@@ -174,12 +174,6 @@ class DictCollectionTest {
     }
 
     @Test
-    void size() {
-        assertThat(DictCollection.size(EXPECTED)).isEqualTo(3);
-        assertThat(DictCollection.size(Map.of())).isEqualTo(0);
-    }
-
-    @Test
     void letNamedDict() {
         assertThat(DictCollection.letNamedDict()).isEqualTo(2);
     }

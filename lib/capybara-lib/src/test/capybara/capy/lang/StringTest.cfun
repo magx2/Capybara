@@ -27,20 +27,20 @@ fun tests(): Effect[TestFile] =
 
 fun should_report_length_and_emptiness(): Assert =
     assert_all([
-        assert_that("capy".length()).is_equal_to(4),
+        assert_that("capy".size()).is_equal_to(4),
         assert_that("".is_empty()).is_equal_to(true),
         assert_that("capy".is_empty()).is_equal_to(false),
     ])
 
 fun should_create_chars(): Assert =
     assert_all([
-        assert_that(char_from("c")).succeeds(value => assert_that(value.to_string()).is_equal_to("c")),
-        assert_that(char_from("z")).succeeds(value => assert_that(value.to_string()).is_equal_to("z")),
-        assert_that(char_from("")).fails("char must contain exactly one character"),
-        assert_that(char_from("ab")).fails("char must contain exactly one character"),
-        assert_that(char_from("x")).succeeds(value => assert_that(value.length()).is_equal_to(1)),
+        assert_that(char { "c" }).succeeds(value => assert_that(value.to_string()).is_equal_to("c")),
+        assert_that(char { "z" }).succeeds(value => assert_that(value.to_string()).is_equal_to("z")),
+        assert_that(char { "" }).fails("char must contain exactly one character"),
+        assert_that(char { "ab" }).fails("char must contain exactly one character"),
+        assert_that(char { "x" }).succeeds(value => assert_that(value.size()).is_equal_to(1)),
         assert_that(
-            match char_at("abc", string_test_index(1)) with
+            match "abc".char_at(string_test_index(1)) with
             case Some { value } -> value.to_string()
             case None -> ""
         ).is_equal_to("b"),

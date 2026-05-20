@@ -41,7 +41,7 @@ fun any_entry(d: Dict[int]): bool = d.any((key, value) => key.starts_with("t") &
 
 fun all_values(d: Dict[int]): bool = d.all((_, value) => value > 0)
 
-fun all_entries(d: Dict[int]): bool = d.all((key, value) => key.length().value > 0 & value > 0)
+fun all_entries(d: Dict[int]): bool = d.all((key, value) => key.size() > 0 & value > 0)
 
 fun is_empty(d: Dict[int]): bool = d.is_empty()
 
@@ -50,8 +50,6 @@ data DictHolder { values: Dict[int] }
 fun not_is_empty(d: Dict[int]): bool = !d.is_empty()
 
 fun not_nested_is_empty(holder: DictHolder): bool = !holder.values.is_empty()
-
-fun size(d: Dict[int]): int = d.size().value
 
 data Entry {k: String, v: int}
 fun dict_to_list(d: Dict[int]): List[Entry] =
@@ -67,4 +65,4 @@ fun dict_to_string(d: Dict[int]): String =
 
 fun let_named_dict(): int =
     let dict: Dict[int] = { "one": 1, "two": 2 }
-    dict.size().value
+    dict.size()

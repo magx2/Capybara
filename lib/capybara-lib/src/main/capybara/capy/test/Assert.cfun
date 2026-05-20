@@ -880,8 +880,8 @@ fun ListAssert[T].is_equal_to(other: List[T]): ListAssert[T] =
 
 fun ListAssert[T].has_size(other: int): ListAssert[T] =
     let assertion = Assertion {
-        result: this.value.size().value == other,
-        message: "Expected list size:\n" + this.value.size().value + "\nto be equal to:\n" + other,
+        result: this.value.size() == other,
+        message: "Expected list size:\n" + this.value.size() + "\nto be equal to:\n" + other,
         type: 'ListAssert[T].has_size'
     }
     ListAssert {
@@ -891,7 +891,7 @@ fun ListAssert[T].has_size(other: int): ListAssert[T] =
 
 fun ListAssert[T].is_empty(): ListAssert[T] =
     let assertion = Assertion {
-        result: this.value.size().value == 0,
+        result: this.value.size() == 0,
         message: "Expected list:\n" + this.value + "\nto be empty",
         type: 'ListAssert[T].is_empty()'
     }
@@ -935,8 +935,8 @@ fun SetAssert[T].is_equal_to(other: Set[T]): SetAssert[T] =
 
 fun SetAssert[T].has_size(other: int): SetAssert[T] =
     let assertion = Assertion {
-        result: this.value.size().value == other,
-        message: "Expected set size:\n" + this.value.size().value + "\nto be equal to:\n" + other,
+        result: this.value.size() == other,
+        message: "Expected set size:\n" + this.value.size() + "\nto be equal to:\n" + other,
         type: 'SetAssert[T].has_size'
     }
     SetAssert {
@@ -946,7 +946,7 @@ fun SetAssert[T].has_size(other: int): SetAssert[T] =
 
 fun SetAssert[T].is_empty(): SetAssert[T] =
     let assertion = Assertion {
-        result: this.value.size().value == 0,
+        result: this.value.size() == 0,
         message: "Expected set:\n" + this.value + "\nto be empty",
         type: 'SetAssert[T].is_empty()'
     }
@@ -990,8 +990,8 @@ fun DictAssert[T].is_equal_to(other: Dict[T]): DictAssert[T] =
 
 fun DictAssert[T].has_size(other: int): DictAssert[T] =
     let assertion = Assertion {
-        result: this.value.size().value == other,
-        message: "Expected dict size:\n" + this.value.size().value + "\nto be equal to:\n" + other,
+        result: this.value.size() == other,
+        message: "Expected dict size:\n" + this.value.size() + "\nto be equal to:\n" + other,
         type: 'DictAssert[T].has_size'
     }
     DictAssert {
@@ -1001,7 +1001,7 @@ fun DictAssert[T].has_size(other: int): DictAssert[T] =
 
 fun DictAssert[T].is_empty(): DictAssert[T] =
     let assertion = Assertion {
-        result: this.value.size().value == 0,
+        result: this.value.size() == 0,
         message: "Expected dict:\n" + this.value + "\nto be empty",
         type: 'DictAssert[T].is_empty()'
     }
@@ -1056,8 +1056,8 @@ fun SeqAssert[T].is_equal_to(other: Seq[T]): SeqAssert[T] =
 
 fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
     let assertion = Assertion {
-        result: this.value.as_list().size().value == other,
-        message: "Expected sequence size:\n" + this.value.as_list().size().value + "\nto be equal to:\n" + other,
+        result: this.value.as_list().size() == other,
+        message: "Expected sequence size:\n" + this.value.as_list().size() + "\nto be equal to:\n" + other,
         type: 'SeqAssert[T].has_size'
     }
     SeqAssert {
@@ -1067,7 +1067,7 @@ fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
 
 fun SeqAssert[T].is_empty(): SeqAssert[T] =
     let assertion = Assertion {
-        result: this.value.as_list().size().value == 0,
+        result: this.value.as_list().size() == 0,
         message: "Expected sequence:\n" + this.value.as_list() + "\nto be empty",
         type: 'SeqAssert[T].is_empty()'
     }

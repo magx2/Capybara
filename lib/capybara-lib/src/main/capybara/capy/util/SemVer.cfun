@@ -80,7 +80,7 @@ fun sem_ver(
 /// ```
 fun parse_semver(version: String): Result[SemVer] =
     data __Parse[T] { buffer: String, value: T }
-    fun __tail(value: String): String = value[1, value.length()]
+    fun __tail(value: String): String = value[1, value.size()]
     /// ```
     /// <version core> ::= <major> "." <minor> "." <patch>
     /// ```

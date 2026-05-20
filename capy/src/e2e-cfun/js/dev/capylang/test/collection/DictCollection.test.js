@@ -24,7 +24,6 @@ test('DictCollection', () => {
     assert.equal(dict.dictToString(expectedDict), 'one 1, two 2, three 3');
 
     const values = new Map([['a', 1], ['b', 2]]);
-    assert.equal(dict.size(values), 2);
     assert.equal(dict.appendTuple(values).get('leet'), 1337);
     assert.equal(dict.appendTupleOverride(new Map(expectedDict)).get('two'), 200);
 });

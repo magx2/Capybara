@@ -650,17 +650,11 @@ public final class JavaScriptGenerator implements Generator {
                     return "(" + receiver + ").ordinal";
                 }
             }
-            if ("length".equals(methodName) && receiverType == PrimitiveLinkedType.STRING) {
-                return "(" + receiver + ").length";
+            if ("size".equals(methodName) && isStringLike(receiverType) && tailArgs.isEmpty()) {
+                return "String(" + receiver + ").length";
             }
-            if (("to_char".equals(methodName) || "toChar".equals(methodName))
-                && receiverType == PrimitiveLinkedType.STRING
-                && tailArgs.isEmpty()) {
-                require("capy.lang.String");
-                return moduleVar("capy.lang.String") + ".toChar(" + receiver + ")";
-            }
-            if (("get_char".equals(methodName) || "getChar".equals(methodName))
-                && receiverType == PrimitiveLinkedType.STRING
+            if (("char_at".equals(methodName) || "charAt".equals(methodName) || "get_char".equals(methodName) || "getChar".equals(methodName))
+                && isStringLike(receiverType)
                 && tailArgs.size() == 1) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".getChar(" + receiver + ", " + tailArgs.getFirst() + ")";
@@ -1164,6 +1158,12 @@ public final class JavaScriptGenerator implements Generator {
                    || type instanceof CollectionLinkedType.CompiledSet
                    || type instanceof CollectionLinkedType.CompiledDict
                    || type == PrimitiveLinkedType.STRING;
+        }
+
+        private boolean isStringLike(CompiledType type) {
+            return type == PrimitiveLinkedType.STRING
+                   || (type instanceof CompiledPrimitiveBackedType primitiveBackedType
+                       && primitiveBackedType.backingType() == PrimitiveLinkedType.STRING);
         }
 
         private boolean isNativePlusType(CompiledType type) {
@@ -1875,9 +1875,9 @@ public final class JavaScriptGenerator implements Generator {
                     "clamp_long_to_int", "clampLongToInt", "safe_long_to_int", "safeLongToInt"
             ));
             exports.put("capy.lang.String", Set.of(
-                    "length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
-                    "__constructor__primitive__char", "char_from", "charFrom", "to_char", "toChar", "char_at", "charAt",
-                    "get_char", "getChar", "to_string", "toString", "toString__name_to_string__char", "length__name_length__char",
+                    "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
+                    "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
+                    "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "__capybaraPrimitiveTypes"
             ));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
@@ -2117,15 +2117,12 @@ public final class JavaScriptGenerator implements Generator {
                    + "    const text = String(value);\n"
                    + "    return text.length === 1 ? new capy.Success({ value: text }) : new capy.Error({ message: 'char must contain exactly one character' });\n"
                    + "}\n"
-                   + "const charFrom = __constructor__primitive__char;\n"
-                   + "const toChar = __constructor__primitive__char;\n"
                    + "const charAt = (value, idx) => capy.getIndex(value, idx);\n"
                    + "const toStringChar = value => String(value);\n"
-                   + "const lengthChar = value => String(value).length;\n"
                    + "const equalsChar = (left, right) => String(left) === String(right);\n"
                    + "const __capybaraPrimitiveTypes = Object.freeze({ char: Object.freeze({ cfunType: '/capy/lang/String.char', backingType: 'String' }) });\n"
                    + "module.exports = {\n"
-                   + "    length: value => String(value).length,\n"
+                   + "    size: value => String(value).length,\n"
                    + "    get: (value, start, end) => end === undefined ? capy.getIndex(value, start) : capy.slice(value, start, end),\n"
                    + "    replace: (value, oldValue, newValue) => String(value).split(oldValue).join(newValue),\n"
                    + "    is_empty: value => String(value).length === 0,\n"
@@ -2135,10 +2132,6 @@ public final class JavaScriptGenerator implements Generator {
                    + "    end_with: (value, part) => String(value).endsWith(part),\n"
                    + "    trim: value => String(value).trim(),\n"
                    + "    __constructor__primitive__char,\n"
-                   + "    char_from: charFrom,\n"
-                   + "    charFrom,\n"
-                   + "    to_char: toChar,\n"
-                   + "    toChar,\n"
                    + "    char_at: charAt,\n"
                    + "    charAt,\n"
                    + "    get_char: charAt,\n"
@@ -2146,7 +2139,6 @@ public final class JavaScriptGenerator implements Generator {
                    + "    to_string: toStringChar,\n"
                    + "    toString: toStringChar,\n"
                    + "    toString__name_to_string__char: toStringChar,\n"
-                   + "    length__name_length__char: lengthChar,\n"
                    + "    op3d_op3d__op_op3d_op3d__char__char: equalsChar,\n"
                    + "    __capybaraPrimitiveTypes,\n"
                    + "};\n";

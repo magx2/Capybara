@@ -27,14 +27,14 @@ fun validated_user_age_or_default(age: int): int =
     (User { age: age }).or_else(User! { age: 1 }).age
 
 union ValidatedName { name: String } with constructor {
-   if name.length().value == 0 then
+   if name.size() == 0 then
        Error { "Name was empty" }
    else
        Success { * { name: name } }
 } = NamedUser | NamedGuest
 
 data NamedUser { name: String, role: String } with constructor {
-    if role.length().value == 0 then
+    if role.size() == 0 then
         Error { "Role was empty" }
     else
         Success { * { name: name, role: role } }
@@ -43,14 +43,14 @@ data NamedUser { name: String, role: String } with constructor {
 data NamedGuest { name: String, badge: String }
 
 union ValidatedProfileName { name: String } with constructor {
-   if name.length().value == 0 then
+   if name.size() == 0 then
        Error { "Profile name was empty" }
    else
        Success { * { name: name } }
 } = Profile
 
 union ValidatedProfileRole { role: String } with constructor {
-   if role.length().value == 0 then
+   if role.size() == 0 then
        Error { "Profile role was empty" }
    else
        Success { * { role: role } }
