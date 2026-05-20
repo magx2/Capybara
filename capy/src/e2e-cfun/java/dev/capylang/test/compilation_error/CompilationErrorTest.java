@@ -24,7 +24,7 @@ public class CompilationErrorTest {
                         fun parse_semver(version: String): Result[int] =
                             data __Parse[T] { buffer: String, value: T }
                             fun __parse_digit(buffer: String): Result[__Parse[int]] =
-                                Success { __Parse { buffer: buffer[1, buffer.length()], value: 1 } }
+                                Success { __Parse { buffer: buffer[1, buffer.size()], value: 1 } }
                             fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] =
                                 match parse.buffer[0] with
                                 case None ->
@@ -36,7 +36,7 @@ public class CompilationErrorTest {
                                     match next_digit with
                                     case Error error ->
                                         match parse.value with
-                                        case Some { value } -> Success { __Parse { parse.buffer[1, parse.buffer.length()], value } }
+                                        case Some { value } -> Success { __Parse { parse.buffer[1, parse.buffer.size()], value } }
                                         case None -> error
                                     case Success { next_digit_parse } ->
                                         let new_parse: __Parse[Option[int]] = __Parse {
@@ -246,7 +246,7 @@ public class CompilationErrorTest {
                         from /capy/lang/Result import { * }
                         from /capy/lang/String import { * }
                         union Parent { foo: String } with constructor {
-                           if foo.length() == 0 then
+                           if foo.size() == 0 then
                                Error { message: "missing" }
                            else
                                Success { value: * { foo: foo } }
@@ -1327,7 +1327,7 @@ public class CompilationErrorTest {
                                 single JsonNull
                                 from /capy/lang/String import { * }
                                   fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =
-                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4, json.length()] }
+                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4, json.size()] }
                                     Success { parsed }
                                 """,
                         new Position(10, 4),
@@ -1794,7 +1794,7 @@ public class CompilationErrorTest {
     private static final List<RawModule> DEFAULT_MODULES = List.of(
             new RawModule("String", "/capy/lang", """
                     data String { <native> }
-                    fun String.length(): int = <native>
+                    fun String.size(): int = <native>
                     """),
             new RawModule("Name", "/capy/compilation_test", """
                     union Name[T] = Foo[T] | Boo

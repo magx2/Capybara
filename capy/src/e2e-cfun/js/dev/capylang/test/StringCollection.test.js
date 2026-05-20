@@ -16,7 +16,6 @@ test('StringCollection', () => {
     assert.equal(strings.notNestedIsEmpty(new strings.BufferHolder({ buffer: 'capybara' })), true);
     assert.equal(strings.notTrimmedIsEmpty('   '), false);
     assert.equal(assertSuccess(strings.makeChar('c')), 'c');
-    assert.equal(assertSuccess(strings.makeCharMethod('z')), 'z');
     assert.match(assertError(strings.makeChar('')), /char must contain exactly one character/);
     assert.match(assertError(strings.makeChar('ab')), /char must contain exactly one character/);
     assert.equal(strings.charToString('x'), 'x');

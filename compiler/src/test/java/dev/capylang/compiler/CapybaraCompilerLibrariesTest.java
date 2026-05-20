@@ -568,7 +568,7 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/lang/String import { * }
 
                 union ValidatedName { name: String } with constructor {
-                   if name.length() == 0 then
+                   if name.size() == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
@@ -597,7 +597,7 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/lang/String import { * }
 
                 union ValidatedName { name: String } with constructor {
-                   if name.length() == 0 then
+                   if name.size() == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
@@ -1257,7 +1257,7 @@ class CapybaraCompilerLibrariesTest {
     private static RawModule stringModule() {
         return new RawModule("String", "/capy/lang", """
                 data String { <native> }
-                fun String.length(): int = <native>
+                fun String.size(): int = <native>
                 """);
     }
 

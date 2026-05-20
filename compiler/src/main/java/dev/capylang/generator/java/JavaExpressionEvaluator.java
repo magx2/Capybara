@@ -86,7 +86,7 @@ public class JavaExpressionEvaluator {
                 java.util.List.of("String"),
                 "is_empty", "plus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*",
-                "starts_with", "end_with", "trim", "to_char", "toChar", "get_char", "getChar"
+                "starts_with", "end_with", "trim", "char_at", "charAt", "get_char", "getChar"
         );
         return java.util.Map.copyOf(owners);
     }
@@ -485,6 +485,16 @@ public class JavaExpressionEvaluator {
                     : functionCall.name();
             var normalizedMethodName = emittedMethodName(functionCall);
             var primitiveBackedMethodCall = isPrimitiveBackedMethodCall(functionCall);
+            if ("size".equals(methodName) && isStringLike(functionCall.arguments().getFirst().type()) && args.size() == 1) {
+                return current.addExpression("(" + args.getFirst() + ").length()");
+            }
+            if ("contains".equals(methodName)
+                && args.size() == 2
+                && functionCall.arguments().size() == 2
+                && functionCall.arguments().getFirst().type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
+                var value = coercePrimitiveCallArgument(functionCall.arguments().get(1).type(), args.get(1));
+                return current.addExpression(args.getFirst() + ".contains(" + value + ")");
+            }
             if (isStaticExtensionMethod(functionCall) || primitiveBackedMethodCall) {
                 var invokeArgs = java.util.stream.IntStream.range(0, args.size())
                         .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
@@ -598,7 +608,7 @@ public class JavaExpressionEvaluator {
                     + ".entrySet().stream().map(__entry -> java.util.List.of(__entry.getKey(), __entry.getValue())).toList()"
             ));
         }
-        if (("_contains_native".equals(methodName) || "contains_native".equals(methodName))
+        if (("_contains_native".equals(methodName) || "contains_native".equals(methodName) || "contains".equals(methodName))
             && args.size() == 2
             && functionCall.arguments().size() == 2
             && receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
@@ -3617,6 +3627,12 @@ public class JavaExpressionEvaluator {
         return functionCall.name().startsWith(METHOD_DECL_PREFIX)
                && !functionCall.arguments().isEmpty()
                && functionCall.arguments().getFirst().type() instanceof dev.capylang.compiler.CompiledPrimitiveBackedType;
+    }
+
+    private static boolean isStringLike(dev.capylang.compiler.CompiledType type) {
+        return type == dev.capylang.compiler.PrimitiveLinkedType.STRING
+               || (type instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType
+                   && primitiveBackedType.backingType() == dev.capylang.compiler.PrimitiveLinkedType.STRING);
     }
 
     private static String primitiveBackedMethodName(CompiledFunctionCall functionCall) {

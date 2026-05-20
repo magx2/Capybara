@@ -33,18 +33,16 @@ fun not_nested_is_empty(holder: BufferHolder): bool = !holder.buffer.is_empty()
 
 fun not_trimmed_is_empty(s: String): bool = !s.trim().is_empty()
 
-fun length(s: String): int = s.length().value
+fun length(s: String) = s.size()
 
-fun make_char(value: String): Result[char] = char_from(value)
-
-fun make_char_method(value: String): Result[char] = value.to_char()
+fun make_char(value: String): Result[char] = char { value }
 
 fun char_to_string(value: char): String = value.to_string()
 
-fun char_length(value: char): int = value.length().value
+fun char_length(value: char) = value.size()
 
 fun char_at_or_question(value: String, idx: index): String =
-    match value.get_char(idx) with
+    match value.char_at(idx) with
     case Some { char } -> char.to_string()
     case None -> "?"
 

@@ -111,10 +111,6 @@ class StringCollectionTest {
         assertThat(success).isInstanceOf(Result.Success.class);
         assertThat(((Result.Success<String>) success).value()).isEqualTo("c");
 
-        var methodSuccess = StringCollection.makeCharMethod("z");
-        assertThat(methodSuccess).isInstanceOf(Result.Success.class);
-        assertThat(((Result.Success<String>) methodSuccess).value()).isEqualTo("z");
-
         var emptyError = StringCollection.makeChar("");
         assertThat(emptyError).isInstanceOf(Result.Error.class);
         assertThat(((Result.Error) emptyError).ex())

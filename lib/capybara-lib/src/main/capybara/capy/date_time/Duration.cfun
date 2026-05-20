@@ -114,7 +114,7 @@ fun from_iso_8601(iso: String): Result[Duration] =
         has_time_component: bool
     }
     fun __invalid(message: String): String = "Invalid ISO 8601 duration format: " + message
-    fun __tail(value: String): String = value[1, value.length()]
+    fun __tail(value: String): String = value[1, value.size()]
     fun __parse_positive_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
@@ -158,13 +158,13 @@ fun from_iso_8601(iso: String): Result[Duration] =
         case Success -> true
         case Error -> false
     fun __is_combined_basic(value: String): bool =
-        if value.length().value == 15
+        if value.size() == 15
         then __is_exact_digits(value[0, 8])
             & value[8, 9] == "T"
             & __is_exact_digits(value[9, 15])
         else false
     fun __is_combined_extended(value: String): bool =
-        if value.length().value == 19
+        if value.size() == 19
         then __is_exact_digits(value[0, 4])
             & value[4, 5] == "-"
             & __is_exact_digits(value[5, 7])

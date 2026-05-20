@@ -18,7 +18,7 @@ private fun drop_prefix(value: String, size: int): String =
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1, value.length()], size - 1)
+            case Some { _ } -> __drop_prefix(value[1, value.size()], size - 1)
     ---
     __drop_prefix(value, size)
 
@@ -31,8 +31,8 @@ private fun find_all(pattern: String, input: String, acc: List[Match]): List[Mat
             case None -> acc
             case Some { _ } ->
                 if input.starts_with(pattern)
-                then __find_all(pattern, drop_prefix(input, pattern.length()), acc + Match { group_value: pattern })
-                else __find_all(pattern, input[1, input.length()], acc)
+                then __find_all(pattern, drop_prefix(input, pattern.size()), acc + Match { group_value: pattern })
+                else __find_all(pattern, input[1, input.size()], acc)
     ---
     __find_all(pattern, input, acc)
 
@@ -45,8 +45,8 @@ private fun split(pattern: String, input: String, current: String, acc: List[Str
             case None -> acc + current
             case Some { c } ->
                 if input.starts_with(pattern)
-                then __split(pattern, drop_prefix(input, pattern.length()), "", acc + current)
-                else __split(pattern, input[1, input.length()], current + c, acc)
+                then __split(pattern, drop_prefix(input, pattern.size()), "", acc + current)
+                else __split(pattern, input[1, input.size()], current + c, acc)
     ---
     __split(pattern, input, current, acc)
 

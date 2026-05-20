@@ -2,7 +2,7 @@ from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 
 data User { name: String } with constructor {
-    if name.length().value == 0
+    if name.size() == 0
     then Error { message: "You need to pass name" }
     else Success { value: * { name: name } }
 }

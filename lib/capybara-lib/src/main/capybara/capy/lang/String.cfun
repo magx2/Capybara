@@ -11,49 +11,42 @@ from /capy/lang/Seq import { * }
 data String { <native> }
 
 /// Returns the number of characters in this String.
-fun String.length(): size = <native>
+fun String.size(): size = <native>
 
 /// Single-character String value.
 type char -> String with constructor {
-    if value.length().value == 1
+    if value.size() == 1
     then Success { value }
     else Error { message: "char must contain exactly one character" }
 }
 
-/// Creates a `char` from a one-character String.
-fun char_from(value: String): Result[char] = char { value }
-
-/// Creates a `char` from this one-character String.
-fun String.to_char(): Result[char] = char { this }
-
 /// Returns the underlying one-character String.
 fun char.to_string(): String = this.value
 
-/// Returns the length of this `char`.
-fun char.length(): size = this.to_string().length()
-
 /// Returns true when both chars contain the same character.
 fun char.`==`(other: char): bool = this.value == other.value
-
-private fun raw_char(value: String): char = char! { value }
 
 /// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
 fun String.get(idx: index): Option[String] = <native>
 
 /// Returns the character at idx as a validated `char` using the same bounds and negative-index rules as string[idx].
-fun char_at(value: String, idx: index): Option[char] =
-    match value.get(idx) with
-    case Some { value } -> Some { value: raw_char(value) }
+fun String.char_at(idx: index): Option[char] =
+    match this.get(idx) with
+    case Some { value } -> {
+        match char { value } with
+        case Success { parsed } -> Some { value: parsed }
+        case Error -> None {}
+    }
     case None -> None {}
 
 /// Returns the character at idx as a validated `char` using the same bounds and negative-index rules as string[idx].
-fun String.get_char(idx: index): Option[char] = char_at(this, idx)
+fun String.get_char(idx: index): Option[char] = this.char_at(idx)
 
 /// Returns the substring in the half-open range [from, to) using negative-index rules.
 fun String.get(from: int, to: int): String = <native>
 
 /// Returns true when this String has no characters.
-fun String.is_empty(): bool = this.length() == EMPTY
+fun String.is_empty(): bool = this.size() == EMPTY
 
 /// Returns this String with `value` appended.
 fun String.`+`(value: any): String = <native>
@@ -115,11 +108,11 @@ fun String.all(predicate: (String, int) => bool): bool =
 
 /// Returns true when this String contains the given substring.
 fun String.contains(part: String): bool =
-    if part.length() == EMPTY
+    if part.size() == EMPTY
     then true
     else this.any((_, idx) =>
-        if idx + part.length().value <= this.length().value
-        then this[idx, idx + part.length().value] == part
+        if idx + part.size().value <= this.size().value
+        then this[idx, idx + part.size().value] == part
         else false)
 
 /// Returns true when this String contains the given substring.
@@ -184,31 +177,31 @@ fun String.`|*`(map: String => List[Y]): Seq[Y] = this.flat_map(map)
 
 /// Returns true when this String starts with the given substring.
 fun String.starts_with(part: String): bool =
-    if this.length() < part.length()
+    if this.size() < part.size()
     then false
-    else this[0, part.length()] == part
+    else this[0, part.size()] == part
 
 /// Returns true when this String ends with the given substring.
 fun String.end_with(part: String): bool =
-    if this.length() < part.length()
+    if this.size() < part.size()
     then false
-    else this[this.length().value - part.length().value, this.length()] == part
+    else this[this.size().value - part.size().value, this.size()] == part
 
 /// Returns this String without leading and trailing whitespace.
 fun String.trim(): String =
     fun is_trim_whitespace(char: String): bool =
         char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
     fun rec __trim_left(value: String): String =
-        if value.length() == EMPTY
+        if value.size() == EMPTY
         then ""
         else if is_trim_whitespace(value[0, 1])
-            then __trim_left(value[1, value.length()])
+            then __trim_left(value[1, value.size()])
             else value
     fun rec __trim_right(value: String): String =
-        if value.length() == EMPTY
+        if value.size() == EMPTY
         then ""
-        else if is_trim_whitespace(value[value.length().value - 1, value.length()])
-            then __trim_right(value[0, value.length().value - 1])
+        else if is_trim_whitespace(value[value.size().value - 1, value.size()])
+            then __trim_right(value[0, value.size().value - 1])
             else value
     ---
     __trim_right(__trim_left(this))
