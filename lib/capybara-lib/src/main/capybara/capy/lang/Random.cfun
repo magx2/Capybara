@@ -18,16 +18,16 @@ private const RANDOM_MULTIPLIER: long = 6364136223846793005L
 private const RANDOM_INCREMENT: long = 1442695040888963407L
 
 /// Returns the deterministic next seed for this seed.
-private fun seed.next_seed(): seed = seed { @this * RANDOM_MULTIPLIER + RANDOM_INCREMENT }
+private fun seed.next_seed(): seed = seed { this.value * RANDOM_MULTIPLIER + RANDOM_INCREMENT }
 
 /// Returns a random `long` and the next seed.
-fun seed.random_long(): RandomResult[long] = RandomResult { value: @this, seed: this.next_seed() }
+fun seed.random_long(): RandomResult[long] = RandomResult { value: this.value, seed: this.next_seed() }
 
 /// Returns a random `int` and the next seed.
-fun seed.random_int(): RandomResult[int] = RandomResult { value: (@this).to_int(), seed: this.next_seed() }
+fun seed.random_int(): RandomResult[int] = RandomResult { value: (this.value).to_int(), seed: this.next_seed() }
 
 /// Returns a random `bool` and the next seed.
-fun seed.random_bool(): RandomResult[bool] = RandomResult { value: @this >= 0L, seed: this.next_seed() }
+fun seed.random_bool(): RandomResult[bool] = RandomResult { value: this.value >= 0L, seed: this.next_seed() }
 
 /// Returns a random `double` in `[0.0, 1.0]` and the next seed.
 fun seed.random_double(): RandomResult[double] =
@@ -35,7 +35,7 @@ fun seed.random_double(): RandomResult[double] =
     fun unit_double(value: long): double =
         floor_mod(value, DOUBLE_BOUND + 1L) / DOUBLE_BOUND_AS_DOUBLE
     ---
-    RandomResult { value: unit_double(@this), seed: this.next_seed() }
+    RandomResult { value: unit_double(this.value), seed: this.next_seed() }
 
 /// Returns a random `float` in `[0.0f, 1.0f]` and the next seed.
 fun seed.random_float(): RandomResult[float] =
@@ -43,7 +43,7 @@ fun seed.random_float(): RandomResult[float] =
     fun unit_float(value: long): float =
         floor_mod(value, FLOAT_BOUND + 1L) / FLOAT_BOUND_AS_FLOAT
     ---
-    RandomResult { value: unit_float(@this), seed: this.next_seed() }
+    RandomResult { value: unit_float(this.value), seed: this.next_seed() }
 
 /// Returns an infinite sequence of random `int` values.
 fun seed.random_ints(): Cons[int] =

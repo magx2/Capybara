@@ -115,7 +115,7 @@ class PrimitiveBackedTypeGeneratorTest {
                 type token -> String
 
                 fun make(value: String): token = token { value }
-                fun unwrap(value: token): String = @value
+                fun unwrap(value: token): String = value.value
                 """)));
 
         var js = generatedCode(new JavaScriptGenerator(), program, Path.of("foo", "Tokens.js"));
@@ -148,7 +148,7 @@ class PrimitiveBackedTypeGeneratorTest {
                     else Error { "bad index" }
                 }
 
-                fun next(value: index): index = index! { @value + 1 }
+                fun next(value: index): index = index! { value.value + 1 }
                 """)));
 
         var code = generatedCode(new PythonGenerator(), program, Path.of("foo", "Numbers.py"));
@@ -200,8 +200,8 @@ class PrimitiveBackedTypeGeneratorTest {
                 type user_id -> int
 
                 fun make(value: int): user_id = user_id { value }
-                fun unwrap(value: user_id): int = @value
-                fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
+                fun unwrap(value: user_id): int = value.value
+                fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
                 fun plus(left: user_id, right: user_id): user_id = left.plus(right)
                 """)));
     }

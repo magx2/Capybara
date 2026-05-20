@@ -19,12 +19,12 @@ fun tests(): Effect[TestFile] =
         test("non_zero_int rejects zero", () => assert_that(non_zero_int { 0 }).fails("non_zero_int must not be 0")),
         test("non_zero_long accepts non-zero values", () => should_construct_non_zero_long(-1L, -1L)),
         test("non_zero_long rejects zero", () => assert_that(non_zero_long { 0L }).fails("non_zero_long must not be 0")),
-        test("NON_NEGATIVE_INT_ZERO is zero", () => assert_that(@NON_NEGATIVE_INT_ZERO).is_equal_to(0)),
-        test("POSITIVE_INT_ONE is one", () => assert_that(@POSITIVE_INT_ONE).is_equal_to(1)),
-        test("NON_NEGATIVE_LONG_ZERO is zero", () => assert_that(@NON_NEGATIVE_LONG_ZERO).is_equal_to(0L)),
-        test("POSITIVE_LONG_ONE is one", () => assert_that(@POSITIVE_LONG_ONE).is_equal_to(1L)),
-        test("NON_ZERO_INT_ONE is one", () => assert_that(@NON_ZERO_INT_ONE).is_equal_to(1)),
-        test("NON_ZERO_LONG_ONE is one", () => assert_that(@NON_ZERO_LONG_ONE).is_equal_to(1L)),
+        test("NON_NEGATIVE_INT_ZERO is zero", () => assert_that(NON_NEGATIVE_INT_ZERO.value).is_equal_to(0)),
+        test("POSITIVE_INT_ONE is one", () => assert_that(POSITIVE_INT_ONE.value).is_equal_to(1)),
+        test("NON_NEGATIVE_LONG_ZERO is zero", () => assert_that(NON_NEGATIVE_LONG_ZERO.value).is_equal_to(0L)),
+        test("POSITIVE_LONG_ONE is one", () => assert_that(POSITIVE_LONG_ONE.value).is_equal_to(1L)),
+        test("NON_ZERO_INT_ONE is one", () => assert_that(NON_ZERO_INT_ONE.value).is_equal_to(1)),
+        test("NON_ZERO_LONG_ONE is one", () => assert_that(NON_ZERO_LONG_ONE.value).is_equal_to(1L)),
         test("non_negative_int addition returns non_negative_int", () => should_add_non_negative_int(2, 3, 5)),
         test("non_negative_int addition rejects overflow", () => should_reject_non_negative_int_addition(MAX_INT_VALUE, 1)),
         test("positive_int addition returns positive_int", () => should_add_positive_int(2, 3, 5)),
@@ -39,28 +39,28 @@ fun tests(): Effect[TestFile] =
     ])
 
 private fun should_construct_non_negative_int(value: int, expected: int): Assert =
-    assert_that((non_negative_int { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
+    assert_that((non_negative_int { value }).reduce(actual => actual.value, _ => -1)).is_equal_to(expected)
 
 private fun should_construct_positive_int(value: int, expected: int): Assert =
-    assert_that((positive_int { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
+    assert_that((positive_int { value }).reduce(actual => actual.value, _ => -1)).is_equal_to(expected)
 
 private fun should_construct_non_negative_long(value: long, expected: long): Assert =
-    assert_that((non_negative_long { value }).reduce(actual => @actual, _ => -1L)).is_equal_to(expected)
+    assert_that((non_negative_long { value }).reduce(actual => actual.value, _ => -1L)).is_equal_to(expected)
 
 private fun should_construct_positive_long(value: long, expected: long): Assert =
-    assert_that((positive_long { value }).reduce(actual => @actual, _ => -1L)).is_equal_to(expected)
+    assert_that((positive_long { value }).reduce(actual => actual.value, _ => -1L)).is_equal_to(expected)
 
 private fun should_construct_non_zero_int(value: int, expected: int): Assert =
-    assert_that((non_zero_int { value }).reduce(actual => @actual, _ => 0)).is_equal_to(expected)
+    assert_that((non_zero_int { value }).reduce(actual => actual.value, _ => 0)).is_equal_to(expected)
 
 private fun should_construct_non_zero_long(value: long, expected: long): Assert =
-    assert_that((non_zero_long { value }).reduce(actual => @actual, _ => 0L)).is_equal_to(expected)
+    assert_that((non_zero_long { value }).reduce(actual => actual.value, _ => 0L)).is_equal_to(expected)
 
 private fun should_add_non_negative_int(left: int, right: int, expected: int): Assert =
     assert_that(
         (non_negative_int { left }).reduce(
             left_value => (non_negative_int { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1),
+                right_value => left_value.plus(right_value).reduce(actual => actual.value, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -71,7 +71,7 @@ private fun should_add_positive_int(left: int, right: int, expected: int): Asser
     assert_that(
         (positive_int { left }).reduce(
             left_value => (positive_int { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1),
+                right_value => left_value.plus(right_value).reduce(actual => actual.value, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -104,7 +104,7 @@ private fun should_add_non_negative_long(left: long, right: long, expected: long
     assert_that(
         (non_negative_long { left }).reduce(
             left_value => (non_negative_long { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.plus(right_value).reduce(actual => actual.value, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -126,7 +126,7 @@ private fun should_add_positive_long(left: long, right: long, expected: long): A
     assert_that(
         (positive_long { left }).reduce(
             left_value => (positive_long { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.plus(right_value).reduce(actual => actual.value, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -148,7 +148,7 @@ private fun should_subtract_non_negative_long(left: long, right: long, expected:
     assert_that(
         (non_negative_long { left }).reduce(
             left_value => (non_negative_long { right }).reduce(
-                right_value => left_value.minus(right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.minus(right_value).reduce(actual => actual.value, _ => -1L),
                 _ => -1L
             ),
             _ => -1L

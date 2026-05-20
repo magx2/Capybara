@@ -24,19 +24,19 @@ fun from_string(path_string: String): Path =
             if c == '/'
             then
                 if current == ""
-                then __segments(value[1, @(value.length())], "", acc)
-                else __segments(value[1, @(value.length())], "", acc + current)
+                then __segments(value[1, value.length().value], "", acc)
+                else __segments(value[1, value.length().value], "", acc + current)
             else
-                __segments(value[1, @(value.length())], current + c, acc)
+                __segments(value[1, value.length().value], current + c, acc)
     ---
     let value =
         if path_string.starts_with('/')
-        then path_string[1, @(path_string.length())]
+        then path_string[1, path_string.length().value]
         else if path_string.starts_with('~')
         then
             match path_string[1] with
-            case Some { '/' } -> path_string[2, @(path_string.length())]
-            case _ -> path_string[1, @(path_string.length())]
+            case Some { '/' } -> path_string[2, path_string.length().value]
+            case _ -> path_string[1, path_string.length().value]
         else path_string
     Path {
         root:

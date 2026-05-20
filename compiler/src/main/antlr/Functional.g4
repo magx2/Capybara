@@ -125,7 +125,6 @@ expressionNoLet: ifExpression
                | '(' expression ')'
                | '{' expression '}'
                | new_set
-               | AT expressionNoLet
                | BANG expressionNoLet
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
@@ -156,7 +155,6 @@ expressionNoLetNoPipe: ifExpression
                      | '(' expression ')'
                      | '{' expression '}'
                      | new_set
-                     | AT expressionNoLetNoPipe
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
@@ -348,7 +346,6 @@ PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
 PIPE : '|';
 COLON : ':';
-AT : '@';
 EQUAL : '==';
 LE : '<=';
 GE : '>=';

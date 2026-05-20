@@ -242,16 +242,20 @@ public class CapybaraExpressionCompiler {
         return linkExpression(unwrapExpression.expression(), scope)
                 .flatMap(expression -> {
                     if (expression.type() instanceof CompiledPrimitiveBackedType primitiveBackedType) {
-                        return Result.success((CompiledExpression) new CompiledUnwrapExpression(
-                                expression,
-                                primitiveBackedType.backingType()
-                        ));
+                        return Result.success(unwrapPrimitiveBackedExpression(expression, primitiveBackedType));
                     }
                     return withPosition(
-                            Result.error("`@` can only unwrap primitive-backed types, got `" + displayType(expression.type()) + "`"),
+                            Result.error("`.value` can only unwrap primitive-backed types, got `" + displayType(expression.type()) + "`"),
                             unwrapExpression.position()
                     );
                 });
+    }
+
+    private static CompiledUnwrapExpression unwrapPrimitiveBackedExpression(
+            CompiledExpression expression,
+            CompiledPrimitiveBackedType primitiveBackedType
+    ) {
+        return new CompiledUnwrapExpression(expression, primitiveBackedType.backingType());
     }
 
     private Optional<SourcePosition> lambdaErrorPosition(LambdaExpression lambdaExpression) {
@@ -489,7 +493,17 @@ public class CapybaraExpressionCompiler {
                             }
                         }
                     }
+                    if (source.type() instanceof CompiledPrimitiveBackedType primitiveBackedType
+                        && "value".equals(fieldAccess.field())) {
+                        return Result.success(unwrapPrimitiveBackedExpression(source, primitiveBackedType));
+                    }
                     if (!(source.type() instanceof GenericDataType dataType)) {
+                        if ("value".equals(fieldAccess.field())) {
+                            return withPosition(
+                                    Result.error("`.value` can only unwrap primitive-backed types, got `" + displayType(source.type()) + "`"),
+                                    fieldAccess.position()
+                            );
+                        }
                         return withPosition(
                                 Result.error("Field access requires data type, was `" + displayType(source.type()) + "`"),
                                 fieldAccess.position()

@@ -17,17 +17,17 @@ const FIRST_USER_ID = user_id! { 1 }
 
 fun new_user_id(value: int): Result[user_id] = user_id { value }
 fun raw_user_id(value: int): user_id = user_id! { value }
-fun unwrap_user_id(id: user_id): int = @id
+fun unwrap_user_id(id: user_id): int = id.value
 fun unwrap_raw_user_id(value: int): int = unwrap_user_id(raw_user_id(value))
 fun score_of(value: int): score = score { value }
-fun unwrap_score(score: score): int = @score
+fun unwrap_score(score: score): int = score.value
 fun raw_token(value: String): token = token { value }
-fun unwrap_token(value: token): String = @value
+fun unwrap_token(value: token): String = value.value
 fun append_token_suffix(value: String): String = value + "_suffix"
 fun pass_token_to_string(value: token): String = append_token_suffix(value)
 
-fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
-fun user_id.`+`(other: user_id): user_id = user_id! { @this + @other }
+fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
+fun user_id.`+`(other: user_id): user_id = user_id! { this.value + other.value }
 
 fun plus_user_ids(left: user_id, right: user_id): user_id = left.plus(right)
 fun add_user_ids(left: user_id, right: user_id): user_id = left + right

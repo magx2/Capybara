@@ -1645,10 +1645,6 @@ public class CapybaraParser {
             );
         }
 
-        if (expression.AT() != null && expression.expressionNoLet().size() == 1) {
-            return new UnwrapExpression(expressionNoLet(expression.expressionNoLet(0)), position(expression));
-        }
-
         if (expression.BANG() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
             return negate(expressionNoLet(expression.expressionNoLet(0)), position(expression));
         }
@@ -1942,10 +1938,6 @@ public class CapybaraParser {
                     ),
                     position(expression)
             );
-        }
-
-        if (expression.AT() != null && expression.expressionNoLetNoPipe().size() == 1) {
-            return new UnwrapExpression(expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)), position(expression));
         }
 
         if (expression.BANG() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {

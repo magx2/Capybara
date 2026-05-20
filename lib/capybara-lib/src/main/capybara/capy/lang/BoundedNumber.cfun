@@ -29,34 +29,34 @@ const IMPOSSIBLE_PROBABILITY: probability = probability! { 0.0 }
 const CERTAIN_PROBABILITY: probability = probability! { 1.0 }
 
 fun ratio.to_percentage(): percentage =
-    percentage! { @this * 100.0 }
+    percentage! { this.value * 100.0 }
 
 fun ratio.to_probability(): probability =
-    probability! { @this }
+    probability! { this.value }
 
 fun percentage.to_ratio(): ratio =
-    ratio! { @this / 100.0 }
+    ratio! { this.value / 100.0 }
 
 fun probability.to_ratio(): ratio =
-    ratio! { @this }
+    ratio! { this.value }
 
-fun ratio.`>`(other: ratio): bool = @this > @other
-fun ratio.`>=`(other: ratio): bool = @this >= @other
-fun ratio.`<`(other: ratio): bool = @this < @other
-fun ratio.`<=`(other: ratio): bool = @this <= @other
-fun ratio.`==`(other: ratio): bool = @this == @other
+fun ratio.`>`(other: ratio): bool = this.value > other.value
+fun ratio.`>=`(other: ratio): bool = this.value >= other.value
+fun ratio.`<`(other: ratio): bool = this.value < other.value
+fun ratio.`<=`(other: ratio): bool = this.value <= other.value
+fun ratio.`==`(other: ratio): bool = this.value == other.value
 
-fun percentage.`>`(other: percentage): bool = @this > @other
-fun percentage.`>=`(other: percentage): bool = @this >= @other
-fun percentage.`<`(other: percentage): bool = @this < @other
-fun percentage.`<=`(other: percentage): bool = @this <= @other
-fun percentage.`==`(other: percentage): bool = @this == @other
+fun percentage.`>`(other: percentage): bool = this.value > other.value
+fun percentage.`>=`(other: percentage): bool = this.value >= other.value
+fun percentage.`<`(other: percentage): bool = this.value < other.value
+fun percentage.`<=`(other: percentage): bool = this.value <= other.value
+fun percentage.`==`(other: percentage): bool = this.value == other.value
 
-fun probability.`>`(other: probability): bool = @this > @other
-fun probability.`>=`(other: probability): bool = @this >= @other
-fun probability.`<`(other: probability): bool = @this < @other
-fun probability.`<=`(other: probability): bool = @this <= @other
-fun probability.`==`(other: probability): bool = @this == @other
+fun probability.`>`(other: probability): bool = this.value > other.value
+fun probability.`>=`(other: probability): bool = this.value >= other.value
+fun probability.`<`(other: probability): bool = this.value < other.value
+fun probability.`<=`(other: probability): bool = this.value <= other.value
+fun probability.`==`(other: probability): bool = this.value == other.value
 
 fun ratio_to_percentage(value: ratio): percentage = value.to_percentage()
 

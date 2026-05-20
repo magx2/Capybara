@@ -45,7 +45,7 @@ fun list_const_sum(): int = LIST_V |> 0, (acc, v) => acc + v
 
 fun set_const_has_a(): bool = SET_V ? "a"
 
-fun dict_const_size(): int = @((DICT_V).size())
+fun dict_const_size(): int = (DICT_V).size().value
 
 fun dog_data_name(): String = DOG_DATA.name
 

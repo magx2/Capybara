@@ -2,8 +2,8 @@ from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 
-fun choose(values: List[int]): int = 100 + @(values.size())
-fun choose(values: List[long]): int = 200 + @(values.size())
+fun choose(values: List[int]): int = 100 + values.size().value
+fun choose(values: List[long]): int = 200 + values.size().value
 
 fun ints(): List[int] = [1, 2, 3]
 fun longs(): List[long] = [1L, 2L, 3L]
