@@ -11,6 +11,7 @@ fun tests(): Effect[TestFile] =
         test("should report length and emptiness", () => should_report_length_and_emptiness()),
         test("should create chars", () => should_create_chars()),
         test("should get characters by index", () => should_get_characters_by_index()),
+        test("should list characters as sequence", () => should_list_characters_as_sequence()),
         test("should get substrings by range", () => should_get_substrings_by_range()),
         test("should concatenate values", () => should_concatenate_values()),
         test("should test any and all characters", () => should_test_any_and_all_characters()),
@@ -54,6 +55,14 @@ fun should_get_characters_by_index(): Assert =
         assert_that(value[-1]).contains("a"),
         assert_that(value[100]).is_empty(),
         assert_that(value[-100]).is_empty(),
+    ])
+
+fun should_list_characters_as_sequence(): Assert =
+    assert_all([
+        assert_that("capy".chars()).has_size(4).contains("p"),
+        assert_that(("capy".chars() | char => char.to_string()).as_list()).is_equal_to(["c", "a", "p", "y"]),
+        assert_that("".chars()).is_empty(),
+        assert_that(("".chars() | char => char.to_string()).as_list()).is_equal_to([]),
     ])
 
 fun should_get_substrings_by_range(): Assert =

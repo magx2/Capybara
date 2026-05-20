@@ -29,6 +29,23 @@ fun String.get(idx: index): Option[char] = <native>
 /// Returns the substring in the half-open range [from, to) using negative-index rules.
 fun String.get(from: int, to: int): String = <native>
 
+/// Returns this String's characters as a finite lazy sequence.
+///
+/// Empty strings return an empty sequence.
+fun String.chars(): Seq[char] =
+    fun chars(s: String, idx: index): Seq[char] =
+        match s.get(idx) with
+        case None -> End {}
+        case Some { char } -> Cons {
+            char,
+            () =>
+                match idx.next() with
+                case Success { next_idx } -> chars(s, next_idx)
+                case Error  -> End {}
+        }
+    ---
+    chars(this, FIRST_ELEMENT)
+
 /// Returns true when this String has no characters.
 fun String.is_empty(): bool = this.size() == EMPTY
 
