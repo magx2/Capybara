@@ -28,15 +28,15 @@ fun pi_plus_e(): double = PI + E
 fun uses_private_const(): int = HIDDEN + 1
 
 fun local_consts(x: int): int =
-    const __BASE = 10
-    const __INC: int = 5
+    const BASE = 10
+    const INC: int = 5
     ---
-    x + __BASE + __INC
+    x + BASE + INC
 
 fun local_private_named_const(x: String): bool =
-    const __white_space: Set[String] = { " ", "\t", "\n" }
+    const white_space: Set[String] = { " ", "\t", "\n" }
     ---
-    __white_space ? x
+    white_space ? x
 
 fun primitives_summary(): String =
     BYTE_V + ":" + INT_V + ":" + LONG_V + ":" + FLOAT_V + ":" + DOUBLE_V + ":" + BOOL_V + ":" + STRING_V

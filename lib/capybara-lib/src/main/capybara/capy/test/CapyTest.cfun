@@ -364,18 +364,18 @@ private fun team_city_messages_case(test_case: TestCase): List[String] =
     ]
 
 fun team_city_escape(value: String): String =
-    fun rec __team_city_escape(value: String, acc: String): String =
+    fun rec team_city_escape(value: String, acc: String): String =
         match value[0] with
         case None -> acc
-        case Some { '\'' } -> __team_city_escape(value[1, value.size()], acc + "|'")
-        case Some { '\n' } -> __team_city_escape(value[1, value.size()], acc + '|n')
-        case Some { '\r' } -> __team_city_escape(value[1, value.size()], acc + '|r')
-        case Some { '|' } -> __team_city_escape(value[1, value.size()], acc + '||')
-        case Some { '[' } -> __team_city_escape(value[1, value.size()], acc + '|[')
-        case Some { ']' } -> __team_city_escape(value[1, value.size()], acc + '|]')
-        case Some { c } -> __team_city_escape(value[1, value.size()], acc + c)
+        case Some { '\'' } -> team_city_escape(value[1, value.size()], acc + "|'")
+        case Some { '\n' } -> team_city_escape(value[1, value.size()], acc + '|n')
+        case Some { '\r' } -> team_city_escape(value[1, value.size()], acc + '|r')
+        case Some { '|' } -> team_city_escape(value[1, value.size()], acc + '||')
+        case Some { '[' } -> team_city_escape(value[1, value.size()], acc + '|[')
+        case Some { ']' } -> team_city_escape(value[1, value.size()], acc + '|]')
+        case Some { c } -> team_city_escape(value[1, value.size()], acc + c)
     ---
-    __team_city_escape(value, '')
+    team_city_escape(value, '')
 
 private fun test_suite_name(file_name: String): String = file_name
 
@@ -412,16 +412,16 @@ private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_f
     )
 
 private fun stale_files(files: List[Path], expected_files: List[Path]): List[Path] =
-    fun rec __stale_files(files: List[Path], expected_files: List[Path], acc: List[Path]): List[Path] =
+    fun rec stale_files(files: List[Path], expected_files: List[Path], acc: List[Path]): List[Path] =
         match files[0] with
         case None -> acc
         case Some { file } ->
             let normalized = file.normalize()
             if path_to_manifest_line(normalized) == OUTPUT_MANIFEST_FILE | path_list_contains(expected_files, normalized)
-            then __stale_files(files[1:], expected_files, acc)
-            else __stale_files(files[1:], expected_files, acc + normalized)
+            then stale_files(files[1:], expected_files, acc)
+            else stale_files(files[1:], expected_files, acc + normalized)
     ---
-    __stale_files(files, expected_files, [])
+    stale_files(files, expected_files, [])
 
 private fun delete_stale_outputs(output_dir: Path, stale_files: List[Path]): Effect[Result[List[Path]]] =
     match stale_files[0] with
@@ -536,14 +536,14 @@ private fun path_to_manifest_line(path: Path): String =
     path_segments_to_string(path.normalize().segments)
 
 private fun path_segments_to_string(segments: List[String]): String =
-    fun rec __path_segments_to_string(segments: List[String], acc: String): String =
+    fun rec path_segments_to_string(segments: List[String], acc: String): String =
         match segments[0] with
         case None -> acc
         case Some { segment } ->
             let next = if acc.is_empty() then segment else acc + '/' + segment
-            __path_segments_to_string(segments[1:], next)
+            path_segments_to_string(segments[1:], next)
     ---
-    __path_segments_to_string(segments, '')
+    path_segments_to_string(segments, '')
 
 private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs.any(output => output.failed)
 

@@ -582,13 +582,13 @@ class CapybaraParserTest {
     }
 
     @Test
-    @DisplayName("should parse lowercase private local const declaration")
-    void parseLowercasePrivateLocalConstDeclaration() {
+    @DisplayName("should parse lowercase local const declaration")
+    void parseLowercaseLocalConstDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun foo(x: String): bool =
-                    const __white_space = { " ", "\\t", "\\n" }
+                    const white_space = { " ", "\\t", "\\n" }
                     ---
-                    __white_space ? x
+                    white_space ? x
                 """));
 
         var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
@@ -603,24 +603,17 @@ class CapybaraParserTest {
     }
 
     @Test
-    @DisplayName("should reject local const name without private prefix")
-    void rejectLocalConstNameWithoutPrivatePrefix() {
-        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+    @DisplayName("should parse local const name without private prefix")
+    void parseLocalConstNameWithoutPrivatePrefix() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun foo(x: String): bool =
                     const white_space = { " ", "\\t", "\\n" }
                     ---
-                    x == ""
+                    white_space ? x
                 """));
 
-        assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
-                .singleElement()
-                .satisfies(error -> {
-                    assertThat(error.file()).isEqualTo("/parser/Test.cfun");
-                    assertThat(error.line()).isEqualTo(2);
-                    assertThat(error.column()).isEqualTo(4);
-                    assertThat(error.message()).contains("Local const name has to start with `__`");
-                });
+        var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
+        assertThat(localConst.returnType()).contains(new CollectionType.SetType(PrimitiveType.STRING));
     }
 
     @Test
@@ -628,10 +621,10 @@ class CapybaraParserTest {
     void rejectDuplicateLocalConstNames() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 fun foo(): int =
-                    const __white_space = 1
-                    const __white_space = 2
+                    const white_space = 1
+                    const white_space = 2
                     ---
-                    __white_space
+                    white_space
                 """));
 
         assertThat(result).isInstanceOf(Result.Error.class);
@@ -641,7 +634,7 @@ class CapybaraParserTest {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");
                     assertThat(error.line()).isEqualTo(2);
                     assertThat(error.column()).isEqualTo(4);
-                    assertThat(error.message()).contains("Duplicate local const name: __white_space. Declared at: 2:4, 3:4");
+                    assertThat(error.message()).contains("Duplicate local const name: white_space. Declared at: 2:4, 3:4");
                 });
     }
 
@@ -744,8 +737,8 @@ class CapybaraParserTest {
         method.setAccessible(true);
                 var module = new RawModule("SemVer", "/capy/util", """
                 fun parse(): int =
-                    fun rec __parse_positive_digit(value: int): int = __parse_positive_digit(value)
-                    fun __parse_positive_digit(value: int): int = value + 1
+                    fun rec parse_positive_digit(value: int): int = parse_positive_digit(value)
+                    fun parse_positive_digit(value: int): int = value + 1
                     ---
                     0
                 """);
@@ -754,12 +747,12 @@ class CapybaraParserTest {
                 parser,
                 module,
                 module.input(),
-                "Duplicate local function name: __parse_positive_digit"
+                "Duplicate local function name: parse_positive_digit"
         );
 
         assertThat(error.line()).isEqualTo(2);
         assertThat(error.column()).isEqualTo(4);
-        assertThat(error.message()).contains("Duplicate local function name: __parse_positive_digit. Declared at: 2:4, 3:4");
+        assertThat(error.message()).contains("Duplicate local function name: parse_positive_digit. Declared at: 2:4, 3:4");
     }
 
     @Test

@@ -49,79 +49,79 @@ fun Interval.duration(): Duration =
 ///
 /// Also accepts `--` as an alternate input separator and canonicalizes back to `/`.
 fun from_iso_8601(iso: String): Result[Interval] =
-    data __Split { left: String, right: String }
-    data __SplitScan { left: String, right: String, seen_separator: bool }
-    fun __invalid(message: String): String = "Invalid ISO 8601 interval format: " + message
-    fun rec __drop_prefix(value: String, size: int): String =
+    data Split { left: String, right: String }
+    data SplitScan { left: String, right: String, seen_separator: bool }
+    fun invalid(message: String): String = "Invalid ISO 8601 interval format: " + message
+    fun rec drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1, value.size()], size - 1)
-    fun rec __scan_split(separator: String, value: String, scan: __SplitScan): Result[__Split] =
+            case Some { _ } -> drop_prefix(value[1, value.size()], size - 1)
+    fun rec scan_split(separator: String, value: String, scan: SplitScan): Result[Split] =
         if value.is_empty()
         then if !scan.seen_separator
-            then Error { __invalid("expected exactly one `" + separator + "` separator") }
+            then Error { invalid("expected exactly one `" + separator + "` separator") }
             else if scan.left.is_empty() | scan.right.is_empty()
-            then Error { __invalid("interval parts must not be empty") }
-            else Success { __Split { left: scan.left, right: scan.right } }
+            then Error { invalid("interval parts must not be empty") }
+            else Success { Split { left: scan.left, right: scan.right } }
         else if value.starts_with(separator)
             then if scan.seen_separator
-                then Error { __invalid("expected exactly one interval separator") }
-                else __scan_split(separator, __drop_prefix(value, separator.size()), __SplitScan {
+                then Error { invalid("expected exactly one interval separator") }
+                else scan_split(separator, drop_prefix(value, separator.size()), SplitScan {
                     left: scan.left,
                     right: "",
                     seen_separator: true
                 })
             else if scan.seen_separator
-                then __scan_split(separator, value[1, value.size()], __SplitScan {
+                then scan_split(separator, value[1, value.size()], SplitScan {
                     left: scan.left,
                     right: scan.right + value[0, 1],
                     seen_separator: true
                 })
-                else __scan_split(separator, value[1, value.size()], __SplitScan {
+                else scan_split(separator, value[1, value.size()], SplitScan {
                     left: scan.left + value[0, 1],
                     right: scan.right,
                     seen_separator: false
                 })
-    fun __split_interval(value: String): Result[__Split] =
+    fun split_interval(value: String): Result[Split] =
         let has_slash = regex/\// ? value
         let has_dash = regex/--/ ? value
         if has_slash & !has_dash
-        then __scan_split("/", value, __SplitScan { left: "", right: "", seen_separator: false })
+        then scan_split("/", value, SplitScan { left: "", right: "", seen_separator: false })
         else if has_dash & !has_slash
-        then __scan_split("--", value, __SplitScan { left: "", right: "", seen_separator: false })
+        then scan_split("--", value, SplitScan { left: "", right: "", seen_separator: false })
         else if has_slash & has_dash
-        then Error { __invalid("expected exactly one interval separator") }
-        else Error { __invalid("expected `/` or `--` separator") }
-    fun __parse_datetime(value: String): Result[DateTime] =
+        then Error { invalid("expected exactly one interval separator") }
+        else Error { invalid("expected `/` or `--` separator") }
+    fun parse_datetime(value: String): Result[DateTime] =
         match /capy/date_time/DateTime.from_iso_8601(value) with
         case Success { datetime } -> Success { datetime }
-        case Error -> Error { __invalid("interval endpoints must be UTC date-times") }
-    fun __parse_start_end(split: __Split): Result[Interval] = {
-        let start <- __parse_datetime(split.left)
-        let end <- __parse_datetime(split.right)
+        case Error -> Error { invalid("interval endpoints must be UTC date-times") }
+    fun parse_start_end(split: Split): Result[Interval] = {
+        let start <- parse_datetime(split.left)
+        let end <- parse_datetime(split.right)
         if start.greater_than(end)
-        then Error { __invalid("interval start must not be after interval end") }
+        then Error { invalid("interval start must not be after interval end") }
         else Success { DateTimeStartEnd { start, end } }
     }
-    fun __parse_start_duration(split: __Split): Result[Interval] = {
+    fun parse_start_duration(split: Split): Result[Interval] = {
         let duration <- /capy/date_time/Duration.from_iso_8601(split.right)
-        let start <- __parse_datetime(split.left)
+        let start <- parse_datetime(split.left)
         Success { DateTimeStartDuration { start, duration } }
     }
-    fun __parse_duration_end(split: __Split): Result[Interval] = {
+    fun parse_duration_end(split: Split): Result[Interval] = {
         let duration <- /capy/date_time/Duration.from_iso_8601(split.left)
-        let end <- __parse_datetime(split.right)
+        let end <- parse_datetime(split.right)
         Success { DateTimeDurationEnd { duration, end } }
     }
     ---
-    let split <- __split_interval(iso)
+    let split <- split_interval(iso)
     if split.left.starts_with("P") & split.right.starts_with("P")
-    then Error { __invalid("interval cannot contain a duration on both sides") }
+    then Error { invalid("interval cannot contain a duration on both sides") }
     else if split.left.starts_with("P")
-    then __parse_duration_end(split)
+    then parse_duration_end(split)
     else if split.right.starts_with("P")
-    then __parse_start_duration(split)
-    else __parse_start_end(split)
+    then parse_start_duration(split)
+    else parse_start_end(split)

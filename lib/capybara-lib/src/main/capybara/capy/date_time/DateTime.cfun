@@ -55,7 +55,7 @@ fun DateTime.`-`(duration: Duration): DateTime = this.minus(duration)
 
 /// Returns the duration from `other` to this `DateTime`.
 fun DateTime.minus(other: DateTime): Duration =
-    fun __positive_duration_from_seconds(total_seconds: long): Duration =
+    fun positive_duration_from_seconds(total_seconds: long): Duration =
         let days = floor_div(total_seconds, SECONDS_IN_DAY)
         let remainder_after_days = floor_mod(total_seconds, SECONDS_IN_DAY)
         let hours = floor_div(remainder_after_days, SECONDS_IN_HOUR)
@@ -73,8 +73,8 @@ fun DateTime.minus(other: DateTime): Duration =
     ---
     let delta = this.timestamp() - other.timestamp()
     if delta < 0L
-    then __positive_duration_from_seconds(0L - delta).negate()
-    else __positive_duration_from_seconds(delta)
+    then positive_duration_from_seconds(0L - delta).negate()
+    else positive_duration_from_seconds(delta)
 
 /// Returns `true` when this date-time is after `other`.
 fun DateTime.greater_than(other: DateTime): bool =
@@ -106,9 +106,9 @@ fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)
 
 /// Formats this date-time as a canonical UTC ISO 8601 string.
 fun DateTime.to_iso_8601(): String =
-    fun __format_utc(datetime: DateTime): String =
+    fun format_utc(datetime: DateTime): String =
         datetime.date.to_iso_8601() + "T" + datetime.time.to_iso_8601() + "Z"
-    fun __normalize_to_utc(datetime: DateTime): DateTime =
+    fun normalize_to_utc(datetime: DateTime): DateTime =
         match datetime.time.offset_minutes with
         case None -> datetime
         case Some { offset_minutes } ->
@@ -127,58 +127,58 @@ fun DateTime.to_iso_8601(): String =
                 seconds: 0
             })
     ---
-    __format_utc(__normalize_to_utc(this))
+    format_utc(normalize_to_utc(this))
 
 /// Parses a UTC ISO 8601 date-time in basic or extended form.
 fun from_iso_8601(iso: String): Result[DateTime] =
-    data __Split { left: String, right: String }
-    data __SplitScan { left: String, right: String, seen_separator: bool }
-    fun __invalid(message: String): String = "Invalid ISO 8601 date-time format: " + message
-    fun rec __scan_split(value: String, scan: __SplitScan): Result[__Split] =
+    data Split { left: String, right: String }
+    data SplitScan { left: String, right: String, seen_separator: bool }
+    fun invalid(message: String): String = "Invalid ISO 8601 date-time format: " + message
+    fun rec scan_split(value: String, scan: SplitScan): Result[Split] =
         if value.is_empty()
         then if !scan.seen_separator
-            then Error { __invalid("expected `T` separator between date and time") }
+            then Error { invalid("expected `T` separator between date and time") }
             else if scan.left.is_empty() | scan.right.is_empty()
-            then Error { __invalid("date-time parts must not be empty") }
-            else Success { __Split { left: scan.left, right: scan.right } }
+            then Error { invalid("date-time parts must not be empty") }
+            else Success { Split { left: scan.left, right: scan.right } }
         else if value[0, 1] == "T"
             then if scan.seen_separator
-                then Error { __invalid("expected exactly one `T` separator") }
-                else __scan_split(value[1, value.size()], __SplitScan {
+                then Error { invalid("expected exactly one `T` separator") }
+                else scan_split(value[1, value.size()], SplitScan {
                     left: scan.left,
                     right: "",
                     seen_separator: true
                 })
             else if scan.seen_separator
-                then __scan_split(value[1, value.size()], __SplitScan {
+                then scan_split(value[1, value.size()], SplitScan {
                     left: scan.left,
                     right: scan.right + value[0, 1],
                     seen_separator: true
                 })
-                else __scan_split(value[1, value.size()], __SplitScan {
+                else scan_split(value[1, value.size()], SplitScan {
                     left: scan.left + value[0, 1],
                     right: scan.right,
                     seen_separator: false
                 })
-    fun __is_extended_date(value: String): bool =
+    fun is_extended_date(value: String): bool =
         if value.size() == 10
         then value[4, 5] == "-" & value[7, 8] == "-"
         else false
-    fun __is_extended_time(value: String): bool =
+    fun is_extended_time(value: String): bool =
         if value.size() >= 8
         then value[2, 3] == ":" & value[5, 6] == ":"
         else false
     ---
-    let split <- __scan_split(iso, __SplitScan { left: "", right: "", seen_separator: false })
-    let date_is_extended = __is_extended_date(split.left)
-    let time_is_extended = __is_extended_time(split.right)
+    let split <- scan_split(iso, SplitScan { left: "", right: "", seen_separator: false })
+    let date_is_extended = is_extended_date(split.left)
+    let time_is_extended = is_extended_time(split.right)
     if date_is_extended != time_is_extended
-    then Error { __invalid("date and time must use the same basic or extended format") }
+    then Error { invalid("date and time must use the same basic or extended format") }
     else {
         let date <- /capy/date_time/Date.from_iso_8601(split.left)
         let time_with_offset <- /capy/date_time/Time.from_iso_8601(split.right)
         match time_with_offset.offset_minutes with
-        case None -> Error { __invalid("expected UTC designator `Z` or numeric offset") }
+        case None -> Error { invalid("expected UTC designator `Z` or numeric offset") }
         case Some { offset_minutes } -> {
             let utc_time = Time {
                 hour: time_with_offset.hour,

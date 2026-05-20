@@ -51,12 +51,12 @@ fun emit_byte_lists(bytes: List[byte]): Effect[List[byte]] =
     println_error(bytes)
 
 fun read_one(): Effect[String] =
-    read_line().map(line => _line_or_eof(line))
+    read_line().map(line => line_or_eof(line))
 
 fun read_eof_marker(): Effect[String] =
-    read_line().map(line => _line_or_eof(line))
+    read_line().map(line => line_or_eof(line))
 
-fun _line_or_eof(line: Option[String]): String =
+private fun line_or_eof(line: Option[String]): String =
     match line with
     case Some { value } -> value
     case None -> "EOF"

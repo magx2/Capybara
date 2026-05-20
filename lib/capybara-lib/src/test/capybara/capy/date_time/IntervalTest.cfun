@@ -14,81 +14,81 @@ from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
     let success_test_cases = [
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2008, 5, 11, 15, 30, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "20070301T130000Z/20080511T153000Z",
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2008, 5, 11, 15, 30, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2008, 5, 11, 15, 30, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T14:00:00+01:00/P1D",
             "2007-03-01T13:00:00Z/P1D",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2007, 3, 2, 13, 0, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2007, 3, 2, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2008, 5, 11, 15, 30, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T13:00:00Z--2008-05-11T15:30:00Z",
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2008, 5, 11, 15, 30, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T13:00:00Z--P10D",
             "2007-03-01T13:00:00Z/P10D",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2007, 3, 11, 13, 0, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2007, 3, 11, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "P10D--2007-03-11T13:00:00Z",
             "P10D/2007-03-11T13:00:00Z",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2007, 3, 11, 13, 0, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2007, 3, 11, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "P1D/2007-03-03T15:30:10Z",
             "P1D/2007-03-03T15:30:10Z",
-            _interval_datetime(2007, 3, 2, 15, 30, 10),
-            _interval_datetime(2007, 3, 3, 15, 30, 10),
+            interval_datetime(2007, 3, 2, 15, 30, 10),
+            interval_datetime(2007, 3, 3, 15, 30, 10),
             DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T13:00:00Z/P1D",
             "2007-03-01T13:00:00Z/P1D",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2007, 3, 2, 13, 0, 0),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2007, 3, 2, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
         ),
-        _should_parse_interval(
+        should_parse_interval(
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
-            _interval_datetime(2007, 3, 1, 13, 0, 0),
-            _interval_datetime(2007, 3, 3, 15, 30, 10),
+            interval_datetime(2007, 3, 1, 13, 0, 0),
+            interval_datetime(2007, 3, 3, 15, 30, 10),
             DateDuration { years: 0, months: 0, days: 2, hours: 2, minutes: 30, seconds: 10 }
         ),
     ]
@@ -106,7 +106,7 @@ fun tests(): Effect[TestFile] =
 
     test_file("/capy/date_time/Interval.cfun", success_test_cases + failed_test_cases)
 
-fun _should_parse_interval(
+private fun should_parse_interval(
     iso: String,
     canonical: String,
     start: DateTime,
@@ -124,12 +124,12 @@ fun _should_parse_interval(
                         .has_duration(duration),
                 ])))
 
-fun _interval_date(year: int, month_value: int, day: int): Date =
+private fun interval_date(year: int, month_value: int, day: int): Date =
     let parsed_month = (month { month_value }).or_else(JANUARY)
     let parsed_date = Date { day: day, month: parsed_month, year: year }
     parsed_date.or_else(UNIX_DATE)
 
-fun _interval_time(hour_value: int, minute_value: int, second_value: int): Time =
+private fun interval_time(hour_value: int, minute_value: int, second_value: int): Time =
     let parsed_time = {
         let parsed_hour <- hour { hour_value }
         let parsed_minute <- minute { minute_value }
@@ -138,8 +138,8 @@ fun _interval_time(hour_value: int, minute_value: int, second_value: int): Time 
     }
     parsed_time.or_else(MIDNIGHT)
 
-fun _interval_datetime(year: int, month: int, day: int, hour: int, minute: int, second: int): DateTime =
+private fun interval_datetime(year: int, month: int, day: int, hour: int, minute: int, second: int): DateTime =
     DateTime {
-        date: _interval_date(year, month, day),
-        time: _interval_time(hour, minute, second)
+        date: interval_date(year, month, day),
+        time: interval_time(hour, minute, second)
     }

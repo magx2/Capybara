@@ -23,12 +23,12 @@ fun tests(): Effect[TestFile] =
         test("should flat map values", () => set_should_flat_map_values()),
     ])
 
-fun _empty_int_set(): Set[int] = {1, 2} - {1, 2}
+private fun empty_int_set(): Set[int] = {1, 2} - {1, 2}
 
-fun _single_int_set(value: int): Set[int] = _empty_int_set() + value
+private fun single_int_set(value: int): Set[int] = empty_int_set() + value
 
 fun set_should_report_size_and_emptiness(): Assert =
-    let empty = _empty_int_set()
+    let empty = empty_int_set()
     let non_empty = {1, 2} - 2
     assert_all([
         assert_that({1, 2, 3}.size()).is_equal_to(3),
@@ -65,7 +65,7 @@ fun set_should_remove_values_and_sets(): Assert =
     ])
 
 fun set_should_test_any_and_all_values(): Assert =
-    let empty = _empty_int_set()
+    let empty = empty_int_set()
     assert_all([
         assert_that({1, 2, 3}.any(value => value > 2)).is_true(),
         assert_that({1, 2, 3}.any(value => value > 5)).is_false(),
@@ -102,7 +102,7 @@ fun set_should_combine_and_intersect_sets(): Assert =
         assert_that({1, 2} ∪ {2, 3}).is_equal_to({1, 2, 3}),
         assert_that({1, 2, 3}.intersection({2, 3, 4})).is_equal_to({2, 3}),
         assert_that({1, 2, 3} ∩ {2, 3, 4}).is_equal_to({2, 3}),
-        assert_that({1, 2, 3}.difference(_single_int_set(2))).is_equal_to({1, 3}),
+        assert_that({1, 2, 3}.difference(single_int_set(2))).is_equal_to({1, 3}),
     ])
 
 fun set_should_calculate_symmetric_differences(): Assert =
@@ -124,9 +124,9 @@ fun set_should_calculate_cartesian_products(): Assert =
     ])
 
 fun set_should_calculate_power_sets(): Assert =
-    let empty = _empty_int_set()
-    let one = _single_int_set(1)
-    let two = _single_int_set(2)
+    let empty = empty_int_set()
+    let one = single_int_set(1)
+    let two = single_int_set(2)
     let expected: Set[Set[int]] = {
         empty,
         one,
@@ -141,7 +141,7 @@ fun set_should_calculate_power_sets(): Assert =
 fun set_should_reduce_values(): Assert =
     assert_all([
         assert_that({1, 2, 3} |> 0, (acc, value) => acc + value).is_equal_to(6),
-        assert_that(_empty_int_set().reduce(10, (acc, value) => acc + value)).is_equal_to(10),
+        assert_that(empty_int_set().reduce(10, (acc, value) => acc + value)).is_equal_to(10),
     ])
 
 fun set_should_map_values(): Assert =

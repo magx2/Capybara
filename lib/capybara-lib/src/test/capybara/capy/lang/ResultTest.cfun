@@ -32,24 +32,24 @@ fun should_map_error(): Assert =
     let mapped = result | value => Success { "mapped_" + value }
     assert_that(mapped).fails("error message")
 
-fun _positive(x: int): Result[String] =
+private fun positive(x: int): Result[String] =
     if x > 0
     then Success { x + " is positive" }
     else Error { x + " is NOT positive" }
 
-fun _positive_not_zero(x: int): Result[Result[String]] =
+private fun positive_not_zero(x: int): Result[Result[String]] =
     if x != 0
-    then Success { _positive(x) }
+    then Success { positive(x) }
     else Error { "I don't like zero" }
 
 fun should_map_positive(): Assert =
     let result = Success { 420 }
-    let mapped = result | :_positive
+    let mapped = result | :positive
     assert_that(mapped).succeeds("420 is positive")
 
 fun should_map_negative(): Assert =
     let result = Success { -1337 }
-    let mapped = result | :_positive
+    let mapped = result | :positive
     assert_that(mapped).fails("-1337 is NOT positive")
 
 fun should_flatmap_success(): Assert =
@@ -64,17 +64,17 @@ fun should_flatmap_error(): Assert =
 
 fun should_flatmap_positive(): Assert =
     let result = Success { 420 }
-    let mapped = result |* :_positive_not_zero
+    let mapped = result |* :positive_not_zero
     assert_that(mapped).succeeds("420 is positive")
 
 fun should_flatmap_negative(): Assert =
     let result = Success { -1337 }
-    let mapped = result |* :_positive_not_zero
+    let mapped = result |* :positive_not_zero
     assert_that(mapped).fails("-1337 is NOT positive")
 
 fun should_flatmap_zero(): Assert =
     let result = Success { 0 }
-    let mapped = result |* :_positive_not_zero
+    let mapped = result |* :positive_not_zero
     assert_that(mapped).fails("I don't like zero")
 
 fun should_return_value_when_result_succeeded(): Assert =

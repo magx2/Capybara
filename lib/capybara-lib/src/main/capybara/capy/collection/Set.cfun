@@ -273,10 +273,10 @@ fun Set[T].`×`(other: Set[U]): Set[Tuple[T, U]] = this.cartesian_product(other)
 /// {}.power_set() == {{},}
 /// ```
 fun Set[T].power_set(): Set[Set[T]] =
-    fun _set_power_subset(subset: Set[T], value: T): Set[Set[T]] = {subset + value,}
+    fun set_power_subset(subset: Set[T], value: T): Set[Set[T]] = {subset + value,}
     ---
     this.reduce({{},}, (subsets, value) =>
-        subsets.reduce(subsets, (acc, subset) => acc + _set_power_subset(subset, value)))
+        subsets.reduce(subsets, (acc, subset) => acc + set_power_subset(subset, value)))
 
 /// Returns the Set of all subsets of this Set.
 ///

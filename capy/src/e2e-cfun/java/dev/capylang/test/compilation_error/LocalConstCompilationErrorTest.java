@@ -13,13 +13,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class LocalConstCompilationErrorTest {
     @Test
-    void localConstRequiresPrivatePrefix() {
+    void duplicateLocalConstReportsLocations() {
         var programResult = CapybaraCompiler.INSTANCE.compile(
                 List.of(new RawModule("LocalConst", "/foo/boo", """
-                        fun foo(x: String): bool =
+                        fun foo(): int =
                             const white_space = 1
+                            const white_space = 2
                             ---
-                            x == ""
+                            white_space
                         """)),
                 new TreeSet<>()
         );
@@ -31,7 +32,7 @@ class LocalConstCompilationErrorTest {
                     assertThat(error.file()).isEqualTo("/foo/boo/LocalConst.cfun");
                     assertThat(error.line()).isEqualTo(2);
                     assertThat(error.column()).isEqualTo(4);
-                    assertThat(error.message()).contains("Local const name has to start with `__` and use a private identifier style: white_space");
+                    assertThat(error.message()).contains("Duplicate local const name: white_space. Declared at: 2:4, 3:4");
                 });
     }
 }

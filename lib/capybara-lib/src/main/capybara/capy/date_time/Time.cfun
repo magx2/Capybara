@@ -85,9 +85,9 @@ fun Time.round_to_minutes(): Time = Time { hour: this.hour, minute: this.minute,
 fun Time.round_to_hours(): Time = Time { hour: this.hour, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: this.offset_minutes }
 /// Adds seconds and wraps around a 24-hour day.
 fun Time.add_seconds(seconds: int): Time =
-    fun __normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, SECONDS_IN_DAY)
+    fun normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, SECONDS_IN_DAY)
     ---
-    let total_seconds = __normalize_day_seconds(this.to_seconds() + seconds)
+    let total_seconds = normalize_day_seconds(this.to_seconds() + seconds)
     let new_hour = (total_seconds / SECONDS_IN_HOUR) % HOURS_IN_DAY
     let new_minute = (total_seconds / SECONDS_IN_MINUTE) % MINUTES_IN_HOUR
     let new_second = total_seconds % SECONDS_IN_MINUTE
@@ -99,11 +99,11 @@ fun Time.add_hours(hours: int): Time = this.add_seconds(hours * SECONDS_IN_HOUR)
 
 /// Formats this time as an ISO 8601 extended time.
 fun Time.to_iso_8601(): String =
-    fun rec __pad_left(value: String, size: int): String =
+    fun rec pad_left(value: String, size: int): String =
         if value.size() >= size
         then value
-        else __pad_left("0" + value, size)
-    fun __format_offset(offset_minutes: int): String =
+        else pad_left("0" + value, size)
+    fun format_offset(offset_minutes: int): String =
         let absolute_offset_minutes = if offset_minutes < 0 then 0 - offset_minutes else offset_minutes
         let offset_hours = absolute_offset_minutes / MINUTES_IN_HOUR
         let offset_remaining_minutes = absolute_offset_minutes % MINUTES_IN_HOUR
@@ -111,118 +111,118 @@ fun Time.to_iso_8601(): String =
         then "Z"
         else
             (if offset_minutes < 0 then "-" else "+")
-                + __pad_left("" + offset_hours, 2)
+                + pad_left("" + offset_hours, 2)
                 + ":"
-                + __pad_left("" + offset_remaining_minutes, 2)
+                + pad_left("" + offset_remaining_minutes, 2)
     ---
-    __pad_left("" + this.hour.value, 2)
+    pad_left("" + this.hour.value, 2)
     + ":"
-    + __pad_left("" + this.minute.value, 2)
+    + pad_left("" + this.minute.value, 2)
     + ":"
-    + __pad_left("" + this.second.value, 2)
+    + pad_left("" + this.second.value, 2)
     + match this.offset_minutes with
       case None -> ""
-      case Some { value } -> __format_offset(value)
+      case Some { value } -> format_offset(value)
 
 /// Parses an ISO 8601 time in basic or extended complete form.
 fun from_iso_8601(iso: String): Result[Time] =
-    data __Parse[T] { buffer: String, value: T }
-    data __ZoneParse { buffer: String, offset_minutes: Option[offset_minutes] }
-    fun __invalid(message: String): String = "Invalid ISO 8601 time format: " + message
-    fun rec __drop_prefix(value: String, size: int): String =
+    data Parse[T] { buffer: String, value: T }
+    data ZoneParse { buffer: String, offset_minutes: Option[offset_minutes] }
+    fun invalid(message: String): String = "Invalid ISO 8601 time format: " + message
+    fun rec drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1, value.size()], size - 1)
-    fun rec __take_prefix(value: String, size: int, acc: String): String =
+            case Some { _ } -> drop_prefix(value[1, value.size()], size - 1)
+    fun rec take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else
             match value[0] with
             case None -> acc
-            case Some { char } -> __take_prefix(value[1, value.size()], size - 1, acc + char)
-    fun __slice(value: String, start: int, size: int): String = __take_prefix(__drop_prefix(value, start), size, "")
-    fun __parse_single_digit(value: String): Result[__Parse[int]] =
+            case Some { char } -> take_prefix(value[1, value.size()], size - 1, acc + char)
+    fun slice(value: String, start: int, size: int): String = take_prefix(drop_prefix(value, start), size, "")
+    fun parse_single_digit(value: String): Result[Parse[int]] =
         match value[0] with
-        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case None -> Error { invalid("unexpected end of string while parsing digits") }
         case Some { char } ->
             match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1, value.size()], value: digit } }
-            case Error -> Error { __invalid("expected digit, got `" + char + "`") }
-    fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
+            case Success { digit } -> Success { Parse { buffer: value[1, value.size()], value: digit } }
+            case Error -> Error { invalid("expected digit, got `" + char + "`") }
+    fun rec parse_rest_digits(value: String, parsed: int): Result[Parse[int]] =
         if value.is_empty()
-        then Success { __Parse { buffer: value, value: parsed } }
+        then Success { Parse { buffer: value, value: parsed } }
         else
-            match __parse_single_digit(value) with
-            case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
-            case Error -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: String): Result[__Parse[int]] =
-        let parse <- __parse_single_digit(value)
-        __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: String, label: String): Result[int] =
-        let parse <- __parse_digits(value)
+            match parse_single_digit(value) with
+            case Success { next } -> parse_rest_digits(next.buffer, parsed * 10 + next.value)
+            case Error -> Success { Parse { buffer: value, value: parsed } }
+    fun parse_digits(value: String): Result[Parse[int]] =
+        let parse <- parse_single_digit(value)
+        parse_rest_digits(parse.buffer, parse.value)
+    fun parse_exact_digits(value: String, label: String): Result[int] =
+        let parse <- parse_digits(value)
         if parse.buffer.is_empty()
         then Success { parse.value }
-        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+        else Error { invalid("expected digits for " + label + ", got `" + value + "`") }
     fun parse_hour_value(value: int): Result[hour] =
         match hour { value } with
         case Success { parsed } -> Success { parsed }
-        case Error { message } -> Error { __invalid(message) }
+        case Error { message } -> Error { invalid(message) }
     fun parse_minute_value(value: int): Result[minute] =
         match minute { value } with
         case Success { parsed } -> Success { parsed }
-        case Error { message } -> Error { __invalid(message) }
+        case Error { message } -> Error { invalid(message) }
     fun parse_second_value(value: int): Result[second] =
         match second { value } with
         case Success { parsed } -> Success { parsed }
-        case Error { message } -> Error { __invalid(message) }
-    fun __parse_offset(sign: String, hour_part: String, minute_part: String): Result[offset_minutes] = {
-        let hours <- __parse_exact_digits(hour_part, "offset hour")
-        let minutes <- __parse_exact_digits(minute_part, "offset minute")
+        case Error { message } -> Error { invalid(message) }
+    fun parse_offset(sign: String, hour_part: String, minute_part: String): Result[offset_minutes] = {
+        let hours <- parse_exact_digits(hour_part, "offset hour")
+        let minutes <- parse_exact_digits(minute_part, "offset minute")
         if hours > 23
-        then Error { __invalid("offset hour must be between 00 and 23") }
+        then Error { invalid("offset hour must be between 00 and 23") }
         else if minutes > 59
-            then Error { __invalid("offset minute must be between 00 and 59") }
+            then Error { invalid("offset minute must be between 00 and 59") }
             else if sign == "-" & hours == 0 & minutes == 0
-                then Error { __invalid("negative zero offset is not allowed") }
+                then Error { invalid("negative zero offset is not allowed") }
                 else {
                     let direction = if sign == "-" then 0 - 1 else 1
                     match offset_minutes { direction * (hours * MINUTES_IN_HOUR + minutes) } with
                     case Success { parsed } -> Success { parsed }
-                    case Error { message } -> Error { __invalid(message) }
+                    case Error { message } -> Error { invalid(message) }
                 }
     }
-    fun __parse_zone(value: String): Result[__ZoneParse] =
+    fun parse_zone(value: String): Result[ZoneParse] =
         if value.is_empty()
-        then Error { __invalid("time must not be empty") }
-        else if __slice(value, value.size().value - 1, 1) == "Z"
-            then Success { __ZoneParse { buffer: __take_prefix(value, value.size().value - 1, ""), offset_minutes: Some { offset_minutes! { 0 } } } }
+        then Error { invalid("time must not be empty") }
+        else if slice(value, value.size().value - 1, 1) == "Z"
+            then Success { ZoneParse { buffer: take_prefix(value, value.size().value - 1, ""), offset_minutes: Some { offset_minutes! { 0 } } } }
         else if value.size() >= 6
-                & (__slice(value, value.size().value - 6, 1) == "+" | __slice(value, value.size().value - 6, 1) == "-")
-                & __slice(value, value.size().value - 3, 1) == ":"
+                & (slice(value, value.size().value - 6, 1) == "+" | slice(value, value.size().value - 6, 1) == "-")
+                & slice(value, value.size().value - 3, 1) == ":"
                 then {
-                    let offset_minutes <- __parse_offset(__slice(value, value.size().value - 6, 1), __slice(value, value.size().value - 5, 2), __slice(value, value.size().value - 2, 2))
-                    Success { __ZoneParse { buffer: __take_prefix(value, value.size().value - 6, ""), offset_minutes: Some { offset_minutes } } }
+                    let offset_minutes <- parse_offset(slice(value, value.size().value - 6, 1), slice(value, value.size().value - 5, 2), slice(value, value.size().value - 2, 2))
+                    Success { ZoneParse { buffer: take_prefix(value, value.size().value - 6, ""), offset_minutes: Some { offset_minutes } } }
                 }
             else if value.size() >= 5
-                    & (__slice(value, value.size().value - 5, 1) == "+" | __slice(value, value.size().value - 5, 1) == "-")
+                    & (slice(value, value.size().value - 5, 1) == "+" | slice(value, value.size().value - 5, 1) == "-")
                     then {
-                        let offset_minutes <- __parse_offset(__slice(value, value.size().value - 5, 1), __slice(value, value.size().value - 4, 2), __slice(value, value.size().value - 2, 2))
-                        Success { __ZoneParse { buffer: __take_prefix(value, value.size().value - 5, ""), offset_minutes: Some { offset_minutes } } }
+                        let offset_minutes <- parse_offset(slice(value, value.size().value - 5, 1), slice(value, value.size().value - 4, 2), slice(value, value.size().value - 2, 2))
+                        Success { ZoneParse { buffer: take_prefix(value, value.size().value - 5, ""), offset_minutes: Some { offset_minutes } } }
                     }
                 else if value.size() >= 3
-                        & (__slice(value, value.size().value - 3, 1) == "+" | __slice(value, value.size().value - 3, 1) == "-")
+                        & (slice(value, value.size().value - 3, 1) == "+" | slice(value, value.size().value - 3, 1) == "-")
                         then {
-                            let offset_minutes <- __parse_offset(__slice(value, value.size().value - 3, 1), __slice(value, value.size().value - 2, 2), "00")
-                            Success { __ZoneParse { buffer: __take_prefix(value, value.size().value - 3, ""), offset_minutes: Some { offset_minutes } } }
+                            let offset_minutes <- parse_offset(slice(value, value.size().value - 3, 1), slice(value, value.size().value - 2, 2), "00")
+                            Success { ZoneParse { buffer: take_prefix(value, value.size().value - 3, ""), offset_minutes: Some { offset_minutes } } }
                         }
-                        else Success { __ZoneParse { buffer: value, offset_minutes: None {} } }
-    fun __parse_parts(hour_part: String, minute_part: String, second_part: String, offset_minutes: Option[offset_minutes]): Result[Time] = {
-        let hour_value <- __parse_exact_digits(hour_part, "hour")
-        let minute_value <- __parse_exact_digits(minute_part, "minute")
-        let second_value <- __parse_exact_digits(second_part, "second")
+                        else Success { ZoneParse { buffer: value, offset_minutes: None {} } }
+    fun parse_parts(hour_part: String, minute_part: String, second_part: String, offset_minutes: Option[offset_minutes]): Result[Time] = {
+        let hour_value <- parse_exact_digits(hour_part, "hour")
+        let minute_value <- parse_exact_digits(minute_part, "minute")
+        let second_value <- parse_exact_digits(second_part, "second")
         let parsed_hour <- parse_hour_value(hour_value)
         let parsed_minute <- parse_minute_value(minute_value)
         let parsed_second <- parse_second_value(second_value)
@@ -230,11 +230,11 @@ fun from_iso_8601(iso: String): Result[Time] =
     }
     ---
     let value = if iso.starts_with("T") then iso[1, iso.size()] else iso
-    let zone <- __parse_zone(value)
+    let zone <- parse_zone(value)
     if zone.buffer.size() == 8
     then if zone.buffer[2, 3] == ":" & zone.buffer[5, 6] == ":"
-        then __parse_parts(zone.buffer[0, 2], zone.buffer[3, 5], zone.buffer[6, 8], zone.offset_minutes)
-        else Error { __invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }
+        then parse_parts(zone.buffer[0, 2], zone.buffer[3, 5], zone.buffer[6, 8], zone.offset_minutes)
+        else Error { invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }
     else if zone.buffer.size() == 6
-        then __parse_parts(zone.buffer[0, 2], zone.buffer[2, 4], zone.buffer[4, 6], zone.offset_minutes)
-        else Error { __invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }
+        then parse_parts(zone.buffer[0, 2], zone.buffer[2, 4], zone.buffer[4, 6], zone.offset_minutes)
+        else Error { invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }
