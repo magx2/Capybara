@@ -2161,6 +2161,10 @@ public class CapybaraExpressionCompiler {
         if (getAlias.isPresent()) {
             return getAlias;
         }
+        var stringBackedToString = resolveBuiltinStringBackedToStringMethodInvoke(functionCall, scope, methodName);
+        if (stringBackedToString.isPresent()) {
+            return stringBackedToString;
+        }
         var enumNameMethod = resolveBuiltinEnumNameMethodInvoke(functionCall, scope, methodName);
         if (enumNameMethod.isPresent()) {
             return enumNameMethod;
@@ -2386,6 +2390,33 @@ public class CapybaraExpressionCompiler {
                 parameterTypes,
                 returnType
         );
+    }
+
+    private Optional<Result<CompiledExpression>> resolveBuiltinStringBackedToStringMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName
+    ) {
+        if (!(methodName.equals("to_string") || methodName.equals("toString"))
+            || functionCall.arguments().size() != 1) {
+            return Optional.empty();
+        }
+        var linkedReceiver = linkExpression(functionCall.arguments().getFirst(), scope);
+        if (linkedReceiver instanceof Result.Error<CompiledExpression> error) {
+            return Optional.of(new Result.Error<>(error.errors()));
+        }
+        if (!(linkedReceiver instanceof Result.Success<CompiledExpression> value)) {
+            return Optional.empty();
+        }
+        var receiver = value.value();
+        if (receiver.type() == STRING) {
+            return Optional.of(Result.success(receiver));
+        }
+        if (receiver.type() instanceof CompiledPrimitiveBackedType primitiveBackedType
+            && primitiveBackedType.backingType() == STRING) {
+            return Optional.of(Result.success(unwrapPrimitiveBackedExpression(receiver, primitiveBackedType)));
+        }
+        return Optional.empty();
     }
 
     private Optional<Result<CompiledExpression>> resolveBuiltinEnumNameMethodInvoke(
@@ -3657,6 +3688,13 @@ public class CapybaraExpressionCompiler {
             && sameRawTypeName(expectedPrimitiveBacked.name(), actualPrimitiveBacked.name())) {
             return new CoercedArgument(argument, 1);
         }
+        if (expected instanceof CompiledPrimitiveBackedType expectedPrimitiveBacked
+            && expectedPrimitiveBacked.backingType() == STRING
+            && isCharType(expectedPrimitiveBacked)
+            && argument instanceof CompiledStringValue stringValue
+            && isSingleCharacterStringLiteral(stringValue)) {
+            return new CoercedArgument(argument, 2);
+        }
         if (argument.type() instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
         }
@@ -4922,6 +4960,10 @@ public class CapybaraExpressionCompiler {
         if (receiverType == STRING) {
             ownerNames.add("String");
         }
+        if (receiverType instanceof CompiledPrimitiveBackedType primitiveBackedType
+            && primitiveBackedType.backingType() == STRING) {
+            ownerNames.add("String");
+        }
         ownerNames.addAll(linkCache.methodOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
         if (receiverType instanceof CompiledDataType) {
             ownerNames.addAll(linkCache.subtypeParentOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
@@ -4953,6 +4995,33 @@ public class CapybaraExpressionCompiler {
         var dot = normalized.lastIndexOf('.');
         var index = Math.max(slash, dot);
         return index >= 0 ? normalized.substring(index + 1) : normalized;
+    }
+
+    private boolean isCharType(CompiledPrimitiveBackedType type) {
+        return type.backingType() == STRING && simpleTypeName(type.name()).equals("char");
+    }
+
+    private static boolean isSingleCharacterStringLiteral(CompiledStringValue value) {
+        var literal = value.stringValue();
+        if (literal.length() < 2) {
+            return false;
+        }
+        var quote = literal.charAt(0);
+        if ((quote != '"' && quote != '\'') || literal.charAt(literal.length() - 1) != quote) {
+            return false;
+        }
+        var content = literal.substring(1, literal.length() - 1);
+        var characters = 0;
+        for (var i = 0; i < content.length(); i++) {
+            if (content.charAt(i) == '\\' && i + 1 < content.length()) {
+                i++;
+            }
+            characters++;
+            if (characters > 1) {
+                return false;
+            }
+        }
+        return characters == 1;
     }
 
     private Result<CompiledExpression> linkPipeExpression(InfixExpression expression, Scope scope) {
