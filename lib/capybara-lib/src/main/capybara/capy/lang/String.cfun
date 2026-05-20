@@ -20,27 +20,11 @@ type char -> String with constructor {
     else Error { message: "char must contain exactly one character" }
 }
 
-/// Returns the underlying one-character String.
-fun char.to_string(): String = this.value
-
 /// Returns true when both chars contain the same character.
 fun char.`==`(other: char): bool = this.value == other.value
 
 /// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
-fun String.get(idx: index): Option[String] = <native>
-
-/// Returns the character at idx as a validated `char` using the same bounds and negative-index rules as string[idx].
-fun String.char_at(idx: index): Option[char] =
-    match this.get(idx) with
-    case Some { value } -> {
-        match char { value } with
-        case Success { parsed } -> Some { value: parsed }
-        case Error -> None {}
-    }
-    case None -> None {}
-
-/// Returns the character at idx as a validated `char` using the same bounds and negative-index rules as string[idx].
-fun String.get_char(idx: index): Option[char] = this.char_at(idx)
+fun String.get(idx: index): Option[char] = <native>
 
 /// Returns the substring in the half-open range [from, to) using negative-index rules.
 fun String.get(from: int, to: int): String = <native>

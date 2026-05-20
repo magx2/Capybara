@@ -172,6 +172,45 @@ class PrimitiveBackedTypeCompilerTest {
     }
 
     @Test
+    void shouldUseBackingStringBehaviorForStringBackedPrimitiveValues() {
+        var compiled = compileSuccess(new RawModule("String", "/capy/lang", """
+                data String { <native> }
+                type char -> String
+
+                fun String.size(): int = <native>
+                fun stringify(value: char): String = value.to_string()
+                fun char_size(value: char): int = value.size()
+                fun takes_char(value: char): char = value
+                fun single_literal(): char = takes_char("a")
+                fun single_quoted_literal(): char = takes_char('b')
+                """));
+
+        assertThat(function(compiled, "String", "stringify").expression()).isInstanceOfSatisfying(
+                CompiledUnwrapExpression.class,
+                unwrap -> assertThat(unwrap.type()).isEqualTo(PrimitiveLinkedType.STRING)
+        );
+        assertThat(function(compiled, "String", "char_size").expression()).isInstanceOfSatisfying(
+                CompiledFunctionCall.class,
+                call -> assertThat(call.name()).isEqualTo("__method__String__size")
+        );
+    }
+
+    @Test
+    void shouldRejectRawBackingStringsForNonCharPrimitiveBackedTypes() {
+        assertThat(compileFailure(new RawModule("Tokens", "/foo/app", """
+                type token -> String
+                fun takes_token(value: token): token = value
+                fun bad(): token = takes_token("raw")
+                """)).message()).contains("Expected `token`, got `String`");
+
+        assertThat(compileFailure(new RawModule("Chars", "/foo/app", """
+                type char -> String
+                fun takes_char(value: char): char = value
+                fun bad(): char = takes_char("ab")
+                """)).message()).contains("Expected `char`, got `String`");
+    }
+
+    @Test
     void shouldUsePrimitiveBackedValuesWhereBackingPrimitiveIsExpectedAcrossExpressionShapes() {
         compileSuccess(List.of(optionModule(), new RawModule("Indexes", "/foo/app", """
                 type index -> int with constructor {

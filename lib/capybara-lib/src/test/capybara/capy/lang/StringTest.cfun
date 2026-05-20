@@ -40,7 +40,7 @@ fun should_create_chars(): Assert =
         assert_that(char { "ab" }).fails("char must contain exactly one character"),
         assert_that(char { "x" }).succeeds(value => assert_that(value.size()).is_equal_to(1)),
         assert_that(
-            match "abc".char_at(string_test_index(1)) with
+            match "abc".get(string_test_index(1)) with
             case Some { value } -> value.to_string()
             case None -> ""
         ).is_equal_to("b"),

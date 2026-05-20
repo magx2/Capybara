@@ -42,7 +42,7 @@ fun char_to_string(value: char): String = value.to_string()
 fun char_length(value: char) = value.size()
 
 fun char_at_or_question(value: String, idx: index): String =
-    match value.char_at(idx) with
+    match value.get(idx) with
     case Some { char } -> char.to_string()
     case None -> "?"
 
