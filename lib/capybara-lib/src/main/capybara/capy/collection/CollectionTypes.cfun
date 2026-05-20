@@ -18,6 +18,9 @@ type size -> int with constructor {
 const FIRST_ELEMENT: index = index! { 0 }
 const EMPTY: size = size! { 0 }
 
+fun index.to_size(): size = size! { this.value }
+fun size.to_index(): index = index! { this.value }
+
 fun index.next(): Result[index] =
     if this.value == MAX_INT_VALUE
     then Error { message: "index increment overflow" }
@@ -28,36 +31,51 @@ fun index.plus(offset: size): Result[index] =
     then Error { message: "index addition overflow" }
     else Success { index! { this.value + offset.value } }
 
+fun index.plus(offset: int): Result[index] =
+    let parsed_offset <- size { offset }
+    this.plus(parsed_offset)
+
 fun index.`+`(offset: size): Result[index] = this.plus(offset)
+fun index.`+`(offset: int): Result[index] = this.plus(offset)
 
 fun index.`>`(other: index): bool = this.value > other.value
+fun index.`>`(other: int): bool = this.value > other
 fun index.`>=`(other: index): bool = this.value >= other.value
+fun index.`>=`(other: int): bool = this.value >= other
 fun index.`<`(other: index): bool = this.value < other.value
+fun index.`<`(other: int): bool = this.value < other
 fun index.`<=`(other: index): bool = this.value <= other.value
+fun index.`<=`(other: int): bool = this.value <= other
 fun index.`==`(other: index): bool = this.value == other.value
+fun index.`==`(other: int): bool = this.value == other
 
 fun size.plus(other: size): Result[size] =
     if this.value > MAX_INT_VALUE - other.value
     then Error { message: "size addition overflow" }
     else Success { size! { this.value + other.value } }
 
+fun size.plus(other: int): Result[size] =
+    let parsed_other <- size { other }
+    this.plus(parsed_other)
+
 fun size.`+`(other: size): Result[size] = this.plus(other)
+fun size.`+`(other: int): Result[size] = this.plus(other)
 
 fun size.minus(other: size): Result[size] =
     size { this.value - other.value }
 
+fun size.minus(other: int): Result[size] =
+    size { this.value - other }
+
 fun size.`-`(other: size): Result[size] = this.minus(other)
-
+fun size.`-`(other: int): Result[size] = this.minus(other)
 fun size.`>`(other: size): bool = this.value > other.value
+fun size.`>`(other: int): bool = this.value > other
 fun size.`>=`(other: size): bool = this.value >= other.value
+fun size.`>=`(other: int): bool = this.value >= other
 fun size.`<`(other: size): bool = this.value < other.value
+fun size.`<`(other: int): bool = this.value < other
 fun size.`<=`(other: size): bool = this.value <= other.value
+fun size.`<=`(other: int): bool = this.value <= other
 fun size.`==`(other: size): bool = this.value == other.value
-
-fun next_index(value: index): Result[index] = value.next()
-
-fun add_size_to_index(value: index, offset: size): Result[index] = value.plus(offset)
-
-fun add_size(left: size, right: size): Result[size] = left.plus(right)
-
-fun subtract_size(left: size, right: size): Result[size] = left.minus(right)
+fun size.`==`(other: int): bool = this.value == other
