@@ -40,18 +40,25 @@ fun tests(): Effect[TestFile] =
         + _time_test_from_iso_8601_success()
         + _time_test_from_iso_8601_failure())
 
-private fun time_from_parts(hour_value: int, minute_value: int, second_value: int, offset_minutes: Option[int]): Result[Time] = {
+private fun time_from_parts(hour_value: int, minute_value: int, second_value: int, offset_minutes: Option[offset_minutes]): Result[Time] = {
     let parsed_hour <- hour { hour_value }
     let parsed_minute <- minute { minute_value }
     let parsed_second <- second { second_value }
-    Time { hour: parsed_hour, minute: parsed_minute, second: parsed_second, offset_minutes }
+    Success { Time { hour: parsed_hour, minute: parsed_minute, second: parsed_second, offset_minutes } }
 }
 
 fun _local_time(hour: int, minute: int, second: int): Result[Time] =
     time_from_parts(hour, minute, second, None {})
 
-fun _offset_time(hour: int, minute: int, second: int, offset_minutes: int): Result[Time] =
-    time_from_parts(hour, minute, second, Some { offset_minutes })
+fun _offset_time(hour: int, minute: int, second: int, offset_value: int): Result[Time] = {
+    let parsed_offset <- offset_minutes { offset_value }
+    time_from_parts(hour, minute, second, Some { parsed_offset })
+}
+
+private fun some_offset(value: int): Option[offset_minutes] =
+    match offset_minutes { value } with
+    case Success { parsed } -> Some { parsed }
+    case Error -> None {}
 
 private fun component_type_tests(): List[TestCase] =
     [
@@ -72,6 +79,14 @@ private fun component_type_tests(): List[TestCase] =
                 assert_that(second { 0 }).succeeds(),
                 assert_that(second { 59 }).succeeds(),
                 assert_that(second { 60 }).fails(),
+            ])),
+        test("offset_minutes should accept UTC offsets in range",
+            () => assert_all([
+                assert_that(offset_minutes { 0 }).succeeds(),
+                assert_that(offset_minutes { 1439 }).succeeds(),
+                assert_that(offset_minutes { -1439 }).succeeds(),
+                assert_that(offset_minutes { 1440 }).fails(),
+                assert_that(offset_minutes { -1440 }).fails(),
             ])),
         test("time component comparison operators should compare values",
             () =>
@@ -140,7 +155,7 @@ fun _test_round_to_minutes(): TestCase =
                     .has_hour(23)
                     .has_minute(59)
                     .has_second(0)
-                    .has_offset_minutes(Some { 90 })))
+                    .has_offset_minutes(some_offset(90))))
 
 fun _test_round_to_hours(): TestCase =
     test(
@@ -151,7 +166,7 @@ fun _test_round_to_hours(): TestCase =
                     .has_hour(23)
                     .has_minute(0)
                     .has_second(0)
-                    .has_offset_minutes(Some { -300 })))
+                    .has_offset_minutes(some_offset(-300))))
 
 fun _test_add_seconds(): List[TestCase] =
     ([
@@ -169,7 +184,7 @@ fun _test_add_seconds(): List[TestCase] =
         () => assert_that(_offset_time(hour, minute, second, 330))
             .succeeds(time =>
                 assert_that(time.add_seconds(seconds_to_add))
-                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { 330 }))))).as_list()
+                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, some_offset(330)))))).as_list()
 
 fun _test_add_minutes(): List[TestCase] =
     ([
@@ -185,7 +200,7 @@ fun _test_add_minutes(): List[TestCase] =
         () => assert_that(_offset_time(hour, minute, second, -300))
             .succeeds(time =>
                 assert_that(time.add_minutes(minutes_to_add))
-                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { -300 }))))).as_list()
+                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, some_offset(-300)))))).as_list()
 
 fun _test_add_hours(): List[TestCase] =
     ([
@@ -197,14 +212,14 @@ fun _test_add_hours(): List[TestCase] =
         () => assert_that(_offset_time(hour, minute, second, 0))
             .succeeds(time =>
                 assert_that(time.add_hours(hours_to_add))
-                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { 0 }))))).as_list()
+                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, some_offset(0)))))).as_list()
 
 fun _time_test_to_iso_8601(): List[TestCase] =
     ([
         (_time_test_value(13, 47, 30, None {}), "13:47:30"),
-        (_time_test_value(13, 47, 30, Some { 0 }), "13:47:30Z"),
-        (_time_test_value(13, 47, 30, Some { 90 }), "13:47:30+01:30"),
-        (_time_test_value(13, 47, 30, Some { -300 }), "13:47:30-05:00"),
+        (_time_test_value(13, 47, 30, some_offset(0)), "13:47:30Z"),
+        (_time_test_value(13, 47, 30, some_offset(90)), "13:47:30+01:30"),
+        (_time_test_value(13, 47, 30, some_offset(-300)), "13:47:30-05:00"),
     ] | (time, expected) => test(
         "Time.to_iso_8601() should format {expected}",
         () => assert_that(time.to_iso_8601()).is_equal_to(expected))).as_list()
@@ -215,17 +230,17 @@ fun _time_test_from_iso_8601_success(): List[TestCase] =
         ("134730", _time_test_value(13, 47, 30, None {})),
         ("T13:47:30", _time_test_value(13, 47, 30, None {})),
         ("T134730", _time_test_value(13, 47, 30, None {})),
-        ("13:47:30Z", _time_test_value(13, 47, 30, Some { 0 })),
-        ("134730Z", _time_test_value(13, 47, 30, Some { 0 })),
-        ("13:47:30+00:00", _time_test_value(13, 47, 30, Some { 0 })),
-        ("134730+0000", _time_test_value(13, 47, 30, Some { 0 })),
-        ("13:47:30+00", _time_test_value(13, 47, 30, Some { 0 })),
-        ("13:47:30+01:30", _time_test_value(13, 47, 30, Some { 90 })),
-        ("134730+0130", _time_test_value(13, 47, 30, Some { 90 })),
-        ("13:47:30+14:00", _time_test_value(13, 47, 30, Some { 840 })),
-        ("13:47:30-05", _time_test_value(13, 47, 30, Some { -300 })),
-        ("134730-1130", _time_test_value(13, 47, 30, Some { -690 })),
-        ("T134730+02", _time_test_value(13, 47, 30, Some { 120 })),
+        ("13:47:30Z", _time_test_value(13, 47, 30, some_offset(0))),
+        ("134730Z", _time_test_value(13, 47, 30, some_offset(0))),
+        ("13:47:30+00:00", _time_test_value(13, 47, 30, some_offset(0))),
+        ("134730+0000", _time_test_value(13, 47, 30, some_offset(0))),
+        ("13:47:30+00", _time_test_value(13, 47, 30, some_offset(0))),
+        ("13:47:30+01:30", _time_test_value(13, 47, 30, some_offset(90))),
+        ("134730+0130", _time_test_value(13, 47, 30, some_offset(90))),
+        ("13:47:30+14:00", _time_test_value(13, 47, 30, some_offset(840))),
+        ("13:47:30-05", _time_test_value(13, 47, 30, some_offset(-300))),
+        ("134730-1130", _time_test_value(13, 47, 30, some_offset(-690))),
+        ("T134730+02", _time_test_value(13, 47, 30, some_offset(120))),
     ] | (iso, expected) => test(
         "Time.from_iso_8601 should parse {iso}",
         () => assert_that(/capy/date_time/Time.from_iso_8601(iso)).succeeds(expected))).as_list()
@@ -248,7 +263,7 @@ fun _time_test_from_iso_8601_failure(): List[TestCase] =
         "Time.from_iso_8601 should fail for {iso}",
         () => assert_that(/capy/date_time/Time.from_iso_8601(iso)).fails())).as_list()
 
-fun _time_test_value(hour: int, minute: int, second: int, offset_minutes: Option[int]): Time =
+fun _time_test_value(hour: int, minute: int, second: int, offset_minutes: Option[offset_minutes]): Time =
     match time_from_parts(hour, minute, second, offset_minutes) with
     case Success { value } -> value
     case Error -> MIDNIGHT
