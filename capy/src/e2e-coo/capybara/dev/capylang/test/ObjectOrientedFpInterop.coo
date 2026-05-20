@@ -30,6 +30,8 @@ class PetInteractor {
     def add_user_ids(left: user_id, right: user_id): user_id =
         ObjectOrientedFpInterop.addUserIds(left, right)
 
+    def user_id_slots(size: int): user_id[] = user_id[size]
+
     def local_user_id(value: int): int {
         let id: user_id = user_id { value }
         return ObjectOrientedFpInterop.unwrapUserId(id)

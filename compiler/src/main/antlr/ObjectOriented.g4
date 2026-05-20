@@ -91,6 +91,7 @@ functionType: ':' type;
 
 VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
+SUPER: 'super';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
 identifier: NAME | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'void' | 'any' | 'return' | 'catch';
 type: functionTypeLiteral | arrayOrSimpleType;
@@ -211,7 +212,8 @@ sizedArrayType: 'byte'
     | 'any'
     | 'data'
     | 'void'
-    | qualifiedType ('[' type (',' type)* ']')?;
+    | qualifiedType ('[' type (',' type)* ']')?
+    | lowerQualifiedType;
 
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
@@ -228,7 +230,7 @@ functionCall
     | 'any' LPAREN argumentList? RPAREN
     | qualifiedType DOT identifier LPAREN argumentList? RPAREN
     ;
-value: literal | identifier | qualifiedType;
+value: literal | identifier | qualifiedType | SUPER;
 thisExpression: 'this';
 expressionBlock: LBRACE expression RBRACE;
 argumentList: expression (COMMA expression)*;
