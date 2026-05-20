@@ -27,6 +27,8 @@ fun month.`>=`(other: month): bool = this.value >= other.value
 fun month.`<`(other: month): bool = this.value < other.value
 fun month.`<=`(other: month): bool = this.value <= other.value
 fun month.`==`(other: month): bool = this.value == other.value
+fun month.next(): month = if this == DECEMBER then JANUARY else month! { this.value + 1 }
+fun month.previous(): month = if this == JANUARY then DECEMBER else month! { this.value - 1 }
 
 /// Checks whether a year is a leap year in the Gregorian calendar.
 private fun leap_year_value(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
