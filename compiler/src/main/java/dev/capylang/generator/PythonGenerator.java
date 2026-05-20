@@ -1837,7 +1837,8 @@ public final class PythonGenerator implements Generator {
             ));
             exports.put("capy.lang.String", Set.of(
                     "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
-                    "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
+                    "__constructor__primitive__char", "capy__constructorPrimitiveChar",
+                    "char_at", "charAt", "get_char", "getChar",
                     "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "__capybaraPrimitiveTypes"
             ));
@@ -1866,12 +1867,14 @@ public final class PythonGenerator implements Generator {
                     "greater", "greater_op3d", "less", "less_op3d", "op3d_op3d",
                     "greater__month__month", "greater_op3d__month__month", "less__month__month",
                     "less_op3d__month__month", "op3d_op3d__month__month",
+                    "next__name_next__month", "previous__name_previous__month",
                     "UNIX_DATE", "fromIso8601", "from_iso_8601", "__capybaraPrimitiveTypes"));
             exports.put("capy.date_time.TimeModule", Set.of(
                     "Time", "__constructor__data__Time", "capy__constructorDataTime",
                     "__constructor__primitive__hour", "capy__constructorPrimitiveHour",
                     "__constructor__primitive__minute", "capy__constructorPrimitiveMinute",
                     "__constructor__primitive__second", "capy__constructorPrimitiveSecond",
+                    "__constructor__primitive__offset_minutes", "capy__constructorPrimitiveOffsetMinutes",
                     "greater__op_greater__hour__hour", "greater__op_greater__minute__minute", "greater__op_greater__second__second",
                     "greater_op3d__op_greater_op3d__hour__hour", "greater_op3d__op_greater_op3d__minute__minute", "greater_op3d__op_greater_op3d__second__second",
                     "less__op_less__hour__hour", "less__op_less__minute__minute", "less__op_less__second__second",
@@ -2055,6 +2058,7 @@ public final class PythonGenerator implements Generator {
                     def __constructor__primitive__char(value):
                         text = str(value)
                         return capy.Success({'value': text}) if len(text) == 1 else capy.Error({'message': 'char must contain exactly one character'})
+                    capy__constructorPrimitiveChar = __constructor__primitive__char
                     char_at = lambda value, idx: capy.get_index(value, idx)
                     charAt = char_at
                     get_char = char_at
@@ -2298,6 +2302,10 @@ public final class PythonGenerator implements Generator {
                     OCTOBER = oCTOBER = 10
                     NOVEMBER = nOVEMBER = 11
                     DECEMBER = dECEMBER = 12
+                    def next__name_next__month(this_):
+                        return JANUARY if this_ == DECEMBER else this_ + 1
+                    def previous__name_previous__month(this_):
+                        return DECEMBER if this_ == JANUARY else this_ - 1
                     UNIX_DATE = uNIXDATE = Date({'day': 1, 'month': 1, 'year': 1970})
                     __capybaraPrimitiveTypes = {'month': {'cfunType': '/capy/date_time/Date.month', 'backingType': 'int'}}
                     fromIso8601 = capy.date_from_iso
@@ -2321,6 +2329,9 @@ public final class PythonGenerator implements Generator {
                     def __constructor__primitive__second(value):
                         return capy.Success({'value': value}) if value >= 0 and value <= 59 else capy.Error({'message': 'second must be between 0 and 59'})
                     capy__constructorPrimitiveSecond = __constructor__primitive__second
+                    def __constructor__primitive__offset_minutes(value):
+                        return capy.Success({'value': value}) if value >= -1439 and value <= 1439 else capy.Error({'message': 'offset minutes must be between -1439 and 1439'})
+                    capy__constructorPrimitiveOffsetMinutes = __constructor__primitive__offset_minutes
                     def greater__op_greater__hour__hour(this_, other): return this_ > other
                     def greater__op_greater__minute__minute(this_, other): return this_ > other
                     def greater__op_greater__second__second(this_, other): return this_ > other
@@ -2345,7 +2356,8 @@ public final class PythonGenerator implements Generator {
                     __capybaraPrimitiveTypes = {
                         'hour': {'cfunType': '/capy/date_time/Time.hour', 'backingType': 'int'},
                         'minute': {'cfunType': '/capy/date_time/Time.minute', 'backingType': 'int'},
-                        'second': {'cfunType': '/capy/date_time/Time.second', 'backingType': 'int'}
+                        'second': {'cfunType': '/capy/date_time/Time.second', 'backingType': 'int'},
+                        'offset_minutes': {'cfunType': '/capy/date_time/Time.offset_minutes', 'backingType': 'int'}
                     }
                     fromIso8601 = capy.time_from_iso
                     from_iso_8601 = fromIso8601
