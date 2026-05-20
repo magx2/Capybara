@@ -653,6 +653,10 @@ public final class JavaScriptGenerator implements Generator {
             if ("size".equals(methodName) && isStringLike(receiverType) && tailArgs.isEmpty()) {
                 return "String(" + receiver + ").length";
             }
+            if ("chars".equals(methodName) && isStringLike(receiverType) && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".chars(" + receiver + ")";
+            }
             if (("char_at".equals(methodName) || "charAt".equals(methodName) || "get_char".equals(methodName) || "getChar".equals(methodName))
                 && isStringLike(receiverType)
                 && tailArgs.size() == 1) {
@@ -1876,7 +1880,7 @@ public final class JavaScriptGenerator implements Generator {
             ));
             exports.put("capy.lang.String", Set.of(
                     "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
-                    "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
+                    "chars", "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
                     "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "__capybaraPrimitiveTypes"
             ));
@@ -2115,11 +2119,17 @@ public final class JavaScriptGenerator implements Generator {
         private static String stringRuntime() {
             return "'use strict';\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
+                   + "const Seq = require('./Seq.js');\n"
                    + "function __constructor__primitive__char(value) {\n"
                    + "    const text = String(value);\n"
                    + "    return text.length === 1 ? new capy.Success({ value: text }) : new capy.Error({ message: 'char must contain exactly one character' });\n"
                    + "}\n"
                    + "const charAt = (value, idx) => capy.getIndex(value, idx);\n"
+                   + "const chars = value => {\n"
+                   + "    const text = String(value);\n"
+                   + "    const next = idx => idx >= text.length ? Seq.End : new Seq.Cons({ value: text.charAt(idx), rest: () => next(idx + 1) });\n"
+                   + "    return next(0);\n"
+                   + "};\n"
                    + "const toStringChar = value => String(value);\n"
                    + "const equalsChar = (left, right) => String(left) === String(right);\n"
                    + "const __capybaraPrimitiveTypes = Object.freeze({ char: Object.freeze({ cfunType: '/capy/lang/String.char', backingType: 'String' }) });\n"
@@ -2133,6 +2143,7 @@ public final class JavaScriptGenerator implements Generator {
                    + "    starts_with: (value, part) => String(value).startsWith(part),\n"
                    + "    end_with: (value, part) => String(value).endsWith(part),\n"
                    + "    trim: value => String(value).trim(),\n"
+                   + "    chars,\n"
                    + "    __constructor__primitive__char,\n"
                    + "    char_at: charAt,\n"
                    + "    charAt,\n"
