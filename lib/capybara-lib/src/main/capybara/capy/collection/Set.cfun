@@ -51,9 +51,7 @@ fun Set[T].any(predicate: T => bool): bool = this.to_list().any(predicate)
 fun Set[T].all(predicate: T => bool): bool = this.to_list().all(predicate)
 
 /// Returns true when this Set contains the given value.
-fun Set[T].contains(value: T): bool = this.contains_native(value)
-
-private fun Set[T].contains_native(value: T): bool = <native>
+fun Set[T].contains(value: T): bool = <native>
 
 /// Returns true when this Set contains the given value.
 fun Set[T].`?`(value: T): bool = this.contains(value)
