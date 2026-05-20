@@ -23,9 +23,9 @@ class PrimitiveBackedTypeCompilerTest {
                 const FIRST_USER_ID = user_id! { 1 }
 
                 fun make(id: int): user_id = user_id { id }
-                fun unwrap(id: user_id): int = @id
-                fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
-                fun user_id.`+`(other: user_id): user_id = user_id! { @this + @other }
+                fun unwrap(id: user_id): int = id.value
+                fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
+                fun user_id.`+`(other: user_id): user_id = user_id! { this.value + other.value }
                 fun call_plus(a: user_id, b: user_id): user_id = a.plus(b)
                 fun call_op(a: user_id, b: user_id): user_id = a + b
                 """));
@@ -155,7 +155,7 @@ class PrimitiveBackedTypeCompilerTest {
                 type token -> String
 
                 fun make(value: String): token = token { value }
-                fun unwrap(value: token): String = @value
+                fun unwrap(value: token): String = value.value
                 fun append_suffix(value: String): String = value + "-suffix"
                 fun pass_to_string(value: token): String = append_suffix(value)
                 """));
@@ -213,12 +213,22 @@ class PrimitiveBackedTypeCompilerTest {
     }
 
     @Test
-    void shouldRejectUnwrapForNonPrimitiveBackedValues() {
+    void shouldRejectRawValueAccessForNonPrimitiveBackedValues() {
         var error = compileFailure(new RawModule("Ids", "/foo/app", """
-                fun bad(id: int): int = @id
+                fun bad(id: int): int = id.value
                 """));
 
-        assertThat(error.message()).contains("`@` can only unwrap primitive-backed types");
+        assertThat(error.message()).contains("`.value` can only unwrap primitive-backed types, got `int`");
+    }
+
+    @Test
+    void shouldRejectOldRawUnwrapSyntax() {
+        var error = compileFailure(new RawModule("Ids", "/foo/app", """
+                type user_id -> int
+                fun bad(id: user_id): int = @id
+                """));
+
+        assertThat(error.message()).contains("@");
     }
 
     private static CompiledProgram compileSuccess(RawModule module) {

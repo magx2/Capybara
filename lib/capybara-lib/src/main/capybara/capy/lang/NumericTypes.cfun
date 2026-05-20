@@ -51,78 +51,78 @@ const NON_ZERO_INT_ONE: non_zero_int = non_zero_int! { 1 }
 const NON_ZERO_LONG_ONE: non_zero_long = non_zero_long! { 1L }
 
 fun non_negative_int.plus(other: non_negative_int): Result[non_negative_int] =
-    if @this > MAX_INT_VALUE - @other
+    if this.value > MAX_INT_VALUE - other.value
     then Error { message: "non_negative_int addition overflow" }
-    else Success { non_negative_int! { @this + @other } }
+    else Success { non_negative_int! { this.value + other.value } }
 
 fun non_negative_int.`+`(other: non_negative_int): Result[non_negative_int] = this.plus(other)
 
 fun non_negative_int.minus(other: non_negative_int): Result[non_negative_int] =
-    non_negative_int { @this - @other }
+    non_negative_int { this.value - other.value }
 
 fun non_negative_int.`-`(other: non_negative_int): Result[non_negative_int] = this.minus(other)
 
 fun positive_int.plus(other: positive_int): Result[positive_int] =
-    if @this > MAX_INT_VALUE - @other
+    if this.value > MAX_INT_VALUE - other.value
     then Error { message: "positive_int addition overflow" }
-    else Success { positive_int! { @this + @other } }
+    else Success { positive_int! { this.value + other.value } }
 
 fun positive_int.`+`(other: positive_int): Result[positive_int] = this.plus(other)
 
 fun non_negative_long.plus(other: non_negative_long): Result[non_negative_long] =
-    if @this > MAX_LONG_VALUE - @other
+    if this.value > MAX_LONG_VALUE - other.value
     then Error { message: "non_negative_long addition overflow" }
-    else Success { non_negative_long! { @this + @other } }
+    else Success { non_negative_long! { this.value + other.value } }
 
 fun non_negative_long.`+`(other: non_negative_long): Result[non_negative_long] = this.plus(other)
 
 fun non_negative_long.minus(other: non_negative_long): Result[non_negative_long] =
-    non_negative_long { @this - @other }
+    non_negative_long { this.value - other.value }
 
 fun non_negative_long.`-`(other: non_negative_long): Result[non_negative_long] = this.minus(other)
 
 fun positive_long.plus(other: positive_long): Result[positive_long] =
-    if @this > MAX_LONG_VALUE - @other
+    if this.value > MAX_LONG_VALUE - other.value
     then Error { message: "positive_long addition overflow" }
-    else Success { positive_long! { @this + @other } }
+    else Success { positive_long! { this.value + other.value } }
 
 fun positive_long.`+`(other: positive_long): Result[positive_long] = this.plus(other)
 
-fun non_negative_int.`>`(other: non_negative_int): bool = @this > @other
-fun non_negative_int.`>=`(other: non_negative_int): bool = @this >= @other
-fun non_negative_int.`<`(other: non_negative_int): bool = @this < @other
-fun non_negative_int.`<=`(other: non_negative_int): bool = @this <= @other
-fun non_negative_int.`==`(other: non_negative_int): bool = @this == @other
+fun non_negative_int.`>`(other: non_negative_int): bool = this.value > other.value
+fun non_negative_int.`>=`(other: non_negative_int): bool = this.value >= other.value
+fun non_negative_int.`<`(other: non_negative_int): bool = this.value < other.value
+fun non_negative_int.`<=`(other: non_negative_int): bool = this.value <= other.value
+fun non_negative_int.`==`(other: non_negative_int): bool = this.value == other.value
 
-fun positive_int.`>`(other: positive_int): bool = @this > @other
-fun positive_int.`>=`(other: positive_int): bool = @this >= @other
-fun positive_int.`<`(other: positive_int): bool = @this < @other
-fun positive_int.`<=`(other: positive_int): bool = @this <= @other
-fun positive_int.`==`(other: positive_int): bool = @this == @other
+fun positive_int.`>`(other: positive_int): bool = this.value > other.value
+fun positive_int.`>=`(other: positive_int): bool = this.value >= other.value
+fun positive_int.`<`(other: positive_int): bool = this.value < other.value
+fun positive_int.`<=`(other: positive_int): bool = this.value <= other.value
+fun positive_int.`==`(other: positive_int): bool = this.value == other.value
 
-fun non_negative_long.`>`(other: non_negative_long): bool = @this > @other
-fun non_negative_long.`>=`(other: non_negative_long): bool = @this >= @other
-fun non_negative_long.`<`(other: non_negative_long): bool = @this < @other
-fun non_negative_long.`<=`(other: non_negative_long): bool = @this <= @other
-fun non_negative_long.`==`(other: non_negative_long): bool = @this == @other
+fun non_negative_long.`>`(other: non_negative_long): bool = this.value > other.value
+fun non_negative_long.`>=`(other: non_negative_long): bool = this.value >= other.value
+fun non_negative_long.`<`(other: non_negative_long): bool = this.value < other.value
+fun non_negative_long.`<=`(other: non_negative_long): bool = this.value <= other.value
+fun non_negative_long.`==`(other: non_negative_long): bool = this.value == other.value
 
-fun positive_long.`>`(other: positive_long): bool = @this > @other
-fun positive_long.`>=`(other: positive_long): bool = @this >= @other
-fun positive_long.`<`(other: positive_long): bool = @this < @other
-fun positive_long.`<=`(other: positive_long): bool = @this <= @other
-fun positive_long.`==`(other: positive_long): bool = @this == @other
+fun positive_long.`>`(other: positive_long): bool = this.value > other.value
+fun positive_long.`>=`(other: positive_long): bool = this.value >= other.value
+fun positive_long.`<`(other: positive_long): bool = this.value < other.value
+fun positive_long.`<=`(other: positive_long): bool = this.value <= other.value
+fun positive_long.`==`(other: positive_long): bool = this.value == other.value
 
-fun non_zero_int.`>`(other: non_zero_int): bool = @this > @other
-fun non_zero_int.`>=`(other: non_zero_int): bool = @this >= @other
-fun non_zero_int.`<`(other: non_zero_int): bool = @this < @other
-fun non_zero_int.`<=`(other: non_zero_int): bool = @this <= @other
-fun non_zero_int.`==`(other: non_zero_int): bool = @this == @other
+fun non_zero_int.`>`(other: non_zero_int): bool = this.value > other.value
+fun non_zero_int.`>=`(other: non_zero_int): bool = this.value >= other.value
+fun non_zero_int.`<`(other: non_zero_int): bool = this.value < other.value
+fun non_zero_int.`<=`(other: non_zero_int): bool = this.value <= other.value
+fun non_zero_int.`==`(other: non_zero_int): bool = this.value == other.value
 
-fun non_zero_long.`>`(other: non_zero_long): bool = @this > @other
-fun non_zero_long.`>=`(other: non_zero_long): bool = @this >= @other
-fun non_zero_long.`<`(other: non_zero_long): bool = @this < @other
-fun non_zero_long.`<=`(other: non_zero_long): bool = @this <= @other
-fun non_zero_long.`==`(other: non_zero_long): bool = @this == @other
+fun non_zero_long.`>`(other: non_zero_long): bool = this.value > other.value
+fun non_zero_long.`>=`(other: non_zero_long): bool = this.value >= other.value
+fun non_zero_long.`<`(other: non_zero_long): bool = this.value < other.value
+fun non_zero_long.`<=`(other: non_zero_long): bool = this.value <= other.value
+fun non_zero_long.`==`(other: non_zero_long): bool = this.value == other.value
 
 fun add_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] = left.plus(right)
 

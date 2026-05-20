@@ -11,8 +11,8 @@ fun tests(): Effect[TestFile] =
         test("index rejects negative values", () => assert_that(index { -1 }).fails("index must be greater than or equal to 0")),
         test("size accepts zero", () => should_construct_size(0, 0)),
         test("size rejects negative values", () => assert_that(size { -1 }).fails("size must be greater than or equal to 0")),
-        test("FIRST_ELEMENT is zero index", () => assert_that(@FIRST_ELEMENT).is_equal_to(0)),
-        test("EMPTY is zero size", () => assert_that(@EMPTY).is_equal_to(0)),
+        test("FIRST_ELEMENT is zero index", () => assert_that(FIRST_ELEMENT.value).is_equal_to(0)),
+        test("EMPTY is zero size", () => assert_that(EMPTY.value).is_equal_to(0)),
         test("index can advance by one", () => should_advance_index(4, 5)),
         test("index advance rejects overflow", () => should_reject_index_advance(MAX_INT_VALUE)),
         test("index can advance by size", () => should_add_size_to_index(4, 3, 7)),
@@ -26,13 +26,13 @@ fun tests(): Effect[TestFile] =
     ])
 
 private fun should_construct_index(value: int, expected: int): Assert =
-    assert_that((index { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
+    assert_that((index { value }).reduce(actual => actual.value, _ => -1)).is_equal_to(expected)
 
 private fun should_construct_size(value: int, expected: int): Assert =
-    assert_that((size { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
+    assert_that((size { value }).reduce(actual => actual.value, _ => -1)).is_equal_to(expected)
 
 private fun should_advance_index(value: int, expected: int): Assert =
-    assert_that((index { value }).reduce(actual => actual.next().reduce(next => @next, _ => -1), _ => -1)).is_equal_to(expected)
+    assert_that((index { value }).reduce(actual => actual.next().reduce(next => next.value, _ => -1), _ => -1)).is_equal_to(expected)
 
 private fun should_reject_index_advance(value: int): Assert =
     let message: String =
@@ -46,7 +46,7 @@ private fun should_add_size_to_index(value: int, offset: int, expected: int): As
     assert_that(
         (index { value }).reduce(
             index_value => (size { offset }).reduce(
-                size_value => index_value.plus(size_value).reduce(actual => @actual, _ => -1),
+                size_value => index_value.plus(size_value).reduce(actual => actual.value, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -68,7 +68,7 @@ private fun should_add_size(left: int, right: int, expected: int): Assert =
     assert_that(
         (size { left }).reduce(
             left_value => (size { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1),
+                right_value => left_value.plus(right_value).reduce(actual => actual.value, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -90,7 +90,7 @@ private fun should_subtract_size(left: int, right: int, expected: int): Assert =
     assert_that(
         (size { left }).reduce(
             left_value => (size { right }).reduce(
-                right_value => left_value.minus(right_value).reduce(actual => @actual, _ => -1),
+                right_value => left_value.minus(right_value).reduce(actual => actual.value, _ => -1),
                 _ => -1
             ),
             _ => -1

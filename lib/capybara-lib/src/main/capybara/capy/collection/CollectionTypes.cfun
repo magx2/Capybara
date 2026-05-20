@@ -19,40 +19,40 @@ const FIRST_ELEMENT: index = index! { 0 }
 const EMPTY: size = size! { 0 }
 
 fun index.next(): Result[index] =
-    if @this == MAX_INT_VALUE
+    if this.value == MAX_INT_VALUE
     then Error { message: "index increment overflow" }
-    else Success { index! { @this + 1 } }
+    else Success { index! { this.value + 1 } }
 
 fun index.plus(offset: size): Result[index] =
-    if @this > MAX_INT_VALUE - @offset
+    if this.value > MAX_INT_VALUE - offset.value
     then Error { message: "index addition overflow" }
-    else Success { index! { @this + @offset } }
+    else Success { index! { this.value + offset.value } }
 
 fun index.`+`(offset: size): Result[index] = this.plus(offset)
 
-fun index.`>`(other: index): bool = @this > @other
-fun index.`>=`(other: index): bool = @this >= @other
-fun index.`<`(other: index): bool = @this < @other
-fun index.`<=`(other: index): bool = @this <= @other
-fun index.`==`(other: index): bool = @this == @other
+fun index.`>`(other: index): bool = this.value > other.value
+fun index.`>=`(other: index): bool = this.value >= other.value
+fun index.`<`(other: index): bool = this.value < other.value
+fun index.`<=`(other: index): bool = this.value <= other.value
+fun index.`==`(other: index): bool = this.value == other.value
 
 fun size.plus(other: size): Result[size] =
-    if @this > MAX_INT_VALUE - @other
+    if this.value > MAX_INT_VALUE - other.value
     then Error { message: "size addition overflow" }
-    else Success { size! { @this + @other } }
+    else Success { size! { this.value + other.value } }
 
 fun size.`+`(other: size): Result[size] = this.plus(other)
 
 fun size.minus(other: size): Result[size] =
-    size { @this - @other }
+    size { this.value - other.value }
 
 fun size.`-`(other: size): Result[size] = this.minus(other)
 
-fun size.`>`(other: size): bool = @this > @other
-fun size.`>=`(other: size): bool = @this >= @other
-fun size.`<`(other: size): bool = @this < @other
-fun size.`<=`(other: size): bool = @this <= @other
-fun size.`==`(other: size): bool = @this == @other
+fun size.`>`(other: size): bool = this.value > other.value
+fun size.`>=`(other: size): bool = this.value >= other.value
+fun size.`<`(other: size): bool = this.value < other.value
+fun size.`<=`(other: size): bool = this.value <= other.value
+fun size.`==`(other: size): bool = this.value == other.value
 
 fun next_index(value: index): Result[index] = value.next()
 

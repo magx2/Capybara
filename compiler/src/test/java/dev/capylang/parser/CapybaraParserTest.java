@@ -280,14 +280,14 @@ class CapybaraParserTest {
     }
 
     @Test
-    @DisplayName("should parse primitive-backed type constructors and unwrap expressions")
-    void parsePrimitiveBackedTypeConstructorAndUnwrap() {
+    @DisplayName("should parse primitive-backed type constructors and value access expressions")
+    void parsePrimitiveBackedTypeConstructorAndValueAccess() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 type user_id -> int with constructor {
                     if value > 0 then value else 1
                 }
 
-                fun unwrap(id: user_id): int = @id
+                fun unwrap(id: user_id): int = id.value
                 """));
 
         var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "user_id", module.functional());
@@ -295,9 +295,11 @@ class CapybaraParserTest {
                 assertThat(constructor).isInstanceOf(IfExpression.class));
 
         var unwrap = findFunction("unwrap", module.functional());
-        assertThat(unwrap.expression()).isInstanceOfSatisfying(UnwrapExpression.class, expression ->
-                assertThat(expression.expression()).isInstanceOfSatisfying(Value.class, value ->
-                        assertThat(value.name()).isEqualTo("id")));
+        assertThat(unwrap.expression()).isInstanceOfSatisfying(FieldAccess.class, expression -> {
+            assertThat(expression.field()).isEqualTo("value");
+            assertThat(expression.source()).isInstanceOfSatisfying(Value.class, value ->
+                    assertThat(value.name()).isEqualTo("id"));
+        });
     }
 
     @Test
@@ -306,8 +308,8 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 type user_id -> int
 
-                fun user_id.plus(id: user_id): user_id = user_id! { @this + @id }
-                fun user_id.`+`(id: user_id): user_id = user_id! { @this + @id }
+                fun user_id.plus(id: user_id): user_id = user_id! { this.value + id.value }
+                fun user_id.`+`(id: user_id): user_id = user_id! { this.value + id.value }
                 """));
 
         var plus = findFunction("__method__user_id__plus", module.functional());

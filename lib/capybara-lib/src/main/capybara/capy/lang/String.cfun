@@ -15,7 +15,7 @@ fun String.length(): size = <native>
 
 /// Single-character String value.
 type char -> String with constructor {
-    if @(value.length()) == 1
+    if value.length().value == 1
     then Success { value }
     else Error { message: "char must contain exactly one character" }
 }
@@ -27,13 +27,13 @@ fun char_from(value: String): Result[char] = char { value }
 fun String.to_char(): Result[char] = char { this }
 
 /// Returns the underlying one-character String.
-fun char.to_string(): String = @this
+fun char.to_string(): String = this.value
 
 /// Returns the length of this `char`.
 fun char.length(): size = this.to_string().length()
 
 /// Returns true when both chars contain the same character.
-fun char.`==`(other: char): bool = @this == @other
+fun char.`==`(other: char): bool = this.value == other.value
 
 private fun raw_char(value: String): char = char! { value }
 
@@ -118,8 +118,8 @@ fun String.contains(part: String): bool =
     if part.length() == EMPTY
     then true
     else this.any((_, idx) =>
-        if idx + @(part.length()) <= @(this.length())
-        then this[idx, idx + @(part.length())] == part
+        if idx + part.length().value <= this.length().value
+        then this[idx, idx + part.length().value] == part
         else false)
 
 /// Returns true when this String contains the given substring.
@@ -192,7 +192,7 @@ fun String.starts_with(part: String): bool =
 fun String.end_with(part: String): bool =
     if this.length() < part.length()
     then false
-    else this[@(this.length()) - @(part.length()), this.length()] == part
+    else this[this.length().value - part.length().value, this.length()] == part
 
 /// Returns this String without leading and trailing whitespace.
 fun String.trim(): String =
@@ -207,8 +207,8 @@ fun String.trim(): String =
     fun rec __trim_right(value: String): String =
         if value.length() == EMPTY
         then ""
-        else if is_trim_whitespace(value[@(value.length()) - 1, value.length()])
-            then __trim_right(value[0, @(value.length()) - 1])
+        else if is_trim_whitespace(value[value.length().value - 1, value.length()])
+            then __trim_right(value[0, value.length().value - 1])
             else value
     ---
     __trim_right(__trim_left(this))

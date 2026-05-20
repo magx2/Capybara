@@ -39,13 +39,13 @@ fun tests(): Effect[TestFile] =
     let parse_test_cases = (test_cases.entries() | (str, expected) => test("should parse {str} to {expected}", () => should_parse_sem_ver(str, expected))).as_list()
     let to_string_test_cases = (test_cases.entries() | (expected, sem_ver_case) => test("{expected}.to_string() is equal to {expected}", () => should_stringify_sem_ver(expected))).as_list()
     let component_test_cases = [
-        test("major accepts zero", () => assert_that(major { 0 }).succeeds(value => assert_that(@value).is_equal_to(0))),
-        test("minor accepts zero", () => assert_that(minor { 0 }).succeeds(value => assert_that(@value).is_equal_to(0))),
-        test("patch accepts zero", () => assert_that(patch { 0 }).succeeds(value => assert_that(@value).is_equal_to(0))),
+        test("major accepts zero", () => assert_that(major { 0 }).succeeds(value => assert_that(value.value).is_equal_to(0))),
+        test("minor accepts zero", () => assert_that(minor { 0 }).succeeds(value => assert_that(value.value).is_equal_to(0))),
+        test("patch accepts zero", () => assert_that(patch { 0 }).succeeds(value => assert_that(value.value).is_equal_to(0))),
         test("sem_ver accepts zero components", () => assert_that(sem_ver(0, 0, 0, None {}, None {})).succeeds(value => assert_all([
-            assert_that(@(value.major)).is_equal_to(0),
-            assert_that(@(value.minor)).is_equal_to(0),
-            assert_that(@(value.patch)).is_equal_to(0)
+            assert_that(value.major.value).is_equal_to(0),
+            assert_that(value.minor.value).is_equal_to(0),
+            assert_that(value.patch.value).is_equal_to(0)
         ]))),
         test("sem_ver rejects negative major", () => assert_that(sem_ver(-1, 0, 0, None {}, None {})).fails("major must be greater than or equal to 0")),
         test("sem_ver rejects negative minor", () => assert_that(sem_ver(0, -1, 0, None {}, None {})).fails("minor must be greater than or equal to 0")),
@@ -75,9 +75,9 @@ fun tests(): Effect[TestFile] =
 
 fun should_parse_sem_ver(str: String, expected: ExpectedSemVer) =
     assert_that(parse_semver(str)).succeeds(value => assert_all([
-        assert_that(@(value.major)).is_equal_to(expected.major),
-        assert_that(@(value.minor)).is_equal_to(expected.minor),
-        assert_that(@(value.patch)).is_equal_to(expected.patch),
+        assert_that(value.major.value).is_equal_to(expected.major),
+        assert_that(value.minor.value).is_equal_to(expected.minor),
+        assert_that(value.patch.value).is_equal_to(expected.patch),
         assert_that(value.pre_release).is_equal_to(expected.pre_release),
         assert_that(value.build_metadata).is_equal_to(expected.build_metadata),
     ]))

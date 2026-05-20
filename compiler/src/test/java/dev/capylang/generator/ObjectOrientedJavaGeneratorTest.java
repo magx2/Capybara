@@ -297,7 +297,7 @@ class ObjectOrientedJavaGeneratorTest {
                                 type user_id -> int
 
                                 fun make_user_id(value: int): user_id = user_id { value }
-                                fun unwrap_user_id(id: user_id): int = @id
+                                fun unwrap_user_id(id: user_id): int = id.value
                                 """,
                         SourceKind.FUNCTIONAL
                 ),

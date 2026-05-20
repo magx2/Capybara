@@ -525,7 +525,7 @@ fun DateAssert.has_day(other: int): DateAssert =
 
 fun DateAssert.has_month(other: int): DateAssert =
     let assertion = Assertion {
-        result: @(this.value.month) == other,
+        result: this.value.month.value == other,
         message: "Expected date month:\n" + this.value.month + "\nto be equal to:\n" + other,
         type: 'DateAssert.has_month'
     }
@@ -561,7 +561,7 @@ fun TimeAssert.is_equal_to(hour: int, minute: int, second: int): TimeAssert =
 
 fun TimeAssert.has_hour(other: int): TimeAssert =
     let assertion = Assertion {
-        result: @(this.value.hour) == other,
+        result: this.value.hour.value == other,
         message: "Expected time hour:\n" + this.value.hour + "\nto be equal to:\n" + other,
         type: 'TimeAssert.has_hour'
     }
@@ -572,7 +572,7 @@ fun TimeAssert.has_hour(other: int): TimeAssert =
 
 fun TimeAssert.has_minute(other: int): TimeAssert =
     let assertion = Assertion {
-        result: @(this.value.minute) == other,
+        result: this.value.minute.value == other,
         message: "Expected time minute:\n" + this.value.minute + "\nto be equal to:\n" + other,
         type: 'TimeAssert.has_minute'
     }
@@ -583,7 +583,7 @@ fun TimeAssert.has_minute(other: int): TimeAssert =
 
 fun TimeAssert.has_second(other: int): TimeAssert =
     let assertion = Assertion {
-        result: @(this.value.second) == other,
+        result: this.value.second.value == other,
         message: "Expected time second:\n" + this.value.second + "\nto be equal to:\n" + other,
         type: 'TimeAssert.has_second'
     }
@@ -658,7 +658,7 @@ fun DateTimeAssert.has_year(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_month(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: @(this.value.date.month) == other,
+        result: this.value.date.month.value == other,
         message: "Expected date-time month:\n" + this.value.date.month + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_month'
     }
@@ -680,7 +680,7 @@ fun DateTimeAssert.has_day(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: @(this.value.time.hour) == other,
+        result: this.value.time.hour.value == other,
         message: "Expected date-time hour:\n" + this.value.time.hour + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_hour'
     }
@@ -691,7 +691,7 @@ fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: @(this.value.time.minute) == other,
+        result: this.value.time.minute.value == other,
         message: "Expected date-time minute:\n" + this.value.time.minute + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_minute'
     }
@@ -702,7 +702,7 @@ fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_second(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: @(this.value.time.second) == other,
+        result: this.value.time.second.value == other,
         message: "Expected date-time second:\n" + this.value.time.second + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_second'
     }
@@ -880,8 +880,8 @@ fun ListAssert[T].is_equal_to(other: List[T]): ListAssert[T] =
 
 fun ListAssert[T].has_size(other: int): ListAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.size()) == other,
-        message: "Expected list size:\n" + @(this.value.size()) + "\nto be equal to:\n" + other,
+        result: this.value.size().value == other,
+        message: "Expected list size:\n" + this.value.size().value + "\nto be equal to:\n" + other,
         type: 'ListAssert[T].has_size'
     }
     ListAssert {
@@ -891,7 +891,7 @@ fun ListAssert[T].has_size(other: int): ListAssert[T] =
 
 fun ListAssert[T].is_empty(): ListAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.size()) == 0,
+        result: this.value.size().value == 0,
         message: "Expected list:\n" + this.value + "\nto be empty",
         type: 'ListAssert[T].is_empty()'
     }
@@ -935,8 +935,8 @@ fun SetAssert[T].is_equal_to(other: Set[T]): SetAssert[T] =
 
 fun SetAssert[T].has_size(other: int): SetAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.size()) == other,
-        message: "Expected set size:\n" + @(this.value.size()) + "\nto be equal to:\n" + other,
+        result: this.value.size().value == other,
+        message: "Expected set size:\n" + this.value.size().value + "\nto be equal to:\n" + other,
         type: 'SetAssert[T].has_size'
     }
     SetAssert {
@@ -946,7 +946,7 @@ fun SetAssert[T].has_size(other: int): SetAssert[T] =
 
 fun SetAssert[T].is_empty(): SetAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.size()) == 0,
+        result: this.value.size().value == 0,
         message: "Expected set:\n" + this.value + "\nto be empty",
         type: 'SetAssert[T].is_empty()'
     }
@@ -990,8 +990,8 @@ fun DictAssert[T].is_equal_to(other: Dict[T]): DictAssert[T] =
 
 fun DictAssert[T].has_size(other: int): DictAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.size()) == other,
-        message: "Expected dict size:\n" + @(this.value.size()) + "\nto be equal to:\n" + other,
+        result: this.value.size().value == other,
+        message: "Expected dict size:\n" + this.value.size().value + "\nto be equal to:\n" + other,
         type: 'DictAssert[T].has_size'
     }
     DictAssert {
@@ -1001,7 +1001,7 @@ fun DictAssert[T].has_size(other: int): DictAssert[T] =
 
 fun DictAssert[T].is_empty(): DictAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.size()) == 0,
+        result: this.value.size().value == 0,
         message: "Expected dict:\n" + this.value + "\nto be empty",
         type: 'DictAssert[T].is_empty()'
     }
@@ -1056,8 +1056,8 @@ fun SeqAssert[T].is_equal_to(other: Seq[T]): SeqAssert[T] =
 
 fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.as_list().size()) == other,
-        message: "Expected sequence size:\n" + @(this.value.as_list().size()) + "\nto be equal to:\n" + other,
+        result: this.value.as_list().size().value == other,
+        message: "Expected sequence size:\n" + this.value.as_list().size().value + "\nto be equal to:\n" + other,
         type: 'SeqAssert[T].has_size'
     }
     SeqAssert {
@@ -1067,7 +1067,7 @@ fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
 
 fun SeqAssert[T].is_empty(): SeqAssert[T] =
     let assertion = Assertion {
-        result: @(this.value.as_list().size()) == 0,
+        result: this.value.as_list().size().value == 0,
         message: "Expected sequence:\n" + this.value.as_list() + "\nto be empty",
         type: 'SeqAssert[T].is_empty()'
     }
@@ -1099,7 +1099,7 @@ fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
     }
 
 fun assert_that(value: String) = StringAssert { value: value, assertions: [] }
-fun assert_that(value: size) = IntAssert { value: @value, assertions: [] }
+fun assert_that(value: size) = IntAssert { value: value.value, assertions: [] }
 fun assert_that(value: int) = IntAssert { value: value, assertions: [] }
 fun assert_that(value: long) = LongAssert { value: value, assertions: [] }
 fun assert_that(value: double) = DoubleAssert { value: value, assertions: [] }

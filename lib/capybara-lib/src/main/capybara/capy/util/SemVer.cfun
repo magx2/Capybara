@@ -23,23 +23,23 @@ type patch -> int with constructor {
     else Error { message: "patch must be greater than or equal to 0" }
 }
 
-fun major.`>`(other: major): bool = @this > @other
-fun major.`>=`(other: major): bool = @this >= @other
-fun major.`<`(other: major): bool = @this < @other
-fun major.`<=`(other: major): bool = @this <= @other
-fun major.`==`(other: major): bool = @this == @other
+fun major.`>`(other: major): bool = this.value > other.value
+fun major.`>=`(other: major): bool = this.value >= other.value
+fun major.`<`(other: major): bool = this.value < other.value
+fun major.`<=`(other: major): bool = this.value <= other.value
+fun major.`==`(other: major): bool = this.value == other.value
 
-fun minor.`>`(other: minor): bool = @this > @other
-fun minor.`>=`(other: minor): bool = @this >= @other
-fun minor.`<`(other: minor): bool = @this < @other
-fun minor.`<=`(other: minor): bool = @this <= @other
-fun minor.`==`(other: minor): bool = @this == @other
+fun minor.`>`(other: minor): bool = this.value > other.value
+fun minor.`>=`(other: minor): bool = this.value >= other.value
+fun minor.`<`(other: minor): bool = this.value < other.value
+fun minor.`<=`(other: minor): bool = this.value <= other.value
+fun minor.`==`(other: minor): bool = this.value == other.value
 
-fun patch.`>`(other: patch): bool = @this > @other
-fun patch.`>=`(other: patch): bool = @this >= @other
-fun patch.`<`(other: patch): bool = @this < @other
-fun patch.`<=`(other: patch): bool = @this <= @other
-fun patch.`==`(other: patch): bool = @this == @other
+fun patch.`>`(other: patch): bool = this.value > other.value
+fun patch.`>=`(other: patch): bool = this.value >= other.value
+fun patch.`<`(other: patch): bool = this.value < other.value
+fun patch.`<=`(other: patch): bool = this.value <= other.value
+fun patch.`==`(other: patch): bool = this.value == other.value
 
 /// Given a version number MAJOR.MINOR.PATCH, increment the:
 ///
@@ -386,4 +386,4 @@ fun SemVer.to_string(): String =
     let build_metadata_str = match this.build_metadata with
         case Some { value } -> "+" + value
         case None -> ""
-    @(this.major) + "." + @(this.minor) + "." + @(this.patch) + pre_release_str + build_metadata_str
+    this.major.value + "." + this.minor.value + "." + this.patch.value + pre_release_str + build_metadata_str
