@@ -1902,6 +1902,7 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.date_time.DateModule", Set.of(
                     "Date", "__constructor__data__Date", "uNIXDATE", "UNIX_DATE", "fromIso8601", "from_iso_8601",
                     "fromDaysSinceUnixEpoch", "from_days_since_unix_epoch",
+                    "next__name_next__month", "previous__name_previous__month",
                     "jANUARY", "JANUARY", "fEBRUARY", "FEBRUARY", "mARCH", "MARCH", "aPRIL", "APRIL",
                     "mAY", "MAY", "jUNE", "JUNE", "jULY", "JULY", "aUGUST", "AUGUST",
                     "sEPTEMBER", "SEPTEMBER", "oCTOBER", "OCTOBER", "nOVEMBER", "NOVEMBER",
@@ -1909,6 +1910,7 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.date_time.TimeModule", Set.of(
                     "Time", "__constructor__data__Time",
                     "__constructor__primitive__hour", "__constructor__primitive__minute", "__constructor__primitive__second",
+                    "__constructor__primitive__offset_minutes",
                     "greater__op_greater__hour__hour", "greater__op_greater__minute__minute", "greater__op_greater__second__second",
                     "greater_op3d__op_greater_op3d__hour__hour", "greater_op3d__op_greater_op3d__minute__minute", "greater_op3d__op_greater_op3d__second__second",
                     "less__op_less__hour__hour", "less__op_less__minute__minute", "less__op_less__second__second",
@@ -2780,6 +2782,14 @@ public final class JavaScriptGenerator implements Generator {
                         return this_ === other;
                     }
 
+                    function next__name_next__month(this_) {
+                        return this_ === dECEMBER ? jANUARY : this_ + 1;
+                    }
+
+                    function previous__name_previous__month(this_) {
+                        return this_ === jANUARY ? dECEMBER : this_ - 1;
+                    }
+
                     function greater(...args) {
                         return greater__month__month(...args);
                     }
@@ -2874,6 +2884,8 @@ public final class JavaScriptGenerator implements Generator {
                         less__month__month,
                         less_op3d__month__month,
                         op3d_op3d__month__month,
+                        next__name_next__month,
+                        previous__name_previous__month,
                         greater,
                         greater_op3d,
                         less,
@@ -3070,6 +3082,12 @@ public final class JavaScriptGenerator implements Generator {
                             : failure('second must be between 0 and 59');
                     }
 
+                    function __constructor__primitive__offset_minutes(value) {
+                        return value >= -mAXOFFSETMINUTES && value <= mAXOFFSETMINUTES
+                            ? success(value)
+                            : failure('offset minutes must be between -1439 and 1439');
+                    }
+
                     const greater__op_greater__hour__hour = (this_, other) => this_ > other;
                     const greater__op_greater__minute__minute = (this_, other) => this_ > other;
                     const greater__op_greater__second__second = (this_, other) => this_ > other;
@@ -3191,6 +3209,7 @@ public final class JavaScriptGenerator implements Generator {
                         hour: Object.freeze({ cfunType: '/capy/date_time/Time.hour', backingType: 'int' }),
                         minute: Object.freeze({ cfunType: '/capy/date_time/Time.minute', backingType: 'int' }),
                         second: Object.freeze({ cfunType: '/capy/date_time/Time.second', backingType: 'int' }),
+                        offset_minutes: Object.freeze({ cfunType: '/capy/date_time/Time.offset_minutes', backingType: 'int' }),
                     });
 
                     module.exports = {
@@ -3199,6 +3218,7 @@ public final class JavaScriptGenerator implements Generator {
                         __constructor__primitive__hour,
                         __constructor__primitive__minute,
                         __constructor__primitive__second,
+                        __constructor__primitive__offset_minutes,
                         greater__op_greater__hour__hour,
                         greater__op_greater__minute__minute,
                         greater__op_greater__second__second,

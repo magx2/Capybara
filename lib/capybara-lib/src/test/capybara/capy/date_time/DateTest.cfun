@@ -89,10 +89,10 @@ fun _test_month(): List[TestCase] =
         "month {value} should be " + (if is_valid then 'valid' else 'invalid'),
         () => if is_valid then assert_that(month { value }).succeeds() else assert_that(month { value }).fails())).as_list()
     + [
-        test("month.next should wrap from December to January", () => assert_that(DECEMBER.next()).is_equal_to(JANUARY)),
-        test("month.previous should wrap from January to December", () => assert_that(JANUARY.previous()).is_equal_to(DECEMBER)),
-        test("month.next should advance middle months", () => assert_that(APRIL.next()).is_equal_to(MAY)),
-        test("month.previous should rewind middle months", () => assert_that(APRIL.previous()).is_equal_to(MARCH)),
+        test("month.next should wrap from December to January", () => assert_that((DECEMBER).next()).is_equal_to(JANUARY)),
+        test("month.previous should wrap from January to December", () => assert_that((JANUARY).previous()).is_equal_to(DECEMBER)),
+        test("month.next should advance middle months", () => assert_that((APRIL).next()).is_equal_to(MAY)),
+        test("month.previous should rewind middle months", () => assert_that((APRIL).previous()).is_equal_to(MARCH)),
     ]
 
 fun _test_leap_year(): List[TestCase] =
