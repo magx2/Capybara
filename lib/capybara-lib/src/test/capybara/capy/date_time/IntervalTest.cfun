@@ -134,7 +134,7 @@ fun _interval_time(hour_value: int, minute_value: int, second_value: int): Time 
         let parsed_hour <- hour { hour_value }
         let parsed_minute <- minute { minute_value }
         let parsed_second <- second { second_value }
-        Time { hour: parsed_hour, minute: parsed_minute, second: parsed_second, offset_minutes: None {} }
+        Success { Time { hour: parsed_hour, minute: parsed_minute, second: parsed_second, offset_minutes: None {} } }
     }
     parsed_time.or_else(MIDNIGHT)
 

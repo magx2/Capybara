@@ -107,34 +107,25 @@ fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)
 /// Formats this date-time as a canonical UTC ISO 8601 string.
 fun DateTime.to_iso_8601(): String =
     fun __format_utc(datetime: DateTime): String =
-        match Time {
-            hour: datetime.time.hour,
-            minute: datetime.time.minute,
-            second: datetime.time.second,
-            offset_minutes: Some { 0 }
-        } with
-        case Success { utc_time } -> datetime.date.to_iso_8601() + "T" + utc_time.to_iso_8601()
-        case Error -> datetime.date.to_iso_8601() + "T" + datetime.time.to_iso_8601()
+        datetime.date.to_iso_8601() + "T" + datetime.time.to_iso_8601() + "Z"
     fun __normalize_to_utc(datetime: DateTime): DateTime =
         match datetime.time.offset_minutes with
         case None -> datetime
         case Some { offset_minutes } ->
-            match Time {
+            let utc_time = Time {
                 hour: datetime.time.hour,
                 minute: datetime.time.minute,
                 second: datetime.time.second,
                 offset_minutes: None {}
-            } with
-            case Success { utc_time } ->
-                DateTime { date: datetime.date, time: utc_time }.plus(DateDuration {
-                    years: 0,
-                    months: 0,
-                    days: 0,
-                    hours: 0,
-                    minutes: 0 - offset_minutes,
-                    seconds: 0
-                })
-            case Error -> datetime
+            }
+            DateTime { date: datetime.date, time: utc_time }.plus(DateDuration {
+                years: 0,
+                months: 0,
+                days: 0,
+                hours: 0,
+                minutes: 0 - offset_minutes.value,
+                seconds: 0
+            })
     ---
     __format_utc(__normalize_to_utc(this))
 
@@ -189,7 +180,7 @@ fun from_iso_8601(iso: String): Result[DateTime] =
         match time_with_offset.offset_minutes with
         case None -> Error { __invalid("expected UTC designator `Z` or numeric offset") }
         case Some { offset_minutes } -> {
-            let utc_time <- Time {
+            let utc_time = Time {
                 hour: time_with_offset.hour,
                 minute: time_with_offset.minute,
                 second: time_with_offset.second,
@@ -202,7 +193,7 @@ fun from_iso_8601(iso: String): Result[DateTime] =
                     months: 0,
                     days: 0,
                     hours: 0,
-                    minutes: 0 - offset_minutes,
+                    minutes: 0 - offset_minutes.value,
                     seconds: 0
                 })
             }

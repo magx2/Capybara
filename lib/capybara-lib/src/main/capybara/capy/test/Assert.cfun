@@ -592,7 +592,7 @@ fun TimeAssert.has_second(other: int): TimeAssert =
         assertions: this.assertions + () => assertion
     }
 
-fun TimeAssert.has_offset_minutes(other: /capy/lang/Option[int]): TimeAssert =
+fun TimeAssert.has_offset_minutes(other: /capy/lang/Option[offset_minutes]): TimeAssert =
     let assertion = Assertion {
         result: this.value.offset_minutes == other,
         message: "Expected time offset:\n" + this.value.offset_minutes + "\nto be equal to:\n" + other,
@@ -604,7 +604,18 @@ fun TimeAssert.has_offset_minutes(other: /capy/lang/Option[int]): TimeAssert =
     }
 
 fun TimeAssert.has_offset_minutes(other: int): TimeAssert =
-    this.has_offset_minutes(/capy/lang/Option.Some { other })
+    match offset_minutes { other } with
+    case Success { parsed } -> this.has_offset_minutes(/capy/lang/Option.Some { parsed })
+    case Error { message } ->
+        let assertion = Assertion {
+            result: false,
+            message: message,
+            type: 'TimeAssert.has_offset_minutes'
+        }
+        TimeAssert {
+            value: this.value,
+            assertions: this.assertions + () => assertion
+        }
 
 fun DateTimeAssert.is_equal_to(other: DateTime): DateTimeAssert =
     let assertion = Assertion {
