@@ -37,14 +37,14 @@ private fun days_31_month(value: month): bool = value == JANUARY | value == MARC
 /// Returns `true` when the month has 30 days.
 private fun days_30_month(value: month): bool = value == APRIL | value == JUNE | value == SEPTEMBER | value == NOVEMBER
 
-const __DAYS_PER_400_YEARS: int = 146097
-const __DAYS_PER_YEAR: int = 365
-const __UNIX_EPOCH_CIVIL_OFFSET_DAYS: int = 719468
-const __DAYS_PER_4_YEARS_MINUS_1: int = 1460
-const __DAYS_PER_100_YEARS_MINUS_1: int = 36524
-const __DAYS_PER_400_YEARS_MINUS_1: int = 146096
-const __MONTH_TO_DAY_NUMERATOR: int = 153
-const __MONTH_TO_DAY_BIAS: int = 2
+private const DAYS_PER_400_YEARS: int = 146097
+private const DAYS_PER_YEAR: int = 365
+private const UNIX_EPOCH_CIVIL_OFFSET_DAYS: int = 719468
+private const DAYS_PER_4_YEARS_MINUS_1: int = 1460
+private const DAYS_PER_100_YEARS_MINUS_1: int = 36524
+private const DAYS_PER_400_YEARS_MINUS_1: int = 146096
+private const MONTH_TO_DAY_NUMERATOR: int = 153
+private const MONTH_TO_DAY_BIAS: int = 2
 
 /// Calendar date represented by day, month and year.
 ///
@@ -86,20 +86,20 @@ fun Date.to_days_since_unix_epoch(): int =
     let era = floor_div(y, 400)
     let yoe = y - era * 400
     let mp = if this.month > FEBRUARY then month_value - 3 else month_value + 9
-    let doy = floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + this.day - 1
-    let doe = yoe * __DAYS_PER_YEAR + floor_div(yoe, 4) - floor_div(yoe, 100) + doy
-    era * __DAYS_PER_400_YEARS + doe - __UNIX_EPOCH_CIVIL_OFFSET_DAYS
+    let doy = floor_div(MONTH_TO_DAY_NUMERATOR * mp + MONTH_TO_DAY_BIAS, 5) + this.day - 1
+    let doe = yoe * DAYS_PER_YEAR + floor_div(yoe, 4) - floor_div(yoe, 100) + doy
+    era * DAYS_PER_400_YEARS + doe - UNIX_EPOCH_CIVIL_OFFSET_DAYS
 
 /// Converts days since Unix epoch (`1970-01-01`) to `Date`.
 fun from_days_since_unix_epoch(days_since_epoch: int): Date =
-    let z: int = days_since_epoch + __UNIX_EPOCH_CIVIL_OFFSET_DAYS
-    let era: int = floor_div(z, __DAYS_PER_400_YEARS)
-    let doe: int = z - era * __DAYS_PER_400_YEARS
-    let yoe: int = floor_div(doe - floor_div(doe, __DAYS_PER_4_YEARS_MINUS_1) + floor_div(doe, __DAYS_PER_100_YEARS_MINUS_1) - floor_div(doe, __DAYS_PER_400_YEARS_MINUS_1), __DAYS_PER_YEAR)
+    let z: int = days_since_epoch + UNIX_EPOCH_CIVIL_OFFSET_DAYS
+    let era: int = floor_div(z, DAYS_PER_400_YEARS)
+    let doe: int = z - era * DAYS_PER_400_YEARS
+    let yoe: int = floor_div(doe - floor_div(doe, DAYS_PER_4_YEARS_MINUS_1) + floor_div(doe, DAYS_PER_100_YEARS_MINUS_1) - floor_div(doe, DAYS_PER_400_YEARS_MINUS_1), DAYS_PER_YEAR)
     let y: int = yoe + era * 400
-    let doy: int = doe - (__DAYS_PER_YEAR * yoe + floor_div(yoe, 4) - floor_div(yoe, 100))
-    let mp: int = floor_div(5 * doy + __MONTH_TO_DAY_BIAS, __MONTH_TO_DAY_NUMERATOR)
-    let day: int = doy - floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + 1
+    let doy: int = doe - (DAYS_PER_YEAR * yoe + floor_div(yoe, 4) - floor_div(yoe, 100))
+    let mp: int = floor_div(5 * doy + MONTH_TO_DAY_BIAS, MONTH_TO_DAY_NUMERATOR)
+    let day: int = doy - floor_div(MONTH_TO_DAY_NUMERATOR * mp + MONTH_TO_DAY_BIAS, 5) + 1
     let month_value: int = if mp < 10 then mp + 3 else mp - 9
     let year: int = if month_value <= FEBRUARY.value then y + 1 else y
     Date! { day, month: month! { month_value }, year }
@@ -109,7 +109,7 @@ fun Date.add_days(days: int): Date = from_days_since_unix_epoch(this.to_days_sin
 
 /// Adds years and months to this date, clamping the day to target month length.
 fun Date.add_years_months(years: int, months: int): Date =
-    fun __floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
+    fun floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
     fun days_in_month(year: int, value: month): int =
         if value == APRIL | value == JUNE | value == SEPTEMBER | value == NOVEMBER
         then 30
@@ -119,7 +119,7 @@ fun Date.add_years_months(years: int, months: int): Date =
     ---
     let total_months = (this.year + years) * 12 + (this.month.value + months - 1)
     let normalized_year = floor_div(total_months, 12)
-    let normalized_month_value = __floor_mod(total_months, 12) + 1
+    let normalized_month_value = floor_mod(total_months, 12) + 1
     let normalized_month = month! { normalized_month_value }
     Date! {
         day: min(this.day, days_in_month(normalized_year, normalized_month)),
@@ -129,92 +129,92 @@ fun Date.add_years_months(years: int, months: int): Date =
 
 /// Formats this date as an ISO 8601 calendar date.
 fun Date.to_iso_8601(): String =
-    fun rec __pad_left(value: String, size: int): String =
+    fun rec pad_left(value: String, size: int): String =
         if value.size() >= size
         then value
-        else __pad_left("0" + value, size)
-    fun __year_to_iso_8601(year: int): String =
+        else pad_left("0" + value, size)
+    fun year_to_iso_8601(year: int): String =
         if year < 0
-        then "-" + __pad_left("" + (0 - year), 4)
+        then "-" + pad_left("" + (0 - year), 4)
         else if year > 9999
             then "+" + year
-            else __pad_left("" + year, 4)
+            else pad_left("" + year, 4)
     ---
-    __year_to_iso_8601(this.year)
+    year_to_iso_8601(this.year)
     + "-"
-    + __pad_left("" + this.month.value, 2)
+    + pad_left("" + this.month.value, 2)
     + "-"
-    + __pad_left("" + this.day, 2)
+    + pad_left("" + this.day, 2)
 
 /// Parses an ISO 8601 calendar date in basic or extended complete form.
 fun from_iso_8601(iso: String): Result[Date] =
-    data __Parse[T] { buffer: String, value: T }
-    fun __invalid(message: String): String = "Invalid ISO 8601 date format: " + message
-    fun __parse_single_digit(value: String): Result[__Parse[int]] =
+    data Parse[T] { buffer: String, value: T }
+    fun invalid(message: String): String = "Invalid ISO 8601 date format: " + message
+    fun parse_single_digit(value: String): Result[Parse[int]] =
         match value[0] with
-        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case None -> Error { invalid("unexpected end of string while parsing digits") }
         case Some { char } ->
             match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1, value.size()], value: digit } }
-            case Error -> Error { __invalid("expected digit, got `" + char + "`") }
-    fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
+            case Success { digit } -> Success { Parse { buffer: value[1, value.size()], value: digit } }
+            case Error -> Error { invalid("expected digit, got `" + char + "`") }
+    fun rec parse_rest_digits(value: String, parsed: int): Result[Parse[int]] =
         if value.is_empty()
-        then Success { __Parse { buffer: value, value: parsed } }
+        then Success { Parse { buffer: value, value: parsed } }
         else
-            match __parse_single_digit(value) with
-            case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
-            case Error -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: String): Result[__Parse[int]] =
-        let parse <- __parse_single_digit(value)
-        __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: String, label: String): Result[int] =
-        let parse <- __parse_digits(value)
+            match parse_single_digit(value) with
+            case Success { next } -> parse_rest_digits(next.buffer, parsed * 10 + next.value)
+            case Error -> Success { Parse { buffer: value, value: parsed } }
+    fun parse_digits(value: String): Result[Parse[int]] =
+        let parse <- parse_single_digit(value)
+        parse_rest_digits(parse.buffer, parse.value)
+    fun parse_exact_digits(value: String, label: String): Result[int] =
+        let parse <- parse_digits(value)
         if parse.buffer.is_empty()
         then Success { parse.value }
-        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun rec __drop_prefix(value: String, size: int): String =
+        else Error { invalid("expected digits for " + label + ", got `" + value + "`") }
+    fun rec drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1, value.size()], size - 1)
-    fun rec __take_prefix(value: String, size: int, acc: String): String =
+            case Some { _ } -> drop_prefix(value[1, value.size()], size - 1)
+    fun rec take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else
             match value[0] with
             case None -> acc
-            case Some { char } -> __take_prefix(value[1, value.size()], size - 1, acc + char)
-    fun __slice(value: String, start: int, size: int): String = __take_prefix(__drop_prefix(value, start), size, "")
-    fun __parse_year(value: String): Result[int] =
+            case Some { char } -> take_prefix(value[1, value.size()], size - 1, acc + char)
+    fun slice(value: String, start: int, size: int): String = take_prefix(drop_prefix(value, start), size, "")
+    fun parse_year(value: String): Result[int] =
         if value.is_empty()
-        then Error { __invalid("expected year") }
+        then Error { invalid("expected year") }
         else if value.starts_with("+")
             then if value.size() < 5
-                then Error { __invalid("expected expanded year, got `" + value + "`") }
+                then Error { invalid("expected expanded year, got `" + value + "`") }
                 else {
-                    let year <- __parse_exact_digits(value[1, value.size()], "year")
+                    let year <- parse_exact_digits(value[1, value.size()], "year")
                     Success { year }
                 }
             else if value.starts_with("-")
                 then if value.size() < 5
-                    then Error { __invalid("expected expanded year, got `" + value + "`") }
+                    then Error { invalid("expected expanded year, got `" + value + "`") }
                     else {
-                        let year <- __parse_exact_digits(value[1, value.size()], "year")
+                        let year <- parse_exact_digits(value[1, value.size()], "year")
                         Success { 0 - year }
                     }
                 else if value.size() < 4
-                    then Error { __invalid("expected four-digit year, got `" + value + "`") }
-                    else __parse_exact_digits(value, "year")
-    fun __parse_date(year_part: String, month_part: String, day_part: String): Result[Date] = {
-        let year <- __parse_year(year_part)
-        let month_value <- __parse_exact_digits(month_part, "month")
+                    then Error { invalid("expected four-digit year, got `" + value + "`") }
+                    else parse_exact_digits(value, "year")
+    fun parse_date(year_part: String, month_part: String, day_part: String): Result[Date] = {
+        let year <- parse_year(year_part)
+        let month_value <- parse_exact_digits(month_part, "month")
         let parsed_month <- month { month_value }
-        let day <- __parse_exact_digits(day_part, "day")
+        let day <- parse_exact_digits(day_part, "day")
         match Date { day, month: parsed_month, year } with
         case Success { date } -> Success { date }
-        case Error { message } -> Error { __invalid(message) }
+        case Error { message } -> Error { invalid(message) }
     }
     ---
     let extended_year_end = iso.size().value - 6
@@ -226,11 +226,11 @@ fun from_iso_8601(iso: String): Result[Date] =
     let basic_month_end = iso.size().value - 2
     let basic_day_start = iso.size().value - 2
     let is_extended = iso.size() >= 10
-        & __slice(iso, extended_year_end, 1) == "-"
-        & __slice(iso, extended_month_end, 1) == "-"
+        & slice(iso, extended_year_end, 1) == "-"
+        & slice(iso, extended_month_end, 1) == "-"
     let is_basic = iso.size() >= 8
     if is_extended
-    then __parse_date(__take_prefix(iso, extended_year_end, ""), __slice(iso, extended_month_start, 2), __slice(iso, extended_day_start, 2))
+    then parse_date(take_prefix(iso, extended_year_end, ""), slice(iso, extended_month_start, 2), slice(iso, extended_day_start, 2))
     else if is_basic
-        then __parse_date(__take_prefix(iso, basic_year_end, ""), __slice(iso, basic_month_start, 2), __slice(iso, basic_day_start, 2))
-        else Error { __invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }
+        then parse_date(take_prefix(iso, basic_year_end, ""), slice(iso, basic_month_start, 2), slice(iso, basic_day_start, 2))
+        else Error { invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }

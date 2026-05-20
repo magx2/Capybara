@@ -38,29 +38,29 @@ fun List[T].minus(other: List[T]): List[T] = this - other
 
 /// Returns true when at least one value satisfies `predicate`.
 fun List[T].any(predicate: T => bool): bool =
-    fun rec __any(list: List[T], idx: int, predicate: T => bool): bool =
+    fun rec any_match(list: List[T], idx: int, predicate: T => bool): bool =
         match list[idx] with
         case None -> false
         case Some { value } ->
             if predicate(value)
             then true
-            else __any(list, idx + 1, predicate)
+            else any_match(list, idx + 1, predicate)
     ---
-    __any(this, 0, predicate)
+    any_match(this, 0, predicate)
 
 /// Returns true when every value satisfies `predicate`.
 ///
 /// Empty lists return true.
 fun List[T].all(predicate: T => bool): bool =
-    fun rec __all(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
+    fun rec all(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
         match list[idx] with
         case None -> acc
         case Some { value } ->
             if !acc
             then false
-            else __all(list, idx + 1, predicate, predicate(value))
+            else all(list, idx + 1, predicate, predicate(value))
     ---
-    __all(this, 0, predicate, true)
+    all(this, 0, predicate, true)
 
 /// Returns true when this List contains the given value.
 fun List[T].contains(value: T): bool =
@@ -71,51 +71,51 @@ fun List[T].`?`(value: T): bool = this.contains(value)
 
 /// Combines all values from left to right.
 fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
-    fun rec __reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
+    fun rec reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
         match list[idx] with
         case None -> acc
-        case Some { value } -> __reduce(list, idx + 1, reducer(acc, value), reducer)
+        case Some { value } -> reduce(list, idx + 1, reducer(acc, value), reducer)
     ---
-    __reduce(this, 0, initial, reducer)
+    reduce(this, 0, initial, reducer)
 
 /// Combines all values from left to right.
 fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
 /// Transforms each value using `map`.
 fun List[T].map(map: T => Y): Seq[Y] =
-    fun __map(list: List[T], idx: int, map: T => Y): Seq[Y] =
+    fun map_values(list: List[T], idx: int, map: T => Y): Seq[Y] =
         match list[idx] with
         case None -> End {}
-        case Some { value } -> Cons { value: map(value), rest: () => __map(list, idx + 1, map) }
+        case Some { value } -> Cons { value: map(value), rest: () => map_values(list, idx + 1, map) }
     ---
-    __map(this, 0, map)
+    map_values(this, 0, map)
 
 /// Transforms each value using `map`.
 fun List[T].`|`(map: T => Y): Seq[Y] = this.map(map)
 
 /// Returns a sequence containing only values that satisfy `predicate`.
 fun List[T].filter(predicate: T => bool): Seq[T] =
-    fun __filter(list: List[T], idx: int, predicate: T => bool): Seq[T] =
+    fun filter(list: List[T], idx: int, predicate: T => bool): Seq[T] =
         match list[idx] with
         case None -> End {}
         case Some { value } ->
             if predicate(value)
-            then Cons { value: value, rest: () => __filter(list, idx + 1, predicate) }
-            else __filter(list, idx + 1, predicate)
+            then Cons { value: value, rest: () => filter(list, idx + 1, predicate) }
+            else filter(list, idx + 1, predicate)
     ---
-    __filter(this, 0, predicate)
+    filter(this, 0, predicate)
 
 /// Returns a sequence without values that satisfy `predicate`.
 fun List[T].reject(predicate: T => bool): Seq[T] =
-    fun __reject(list: List[T], idx: int, predicate: T => bool): Seq[T] =
+    fun reject(list: List[T], idx: int, predicate: T => bool): Seq[T] =
         match list[idx] with
         case None -> End {}
         case Some { value } ->
             if predicate(value)
-            then __reject(list, idx + 1, predicate)
-            else Cons { value: value, rest: () => __reject(list, idx + 1, predicate) }
+            then reject(list, idx + 1, predicate)
+            else Cons { value: value, rest: () => reject(list, idx + 1, predicate) }
     ---
-    __reject(this, 0, predicate)
+    reject(this, 0, predicate)
 
 /// Returns a sequence containing only values that satisfy `predicate`.
 fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)

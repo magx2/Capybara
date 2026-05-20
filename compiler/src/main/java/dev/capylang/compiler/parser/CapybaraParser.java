@@ -25,7 +25,6 @@ public class CapybaraParser {
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
     private static final Pattern MISMATCHED_INPUT_PATTERN = Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
-    private static final Pattern PRIVATE_LOCAL_CONST_NAME_PATTERN = Pattern.compile("^__[A-Za-z_][A-Za-z0-9_]*$");
     private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
     private static final Pattern IMPORT_PATTERN = Pattern.compile(
             "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
@@ -250,7 +249,7 @@ public class CapybaraParser {
     private Result.Error.SingleError duplicateLocalFunctionError(List<Function> functions) {
         var firstFunction = functions.getFirst();
         var firstPosition = firstFunction.position().orElseThrow();
-        var originalName = "__" + firstFunction.name().replaceFirst("^.*__local_fun_\\d+_", "");
+        var originalName = firstFunction.name().replaceFirst("^.*__local_fun_\\d+_", "");
         var locations = functions.stream()
                 .map(function -> function.position().orElseThrow())
                 .map(position -> "%d:%d".formatted(position.line(), position.column()))
@@ -282,7 +281,7 @@ public class CapybaraParser {
     private Result.Error.SingleError duplicateLocalConstError(List<Function> functions) {
         var firstFunction = functions.getFirst();
         var firstPosition = firstFunction.position().orElseThrow();
-        var originalName = "__" + firstFunction.name().replaceFirst("^.*__local_const_\\d+_", "");
+        var originalName = firstFunction.name().replaceFirst("^.*__local_const_\\d+_", "");
         var locations = functions.stream()
                 .map(function -> function.position().orElseThrow())
                 .map(position -> "%d:%d".formatted(position.line(), position.column()))
@@ -633,9 +632,7 @@ public class CapybaraParser {
                 if (localFunctionNameMap.containsKey(localName)) {
                     continue;
                 }
-                var normalizedLocalName = localName.startsWith("__")
-                        ? localName.substring(2)
-                        : localName;
+                var normalizedLocalName = normalizeLocalDefinitionName(localName);
                 localFunctionNameMap.put(
                         localName,
                         localScopePrefix + "__local_fun_" + localFunctionIndex + "_" + normalizedLocalName
@@ -645,30 +642,24 @@ public class CapybaraParser {
             var localType = localDefinition.localTypeDeclaration();
             if (localType != null) {
                 var localTypeName = genericTypeName(localType.genericTypeDeclaration(0));
-                if (!localTypeName.startsWith("__")) {
-                    throw new IllegalStateException("Local type name has to start with `__`: " + localTypeName);
-                }
                 if (localTypeNameMap.containsKey(localTypeName)) {
                     throw new IllegalStateException("Duplicate local type/data name: " + localTypeName);
                 }
                 localTypeNameMap.put(
                         localTypeName,
-                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + localTypeName.substring(2)
+                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + normalizeLocalDefinitionName(localTypeName)
                 );
                 localTypeIndex++;
             }
             var localData = localDefinition.localDataDeclaration();
             if (localData != null) {
                 var localDataName = genericTypeName(localData.genericTypeDeclaration());
-                if (!localDataName.startsWith("__")) {
-                    throw new IllegalStateException("Local data name has to start with `__`: " + localDataName);
-                }
                 if (localTypeNameMap.containsKey(localDataName)) {
                     throw new IllegalStateException("Duplicate local type/data name: " + localDataName);
                 }
                 localTypeNameMap.put(
                         localDataName,
-                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + localDataName.substring(2)
+                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + normalizeLocalDefinitionName(localDataName)
                 );
                 localTypeIndex++;
             }
@@ -688,7 +679,6 @@ public class CapybaraParser {
             if (localConst != null) {
                 var localConstNameNode = localConst.privateLocalConstName();
                 var localConstName = localConstName(localConstNameNode);
-                validateLocalConstName(localConstName, position(localConst));
                 var occurrences = localConstPositions.computeIfAbsent(localConstName, ignored -> new java.util.ArrayList<>());
                 occurrences.add(localConst.start);
                 if (localConstNameMap.containsKey(localConstName)) {
@@ -696,7 +686,7 @@ public class CapybaraParser {
                 }
                 localConstNameMap.put(
                         localConstName,
-                        localScopePrefix + "__local_const_" + localConstIndex + "_" + localConstName.substring(2)
+                        localScopePrefix + "__local_const_" + localConstIndex + "_" + normalizeLocalDefinitionName(localConstName)
                 );
                 localConstIndex++;
             }
@@ -3167,18 +3157,8 @@ public class CapybaraParser {
         }
     }
 
-    private static void validateLocalConstName(String name, Optional<SourcePosition> position) {
-        if (PRIVATE_LOCAL_CONST_NAME_PATTERN.matcher(name).matches()) {
-            return;
-        }
-        var message = "Local const name has to start with `__` and use a private identifier style: " + name;
-        if (position.isPresent()) {
-            var sourcePosition = position.orElseThrow();
-            throw new IllegalStateException(
-                    "line %d:%d: %s".formatted(sourcePosition.line(), sourcePosition.column(), message)
-            );
-        }
-        throw new IllegalStateException(message);
+    private static String normalizeLocalDefinitionName(String name) {
+        return name.startsWith("__") ? name.substring(2) : name;
     }
 
     private static void validateEnumValueName(String name) {

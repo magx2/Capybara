@@ -56,16 +56,16 @@ fun tests(): Effect[TestFile] =
         // invalid dates
         (-1, JANUARY, 2020, false),
         (0, FEBRUARY, 2020, false),
-    ] | (day, month, year, is_valid) => _test_date(day, month, year, is_valid)).as_list()
+    ] | (day, month, year, is_valid) => test_date(day, month, year, is_valid)).as_list()
     test_file('/capy/date_time/Date.cfun',
         test_cases
-        + _test_month()
-        + _test_leap_year()
-        + _date_test_to_iso_8601()
-        + _date_test_from_iso_8601_success()
-        + _date_test_from_iso_8601_failure())
+        + test_month()
+        + test_leap_year()
+        + date_test_to_iso_8601()
+        + date_test_from_iso_8601_success()
+        + date_test_from_iso_8601_failure())
 
-fun _test_date(day: int, month: month, year: int, is_valid: bool): TestCase =
+private fun test_date(day: int, month: month, year: int, is_valid: bool): TestCase =
     let assert: Assert =
         if is_valid
         then assert_that(Date { day, month, year })
@@ -79,7 +79,7 @@ fun _test_date(day: int, month: month, year: int, is_valid: bool): TestCase =
         "Date \{ day: {day}, month: {month}, year: {year} } should be " + (if is_valid then 'valid' else 'invalid'),
         () => assert)
 
-fun _test_month(): List[TestCase] =
+private fun test_month(): List[TestCase] =
     ([
         (0, false),
         (1, true),
@@ -95,14 +95,14 @@ fun _test_month(): List[TestCase] =
         test("month.previous should rewind middle months", () => assert_that((APRIL).previous()).is_equal_to(MARCH)),
     ]
 
-fun _test_leap_year(): List[TestCase] =
+private fun test_leap_year(): List[TestCase] =
     let leap_year = Date { day: 1, month: JANUARY, year: 2020 } | d => Success { d.leap_year() }
     let not_leap_year = Date { day: 1, month: JANUARY, year: 2019 } | d => Success { d.leap_year() }
     [
         test('1/1/2020 should be a leap year', () => assert_that(leap_year).succeeds(true)),
         test('1/1/2019 should not be a leap year', () => assert_that(not_leap_year).succeeds(false)) ]
 
-fun _date_test_to_iso_8601(): List[TestCase] =
+private fun date_test_to_iso_8601(): List[TestCase] =
     ([
         (7, JANUARY, 2000, "2000-01-07"),
         (7, JANUARY, -1, "-0001-01-07"),
@@ -111,7 +111,7 @@ fun _date_test_to_iso_8601(): List[TestCase] =
         "Date.to_iso_8601() should format {day}/{month}/{year}",
         () => assert_that(Date { day, month, year } | d => Success { d.to_iso_8601() }).succeeds(expected))).as_list()
 
-fun _date_test_from_iso_8601_success(): List[TestCase] =
+private fun date_test_from_iso_8601_success(): List[TestCase] =
     ([
         ("2000-01-07", 7, JANUARY, 2000),
         ("20000107", 7, JANUARY, 2000),
@@ -125,7 +125,7 @@ fun _date_test_from_iso_8601_success(): List[TestCase] =
                 .has_month(month)
                 .has_year(year)))).as_list()
 
-fun _date_test_from_iso_8601_failure(): List[TestCase] =
+private fun date_test_from_iso_8601_failure(): List[TestCase] =
     ([
         "2000-02-30",
         "2000-01",
@@ -136,7 +136,7 @@ fun _date_test_from_iso_8601_failure(): List[TestCase] =
         "Date.from_iso_8601 should fail for {iso}",
         () => assert_that(/capy/date_time/Date.from_iso_8601(iso)).fails())).as_list()
 
-fun _date_test_value(day: int, month: month, year: int): Date =
+private fun date_test_value(day: int, month: month, year: int): Date =
     match Date { day: day, month: month, year: year } with
     case Success { value } -> value
     case Error -> UNIX_DATE

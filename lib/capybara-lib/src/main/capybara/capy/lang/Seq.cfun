@@ -11,27 +11,27 @@ single End
 ///
 /// To start at `1`, drop the first element.
 fun natural_seq(): Seq[int] =
-    fun __next(i: int): Seq[int] = Cons { i, () => __next(i+1) }
+    fun next(i: int): Seq[int] = Cons { i, () => next(i+1) }
     ---
-    __next(0)
+    next(0)
 
 /// Returns an infinite Fibonacci sequence: `1, 1, 2, 3, 5, 8, 13, ...`.
 fun fibonacci_seq(): Seq[int] =
-    fun __next(a: int, b: int) = Cons { b, () => __next(b, a+b) }
+    fun next(a: int, b: int) = Cons { b, () => next(b, a+b) }
     ---
-    __next(0,1)
+    next(0,1)
 
 /// Returns an infinite sequence of zeros.
 fun zeros_seq(): Seq[int] =
-    fun __next() = Cons { 0, () => __next() }
+    fun next() = Cons { 0, () => next() }
     ---
-    __next()
+    next()
 
 /// Returns an infinite sequence of ones.
 fun ones_seq(): Seq[int] =
-    fun __next() = Cons { 1, () => __next() }
+    fun next() = Cons { 1, () => next() }
     ---
-    __next()
+    next()
 
 /// Returns an infinite sequence of powers of `base`: `base^0, base^1, base^2, ...`.
 ///
@@ -47,26 +47,26 @@ fun powers_of_2_seq() = powers_seq(2)
 ///
 /// This method is safe to use with infinite sequences.
 fun Seq[T].take(n: size): List[T] =
-    fun rec __take(seq: Seq[T], n: int, list: List[T]): List[T] =
+    fun rec take(seq: Seq[T], n: int, list: List[T]): List[T] =
         if n <=0
         then list
         else
             match seq with
             case End -> list
-            case Cons { value, rest } -> __take(rest(), n-1, list + value)
+            case Cons { value, rest } -> take(rest(), n-1, list + value)
     ---
-    __take(this, n, [])
+    take(this, n, [])
 
 /// Collects the entire sequence into a `List`.
 ///
 /// Important: calling this on an infinite sequence does not terminate.
 fun Seq[T].as_list(): List[T] =
-    fun rec __as_list(seq: Seq[T], list: List[T]): List[T] =
+    fun rec as_list(seq: Seq[T], list: List[T]): List[T] =
         match seq with
         case End -> list
-        case Cons { value, rest } -> __as_list(rest(), list + value)
+        case Cons { value, rest } -> as_list(rest(), list + value)
     ---
-    __as_list(this, [])
+    as_list(this, [])
 
 /// Converts a `List` into a finite `Seq`.
 fun to_seq(list: List[T]): Seq[T] =
@@ -87,16 +87,16 @@ fun to_seq(list: Dict[T]): Seq[Tuple[String, T]] =
 ///
 /// Important: calling this on an infinite sequence does not terminate.
 fun Seq[T].take_last(n: size): List[T] =
-    fun __add_to_list(max: int, list: List[T], value: T) = (if list.size() >= max then list[1:] else list) + value
-    fun __take_last(seq: Seq[T], max: int, n: int, list: List[T]) =
+    fun add_to_list(max: int, list: List[T], value: T) = (if list.size() >= max then list[1:] else list) + value
+    fun take_last(seq: Seq[T], max: int, n: int, list: List[T]) =
         if n <= 0
         then list
         else
             match seq with
             case End -> list
-            case Cons { value, rest } -> __take_last(rest(), max, n-1, __add_to_list(max, list, value))
+            case Cons { value, rest } -> take_last(rest(), max, n-1, add_to_list(max, list, value))
     ---
-    __take_last(this, n, n, [])
+    take_last(this, n, n, [])
 
 /// Returns a sequence containing only elements that satisfy `pred`.
 ///
@@ -105,41 +105,41 @@ fun Seq[T].take_last(n: size): List[T] =
 /// natural_seq().filter(x => x % 2 == 0)
 /// ```
 fun Seq[T].filter(pred: T => bool): Seq[T] =
-    fun __filter(seq: Seq[T], pred: T => bool): Seq[T] =
+    fun filter(seq: Seq[T], pred: T => bool): Seq[T] =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
             if pred(value)
-            then Cons { value, () => __filter(rest(), pred) }
-            else __filter(rest(), pred)
+            then Cons { value, () => filter(rest(), pred) }
+            else filter(rest(), pred)
     ---
-    __filter(this, pred)
+    filter(this, pred)
 
 fun Seq[T].`|-`(pred: T => bool): Seq[T] = this.filter(pred)
 
 /// Returns a sequence without elements that satisfy `pred`.
 fun Seq[T].reject(pred: T => bool): Seq[T] =
-    fun __reject(seq: Seq[T], pred: T => bool): Seq[T] =
+    fun reject(seq: Seq[T], pred: T => bool): Seq[T] =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
             if pred(value)
-            then __reject(rest(), pred)
-            else Cons { value, () => __reject(rest(), pred) }
+            then reject(rest(), pred)
+            else Cons { value, () => reject(rest(), pred) }
     ---
-    __reject(this, pred)
+    reject(this, pred)
 
 /// Skips the first `n` elements of the sequence.
 fun Seq[T].drop(n: size): Seq[T] =
-    fun rec __drop(seq: Seq[T], n: int) =
+    fun rec drop(seq: Seq[T], n: int) =
         if n <= 0
         then seq
         else
             match seq with
             case End -> End {}
-            case Cons { value, rest } -> __drop(rest(), n - 1)
+            case Cons { value, rest } -> drop(rest(), n - 1)
     ---
-    __drop(this, n)
+    drop(this, n)
 
 /// Drops elements until `pred` becomes `true`.
 ///
@@ -149,40 +149,40 @@ fun Seq[T].drop(n: size): Seq[T] =
 ///
 /// The first element that satisfies `pred` is included in the result.
 fun Seq[T].drop_until(pred: T => bool): Seq[T] =
-    fun rec __drop_until(seq: Seq[T], pred: T => bool) =
+    fun rec drop_until(seq: Seq[T], pred: T => bool) =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
             if pred(value)
             then Cons { value, rest }
-            else __drop_until(rest(), pred)
+            else drop_until(rest(), pred)
     ---
-    __drop_until(this, pred)
+    drop_until(this, pred)
 
 /// Returns elements from the start of the sequence until `pred` becomes `true`.
 ///
 /// The element that satisfies `pred` is not included.
 fun Seq[T].until(pred: T => bool): Seq[T] =
-    fun __until(seq: Seq[T], pred: T => bool) =
+    fun until(seq: Seq[T], pred: T => bool) =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
             if pred(value)
             then End {}
-            else Cons { value, () => __until(rest(), pred) }
+            else Cons { value, () => until(rest(), pred) }
     ---
-    __until(this, pred)
+    until(this, pred)
 
 /// Concatenates this sequence with `other`.
 ///
 /// If this sequence is infinite, `other` is never reached.
 fun Seq[T].`+`(other: Seq[T]): Seq[T] =
-    fun __add(seq: Seq[T], other: Seq[T]) =
+    fun add(seq: Seq[T], other: Seq[T]) =
         match seq with
         case End -> other
-        case Cons { value, rest } -> Cons { value, () => __add(rest(), other) }
+        case Cons { value, rest } -> Cons { value, () => add(rest(), other) }
     ---
-    __add(this, other)
+    add(this, other)
 
 /// Transforms each element using `map`.
 fun Seq[T].`|`(map: T => Y): Seq[Y] =
@@ -202,30 +202,30 @@ fun Seq[T].map(map: T => Y): Seq[Y] =
 /// produces:
 /// `[1, 2, 3, 2, 4, 6, 4, 8, 12, ...]`
 fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
-    fun __flat_map(seq: Seq[T], map: T => Seq[Y]) =
+    fun flat_map(seq: Seq[T], map: T => Seq[Y]) =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
-            map(value) + __flat_map(rest(), map)
+            map(value) + flat_map(rest(), map)
     ---
-    __flat_map(this, map)
+    flat_map(this, map)
 
 fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
-    fun __flat_map(seq: Seq[T], map: T => Seq[Y]) =
+    fun flat_map(seq: Seq[T], map: T => Seq[Y]) =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
-            map(value) + __flat_map(rest(), map)
+            map(value) + flat_map(rest(), map)
     ---
-    __flat_map(this, map)
+    flat_map(this, map)
 
 fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
-    fun rec __reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
+    fun rec reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
         match seq with
         case End -> acc
-        case Cons { value, rest } -> __reduce(rest(), reducer(acc, value), reducer)
+        case Cons { value, rest } -> reduce(rest(), reducer(acc, value), reducer)
     ---
-    __reduce(this, initial, reducer)
+    reduce(this, initial, reducer)
 
 fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
@@ -240,15 +240,15 @@ fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initia
 /// `s2 = [a, b, c, ..., z]` (finite)
 /// `s1.zip(s2)` -> [(1, a), (2, b), (3, c), ..., (26, z)]
 fun Seq[T].zip(other: Seq[Y]): Seq[Tuple[T,Y]] =
-    fun __zip(this: Seq[T], other: Seq[Y]): Seq[Tuple[T,Y]] =
+    fun zip(this: Seq[T], other: Seq[Y]): Seq[Tuple[T,Y]] =
         match this with
         case End -> End {}
         case Cons { v1, r1 } ->
             match other with
             case End -> End {}
-            case Cons { v2, r2 } -> Cons { (v1, v2), () => __zip(r1, r2) }
+            case Cons { v2, r2 } -> Cons { (v1, v2), () => zip(r1, r2) }
     ---
-    __zip(this, other)
+    zip(this, other)
 
 /// Returns the first element wrapped in `Option`.
 ///

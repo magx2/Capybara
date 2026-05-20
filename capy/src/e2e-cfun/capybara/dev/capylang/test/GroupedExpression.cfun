@@ -13,17 +13,17 @@ fun nested_pipe_in_match_branch(value: int): Result[int] =
     }
 
 fun grouped_guarded_match_is_exhaustive(input: String): Result[String] =
-    data __Parse[T] { buffer: String, value: T }
-    fun parse_tail(buffer: String): Result[__Parse[String]] =
-        Success { __Parse { buffer, "tail" } }
-    fun parse_build(buffer: String): Result[__Parse[String]] =
-        Success { __Parse { buffer, "build" } }
+    data Parse[T] { buffer: String, value: T }
+    fun parse_tail(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer, "tail" } }
+    fun parse_build(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer, "build" } }
     ---
-    let parse_patch: __Parse[String] = __Parse { input, "base" }
+    let parse_patch: Parse[String] = Parse { input, "base" }
     match parse_patch.buffer[0] with
     case Some { ch } when ch == '-' -> {
         parse_tail(parse_patch.buffer[1, parse_patch.buffer.size()])
-        | parse_tail => Success { __Parse {
+        | parse_tail => Success { Parse {
             buffer: parse_tail.buffer,
             value: "pre:" + parse_tail.value
         }}
@@ -44,18 +44,18 @@ fun grouped_guarded_match_is_exhaustive(input: String): Result[String] =
     case None -> Success { "none" }
 
 fun semver_style_mixed_case_pipe_bodies(input: String): Result[String] =
-    data __Parse[T] { buffer: String, value: T }
-    fun parse_pre_release(buffer: String): Result[__Parse[String]] =
-        Success { __Parse { buffer, "rc1" } }
-    fun parse_build(buffer: String): Result[__Parse[String]] =
-        Success { __Parse { buffer, "001" } }
+    data Parse[T] { buffer: String, value: T }
+    fun parse_pre_release(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer, "rc1" } }
+    fun parse_build(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer, "001" } }
     ---
-    let parse_patch: __Parse[String] = __Parse { input, "1.2.3" }
+    let parse_patch: Parse[String] = Parse { input, "1.2.3" }
     let raw_sem_ver = "1.2.3"
     match parse_patch.buffer[0] with
     case Some { next_char } when next_char == '-' -> {
         parse_pre_release(parse_patch.buffer[1, parse_patch.buffer.size()])
-        | parse_pre_release => Success { __Parse {
+        | parse_pre_release => Success { Parse {
             buffer: parse_pre_release.buffer,
             value: raw_sem_ver + "-" + parse_pre_release.value
         }}
@@ -76,18 +76,18 @@ fun semver_style_mixed_case_pipe_bodies(input: String): Result[String] =
     case None -> Success { raw_sem_ver }
 
 fun inner_ungrouped_pipe_in_match_inside_lambda(input: String): Result[String] =
-    data __Parse[T] { buffer: String, value: T }
-    fun parse_pre_release(buffer: String): Result[__Parse[String]] =
-        Success { __Parse { buffer, "rc1" } }
-    fun parse_build(buffer: String): Result[__Parse[String]] =
-        Success { __Parse { buffer, "001" } }
+    data Parse[T] { buffer: String, value: T }
+    fun parse_pre_release(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer, "rc1" } }
+    fun parse_build(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer, "001" } }
     ---
-    let parse_patch: __Parse[String] = __Parse { input, "1.2.3" }
+    let parse_patch: Parse[String] = Parse { input, "1.2.3" }
     let raw_sem_ver = "1.2.3"
     match parse_patch.buffer[0] with
     case Some { next_char } when next_char == '-' -> {
         parse_pre_release(parse_patch.buffer[1, parse_patch.buffer.size()])
-        | parse_pre_release => Success { __Parse {
+        | parse_pre_release => Success { Parse {
             buffer: parse_pre_release.buffer,
             value: raw_sem_ver + "-" + parse_pre_release.value
         }}

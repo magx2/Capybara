@@ -120,7 +120,7 @@ fun should_convert_data_with_collection_fields_to_json_object(): Assert =
 
 fun should_convert_data_with_set_field_to_json_array(): Assert =
     assert_that(to_json(JsonSetSample { tags: {"red", "blue"} })).succeeds(obj =>
-        match _json_field(obj, "tags") with
+        match json_field(obj, "tags") with
         case Some { tags } -> {
             match tags with
             case JsonArray { values } ->
@@ -172,7 +172,7 @@ fun should_convert_enum_to_json_string(): Assert =
         status: PENDING,
         raw: JsonNull {}
     })).succeeds(obj =>
-        match _json_field(obj, "status") with
+        match json_field(obj, "status") with
         case Some { json } -> {
             match json with
             case JsonString { value } -> assert_that(value).is_equal_to("PENDING")
@@ -232,7 +232,7 @@ fun should_derive_jsonable_to_json_for_nested_and_collection_fields(): Assert =
         }
     })
 
-fun _json_field(json: JsonObject, name: String): Option[Json] =
+private fun json_field(json: JsonObject, name: String): Option[Json] =
     let initial: Option[Json] = None {}
     json.value |> initial, (acc, key, value) =>
         if key == name then Some { value } else acc

@@ -9,15 +9,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PrivateDataTest {
     @Test
-    void underscorePrefixedDataCanBeUsedInsideModule() {
+    void privateDataCanBeUsedInsideModule() {
         assertThat(PrivateData.parseInt(7)).isEqualTo("ok:7");
         assertThat(PrivateData.parseConflict("x")).isEqualTo("internal:x");
     }
 
     @Test
-    void underscorePrefixedDataIsGeneratedAsPrivateRecord() {
+    void privateDataIsGeneratedAsPrivateRecord() {
         var privateParseClass = Arrays.stream(PrivateData.class.getDeclaredClasses())
-                .filter(clazz -> clazz.getSimpleName().equals("_Parse"))
+                .filter(clazz -> clazz.getSimpleName().equals("InternalParse"))
                 .findFirst()
                 .orElseThrow();
         var parseClass = Arrays.stream(PrivateData.class.getDeclaredClasses())

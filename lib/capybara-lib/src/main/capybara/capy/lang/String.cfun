@@ -57,55 +57,55 @@ fun String.plus(value: any): String = this + value
 
 /// Returns true when at least one character satisfies `predicate`.
 fun String.any(predicate: String => bool): bool =
-    fun rec __any(value: String, idx: int, predicate: String => bool): bool =
+    fun rec any_match(value: String, idx: int, predicate: String => bool): bool =
         match value[idx] with
         case None -> false
         case Some { char } ->
             if predicate(char)
             then true
-            else __any(value, idx + 1, predicate)
+            else any_match(value, idx + 1, predicate)
     ---
-    __any(this, 0, predicate)
+    any_match(this, 0, predicate)
 
 /// Returns true when at least one character and index pair satisfies `predicate`.
 fun String.any(predicate: (String, int) => bool): bool =
-    fun rec __any(value: String, idx: int, predicate: (String, int) => bool): bool =
+    fun rec any_match(value: String, idx: int, predicate: (String, int) => bool): bool =
         match value[idx] with
         case None -> false
         case Some { char } ->
             if predicate(char, idx)
             then true
-            else __any(value, idx + 1, predicate)
+            else any_match(value, idx + 1, predicate)
     ---
-    __any(this, 0, predicate)
+    any_match(this, 0, predicate)
 
 /// Returns true when every character satisfies `predicate`.
 ///
 /// Empty strings return true.
 fun String.all(predicate: String => bool): bool =
-    fun rec __all(value: String, idx: int, predicate: String => bool): bool =
+    fun rec all(value: String, idx: int, predicate: String => bool): bool =
         match value[idx] with
         case None -> true
         case Some { char } ->
             if !predicate(char)
             then false
-            else __all(value, idx + 1, predicate)
+            else all(value, idx + 1, predicate)
     ---
-    __all(this, 0, predicate)
+    all(this, 0, predicate)
 
 /// Returns true when every character and index pair satisfies `predicate`.
 ///
 /// Empty strings return true.
 fun String.all(predicate: (String, int) => bool): bool =
-    fun rec __all(value: String, idx: int, predicate: (String, int) => bool): bool =
+    fun rec all(value: String, idx: int, predicate: (String, int) => bool): bool =
         match value[idx] with
         case None -> true
         case Some { char } ->
             if !predicate(char, idx)
             then false
-            else __all(value, idx + 1, predicate)
+            else all(value, idx + 1, predicate)
     ---
-    __all(this, 0, predicate)
+    all(this, 0, predicate)
 
 /// Returns true when this String contains the given substring.
 fun String.contains(part: String): bool =
@@ -121,51 +121,51 @@ fun String.`?`(part: String): bool = this.contains(part)
 
 /// Combines all characters from left to right.
 fun String.reduce(initial: R, reducer: (R, String) => R): R =
-    fun rec __reduce(value: String, idx: int, acc: R, reducer: (R, String) => R): R =
+    fun rec reduce(value: String, idx: int, acc: R, reducer: (R, String) => R): R =
         match value[idx] with
         case None -> acc
-        case Some { char } -> __reduce(value, idx + 1, reducer(acc, char), reducer)
+        case Some { char } -> reduce(value, idx + 1, reducer(acc, char), reducer)
     ---
-    __reduce(this, 0, initial, reducer)
+    reduce(this, 0, initial, reducer)
 
 /// Combines all characters from left to right.
 fun String.`|>`(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
 
 /// Transforms each character using `map`.
 fun String.map(map: String => Y): Seq[Y] =
-    fun __map(value: String, idx: int, map: String => Y): Seq[Y] =
+    fun map_chars(value: String, idx: int, map: String => Y): Seq[Y] =
         match value[idx] with
         case None -> End {}
-        case Some { char } -> Cons { value: map(char), rest: () => __map(value, idx + 1, map) }
+        case Some { char } -> Cons { value: map(char), rest: () => map_chars(value, idx + 1, map) }
     ---
-    __map(this, 0, map)
+    map_chars(this, 0, map)
 
 /// Transforms each character using `map`.
 fun String.`|`(map: String => Y): Seq[Y] = this.map(map)
 
 /// Returns a sequence containing only characters that satisfy `predicate`.
 fun String.filter(predicate: String => bool): Seq[String] =
-    fun __filter(value: String, idx: int, predicate: String => bool): Seq[String] =
+    fun filter(value: String, idx: int, predicate: String => bool): Seq[String] =
         match value[idx] with
         case None -> End {}
         case Some { char } ->
             if predicate(char)
-            then Cons { value: char, rest: () => __filter(value, idx + 1, predicate) }
-            else __filter(value, idx + 1, predicate)
+            then Cons { value: char, rest: () => filter(value, idx + 1, predicate) }
+            else filter(value, idx + 1, predicate)
     ---
-    __filter(this, 0, predicate)
+    filter(this, 0, predicate)
 
 /// Returns a sequence without characters that satisfy `predicate`.
 fun String.reject(predicate: String => bool): Seq[String] =
-    fun __reject(value: String, idx: int, predicate: String => bool): Seq[String] =
+    fun reject(value: String, idx: int, predicate: String => bool): Seq[String] =
         match value[idx] with
         case None -> End {}
         case Some { char } ->
             if predicate(char)
-            then __reject(value, idx + 1, predicate)
-            else Cons { value: char, rest: () => __reject(value, idx + 1, predicate) }
+            then reject(value, idx + 1, predicate)
+            else Cons { value: char, rest: () => reject(value, idx + 1, predicate) }
     ---
-    __reject(this, 0, predicate)
+    reject(this, 0, predicate)
 
 /// Returns a sequence containing only characters that satisfy `predicate`.
 fun String.`|-`(predicate: String => bool): Seq[String] = this.filter(predicate)
@@ -192,20 +192,20 @@ fun String.end_with(part: String): bool =
 fun String.trim(): String =
     fun is_trim_whitespace(char: String): bool =
         char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
-    fun rec __trim_left(value: String): String =
+    fun rec trim_left(value: String): String =
         if value.size() == EMPTY
         then ""
         else if is_trim_whitespace(value[0, 1])
-            then __trim_left(value[1, value.size()])
+            then trim_left(value[1, value.size()])
             else value
-    fun rec __trim_right(value: String): String =
+    fun rec trim_right(value: String): String =
         if value.size() == EMPTY
         then ""
         else if is_trim_whitespace(value[value.size().value - 1, value.size()])
-            then __trim_right(value[0, value.size().value - 1])
+            then trim_right(value[0, value.size().value - 1])
             else value
     ---
-    __trim_right(__trim_left(this))
+    trim_right(trim_left(this))
 
 /// Replaces every occurrence of old with new.
 fun String.replace(old: String, new: String): String = <native>

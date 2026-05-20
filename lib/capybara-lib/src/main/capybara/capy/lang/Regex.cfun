@@ -12,18 +12,18 @@ data Match { group_value: String }
 fun from_literal(pattern: String, flags: String): Regex = Regex { pattern, flags }
 
 private fun drop_prefix(value: String, size: int): String =
-    fun rec __drop_prefix(value: String, size: int): String =
+    fun rec drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1, value.size()], size - 1)
+            case Some { _ } -> drop_prefix(value[1, value.size()], size - 1)
     ---
-    __drop_prefix(value, size)
+    drop_prefix(value, size)
 
 private fun find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
-    fun rec __find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
+    fun rec find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
         if pattern == ""
         then acc
         else
@@ -31,13 +31,13 @@ private fun find_all(pattern: String, input: String, acc: List[Match]): List[Mat
             case None -> acc
             case Some { _ } ->
                 if input.starts_with(pattern)
-                then __find_all(pattern, drop_prefix(input, pattern.size()), acc + Match { group_value: pattern })
-                else __find_all(pattern, input[1, input.size()], acc)
+                then find_all(pattern, drop_prefix(input, pattern.size()), acc + Match { group_value: pattern })
+                else find_all(pattern, input[1, input.size()], acc)
     ---
-    __find_all(pattern, input, acc)
+    find_all(pattern, input, acc)
 
 private fun split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
-    fun rec __split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
+    fun rec split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
         if pattern == ""
         then [input]
         else
@@ -45,10 +45,10 @@ private fun split(pattern: String, input: String, current: String, acc: List[Str
             case None -> acc + current
             case Some { c } ->
                 if input.starts_with(pattern)
-                then __split(pattern, drop_prefix(input, pattern.size()), "", acc + current)
-                else __split(pattern, input[1, input.size()], current + c, acc)
+                then split(pattern, drop_prefix(input, pattern.size()), "", acc + current)
+                else split(pattern, input[1, input.size()], current + c, acc)
     ---
-    __split(pattern, input, current, acc)
+    split(pattern, input, current, acc)
 
 fun Regex.matches(input: String): bool = input ? this.pattern
 
