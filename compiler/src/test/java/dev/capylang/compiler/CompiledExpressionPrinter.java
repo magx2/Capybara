@@ -49,7 +49,7 @@ public class CompiledExpressionPrinter {
             case CompiledNewData linkedNewData -> printLinkedNewData(linkedNewData, level);
             case CompiledStringValue linkedStringValue -> printLinkedStringValue(linkedStringValue, level);
             case CompiledUnwrapExpression linkedUnwrapExpression ->
-                    "@" + printExpression(linkedUnwrapExpression.expression(), level);
+                    printExpression(linkedUnwrapExpression.expression(), level) + ".value";
             case CompiledVariable linkedVariable -> printLinkedVariable(linkedVariable, level);
         };
     }
