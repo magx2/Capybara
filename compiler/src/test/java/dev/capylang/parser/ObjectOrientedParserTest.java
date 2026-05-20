@@ -102,6 +102,8 @@ class ObjectOrientedParserTest {
 
                             def construct(value: int): user_id = user_id { value }
 
+                            def slots(size: int): user_id[] = user_id[size]
+
                             def local_id(value: int): int {
                                 let id: user_id = user_id { value }
                                 return value
@@ -126,7 +128,7 @@ class ObjectOrientedParserTest {
                 .map(ObjectOriented.MethodDeclaration.class::cast)
                 .map(ObjectOriented.MethodDeclaration::returnType)
                 .toList())
-                .containsExactly("user_id", "user_id", "int");
+                .containsExactly("user_id", "user_id", "user_id[]", "int");
     }
 
     @Test

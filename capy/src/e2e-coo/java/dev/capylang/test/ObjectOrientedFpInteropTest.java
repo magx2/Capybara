@@ -19,6 +19,7 @@ class ObjectOrientedFpInteropTest {
         assertThat(interactor.make_user_id(13)).isEqualTo(13);
         assertThat(interactor.unwrap_user_id(17)).isEqualTo(17);
         assertThat(interactor.add_user_ids(19, 23)).isEqualTo(42);
+        assertThat(interactor.user_id_slots(10)).hasSize(10);
         assertThat(interactor.local_user_id(29)).isEqualTo(29);
     }
 }

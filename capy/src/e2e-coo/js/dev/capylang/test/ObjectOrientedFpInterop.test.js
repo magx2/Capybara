@@ -17,5 +17,6 @@ test('object-oriented code can invoke FP functions, create FP data, and match FP
     assert.equal(interactor.make_user_id(13), 13);
     assert.equal(interactor.unwrap_user_id(17), 17);
     assert.equal(interactor.add_user_ids(19, 23), 42);
+    assert.equal(interactor.user_id_slots(10).length, 10);
     assert.equal(interactor.local_user_id(29), 29);
 });
