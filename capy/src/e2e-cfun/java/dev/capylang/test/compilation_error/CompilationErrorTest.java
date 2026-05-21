@@ -340,6 +340,28 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectSplitProgramMainSignatureAcrossOverloads() {
+        var errors = compileProgram("""
+                        from /capy/lang/Effect import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
+
+                        fun main(args: List[String]): /capy/lang/Program =
+                            /capy/lang/Program.Success {}
+
+                        fun main(args: List[int]): Effect[/capy/lang/Program] =
+                            pure(/capy/lang/Program.Success {})
+                        """,
+                "split_program_main_signature");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Invalid overloaded main functions")
+                .contains("fun main(args: List[String]): Effect[/capy/lang/Program]");
+    }
+
+    @Test
     void shouldRejectDuplicateDeriver() {
         var errors = compileProgram("""
                         deriver Show {

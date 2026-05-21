@@ -1053,12 +1053,7 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private boolean isJavaEntrypoint(ObjectOriented.MethodDeclaration method) {
-        return method.name().equals("main")
-               && method.returnType().equals("int")
-               && method.parameters().size() == 1
-               && method.parameters().getFirst().type().equals("List[String]")
-               && method.body().isPresent()
-               && !method.modifiers().contains("abstract");
+        return false;
     }
 
     private void ensureEntrypointCompatible(

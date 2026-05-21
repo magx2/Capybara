@@ -1,3 +1,35 @@
 union Program = Success | Failed
-data Success { results: List[String] }
-data Failed { exitCode: int, errors: List[String] }
+single Success
+data Failed { exit_code: failed_exit_code }
+
+type failed_exit_code -> int with constructor {
+    if value < MIN_FAILED_EXIT_CODE then /capy/lang/Result.Error { message: "failed_exit_code must be greater or equals to {MIN_FAILED_EXIT_CODE}, was `{value}`." }
+    else if value > MAX_FAILED_EXIT_CODE then /capy/lang/Result.Error { message: "failed_exit_code must be less than or equal to {MAX_FAILED_EXIT_CODE}, was `{value}`." }
+    else /capy/lang/Result.Success { value }
+}
+
+fun failed_exit_code.next(): failed_exit_code =
+    if this.value >= MAX_FAILED_EXIT_CODE
+    then LAST_FAILED_EXIT_CODE
+    else failed_exit_code! { this.value + 1 }
+
+fun failed_exit_code.previous(): failed_exit_code =
+    if this.value <= MIN_FAILED_EXIT_CODE
+    then DEFAULT_FAILED_EXIT_CODE
+    else failed_exit_code! { this.value - 1 }
+
+private const MIN_FAILED_EXIT_CODE: int = 1
+private const MAX_FAILED_EXIT_CODE: int = 255
+
+const DEFAULT_FAILED_EXIT_CODE = failed_exit_code! { MIN_FAILED_EXIT_CODE }
+const LAST_FAILED_EXIT_CODE = failed_exit_code! { MAX_FAILED_EXIT_CODE }
+const SIGHUP = failed_exit_code! { 129 } // terminal closed
+const SIGINT = failed_exit_code! { 130 }
+const SIGQUIT = failed_exit_code! { 131 }
+const SIGABRT = failed_exit_code! { 134 }
+const SIGFPE = failed_exit_code! { 136 }
+const SIGKILL = failed_exit_code! { 137 } // kill -9
+const SIGSEGV = failed_exit_code! { 139 }
+const SIGPIPE = failed_exit_code! { 141 } // broken pipe
+const SIGALRM = failed_exit_code! { 142 } // timeout/alarm
+const SIGTERM = failed_exit_code! { 143 }

@@ -1399,29 +1399,15 @@ public final class JavaGenerator implements Generator {
                + "public static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateMethodBody(method, null)
                + "\n}\n";
-        var returnsEffectProgram = isEffectProgramType(method.returnType().toString());
-        var programType = returnsEffectProgram
-                ? normalizeProgramTypeReference(effectPayloadTypeReference(method.returnType().toString()))
-                : normalizeProgramTypeReference(method.returnType().toString());
-        var programComputation = returnsEffectProgram
-                ? programType + " program = " + mapMethodName(method.name()) + "(__capybaraArgsList).unsafeRun();"
-                : programType + " program = " + mapMethodName(method.name()) + "(__capybaraArgsList);";
-        var successType = programType + ".Success";
+        var programType = normalizeProgramTypeReference(effectPayloadTypeReference(method.returnType().toString()));
         var failedType = programType + ".Failed";
         return capybaraMainMethod
                + "\n"
-               + "public static void main(java.lang.String[] args) {\n"
+               + "public static final void main(String... args) {\n"
                + "var __capybaraArgsList = java.util.List.of(args);\n"
-               + programComputation + "\n"
-               + "switch (program) {\n"
-               + "case " + successType + "(var __capybaraResults) -> {\n"
-               + "__capybaraResults.forEach(System.out::println);\n"
-               + "}\n"
-               + "case " + failedType + "(var __capybaraExitCode, var __capybaraErrors) -> {\n"
-               + "__capybaraErrors.forEach(System.err::println);\n"
-               + "System.exit(__capybaraExitCode);\n"
-               + "}\n"
-               + "default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + program);\n"
+               + programType + " __capybaraProgram = " + mapMethodName(method.name()) + "(__capybaraArgsList).unsafeRun();\n"
+               + "if (__capybaraProgram instanceof " + failedType + " __capybaraFailed) {\n"
+               + "System.exit(__capybaraFailed.exit_code());\n"
                + "}\n"
                + "}\n";
     }
@@ -1448,13 +1434,6 @@ public final class JavaGenerator implements Generator {
         return typeName;
     }
 
-    private boolean isEffectProgramType(String typeName) {
-        if (!isEffectTypeReference(typeName)) {
-            return false;
-        }
-        return isProgramTypeReference(effectPayloadTypeReference(typeName));
-    }
-
     private boolean isEffectTypeReference(String typeName) {
         var normalized = typeName.replace(" ", "");
         var genericStart = normalized.indexOf('<');
@@ -1469,11 +1448,6 @@ public final class JavaGenerator implements Generator {
             return "capy.lang.Program";
         }
         return normalized.substring(genericStart + 1, normalized.length() - 1);
-    }
-
-    private boolean isProgramTypeReference(String typeName) {
-        var normalized = normalizeProgramTypeReference(typeName.replace(" ", ""));
-        return "Program".equals(normalized) || "capy.lang.Program".equals(normalized) || normalized.endsWith(".Program");
     }
 
     private String mapJavaDoc(List<String> comments) {

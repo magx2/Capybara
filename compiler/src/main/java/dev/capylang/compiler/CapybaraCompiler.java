@@ -4736,21 +4736,30 @@ public class CapybaraCompiler {
         return !(expectedReturnType instanceof GenericDataType && actualReturnType instanceof GenericDataType);
     }
     private boolean isProgramMain(String name, CompiledType returnType, List<CompiledFunctionParameter> parameters) {
+        return isProgramMainSignature(
+                name,
+                returnType,
+                parameters.stream().map(CompiledFunctionParameter::type).toList()
+        );
+    }
+
+    private boolean isProgramMainSignature(String name, CompiledType returnType, List<CompiledType> parameterTypes) {
         if (!"main".equals(name)) {
             return false;
         }
-        if (parameters.size() != 1) {
-            return false;
-        }
-        if (!(parameters.getFirst().type() instanceof CollectionLinkedType.CompiledList listType)
-            || listType.elementType() != PrimitiveLinkedType.STRING) {
-            return false;
-        }
+        return hasProgramMainArguments(parameterTypes)
+               && returnsEffectProgram(returnType);
+    }
+
+    private boolean hasProgramMainArguments(List<CompiledType> parameterTypes) {
+        return parameterTypes.size() == 1
+               && parameterTypes.getFirst() instanceof CollectionLinkedType.CompiledList listType
+               && listType.elementType() == PrimitiveLinkedType.STRING;
+    }
+
+    private boolean returnsEffectProgram(CompiledType returnType) {
         if (!(returnType instanceof GenericDataType genericDataType)) {
             return false;
-        }
-        if (isProgramType(genericDataType)) {
-            return true;
         }
         var typeParameters = typeParameters(genericDataType);
         return isEffectType(genericDataType)
@@ -4758,22 +4767,22 @@ public class CapybaraCompiler {
                && isProgramTypeDescriptor(typeParameters.getFirst());
     }
 
+    private boolean returnsProgram(CompiledType returnType) {
+        return returnType instanceof GenericDataType genericDataType
+               && isProgramType(genericDataType);
+    }
+
     private boolean isProgramType(GenericDataType genericDataType) {
+        var rawType = genericDataType.name();
         var normalized = normalizeQualifiedTypeName(genericDataType.name());
-        return "Program".equals(genericDataType.name())
-               || normalized.equals("/capy/lang/Program")
-               || normalized.equals("/capy/lang/Program.Program")
-               || normalized.equals("/cap/lang/Program")
-               || normalized.equals("/cap/lang/Program.Program");
+        return "Program".equals(rawType)
+               || normalized.equals("/capy/lang/Program");
     }
 
     private boolean isEffectType(GenericDataType genericDataType) {
         var normalized = normalizeQualifiedTypeName(genericDataType.name());
         return "Effect".equals(genericDataType.name())
-               || normalized.equals("/capy/lang/Effect")
-               || normalized.equals("/capy/lang/Effect.Effect")
-               || normalized.equals("/cap/lang/Effect")
-               || normalized.equals("/cap/lang/Effect.Effect");
+               || normalized.equals("/capy/lang/Effect");
     }
 
     private List<String> typeParameters(GenericDataType genericDataType) {
@@ -4792,10 +4801,7 @@ public class CapybaraCompiler {
         }
         var normalized = normalizeQualifiedTypeName(rawType);
         return "Program".equals(rawType)
-               || normalized.equals("/capy/lang/Program")
-               || normalized.equals("/capy/lang/Program.Program")
-               || normalized.equals("/cap/lang/Program")
-               || normalized.equals("/cap/lang/Program.Program");
+               || normalized.equals("/capy/lang/Program");
     }
 
     private String normalizeQualifiedTypeName(String typeName) {
@@ -5040,7 +5046,38 @@ public class CapybaraCompiler {
                 );
             }
         }
+        var invalidMainOverloadIndex = invalidSplitProgramMainOverloadIndex(signatures);
+        if (invalidMainOverloadIndex.isPresent()) {
+            return withPosition(
+                    Result.error("Invalid overloaded main functions: `main` declarations cannot split the program entrypoint "
+                                 + "signature across parameter and return types. Use exactly `fun main(args: List[String]): "
+                                 + "Effect[/capy/lang/Program]`."),
+                    functions.get(invalidMainOverloadIndex.get()).position(),
+                    normalizeFile(moduleSourceFile)
+            );
+        }
         return Result.success(signatures);
+    }
+
+    private Optional<Integer> invalidSplitProgramMainOverloadIndex(List<CapybaraExpressionCompiler.FunctionSignature> signatures) {
+        var hasDirectProgramMainShape = false;
+        Integer effectProgramMainWithWrongArgumentsIndex = null;
+        for (var i = 0; i < signatures.size(); i++) {
+            var signature = signatures.get(i);
+            if (!"main".equals(signature.name())) {
+                continue;
+            }
+            if (hasProgramMainArguments(signature.parameterTypes()) && returnsProgram(signature.returnType())) {
+                hasDirectProgramMainShape = true;
+            }
+            if (!hasProgramMainArguments(signature.parameterTypes()) && returnsEffectProgram(signature.returnType())) {
+                effectProgramMainWithWrongArgumentsIndex = i;
+            }
+        }
+        if (hasDirectProgramMainShape && effectProgramMainWithWrongArgumentsIndex != null) {
+            return Optional.of(effectProgramMainWithWrongArgumentsIndex);
+        }
+        return Optional.empty();
     }
 
     private boolean areAssignableDataTypeParameters(List<String> expectedParameters, List<String> actualParameters, Map<String, GenericDataType> dataTypes) {
