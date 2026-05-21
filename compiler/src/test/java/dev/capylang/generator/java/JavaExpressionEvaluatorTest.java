@@ -265,6 +265,9 @@ class JavaExpressionEvaluatorTest {
 
                 /// The result of comparing two values.
                 enum Ordering { LESS, EQUAL, GREATER }
+
+                /// Successful program completion
+                single Success
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -279,6 +282,8 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("/// Complete report");
         assertThat(generated).contains("/// Node type");
         assertThat(generated).contains("/// The result of comparing two values.");
+        assertThat(generated).contains("/// Successful program completion");
+        assertThat(generated).contains("public enum Success");
     }
 
     @Test

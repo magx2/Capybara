@@ -1637,7 +1637,7 @@ public class JavaAstBuilder {
         implementInterfaces.add(CAPYBARA_DATA_VALUE);
         return new JavaEnum(
                 buildClassName(type.name()),
-                List.of(),
+                type.comments(),
                 implementInterfaces,
                 List.of("INSTANCE"),
                 List.of(ReflectionValueInfoJava.dataValueInfo(type.name(), reflectionFallbackPackagePath, List.of()))

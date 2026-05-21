@@ -47,7 +47,7 @@ localTypeDeclaration: 'union' genericTypeDeclaration constructorClause? '=' gene
                     | 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause?
                     | 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause?;
-localSingleDeclaration: 'single' TYPE;
+localSingleDeclaration: docComment* 'single' TYPE;
 localConstDeclaration: docComment* 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
 functionNameDeclaration: identifier | methodOwnerDeclaration DOT declarationMethodIdentifier;
@@ -69,7 +69,7 @@ constructorClause: 'with' 'constructor' '{' expression '}';
 deriveClause: 'derive' TYPE (COMMA TYPE)* COMMA?;
 deriverDeclaration: docComment* VISIBILITY? 'deriver' TYPE '{' deriverMethodDeclaration+ '}';
 deriverMethodDeclaration: docComment* 'fun' identifier '(' parameters? ')' functionType '=' expression;
-singleDeclaration: 'single' TYPE;
+singleDeclaration: docComment* 'single' TYPE;
 constDeclaration: docComment* VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
 fieldDeclaration: identifier ':' type
