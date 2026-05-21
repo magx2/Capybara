@@ -1363,7 +1363,8 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String dataConstructorReference(CompiledDataType dataType) {
-            var qualifiedOwner = qualifiedTypeOwnerClassName(dataType.name());
+            var qualifiedOwner = qualifiedTypeOwnerClassName(dataType.name())
+                    .or(() -> dottedTypeOwnerClassName(dataType.name()));
             if (qualifiedOwner.isPresent()) {
                 var ownerClassName = qualifiedOwner.orElseThrow();
                 var typeName = programContext.emittedTypeName(ownerClassName, dataType.name());
@@ -1397,6 +1398,37 @@ public final class JavaScriptGenerator implements Generator {
                 return moduleVar(className) + "." + typeName;
             }
             return typeName;
+        }
+
+        private Optional<String> dottedTypeOwnerClassName(String typeName) {
+            if (typeName.startsWith("/")) {
+                return Optional.empty();
+            }
+            var generic = typeName.indexOf('[');
+            var stripped = generic >= 0 ? typeName.substring(0, generic) : typeName;
+            var dot = stripped.lastIndexOf('.');
+            if (dot < 0) {
+                return Optional.empty();
+            }
+            var ownerName = stripped.substring(0, dot).replace('\\', '.').replace('/', '.');
+            while (ownerName.startsWith(".")) {
+                ownerName = ownerName.substring(1);
+            }
+            if (ownerName.isBlank()) {
+                return Optional.empty();
+            }
+            var resolved = programContext.resolveClassName(ownerName);
+            if (resolved.isPresent()) {
+                return resolved;
+            }
+            if (!ownerName.contains(".") && !moduleInfo.packageName().isBlank()) {
+                var packageOwner = moduleInfo.packageName() + "." + ownerName;
+                var packageResolved = programContext.resolveClassName(packageOwner);
+                if (packageResolved.isPresent()) {
+                    return packageResolved;
+                }
+            }
+            return Optional.empty();
         }
 
         private static Optional<String> qualifiedTypeOwnerClassName(String typeName) {
