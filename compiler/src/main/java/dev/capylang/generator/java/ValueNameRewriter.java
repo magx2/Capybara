@@ -21,6 +21,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedFunctionCall(name, uniqueName, linkedFunctionCall);
             case CompiledFunctionInvoke linkedFunctionInvoke ->
                     rewriteValueInLinkedFunctionInvoke(name, uniqueName, linkedFunctionInvoke);
+            case CompiledObjectConstruction linkedObjectConstruction ->
+                    rewriteValueInLinkedObjectConstruction(name, uniqueName, linkedObjectConstruction);
             case CompiledIfExpression linkedIfExpression ->
                     rewriteValueInLinkedIfExpression(name, uniqueName, linkedIfExpression);
             case CompiledIndexExpression linkedIndexExpression ->
@@ -82,6 +84,16 @@ public class ValueNameRewriter {
                         .map(ar -> rewriteValueInExpression(name, uniqueName, ar))
                         .toList(),
                 expression.returnType()
+        );
+    }
+
+    private static CompiledExpression rewriteValueInLinkedObjectConstruction(String name, String uniqueName, CompiledObjectConstruction expression) {
+        return new CompiledObjectConstruction(
+                expression.objectType(),
+                expression.arguments().stream()
+                        .map(ar -> rewriteValueInExpression(name, uniqueName, ar))
+                        .toList(),
+                expression.effectType()
         );
     }
 

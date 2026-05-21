@@ -583,6 +583,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case CompiledObjectType ignored -> List.<String>of();
         };
         if (actualTypeDescriptors.isEmpty()) {
             return field.type();
@@ -677,8 +678,107 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkFunctionInvoke(FunctionInvoke functionInvoke, Scope scope) {
+        var objectConstruction = tryLinkObjectConstruction(functionInvoke, scope);
+        if (objectConstruction.isPresent()) {
+            return objectConstruction.orElseThrow();
+        }
         return linkExpression(functionInvoke.function(), scope)
                 .flatMap(function -> resolveFunctionInvoke(functionInvoke, scope, function));
+    }
+
+    private Optional<Result<CompiledExpression>> tryLinkObjectConstruction(FunctionInvoke functionInvoke, Scope scope) {
+        var targetName = objectConstructionTargetName(functionInvoke.function());
+        if (targetName.isEmpty()) {
+            return Optional.empty();
+        }
+        var objectConstructor = constructorRegistry.objectConstructorsByType().get(targetName.orElseThrow());
+        if (objectConstructor == null) {
+            if (isTypeLikeObjectConstructorTarget(targetName.orElseThrow())) {
+                return Optional.of(withPosition(
+                        Result.error("Object type `" + targetName.orElseThrow() + "` is not imported or not found"),
+                        functionInvoke.position()
+                ));
+            }
+            return Optional.empty();
+        }
+        return Optional.of(linkObjectConstruction(functionInvoke, scope, objectConstructor));
+    }
+
+    private Optional<String> objectConstructionTargetName(Expression expression) {
+        if (expression instanceof FunctionCall functionCall
+            && functionCall.moduleName().isEmpty()
+            && functionCall.arguments().isEmpty()) {
+            return Optional.of(functionCall.name());
+        }
+        return Optional.empty();
+    }
+
+    private boolean isTypeLikeObjectConstructorTarget(String name) {
+        var simpleName = simpleRawTypeName(normalizeTypeAlias(name));
+        return !simpleName.isBlank() && Character.isUpperCase(simpleName.charAt(0));
+    }
+
+    private Result<CompiledExpression> linkObjectConstruction(
+            FunctionInvoke functionInvoke,
+            Scope scope,
+            ObjectConstructorRef constructor
+    ) {
+        var objectType = constructor.objectType();
+        if (!constructor.constructible()) {
+            return withPosition(
+                    Result.error("Object construction target `" + objectType.name() + "` is a " + constructor.kind() + " and is not constructible"),
+                    functionInvoke.position()
+            );
+        }
+        if (functionInvoke.arguments().size() != constructor.parameters().size()) {
+            return withPosition(
+                    Result.error("Constructor `" + objectType.name() + "` expects "
+                                 + constructor.parameters().size() + " argument(s), got "
+                                 + functionInvoke.arguments().size()),
+                    functionInvoke.position()
+            );
+        }
+        var linkedArguments = new java.util.ArrayList<CompiledExpression>(functionInvoke.arguments().size());
+        for (var i = 0; i < functionInvoke.arguments().size(); i++) {
+            var parameter = constructor.parameters().get(i);
+            var parameterType = linkObjectConstructorParameterType(parameter, scope, functionInvoke.position());
+            if (parameterType instanceof Result.Error<CompiledType> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var linked = linkArgumentForExpectedType(
+                    functionInvoke.arguments().get(i),
+                    scope,
+                    ((Result.Success<CompiledType>) parameterType).value()
+            );
+            if (linked instanceof Result.Error<CoercedArgument> error) {
+                return new Result.Error<>(error.errors());
+            }
+            linkedArguments.add(((Result.Success<CoercedArgument>) linked).value().expression());
+        }
+        var effectType = effectTypeFor(objectType);
+        if (effectType == null) {
+            return withPosition(Result.error("Effect type not found"), functionInvoke.position());
+        }
+        return Result.success(new CompiledObjectConstruction(
+                objectType,
+                List.copyOf(linkedArguments),
+                effectType
+        ));
+    }
+
+    private Result<CompiledType> linkObjectConstructorParameterType(
+            ObjectConstructorParameter parameter,
+            Scope scope,
+            Optional<SourcePosition> position
+    ) {
+        var rawType = parameter.type().trim();
+        if ("void".equals(rawType) || rawType.endsWith("[]")) {
+            return withPosition(
+                    Result.error("Constructor parameter `" + parameter.name() + "` uses OO-only type `" + rawType + "` that is not representable in .cfun"),
+                    position
+            );
+        }
+        return linkTypeInScope(CapybaraParser.parseTypeDescriptor(rawType), scope);
     }
 
     private boolean hasPlaceholderArguments(List<Expression> arguments) {
@@ -1270,6 +1370,7 @@ public class CapybaraExpressionCompiler {
             case CompiledGenericTypeParameter genericTypeParameter -> reflectionGenericParamInfo(genericTypeParameter, anyInfo);
             case CompiledDataParentType parentType -> reflectionParentTypeInfo(parentType, anyInfo);
             case CompiledDataType dataType -> reflectionDataInfo(dataType, anyInfo);
+            case CompiledObjectType objectType -> reflectionDataInfo(objectType, anyInfo);
             case CompiledPrimitiveBackedType primitiveBackedType ->
                     reflectionPrimitiveInfo(primitiveBackedType.backingType(), anyInfo);
         };
@@ -2045,11 +2146,13 @@ public class CapybaraExpressionCompiler {
                 case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
                 case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
                 case CompiledPrimitiveBackedType ignored -> List.<String>of();
+                case CompiledObjectType ignored -> List.<String>of();
             };
             var actualTypeParameters = switch (actualData) {
                 case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
                 case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
                 case CompiledPrimitiveBackedType ignored -> List.<String>of();
+                case CompiledObjectType ignored -> List.<String>of();
             };
             var count = Math.min(expectedTypeParameters.size(), actualTypeParameters.size());
             for (var i = 0; i < count; i++) {
@@ -3841,6 +3944,11 @@ public class CapybaraExpressionCompiler {
         if (expected == PrimitiveLinkedType.ENUM && isEnumLikeType(argument.type())) {
             return new CoercedArgument(argument, 1);
         }
+        if (expected instanceof CompiledObjectType expectedObject
+            && argument.type() instanceof CompiledObjectType actualObject
+            && isObjectTypeCompatible(actualObject, expectedObject)) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof CompiledDataParentType expectedParent
             && argument.type() instanceof CompiledDataParentType argumentParent
             && (sameRawTypeName(expectedParent.name(), argumentParent.name())
@@ -4152,16 +4260,22 @@ public class CapybaraExpressionCompiler {
             return areFunctionTypesCompatible(actualFunction, expectedFunction);
         }
         if (expected instanceof GenericDataType expectedData && actual instanceof GenericDataType actualData) {
+            if (expectedData instanceof CompiledObjectType expectedObject
+                && actualData instanceof CompiledObjectType actualObject) {
+                return isObjectTypeCompatible(actualObject, expectedObject);
+            }
             if (sameRawTypeName(expectedData.name(), actualData.name())) {
                 var expectedTypeParameters = switch (expectedData) {
                     case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
                     case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
                     case CompiledPrimitiveBackedType ignored -> List.<String>of();
+                    case CompiledObjectType ignored -> List.<String>of();
                 };
                 var actualTypeParameters = switch (actualData) {
                     case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
                     case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
                     case CompiledPrimitiveBackedType ignored -> List.<String>of();
+                    case CompiledObjectType ignored -> List.<String>of();
                 };
                 return areTypeParameterDescriptorsCompatible(actualTypeParameters, expectedTypeParameters);
             }
@@ -4191,6 +4305,17 @@ public class CapybaraExpressionCompiler {
             return false;
         }
         return false;
+    }
+
+    private boolean isObjectTypeCompatible(CompiledObjectType actualObject, CompiledObjectType expectedObject) {
+        if (sameRawTypeName(actualObject.name(), expectedObject.name())) {
+            return true;
+        }
+        var expectedSimpleName = simpleRawTypeName(normalizeTypeAlias(expectedObject.name()));
+        return actualObject.parents().stream()
+                .anyMatch(parentName ->
+                        sameRawTypeName(parentName, expectedObject.name())
+                        || simpleRawTypeName(normalizeTypeAlias(parentName)).equals(expectedSimpleName));
     }
 
     private boolean areTypeParameterDescriptorsCompatible(List<String> actualTypeParameters, List<String> expectedTypeParameters) {
@@ -4977,6 +5102,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType ignored -> false;
             case CompiledDataParentType ignored -> false;
             case CompiledPrimitiveBackedType ignored -> false;
+            case CompiledObjectType ignored -> false;
             case CompiledList ignored -> false;
             case CompiledSet ignored -> false;
             case CompiledDict ignored -> false;
@@ -5715,11 +5841,13 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType dataType -> dataType.typeParameters();
             case CompiledDataParentType parentType -> parentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case CompiledObjectType ignored -> List.<String>of();
         };
         var reducerTypeParameters = switch (reducerType) {
             case CompiledDataType dataType -> dataType.typeParameters();
             case CompiledDataParentType parentType -> parentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case CompiledObjectType ignored -> List.<String>of();
         };
         if (initialTypeParameters.size() != reducerTypeParameters.size() || initialTypeParameters.isEmpty()) {
             return (CompiledType) initialType;
@@ -5738,6 +5866,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType dataType -> specializeDataTypeParameters(dataType, refinedTypeParameters);
             case CompiledDataParentType parentType -> specializeParentTypeParameters(parentType, refinedTypeParameters);
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType;
+            case CompiledObjectType objectType -> objectType;
         };
     }
 
@@ -7493,6 +7622,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType dataType -> dataType.typeParameters();
             case CompiledDataParentType parentType -> parentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.of();
+            case CompiledObjectType ignored -> List.of();
         };
     }
 
@@ -7874,7 +8004,7 @@ public class CapybaraExpressionCompiler {
             if (baseType == null) {
                 return Optional.empty();
             }
-            if (baseType instanceof CompiledPrimitiveBackedType) {
+            if (baseType instanceof CompiledPrimitiveBackedType || baseType instanceof CompiledObjectType) {
                 return Optional.empty();
             }
             var parsedTypeArguments = splitTopLevelTypeDescriptors(argsRaw).stream()
@@ -7949,6 +8079,9 @@ public class CapybaraExpressionCompiler {
                 }
                 case CompiledPrimitiveBackedType ignored -> throw new IllegalStateException(
                         "Primitive-backed types do not accept type arguments"
+                );
+                case CompiledObjectType ignored -> throw new IllegalStateException(
+                        "Object types do not accept type arguments"
                 );
             });
         }
@@ -8157,6 +8290,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
                     ? linkedDataParentType.name()
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
+            case CompiledObjectType objectType -> objectType.name();
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.cfunType();
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
@@ -8321,6 +8455,10 @@ public class CapybaraExpressionCompiler {
                 case CompiledDataParentType parentType -> linkWithForParent(source, parentType, linkedUpdates, expression.position());
                 case CompiledPrimitiveBackedType primitiveBackedType -> withPosition(
                         Result.error("`.with(...)` is not available for primitive-backed type `" + primitiveBackedType.name() + "`"),
+                        expression.position()
+                );
+                case CompiledObjectType objectType -> withPosition(
+                        Result.error("`.with(...)` is not available for object type `" + objectType.name() + "`"),
                         expression.position()
                 );
             };
@@ -9380,6 +9518,7 @@ public class CapybaraExpressionCompiler {
                     .map(this::parseLinkedTypeDescriptor)
                     .allMatch(maybeType -> maybeType.map(this::isResolvedTypeForInference).orElse(false));
             case CompiledPrimitiveBackedType ignored -> true;
+            case CompiledObjectType ignored -> true;
         };
     }
 
@@ -9417,6 +9556,7 @@ public class CapybaraExpressionCompiler {
                         .allMatch(maybeType -> maybeType.map(this::isConcreteResolvedType).orElse(false));
             }
             case CompiledPrimitiveBackedType ignored -> true;
+            case CompiledObjectType ignored -> true;
         };
     }
 
@@ -9675,6 +9815,20 @@ public class CapybaraExpressionCompiler {
     }
 
     private String expectedGotMessage(CompiledType expected, CompiledType actual) {
+        if (expected instanceof CompiledObjectType expectedObject) {
+            var actualEffect = resolveSpecializedEffectType(actual);
+            if (actualEffect.isPresent()
+                && actualEffect.orElseThrow().typeParameters().stream()
+                        .findFirst()
+                        .filter(typeParameter ->
+                                typeParameter.equals(linkedTypeDescriptor(expectedObject))
+                                || typeParameter.equals(expectedObject.name()))
+                        .isPresent()) {
+                return "Object construction of " + renderTypeForError(expectedObject)
+                       + " returns " + renderTypeForError(actual)
+                       + ", but " + renderTypeForError(expectedObject) + " was expected";
+            }
+        }
         return "Expected `" + renderTypeForError(expected) + "`, got `" + renderTypeForError(actual) + "`";
     }
 
@@ -9702,6 +9856,7 @@ public class CapybaraExpressionCompiler {
             case CompiledPrimitiveBackedType primitiveBackedType -> renderNamedTypeForError(primitiveBackedType.name(), List.of());
             case CompiledDataType dataType -> renderNamedTypeForError(dataType.name(), dataType.typeParameters());
             case CompiledDataParentType dataParentType -> renderNamedTypeForError(dataParentType.name(), dataParentType.typeParameters());
+            case CompiledObjectType objectType -> renderNamedTypeForError(objectType.name(), List.of());
             default -> type.toString();
         };
     }
@@ -10543,7 +10698,8 @@ public class CapybaraExpressionCompiler {
     public record ConstructorRegistry(
             Map<String, ProtectedConstructorRef> constructorsByType,
             Map<String, List<ProtectedConstructorRef>> parentTypeConstructorsByDataType,
-            Map<String, String> ownerModuleByDataType
+            Map<String, String> ownerModuleByDataType,
+            Map<String, ObjectConstructorRef> objectConstructorsByType
     ) {
         public ConstructorRegistry {
             parentTypeConstructorsByDataType = parentTypeConstructorsByDataType.entrySet().stream()
@@ -10553,6 +10709,7 @@ public class CapybaraExpressionCompiler {
                     ));
             constructorsByType = Map.copyOf(constructorsByType);
             ownerModuleByDataType = Map.copyOf(ownerModuleByDataType);
+            objectConstructorsByType = Map.copyOf(objectConstructorsByType);
         }
     }
 
@@ -10564,6 +10721,20 @@ public class CapybaraExpressionCompiler {
             boolean typeConstructor,
             boolean resultReturning
     ) {
+    }
+
+    public record ObjectConstructorParameter(String name, String type) {
+    }
+
+    public record ObjectConstructorRef(
+            dev.capylang.compiler.CompiledObjectType objectType,
+            String kind,
+            boolean constructible,
+            List<ObjectConstructorParameter> parameters
+    ) {
+        public ObjectConstructorRef {
+            parameters = List.copyOf(parameters);
+        }
     }
     private record CoercedArgument(CompiledExpression expression, int coercions) {
     }

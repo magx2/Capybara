@@ -512,6 +512,7 @@ public class JavaAstBuilder {
         return switch (type) {
             case CompiledDataType dataType -> dataType.typeParameters();
             case CompiledDataParentType parentType -> parentType.typeParameters();
+            case CompiledObjectType ignored -> List.of();
             case CompiledPrimitiveBackedType ignored -> List.of();
         };
     }
@@ -750,6 +751,7 @@ public class JavaAstBuilder {
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case CompiledObjectType ignored -> List.<String>of();
         };
         return typeParameters.stream().findFirst();
     }
@@ -897,6 +899,7 @@ public class JavaAstBuilder {
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case CompiledObjectType ignored -> List.<String>of();
         };
         if (typeParameters.isEmpty()) {
             return new JavaType(rawJavaTypeName);

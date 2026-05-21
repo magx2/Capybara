@@ -121,6 +121,8 @@ final class ConstDependencyOrder {
                 collect(functionInvoke.function(), localConstNames, emittedFunctionName, dependencies);
                 functionInvoke.arguments().forEach(argument -> collect(argument, localConstNames, emittedFunctionName, dependencies));
             }
+            case CompiledObjectConstruction objectConstruction ->
+                    objectConstruction.arguments().forEach(argument -> collect(argument, localConstNames, emittedFunctionName, dependencies));
             case CompiledIfExpression ifExpression -> {
                 collect(ifExpression.condition(), localConstNames, emittedFunctionName, dependencies);
                 collect(ifExpression.thenBranch(), localConstNames, emittedFunctionName, dependencies);

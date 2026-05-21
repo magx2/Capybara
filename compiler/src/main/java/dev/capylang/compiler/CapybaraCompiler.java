@@ -68,7 +68,7 @@ public class CapybaraCompiler {
                 return new Result.Error<>(error.errors());
             }
             var mergedLibraries = mergeLibraries(functionalModules, libraries);
-            var compiledProgram = compile(((Result.Success<Program>) program).value(), mergedLibraries);
+            var compiledProgram = compile(((Result.Success<Program>) program).value(), mergedLibraries, parsedObjectOrientedModules);
             if (compiledProgram instanceof Result.Error<CompiledProgram> error) {
                 return error;
             }
@@ -204,12 +204,20 @@ public class CapybaraCompiler {
         );
         return mapper;
     }
-    private Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
+    private Result<CompiledProgram> compile(
+            Program program,
+            SortedSet<CompiledModule> libraries,
+            List<ObjectOrientedModule> objectOrientedModules
+    ) {
         var totalStartedAt = System.nanoTime();
         var compileCache = new CompileCache();
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
+        var objectModuleRefs = objectOrientedModules.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
-        var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
+        var allModuleRefs = Stream.of(programModuleRefs, objectModuleRefs, libraryModuleRefs)
+                .flatMap(List::stream)
+                .distinct()
+                .toList();
         var moduleHelperClassRequiredByModule = new HashMap<String, Boolean>();
         for (var library : libraries) {
             putImportedModuleEntry(
@@ -225,10 +233,20 @@ public class CapybaraCompiler {
                     moduleHelperClassRequired(module)
             );
         }
+        for (var module : objectOrientedModules) {
+            putOwnedModuleEntry(
+                    moduleHelperClassRequiredByModule,
+                    new ModuleRef(module.name(), module.path()),
+                    false
+            );
+        }
 
         var linkedTypesByModule = new HashMap<String, SortedMap<String, GenericDataType>>();
+        var objectTypeCatalog = objectTypeCatalog(objectOrientedModules);
+        objectTypeCatalog.linkedTypesByModule().forEach((moduleName, objectTypes) ->
+                mergeModuleTypes(linkedTypesByModule, moduleName, objectTypes));
         for (var library : libraries) {
-            putImportedModuleEntry(linkedTypesByModule, new ModuleRef(library.name(), library.path()), library.types());
+            mergeModuleTypes(linkedTypesByModule, new ModuleRef(library.name(), library.path()), library.types(), false);
         }
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
@@ -236,10 +254,11 @@ public class CapybaraCompiler {
             if (linkedTypes instanceof Result.Error<SortedMap<String, GenericDataType>> error) {
                 return new Result.Error<>(error.errors());
             }
-            putOwnedModuleEntry(
+            mergeModuleTypes(
                     linkedTypesByModule,
                     new ModuleRef(module.name(), module.path()),
-                    ((Result.Success<SortedMap<String, GenericDataType>>) linkedTypes).value()
+                    ((Result.Success<SortedMap<String, GenericDataType>>) linkedTypes).value(),
+                    true
             );
         }
 
@@ -279,7 +298,7 @@ public class CapybaraCompiler {
             putOwnedModuleEntry(
                     visibleConstructorsByModule,
                     new ModuleRef(module.name(), module.path()),
-                    availableConstructors(module, moduleLinkIndex, constructorCatalog, allModuleRefs)
+                    availableConstructors(module, moduleLinkIndex, constructorCatalog, objectTypeCatalog, allModuleRefs)
             );
         }
 
@@ -307,6 +326,9 @@ public class CapybaraCompiler {
                     new ModuleRef(library.name(), library.path()),
                     signaturesFromLinkedFunctions(List.copyOf(library.functions()))
             );
+        }
+        for (var objectModuleRef : objectModuleRefs) {
+            putOwnedModuleEntry(signaturesByModule, objectModuleRef, List.of());
         }
         for (var module : program.modules()) {
             var moduleRef = new ModuleRef(module.name(), module.path());
@@ -480,6 +502,12 @@ public class CapybaraCompiler {
     ) {
     }
 
+    private record ObjectTypeCatalog(
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Map<String, CapybaraExpressionCompiler.ObjectConstructorRef>> constructorsByModule
+    ) {
+    }
+
     private ModuleLinkIndex buildModuleLinkIndex(
             List<ModuleRef> allModuleRefs,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
@@ -622,6 +650,52 @@ public class CapybaraCompiler {
                 all.put("/" + modulePath, ownerModule);
             }
         });
+    }
+
+    private void addQualifiedObjectConstructorAliases(
+            Map<String, CapybaraExpressionCompiler.ObjectConstructorRef> all,
+            ModuleRef module,
+            Map<String, CapybaraExpressionCompiler.ObjectConstructorRef> constructors
+    ) {
+        constructors.forEach((typeName, constructor) -> {
+            all.put(module.name() + "." + typeName, constructor);
+            var modulePath = module.path().replace('\\', '/') + "/" + module.name();
+            all.put(modulePath + "." + typeName, constructor);
+            all.put("/" + modulePath + "." + typeName, constructor);
+            if (module.name().equals(typeName)) {
+                all.put(modulePath, constructor);
+                all.put("/" + modulePath, constructor);
+            }
+        });
+    }
+
+    private void mergeModuleTypes(
+            Map<String, SortedMap<String, GenericDataType>> target,
+            String moduleName,
+            SortedMap<String, GenericDataType> types
+    ) {
+        var merged = new TreeMap<String, GenericDataType>();
+        var existing = target.get(moduleName);
+        if (existing != null) {
+            merged.putAll(existing);
+        }
+        merged.putAll(types);
+        target.put(moduleName, unmodifiableSortedMap(merged));
+    }
+
+    private void mergeModuleTypes(
+            Map<String, SortedMap<String, GenericDataType>> target,
+            ModuleRef moduleRef,
+            SortedMap<String, GenericDataType> types,
+            boolean owned
+    ) {
+        if (owned) {
+            mergeModuleTypes(target, moduleRef.name(), types);
+            mergeModuleTypes(target, qualifiedModuleName(moduleRef), types);
+        } else {
+            target.putIfAbsent(moduleRef.name(), unmodifiableSortedMap(new TreeMap<>(types)));
+            mergeModuleTypes(target, qualifiedModuleName(moduleRef), types);
+        }
     }
 
     private record ModuleLinkIndex(
@@ -975,6 +1049,7 @@ public class CapybaraCompiler {
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
+            case CompiledObjectType objectType -> objectType;
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType;
         };
     }
@@ -1266,6 +1341,12 @@ public class CapybaraCompiler {
                     primitiveBackedType.comments(),
                     primitiveBackedType.visibility()
             );
+            case CompiledObjectType objectType -> new CompiledObjectType(
+                    requestedName,
+                    objectType.backendClassName(),
+                    objectType.parents(),
+                    objectType.visibility()
+            );
         };
     }
 
@@ -1325,9 +1406,22 @@ public class CapybaraCompiler {
                     getModuleEntry(linkedTypesByModule, importedModule),
                     compileCache
             );
+            var importedObjectTypes = importedTypes.entrySet().stream()
+                    .filter(entry -> entry.getValue() instanceof CompiledObjectType)
+                    .collect(toMap(
+                            Map.Entry::getKey,
+                            entry -> (CompiledObjectType) entry.getValue(),
+                            (first, second) -> first,
+                            LinkedHashMap::new
+                    ));
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
-                imports.add(new CompiledModule.StaticImport(className, "*"));
+                if (!importedSignaturesByName.isEmpty()
+                    || importedTypes.values().stream().anyMatch(type -> !(type instanceof CompiledObjectType))) {
+                    imports.add(new CompiledModule.StaticImport(className, "*"));
+                }
                 imports.addAll(enumValueStaticImports(importedModule, importedTypes));
+                importedObjectTypes.forEach((symbol, objectType) ->
+                        imports.add(new CompiledModule.StaticImport(objectType.backendClassName(), symbol)));
                 continue;
             }
             var availableFunctionMembers = importedSignaturesByName.keySet();
@@ -1336,8 +1430,13 @@ public class CapybaraCompiler {
             availableMembers.addAll(availableTypeMembers);
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 if (availableMembers.contains(symbol)) {
-                    imports.add(enumValueStaticImport(importedModule, importedTypes, symbol)
-                            .orElseGet(() -> new CompiledModule.StaticImport(className, symbol)));
+                    var objectType = importedObjectTypes.get(symbol);
+                    if (objectType != null) {
+                        imports.add(new CompiledModule.StaticImport(objectType.backendClassName(), symbol));
+                    } else {
+                        imports.add(enumValueStaticImport(importedModule, importedTypes, symbol)
+                                .orElseGet(() -> new CompiledModule.StaticImport(className, symbol)));
+                    }
                 }
             }
         }
@@ -2251,6 +2350,103 @@ public class CapybaraCompiler {
         ));
     }
 
+    private ObjectTypeCatalog objectTypeCatalog(List<ObjectOrientedModule> modules) {
+        var linkedTypesByModule = new LinkedHashMap<String, SortedMap<String, GenericDataType>>();
+        var constructorsByModule = new LinkedHashMap<String, Map<String, CapybaraExpressionCompiler.ObjectConstructorRef>>();
+        for (var module : modules) {
+            var moduleRef = new ModuleRef(module.name(), module.path());
+            var moduleTypes = objectTypes(module);
+            putOwnedModuleEntry(linkedTypesByModule, moduleRef, moduleTypes);
+            putOwnedModuleEntry(constructorsByModule, moduleRef, objectConstructors(module, moduleTypes));
+        }
+        return new ObjectTypeCatalog(Map.copyOf(linkedTypesByModule), Map.copyOf(constructorsByModule));
+    }
+
+    private SortedMap<String, GenericDataType> objectTypes(ObjectOrientedModule module) {
+        var definitionsByName = module.objectOriented().definitions().stream()
+                .collect(toMap(
+                        ObjectOriented.TypeDeclaration::name,
+                        identity(),
+                        (first, second) -> first,
+                        LinkedHashMap::new
+                ));
+        var types = new TreeMap<String, GenericDataType>();
+        for (var definition : module.objectOriented().definitions()) {
+            var type = new CompiledObjectType(
+                    definition.name(),
+                    objectBackendClassName(module, definition.name()),
+                    objectParentNames(definition, definitionsByName, new LinkedHashSet<>()),
+                    null
+            );
+            types.put(definition.name(), type);
+        }
+        return unmodifiableSortedMap(types);
+    }
+
+    private List<String> objectParentNames(
+            ObjectOriented.TypeDeclaration definition,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName,
+            Set<String> visited
+    ) {
+        if (!visited.add(definition.name())) {
+            return List.of();
+        }
+        var parents = new LinkedHashSet<String>();
+        for (var parent : definition.parents()) {
+            parents.add(parent.name());
+            var localParent = definitionsByName.get(parent.name());
+            if (localParent != null) {
+                parents.addAll(objectParentNames(localParent, definitionsByName, visited));
+            }
+        }
+        return List.copyOf(parents);
+    }
+
+    private Map<String, CapybaraExpressionCompiler.ObjectConstructorRef> objectConstructors(
+            ObjectOrientedModule module,
+            SortedMap<String, GenericDataType> moduleTypes
+    ) {
+        var constructors = new LinkedHashMap<String, CapybaraExpressionCompiler.ObjectConstructorRef>();
+        for (var definition : module.objectOriented().definitions()) {
+            var objectType = (CompiledObjectType) moduleTypes.get(definition.name());
+            var kind = objectKind(definition);
+            var constructible = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
+                                && !classDeclaration.modifiers().contains("abstract");
+            var parameters = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
+                    ? classDeclaration.constructorParameters().stream()
+                            .map(parameter -> new CapybaraExpressionCompiler.ObjectConstructorParameter(
+                                    parameter.name(),
+                                    parameter.type()
+                            ))
+                            .toList()
+                    : List.<CapybaraExpressionCompiler.ObjectConstructorParameter>of();
+            constructors.put(definition.name(), new CapybaraExpressionCompiler.ObjectConstructorRef(
+                    objectType,
+                    kind,
+                    constructible,
+                    parameters
+            ));
+        }
+        return Map.copyOf(constructors);
+    }
+
+    private String objectKind(ObjectOriented.TypeDeclaration definition) {
+        return switch (definition) {
+            case ObjectOriented.ClassDeclaration classDeclaration when classDeclaration.modifiers().contains("abstract") ->
+                    "abstract class";
+            case ObjectOriented.ClassDeclaration ignored -> "class";
+            case ObjectOriented.InterfaceDeclaration ignored -> "interface";
+            case ObjectOriented.TraitDeclaration ignored -> "trait";
+        };
+    }
+
+    private String objectBackendClassName(ObjectOrientedModule module, String typeName) {
+        var packageName = normalizeModulePath(module.path()).replace('/', '.');
+        return packageName.isBlank() || ".".equals(packageName)
+                ? typeName
+                : packageName + "." + typeName;
+    }
+
     private ConstructorCatalog constructorCatalog(
             List<Module> modules,
             SortedSet<CompiledModule> libraries
@@ -2472,18 +2668,22 @@ public class CapybaraCompiler {
             Module module,
             ModuleLinkIndex moduleLinkIndex,
             ConstructorCatalog constructorCatalog,
+            ObjectTypeCatalog objectTypeCatalog,
             List<ModuleRef> allModules
     ) {
         var moduleRef = new ModuleRef(module.name(), module.path());
         var localConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), moduleRef)).orElse(Map.of());
         var localParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), moduleRef)).orElse(Map.of());
         var localDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), moduleRef)).orElse(Map.of());
+        var localObjectConstructors = Optional.ofNullable(getModuleEntry(objectTypeCatalog.constructorsByModule(), moduleRef)).orElse(Map.of());
         var constructors = new LinkedHashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>(localConstructors);
         var parentConstructors = new LinkedHashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>(localParentConstructors);
         var dataOwners = new LinkedHashMap<String, String>(localDataOwners);
+        var objectConstructors = new LinkedHashMap<String, CapybaraExpressionCompiler.ObjectConstructorRef>(localObjectConstructors);
         addQualifiedConstructorAliases(constructors, moduleRef, localConstructors);
         addQualifiedParentConstructorAliases(parentConstructors, moduleRef, localParentConstructors);
         addQualifiedDataOwnerAliases(dataOwners, moduleRef, localDataOwners);
+        addQualifiedObjectConstructorAliases(objectConstructors, moduleRef, localObjectConstructors);
 
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
@@ -2493,16 +2693,20 @@ public class CapybaraCompiler {
             var importedConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), importedModule)).orElse(Map.of());
             var importedParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), importedModule)).orElse(Map.of());
             var importedDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), importedModule)).orElse(Map.of());
+            var importedObjectConstructors = Optional.ofNullable(getModuleEntry(objectTypeCatalog.constructorsByModule(), importedModule)).orElse(Map.of());
             addQualifiedConstructorAliases(constructors, importedModule, importedConstructors);
             addQualifiedParentConstructorAliases(parentConstructors, importedModule, importedParentConstructors);
             addQualifiedDataOwnerAliases(dataOwners, importedModule, importedDataOwners);
+            addQualifiedObjectConstructorAliases(objectConstructors, importedModule, importedObjectConstructors);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 importedConstructors.forEach(constructors::put);
                 importedParentConstructors.forEach(parentConstructors::put);
                 importedDataOwners.forEach(dataOwners::put);
+                importedObjectConstructors.forEach(objectConstructors::put);
                 continue;
             }
             var selected = importDeclaration.selectedSymbols(importedConstructors.keySet());
+            var selectedObjectConstructors = importDeclaration.selectedSymbols(importedObjectConstructors.keySet());
             for (var symbol : selected) {
                 var importedConstructor = importedConstructors.get(symbol);
                 if (importedConstructor != null) {
@@ -2517,15 +2721,23 @@ public class CapybaraCompiler {
                     dataOwners.put(symbol, importedDataOwner);
                 }
             }
+            for (var symbol : selectedObjectConstructors) {
+                var importedObjectConstructor = importedObjectConstructors.get(symbol);
+                if (importedObjectConstructor != null) {
+                    objectConstructors.put(symbol, importedObjectConstructor);
+                }
+            }
         }
 
         allModules.forEach(knownModule -> {
             var knownConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), knownModule)).orElse(Map.of());
             var knownParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), knownModule)).orElse(Map.of());
             var knownDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), knownModule)).orElse(Map.of());
+            var knownObjectConstructors = Optional.ofNullable(getModuleEntry(objectTypeCatalog.constructorsByModule(), knownModule)).orElse(Map.of());
             addQualifiedConstructorAliases(constructors, knownModule, knownConstructors);
             addQualifiedParentConstructorAliases(parentConstructors, knownModule, knownParentConstructors);
             addQualifiedDataOwnerAliases(dataOwners, knownModule, knownDataOwners);
+            addQualifiedObjectConstructorAliases(objectConstructors, knownModule, knownObjectConstructors);
         });
         for (var importDeclaration : module.imports()) {
             if (!importDeclaration.qualifiedOnly()) {
@@ -2538,11 +2750,18 @@ public class CapybaraCompiler {
             var importedConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), importedModule)).orElse(Map.of());
             var importedParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), importedModule)).orElse(Map.of());
             var importedDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), importedModule)).orElse(Map.of());
+            var importedObjectConstructors = Optional.ofNullable(getModuleEntry(objectTypeCatalog.constructorsByModule(), importedModule)).orElse(Map.of());
             addQualifiedConstructorAliases(constructors, importedModule, importedConstructors);
             addQualifiedParentConstructorAliases(parentConstructors, importedModule, importedParentConstructors);
             addQualifiedDataOwnerAliases(dataOwners, importedModule, importedDataOwners);
+            addQualifiedObjectConstructorAliases(objectConstructors, importedModule, importedObjectConstructors);
         }
-        return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(constructors), Map.copyOf(parentConstructors), Map.copyOf(dataOwners));
+        return new CapybaraExpressionCompiler.ConstructorRegistry(
+                Map.copyOf(constructors),
+                Map.copyOf(parentConstructors),
+                Map.copyOf(dataOwners),
+                Map.copyOf(objectConstructors)
+        );
     }
 
     private void registerSourceProtectedConstructors(
@@ -3248,6 +3467,8 @@ public class CapybaraCompiler {
                     analyzeTailRecursion(selfCallNames, parameters, functionInvoke.function(), false),
                     analyzeAll(selfCallNames, parameters, functionInvoke.arguments(), false)
             );
+            case CompiledObjectConstruction objectConstruction ->
+                    analyzeAll(selfCallNames, parameters, objectConstruction.arguments(), false);
             case CompiledInfixExpression infixExpression -> merge(
                     analyzeTailRecursion(selfCallNames, parameters, infixExpression.left(), false),
                     analyzeTailRecursion(selfCallNames, parameters, infixExpression.right(), false)
@@ -4450,6 +4671,7 @@ public class CapybaraCompiler {
                     : restorePrivateTypeNameForDisplay(linkedDataParentType.name()) + "[" + linkedDataParentType.typeParameters().stream()
                     .map(this::restorePrivateTypeNameForDisplay)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case CompiledObjectType objectType -> restorePrivateTypeNameForDisplay(objectType.name());
             case CompiledPrimitiveBackedType primitiveBackedType -> restorePrivateTypeNameForDisplay(primitiveBackedType.name());
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> restorePrivateTypeNameForDisplay(linkedGenericTypeParameter.name());
         };
@@ -4513,6 +4735,10 @@ public class CapybaraCompiler {
             && actual instanceof CompiledFunctionType actualFunction) {
             return isAssignableReturnType(expectedFunction.argumentType(), actualFunction.argumentType(), dataTypes)
                    && isAssignableReturnType(expectedFunction.returnType(), actualFunction.returnType(), dataTypes);
+        }
+        if (expected instanceof CompiledObjectType expectedObject
+            && actual instanceof CompiledObjectType actualObject) {
+            return isAssignableObjectReturnType(expectedObject, actualObject);
         }
         if (expected instanceof CompiledDataParentType expectedParent) {
             if (actual instanceof CompiledDataParentType actualParent) {
@@ -4674,6 +4900,11 @@ public class CapybaraCompiler {
 
     private boolean sameTypeName(String left, String right) {
         return normalizeTypeName(left).equals(normalizeTypeName(right));
+    }
+
+    private boolean isAssignableObjectReturnType(CompiledObjectType expected, CompiledObjectType actual) {
+        return sameTypeName(expected.name(), actual.name())
+               || actual.parents().stream().anyMatch(parent -> sameTypeName(expected.name(), parent));
     }
 
     private String normalizeTypeName(String name) {
@@ -4841,6 +5072,7 @@ public class CapybaraCompiler {
             case CompiledDataType dataType -> dataType.typeParameters();
             case CompiledDataParentType parentType -> parentType.typeParameters();
             case CompiledPrimitiveBackedType ignored -> List.of();
+            case CompiledObjectType ignored -> List.of();
         };
     }
 
@@ -4909,6 +5141,12 @@ public class CapybaraCompiler {
                             enrichNothing(value.function(), functionName, moduleSourceFile),
                             value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
                             value.returnType()
+                    );
+            case dev.capylang.compiler.expression.CompiledObjectConstruction value ->
+                    new dev.capylang.compiler.expression.CompiledObjectConstruction(
+                            value.objectType(),
+                            value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                            value.effectType()
                     );
             case dev.capylang.compiler.expression.CompiledIfExpression value ->
                     new dev.capylang.compiler.expression.CompiledIfExpression(
@@ -5267,6 +5505,17 @@ public class CapybaraCompiler {
         var normalizedActual = normalizeDescriptor(actualTypeName);
         if (!visited.add(normalizedActual)) {
             return false;
+        }
+        var maybeObject = dataTypes.values().stream()
+                .filter(CompiledObjectType.class::isInstance)
+                .map(CompiledObjectType.class::cast)
+                .filter(objectType -> sameTypeName(objectType.name(), normalizedActual))
+                .findFirst();
+        if (maybeObject.isPresent()) {
+            var actualObject = maybeObject.orElseThrow();
+            return actualObject.parents().stream()
+                    .anyMatch(parentName -> sameTypeName(parentName, expectedParentName)
+                                            || isSubtypeNameOfParent(parentName, expectedParentName, dataTypes, visited));
         }
         var maybeActual = dataTypes.values().stream()
                 .filter(CompiledDataType.class::isInstance)
@@ -5747,6 +5996,7 @@ public class CapybaraCompiler {
                     : new DataType(compiledDataParentType.name() + "["
                                    + String.join(", ", compiledDataParentType.typeParameters())
                                    + "]");
+            case CompiledObjectType objectType -> new DataType(objectType.name());
         };
     }
 
@@ -5953,6 +6203,7 @@ public class CapybaraCompiler {
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
                     ? linkedDataParentType.name()
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
+            case CompiledObjectType objectType -> objectType.name();
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };

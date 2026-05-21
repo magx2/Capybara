@@ -104,6 +104,9 @@ public class CapybaraTypeCompiler {
         if (linkedType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
             return Result.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
         }
+        if (linkedType instanceof CompiledObjectType objectType) {
+            return Result.error("Type `" + objectType.name() + "` does not accept type arguments");
+        }
         return typeArguments.stream()
                 .map(typeArgument -> parseTypeArgument(typeArgument, linkCache))
                 .map(type -> linkType(type, dataTypes, linkCache))
@@ -271,6 +274,7 @@ public class CapybaraTypeCompiler {
                         dataType.enumValue()
                 );
             }
+            case CompiledObjectType objectType -> objectType;
             default -> linkedType;
         };
     }
@@ -301,6 +305,7 @@ public class CapybaraTypeCompiler {
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
                     ? linkedDataParentType.name()
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
+            case CompiledObjectType objectType -> objectType.name();
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
@@ -558,6 +563,12 @@ public class CapybaraTypeCompiler {
                     primitiveBackedType.cfunType(),
                     primitiveBackedType.comments(),
                     primitiveBackedType.visibility()
+            );
+            case CompiledObjectType objectType -> new CompiledObjectType(
+                    requestedName,
+                    objectType.backendClassName(),
+                    objectType.parents(),
+                    objectType.visibility()
             );
         };
     }

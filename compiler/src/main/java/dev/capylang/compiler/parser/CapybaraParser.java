@@ -1301,6 +1301,10 @@ public class CapybaraParser {
                 .orElseGet(() -> new DataType(name));
     }
 
+    public static Type parseTypeDescriptor(String name) {
+        return type(name);
+    }
+
     private static Optional<Type> findCollectionType(String name) {
         return findCollectionType(name, LIST_PATTERN, CollectionType.ListType::new)
                 .or(() -> findCollectionType(name, SET_PATTERN, CollectionType.SetType::new))
