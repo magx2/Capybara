@@ -29,7 +29,7 @@ gpr.repository=magx2/Capybara
 Then publish with:
 
 ```powershell
-./gradlew.bat :build-tool:gradle:publish
+./gradlew.bat :build-tool:gradle:publish --no-daemon
 ```
 
 ## Use In Another Gradle Project

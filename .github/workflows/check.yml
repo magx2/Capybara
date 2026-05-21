@@ -31,4 +31,4 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Gradle check
-        run: ./gradlew clean check
+        run: ./gradlew clean check --no-daemon
