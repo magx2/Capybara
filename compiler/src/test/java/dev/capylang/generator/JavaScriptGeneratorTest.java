@@ -349,6 +349,41 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldResolveDottedQualifiedDataConstructorOwnerBeforeExportFallback() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule("A", "/foo", """
+                        data Value { amount: int }
+                        fun value(x: int): Value = Value { amount: x }
+                        """),
+                new RawModule("Pipe", "/foo", """
+                        data Value { x: int }
+                        """),
+                new RawModule("Main", "/foo", """
+                        import /foo/A
+                        import /foo/Pipe
+
+                        fun qualified_import_data(x: int): A.Value = A.Value { amount: x }
+                        """)
+        ));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var main = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(main.code()).contains("new __module_foo_A.Value({ amount: x })");
+
+        var output = runNode("""
+                const m = require('./foo/Main.js');
+                console.log(m.qualifiedImportData(7).amount);
+                """);
+
+        assertThat(output).isEqualTo("7");
+    }
+
+    @Test
     void shouldGenerateExecutableNativeRandomSeedExport() throws Exception {
         var program = compileProgram(List.of(new RawModule("Random", "/capy/lang", """
                 type seed -> long
