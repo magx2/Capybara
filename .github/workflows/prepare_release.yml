@@ -1,0 +1,116 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: prepare-release-${{ github.event.repository.default_branch }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          if [[ "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]]; then
+            echo "::error::Prepare Release must be run from '${DEFAULT_BRANCH}', got '${GITHUB_REF_NAME}'."
+            exit 1
+          fi
+
+      - name: Prepare release branch metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F= '/^version[[:space:]]*=/ { v=$2; gsub(/\r/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v }' gradle.properties)"
+          if [[ ! "${VERSION}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-SNAPSHOT$ ]]; then
+            echo "::error::Default branch version must be x.y.z-SNAPSHOT, got '${VERSION}'."
+            exit 1
+          fi
+
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          NEXT_MINOR_VERSION="${MAJOR}.$((MINOR + 1)).0-SNAPSHOT"
+          RELEASE_BRANCH="release/${MAJOR}.${MINOR}.x"
+
+          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" >/dev/null 2>&1; then
+            echo "::error::Release branch '${RELEASE_BRANCH}' already exists."
+            exit 1
+          fi
+
+          {
+            echo "release_branch=${RELEASE_BRANCH}"
+            echo "next_minor_version=${NEXT_MINOR_VERSION}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_BRANCH="${{ steps.version.outputs.release_branch }}"
+          git branch "${RELEASE_BRANCH}"
+          git push origin "${RELEASE_BRANCH}"
+
+      - name: Dispatch Build & Check for release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run check.yml --ref "${{ steps.version.outputs.release_branch }}"
+
+      - name: Dispatch Verify Version for release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run verify_version.yml --ref "${{ steps.version.outputs.release_branch }}"
+
+      - name: Bump minor on default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          NEXT_MINOR_VERSION="${{ steps.version.outputs.next_minor_version }}"
+          sed -i "s/^version=.*/version=${NEXT_MINOR_VERSION}/" gradle.properties
+          git add gradle.properties
+          git commit -m "chore: bump version to ${NEXT_MINOR_VERSION}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"
+
+      - name: Dispatch Build & Check for default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run check.yml --ref "${{ github.event.repository.default_branch }}"

@@ -8,4 +8,34 @@ plugins {
 
     // Apply the java-library plugin for API and implementation separation.
     id 'java-library'
+
+    // Publish Java libraries to GitHub Packages during release automation.
+    id 'maven-publish'
+}
+
+def githubPackagesRepository = providers.environmentVariable('GITHUB_REPOSITORY')
+        .orElse(providers.gradleProperty('gpr.repository'))
+        .orElse('magx2/Capybara')
+def githubPackagesUser = providers.environmentVariable('GITHUB_ACTOR')
+        .orElse(providers.gradleProperty('gpr.user'))
+def githubPackagesKey = providers.environmentVariable('GITHUB_TOKEN')
+        .orElse(providers.gradleProperty('gpr.key'))
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = uri("https://maven.pkg.github.com/${githubPackagesRepository.get()}")
+            credentials {
+                username = githubPackagesUser.orNull
+                password = githubPackagesKey.orNull
+            }
+        }
+    }
 }

@@ -1,12 +1,20 @@
 name: Merge Back
 
 on:
-  push:
-    branches:
-      - "release/**"
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: Release branch to merge back, for example release/1.2.x.
+        required: true
+        type: string
 
 permissions:
+  actions: write
   contents: write
+
+concurrency:
+  group: merge-back-${{ github.event.repository.default_branch }}
+  cancel-in-progress: false
 
 jobs:
   merge-back:
@@ -17,19 +25,59 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Configure git user
         run: |
-          git config user.name "CapyAutomata"
-          git config user.email "CapyAutomata@capylang.dev"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Merge release branch into default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          RELEASE_BRANCH="${GITHUB_REF_NAME}"
+          RELEASE_BRANCH="${{ inputs.release_branch || github.ref_name }}"
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-          git fetch origin "${RELEASE_BRANCH}" "${DEFAULT_BRANCH}"
-          git checkout "${DEFAULT_BRANCH}"
-          git merge --no-ff "origin/${RELEASE_BRANCH}" -m "merge: ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
-          git push origin "${DEFAULT_BRANCH}"
+          if [[ ! "${RELEASE_BRANCH}" =~ ^release/[0-9]+\.[0-9]+\.x$ ]]; then
+            echo "::error::Merge Back requires a release/{major}.{minor}.x branch, got '${RELEASE_BRANCH}'."
+            exit 1
+          fi
 
+          git fetch origin "${RELEASE_BRANCH}:${RELEASE_BRANCH}" "${DEFAULT_BRANCH}:${DEFAULT_BRANCH}"
+          git checkout "${DEFAULT_BRANCH}"
+
+          set +e
+          git merge --no-ff --no-commit "${RELEASE_BRANCH}"
+          MERGE_STATUS=$?
+          set -e
+
+          if [[ "${MERGE_STATUS}" -ne 0 ]]; then
+            CONFLICTS="$(git diff --name-only --diff-filter=U)"
+            if [[ "${CONFLICTS}" == "gradle.properties" ]]; then
+              git checkout --ours gradle.properties
+              git add gradle.properties
+            else
+              echo "::error::Merge conflict outside gradle.properties. Conflicting files:"
+              printf '%s\n' "${CONFLICTS}"
+              exit 1
+            fi
+          fi
+
+          if [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
+            if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+              git commit -m "merge: ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
+              git push origin "HEAD:${DEFAULT_BRANCH}"
+              gh workflow run check.yml --ref "${DEFAULT_BRANCH}"
+            else
+              echo "Default branch already contains ${RELEASE_BRANCH}."
+            fi
+          fi
