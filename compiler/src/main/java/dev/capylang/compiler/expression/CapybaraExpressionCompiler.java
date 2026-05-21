@@ -693,12 +693,6 @@ public class CapybaraExpressionCompiler {
         }
         var objectConstructor = constructorRegistry.objectConstructorsByType().get(targetName.orElseThrow());
         if (objectConstructor == null) {
-            if (isTypeLikeObjectConstructorTarget(targetName.orElseThrow())) {
-                return Optional.of(withPosition(
-                        Result.error("Object type `" + targetName.orElseThrow() + "` is not imported or not found"),
-                        functionInvoke.position()
-                ));
-            }
             return Optional.empty();
         }
         return Optional.of(linkObjectConstruction(functionInvoke, scope, objectConstructor));
@@ -711,11 +705,6 @@ public class CapybaraExpressionCompiler {
             return Optional.of(functionCall.name());
         }
         return Optional.empty();
-    }
-
-    private boolean isTypeLikeObjectConstructorTarget(String name) {
-        var simpleName = simpleRawTypeName(normalizeTypeAlias(name));
-        return !simpleName.isBlank() && Character.isUpperCase(simpleName.charAt(0));
     }
 
     private Result<CompiledExpression> linkObjectConstruction(

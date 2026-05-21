@@ -39,3 +39,18 @@ test('functional object construction supports parent types, zero args, and seque
     assert.equal(sequenced.result, 'A:B');
     assert.equal(sequenced.stdout, 'constructed:A\nconstructed:B\n');
 });
+
+test('qualified import object construction works', () => {
+    const interop = generatedModule('dev/capylang/test/ObjectConstructionInterop.js');
+    const { TrackedPerson } = generatedModule('dev/capylang/test/TrackedPerson.js');
+
+    const person = captureOutput(() => interop.makeQualifiedPerson('Qual').unsafe_run());
+    assert.equal(person.result instanceof TrackedPerson, true);
+    assert.equal(person.result.label(), 'Qual');
+    assert.equal(person.stdout, 'constructed:Qual\n');
+
+    const printable = captureOutput(() => interop.makeQualifiedPrintable('Iface').unsafe_run());
+    assert.equal(printable.result instanceof TrackedPerson, true);
+    assert.equal(printable.result.label(), 'Iface');
+    assert.equal(printable.stdout, 'constructed:Iface\n');
+});

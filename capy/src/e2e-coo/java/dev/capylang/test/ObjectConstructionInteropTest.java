@@ -75,4 +75,26 @@ class ObjectConstructionInteropTest {
             System.setOut(originalOut);
         }
     }
+
+    @Test
+    void qualifiedImportObjectConstructionWorks() {
+        var originalOut = System.out;
+        var out = new ByteArrayOutputStream();
+        try {
+            System.setOut(new PrintStream(out));
+
+            var person = ObjectConstructionInterop.makeQualifiedPerson("Qual").unsafeRun();
+            assertThat(person).isInstanceOf(TrackedPerson.class);
+            assertThat(person.label()).isEqualTo("Qual");
+            assertThat(out.toString()).isEqualTo("constructed:Qual" + System.lineSeparator());
+
+            out.reset();
+            var printable = ObjectConstructionInterop.makeQualifiedPrintable("Iface").unsafeRun();
+            assertThat(printable).isInstanceOf(TrackedPerson.class);
+            assertThat(printable.label()).isEqualTo("Iface");
+            assertThat(out.toString()).isEqualTo("constructed:Iface" + System.lineSeparator());
+        } finally {
+            System.setOut(originalOut);
+        }
+    }
 }
