@@ -206,7 +206,7 @@ final class ObjectOrientedPythonGenerator {
     }
 
     private String renderClassMethod(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
-        var entrypoint = isPythonEntrypoint(method);
+        var entrypoint = false;
         if (entrypoint) {
             ensureEntrypointCompatible(context, method, parentNames);
         }
@@ -1039,10 +1039,6 @@ final class ObjectOrientedPythonGenerator {
         return new ParentKinds(classParent, List.copyOf(interfaceParents));
     }
 
-    private boolean isPythonEntrypoint(ObjectOriented.MethodDeclaration method) {
-        return false;
-    }
-
     private void ensureEntrypointCompatible(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
         if (referencesThis(method) || referencesParents(method, parentNames)) {
             throw unsupported(context.module(), "Entrypoint method `" + context.typeName() + ".main` cannot use instance state or parent-qualified calls");
@@ -1154,15 +1150,7 @@ final class ObjectOrientedPythonGenerator {
     }
 
     private String renderProgramMain(RenderContext context, List<ObjectOriented.MethodDeclaration> methods) {
-        var main = methods.stream().filter(this::isPythonEntrypoint).findFirst();
-        if (main.isEmpty()) {
-            return "";
-        }
-        return "\nif __name__ == '__main__':\n"
-               + "    result = " + context.typeName() + ".main(__capy_sys.argv[1:])\n"
-               + "    value = result.unsafe_run() if capy.is_effect(result) else result\n"
-               + "    if value is not None:\n"
-               + "        capy.write_program_result(value)\n";
+        return "";
     }
 
     private String renderObjectOrientedInfo(RenderContext context, ObjectOriented.TypeDeclaration declaration, boolean full) {
