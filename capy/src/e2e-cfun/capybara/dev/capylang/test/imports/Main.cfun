@@ -1,6 +1,8 @@
 from Pck1 import { * }
 from Pck2 import { * } except { add }
 from /dev/capylang/capybara/imports2/Pck5 import { lvl_multiplier }
+import /dev/capylang/test/imports/A
+import /dev/capylang/test/imports/B
 
 from Types1 import { * }
 from Types2 import { * } except { T1 }
@@ -34,3 +36,9 @@ fun type5(x: int, y: int): /dev/capylang/capybara/imports2/Types3.T5 =
     if x > 0
     then /dev/capylang/capybara/imports2/Types3.D5_1 { x: x }
     else /dev/capylang/capybara/imports2/Types3.D5_2 { y: y }
+
+fun qualified_import_result(x: int): int = A.foo(x) + B.foo(x)
+
+fun qualified_import_data(x: int): A.Value = A.Value { amount: x }
+
+fun qualified_import_function_data(x: int): int = A.value(x).amount + B.value(x).amount

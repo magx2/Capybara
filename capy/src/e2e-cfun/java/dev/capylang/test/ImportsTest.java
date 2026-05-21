@@ -46,4 +46,17 @@ class ImportsTest {
         assertThat(nonPositive).isInstanceOf(dev.capylang.test.imports2.Types3.D52.class);
         assertThat(((dev.capylang.test.imports2.Types3.D52) nonPositive).y()).isEqualTo(7);
     }
+
+    @Test
+    void supportsQualifiedOnlyImports() {
+        assertThat(dev.capylang.test.imports.Main.qualifiedImportResult(10))
+                .isEqualTo(20);
+
+        var value = dev.capylang.test.imports.Main.qualifiedImportData(7);
+        assertThat(value).isInstanceOf(dev.capylang.test.imports.A.Value.class);
+        assertThat(value.amount()).isEqualTo(7);
+
+        assertThat(dev.capylang.test.imports.Main.qualifiedImportFunctionData(10))
+                .isEqualTo(20);
+    }
 }

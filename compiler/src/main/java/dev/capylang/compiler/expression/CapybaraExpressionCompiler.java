@@ -123,6 +123,7 @@ public class CapybaraExpressionCompiler {
     private final List<FunctionSignature> functionSignatures;
     private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
     private final Map<String, String> moduleClassNameByModuleName;
+    private final Map<String, String> qualifiedModuleAliases;
     private final ConstructorRegistry constructorRegistry;
     private final Optional<String> currentSourceModuleName;
     private final Optional<String> currentConstructorTypeName;
@@ -161,7 +162,22 @@ public class CapybaraExpressionCompiler {
             Optional<String> currentSourceModuleName,
             Optional<String> currentConstructorTypeName
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, currentSourceModuleName, currentConstructorTypeName, true);
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, Map.of(), constructorRegistry, linkCache, currentSourceModuleName, currentConstructorTypeName, true);
+    }
+
+    public CapybaraExpressionCompiler(
+            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            List<FunctionSignature> functionSignatures,
+            Map<String, List<FunctionSignature>> functionSignaturesByModule,
+            Map<String, String> moduleClassNameByModuleName,
+            Map<String, String> qualifiedModuleAliases,
+            ConstructorRegistry constructorRegistry,
+            LinkCache linkCache,
+            Optional<String> currentSourceModuleName,
+            Optional<String> currentConstructorTypeName
+    ) {
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, qualifiedModuleAliases, constructorRegistry, linkCache, currentSourceModuleName, currentConstructorTypeName, true);
     }
 
     private CapybaraExpressionCompiler(
@@ -170,6 +186,7 @@ public class CapybaraExpressionCompiler {
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, String> qualifiedModuleAliases,
             ConstructorRegistry constructorRegistry,
             LinkCache linkCache,
             Optional<String> currentSourceModuleName,
@@ -182,6 +199,7 @@ public class CapybaraExpressionCompiler {
         this.functionSignatures = functionSignatures;
         this.functionSignaturesByModule = functionSignaturesByModule;
         this.moduleClassNameByModuleName = moduleClassNameByModuleName;
+        this.qualifiedModuleAliases = Map.copyOf(qualifiedModuleAliases);
         this.constructorRegistry = constructorRegistry;
         this.currentSourceModuleName = currentSourceModuleName;
         this.currentConstructorTypeName = currentConstructorTypeName;
@@ -274,6 +292,7 @@ public class CapybaraExpressionCompiler {
                 functionSignatures,
                 functionSignaturesByModule,
                 moduleClassNameByModuleName,
+                qualifiedModuleAliases,
                 constructorRegistry,
                 linkCache,
                 currentSourceModuleName,
@@ -966,12 +985,16 @@ public class CapybaraExpressionCompiler {
     }
 
     private ResolvedModule resolveQualifiedModule(String normalizedModuleName) {
-        var direct = functionSignaturesByModule.get(normalizedModuleName);
+        var aliasedModuleName = qualifiedModuleAliases.get(normalizedModuleName);
+        if (aliasedModuleName != null) {
+            var aliased = resolveQualifiedModuleDirect(aliasedModuleName);
+            if (aliased != null) {
+                return aliased;
+            }
+        }
+        var direct = resolveQualifiedModuleDirect(normalizedModuleName);
         if (direct != null) {
-            return new ResolvedModule(
-                    moduleClassNameByModuleName.getOrDefault(normalizedModuleName, normalizedModuleName),
-                    direct
-            );
+            return direct;
         }
         var lastSlash = normalizedModuleName.lastIndexOf('/');
         if (lastSlash >= 0 && lastSlash < normalizedModuleName.length() - 1) {
@@ -992,11 +1015,21 @@ public class CapybaraExpressionCompiler {
         return null;
     }
 
+    private ResolvedModule resolveQualifiedModuleDirect(String normalizedModuleName) {
+        var direct = functionSignaturesByModule.get(normalizedModuleName);
+        if (direct != null) {
+            return new ResolvedModule(
+                    moduleClassNameByModuleName.getOrDefault(normalizedModuleName, normalizedModuleName),
+                    direct
+            );
+        }
+        return null;
+    }
+
     private String normalizeQualifiedModuleName(String moduleName) {
         var normalized = moduleName.replace('\\', '/');
         if (normalized.startsWith("/")) {
-            normalized = normalized.substring(1);
-            return normalized.replace("/", ".");
+            return normalized.substring(1);
         }
         return normalized;
     }

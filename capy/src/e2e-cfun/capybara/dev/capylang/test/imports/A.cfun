@@ -1,0 +1,5 @@
+data Value { amount: int }
+
+fun foo(x: int): int = x + 1
+
+fun value(x: int): Value = Value { amount: x + 10 }
