@@ -26,8 +26,12 @@ public class CapybaraParser {
     private static final Pattern MISMATCHED_INPUT_PATTERN = Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
-    private static final Pattern IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+    private static final String MODULE_NAME_PATTERN = "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+";
+    private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
+            "^\\s*from\\s+(" + MODULE_NAME_PATTERN + ")\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+    );
+    private static final Pattern QUALIFIED_IMPORT_PATTERN = Pattern.compile(
+            "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
     );
     private final List<Result.Error.SingleError> parserErrors = new ArrayList<>();
     private RawModule currentModule;
@@ -122,7 +126,8 @@ public class CapybaraParser {
         var imports = new ArrayList<ImportDeclaration>();
         var bodyLines = new ArrayList<String>();
         for (var line : source.split("\\R", -1)) {
-            var matcher = IMPORT_PATTERN.matcher(line);
+            var matcher = FROM_IMPORT_PATTERN.matcher(line);
+            var qualifiedMatcher = QUALIFIED_IMPORT_PATTERN.matcher(line);
             if (matcher.matches()) {
                 var module = matcher.group(1);
                 var symbols = Stream.of(matcher.group(2).split(","))
@@ -136,6 +141,10 @@ public class CapybaraParser {
                                 .filter(symbol -> !symbol.isBlank())
                                 .toList();
                 imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
+                // Keep source line numbers stable for parser/linker diagnostics.
+                bodyLines.add("");
+            } else if (qualifiedMatcher.matches()) {
+                imports.add(ImportDeclaration.qualified(qualifiedMatcher.group(1)));
                 // Keep source line numbers stable for parser/linker diagnostics.
                 bodyLines.add("");
             } else {

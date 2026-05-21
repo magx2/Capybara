@@ -16,8 +16,12 @@ import java.util.stream.Stream;
 
 public final class ObjectOrientedParser {
     public static final ObjectOrientedParser INSTANCE = new ObjectOrientedParser();
-    private static final Pattern IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+    private static final String MODULE_NAME_PATTERN = "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+";
+    private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
+            "^\\s*from\\s+(" + MODULE_NAME_PATTERN + ")\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+    );
+    private static final Pattern QUALIFIED_IMPORT_PATTERN = Pattern.compile(
+            "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
     );
 
     public Result<ObjectOrientedModule> parseModule(RawModule module) {
@@ -83,7 +87,8 @@ public final class ObjectOrientedParser {
         var imports = new ArrayList<ImportDeclaration>();
         var bodyLines = new ArrayList<String>();
         for (var line : source.split("\\R", -1)) {
-            var matcher = IMPORT_PATTERN.matcher(line);
+            var matcher = FROM_IMPORT_PATTERN.matcher(line);
+            var qualifiedMatcher = QUALIFIED_IMPORT_PATTERN.matcher(line);
             if (matcher.matches()) {
                 var module = matcher.group(1);
                 var symbols = Stream.of(matcher.group(2).split(","))
@@ -97,6 +102,9 @@ public final class ObjectOrientedParser {
                                 .filter(symbol -> !symbol.isBlank())
                                 .toList();
                 imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
+                bodyLines.add("");
+            } else if (qualifiedMatcher.matches()) {
+                imports.add(ImportDeclaration.qualified(qualifiedMatcher.group(1)));
                 bodyLines.add("");
             } else {
                 bodyLines.add(line);

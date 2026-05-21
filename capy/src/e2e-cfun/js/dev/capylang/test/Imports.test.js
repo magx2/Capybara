@@ -9,4 +9,7 @@ test('Imports', () => {
     assert.equal(importsMain.xyz(1, 2, 3).xyz, '123');
     assert.equal(importsMain.type5(5, 2).__capybaraType, 'D51');
     assert.equal(importsMain.type5(0, 7).__capybaraType, 'D52');
+    assert.equal(importsMain.qualifiedImportResult(10), 20);
+    assert.equal(importsMain.qualifiedImportData(7).amount, 7);
+    assert.equal(importsMain.qualifiedImportFunctionData(10), 20);
 });

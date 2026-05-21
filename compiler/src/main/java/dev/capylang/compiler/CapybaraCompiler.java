@@ -354,6 +354,7 @@ public class CapybaraCompiler {
                     ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableConstructorSignatures).value(),
                     signaturesByModule,
                     moduleClassNameByModuleName,
+                    qualifiedImportAliases(module, moduleLinkIndex),
                     getModuleEntry(visibleConstructorsByModule, moduleRef),
                     sourceFile,
                     compileCache
@@ -557,6 +558,21 @@ public class CapybaraCompiler {
         return qualified != null ? qualified : source.get(moduleRef.name());
     }
 
+    private Map<String, String> qualifiedImportAliases(Module module, ModuleLinkIndex moduleLinkIndex) {
+        var aliases = new LinkedHashMap<String, String>();
+        for (var importDeclaration : module.imports()) {
+            if (!importDeclaration.qualifiedOnly()) {
+                continue;
+            }
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
+            if (importedModule == null) {
+                continue;
+            }
+            aliases.put(importedModule.name(), qualifiedModuleName(importedModule));
+        }
+        return Map.copyOf(aliases);
+    }
+
     private void addQualifiedConstructorAliases(
             Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> all,
             ModuleRef module,
@@ -644,7 +660,7 @@ public class CapybaraCompiler {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache), moduleSourceFile);
+        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, moduleSourceFile, compileCache), moduleSourceFile);
     }
 
     private Result<CompiledModule> linkModule(
@@ -672,7 +688,7 @@ public class CapybaraCompiler {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
+        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, moduleSourceFile, compileCache)
                 .flatMap(firstPassFunctions -> {
                     var moduleSignatures = getModuleEntry(signaturesByModule, moduleRef);
                     var refinedSignatures = mergeSignatures(
@@ -691,7 +707,7 @@ public class CapybaraCompiler {
                         ));
                     }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
+                    return linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, moduleSourceFile, compileCache)
                             .map(linkedFunctions -> new CompiledModule(
                                     module.name(),
                                     module.path(),
@@ -877,6 +893,20 @@ public class CapybaraCompiler {
                 knownModule,
                 visibleTypes(module.path(), knownModule, getModuleEntry(linkedTypesByModule, knownModule), compileCache)
         ));
+        for (var importDeclaration : module.imports()) {
+            if (!importDeclaration.qualifiedOnly()) {
+                continue;
+            }
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
+            if (importedModule == null) {
+                continue;
+            }
+            addQualifiedTypeAliases(
+                    all,
+                    importedModule,
+                    visibleTypes(module.path(), importedModule, getModuleEntry(linkedTypesByModule, importedModule), compileCache)
+            );
+        }
         resolveQualifiedExternalFieldTypes(all);
         return Result.success(Map.copyOf(all));
     }
@@ -2497,6 +2527,21 @@ public class CapybaraCompiler {
             addQualifiedParentConstructorAliases(parentConstructors, knownModule, knownParentConstructors);
             addQualifiedDataOwnerAliases(dataOwners, knownModule, knownDataOwners);
         });
+        for (var importDeclaration : module.imports()) {
+            if (!importDeclaration.qualifiedOnly()) {
+                continue;
+            }
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
+            if (importedModule == null) {
+                continue;
+            }
+            var importedConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), importedModule)).orElse(Map.of());
+            var importedParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), importedModule)).orElse(Map.of());
+            var importedDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), importedModule)).orElse(Map.of());
+            addQualifiedConstructorAliases(constructors, importedModule, importedConstructors);
+            addQualifiedParentConstructorAliases(parentConstructors, importedModule, importedParentConstructors);
+            addQualifiedDataOwnerAliases(dataOwners, importedModule, importedDataOwners);
+        }
         return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(constructors), Map.copyOf(parentConstructors), Map.copyOf(dataOwners));
     }
 
@@ -3012,6 +3057,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, String> qualifiedModuleAliases,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             String moduleSourceFile,
             CompileCache compileCache
@@ -3021,7 +3067,7 @@ public class CapybaraCompiler {
                 CapybaraExpressionCompiler.LinkCache::new
         );
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, linkCache, compileCache))
+                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, qualifiedModuleAliases, protectedConstructorsByType, moduleSourceFile, linkCache, compileCache))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -3032,6 +3078,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, String> qualifiedModuleAliases,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             String moduleSourceFile,
             CapybaraExpressionCompiler.LinkCache linkCache,
@@ -3055,6 +3102,7 @@ public class CapybaraCompiler {
                         signatures,
                         signaturesByModule,
                         moduleClassNameByModuleName,
+                        qualifiedModuleAliases,
                         protectedConstructorsByType,
                         linkCache
                 ).flatMap(ex -> validateConstructorReturnType(function, ex, dataTypes, functionGenericTypeNames, compileCache)
@@ -3424,6 +3472,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, String> qualifiedModuleAliases,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CapybaraExpressionCompiler.LinkCache linkCache
     ) {
@@ -3433,6 +3482,7 @@ public class CapybaraCompiler {
                 signatures,
                 signaturesByModule,
                 moduleClassNameByModuleName,
+                qualifiedModuleAliases,
                 protectedConstructorsByType,
                 linkCache,
                 Optional.of(qualifiedModuleNameFromSourceFile(moduleSourceFile)),
@@ -3483,6 +3533,7 @@ public class CapybaraCompiler {
                     selfSignatureAsNothing,
                     signaturesByModule,
                     moduleClassNameByModuleName,
+                    qualifiedModuleAliases,
                     protectedConstructorsByType,
                     linkCache,
                     Optional.of(qualifiedModuleNameFromSourceFile(moduleSourceFile)),

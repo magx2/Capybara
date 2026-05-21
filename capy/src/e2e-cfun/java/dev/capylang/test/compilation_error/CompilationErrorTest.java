@@ -739,6 +739,22 @@ public class CompilationErrorTest {
                 () -> assertThat(error.message()).isEqualTo(finalErrorMessage));
     }
 
+    @Test
+    void qualifiedImportReportsUnknownModule() {
+        var errors = compileProgram("""
+                import /foo/missing/Nope
+
+                fun value(): int = 1
+                """, "unknown_qualified_import");
+
+        assertThat(errors).hasSize(1);
+        var error = errors.first();
+        assertAll("Assertions on error",
+                () -> assertThat(error.file()).isEqualTo("/foo/boo/unknown_qualified_import.cfun"),
+                () -> assertThat(error.message())
+                        .contains("Module `unknown_qualified_import` imports unknown module `/foo/missing/Nope`"));
+    }
+
     @SuppressWarnings("unchecked")
     static Stream<Arguments> compilationError() {
         return concat(simpleCompilationError(), multilineCompilationError(), infixOperations(), bitwiseOperations(), matchCompilationErrors());
@@ -1911,6 +1927,9 @@ public class CompilationErrorTest {
         return normalized.substring(normalized.lastIndexOf('/') + 1, normalized.length() - ".cfun".length());
     }
     private static String toImportLine(ImportDeclaration importDeclaration) {
+        if (importDeclaration.qualifiedOnly()) {
+            return "import %s".formatted(importDeclaration.moduleName());
+        }
         var base = "from %s import { %s }".formatted(importDeclaration.moduleName(), String.join(", ", importDeclaration.symbols()));
         if (importDeclaration.excludedSymbols().isEmpty()) {
             return base;

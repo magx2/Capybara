@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Optional;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.stream.Stream;
 
 import dev.capylang.compiler.Result;
@@ -50,6 +51,18 @@ class CapybaraParserTest {
                 })
                 .findAny()
                 .orElseThrow(() -> new AssertionError(type.getSimpleName() + " " + name + " not found"));
+    }
+
+    @Test
+    void parsesQualifiedImport() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                import /foo/A
+
+                fun value(): int = A.foo(1)
+                """));
+
+        assertThat(module.imports())
+                .containsExactly(new dev.capylang.compiler.ImportDeclaration("/foo/A", List.of(), List.of(), true));
     }
 
     private static dev.capylang.compiler.parser.Module parseSuccess(RawModule module) {
