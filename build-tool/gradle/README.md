@@ -6,7 +6,7 @@ This module publishes the Gradle plugin `dev.capylang`.
 
 The plugin is published as Maven artifacts to GitHub Packages for this repository:
 
-- repository: `https://maven.pkg.github.com/grzeslowski/capybara`
+- repository: `https://maven.pkg.github.com/magx2/Capybara`
 - plugin id: `dev.capylang`
 
 Local publishing requires credentials with `write:packages`.
@@ -23,6 +23,7 @@ or in `~/.gradle/gradle.properties`:
 ```properties
 gpr.user=<github-user>
 gpr.key=<github-token>
+gpr.repository=magx2/Capybara
 ```
 
 Then publish with:
@@ -42,7 +43,7 @@ pluginManagement {
     repositories {
         gradlePluginPortal()
         maven {
-            url = uri("https://maven.pkg.github.com/grzeslowski/capybara")
+            url = uri("https://maven.pkg.github.com/magx2/Capybara")
             credentials {
                 username = providers.gradleProperty("gpr.user").get()
                 password = providers.gradleProperty("gpr.key").get()
@@ -71,4 +72,4 @@ gpr.key=<github-token>
 
 ## Release Workflow
 
-The GitHub release workflow publishes the plugin automatically for release tags.
+The GitHub release workflow publishes the plugin and Java libraries automatically from `release/*` branches.

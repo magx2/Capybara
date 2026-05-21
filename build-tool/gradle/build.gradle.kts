@@ -10,6 +10,9 @@ val githubPackagesUser = providers.environmentVariable("GITHUB_ACTOR")
     .orElse(providers.gradleProperty("gpr.user"))
 val githubPackagesKey = providers.environmentVariable("GITHUB_TOKEN")
     .orElse(providers.gradleProperty("gpr.key"))
+val githubPackagesRepository = providers.environmentVariable("GITHUB_REPOSITORY")
+    .orElse(providers.gradleProperty("gpr.repository"))
+    .orElse("magx2/Capybara")
 
 repositories {
     mavenCentral()
@@ -42,7 +45,7 @@ publishing {
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/grzeslowski/capybara")
+            url = uri("https://maven.pkg.github.com/${githubPackagesRepository.get()}")
             credentials {
                 username = githubPackagesUser.orNull
                 password = githubPackagesKey.orNull

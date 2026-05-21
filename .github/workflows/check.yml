@@ -1,16 +1,17 @@
-name: Test
+name: Build & Check
 
 on:
   push:
     branches:
       - "**"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  build-check:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,5 +30,5 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run tests
+      - name: Run Gradle check
         run: ./gradlew clean check
