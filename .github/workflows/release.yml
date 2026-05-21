@@ -42,6 +42,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
 
       - name: Validate release branch
         shell: bash
@@ -152,6 +154,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
@@ -204,6 +208,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
 
       - name: Build Windows native CLI
         run: .\gradlew.bat :capy:nativeCompile --no-daemon
@@ -244,14 +250,16 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
       - name: Configure git user
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
 
       - name: Ensure release branch has not moved
         shell: bash
