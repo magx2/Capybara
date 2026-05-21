@@ -122,7 +122,6 @@ final class ObjectOrientedPythonGenerator {
         if (methods.isEmpty() && declaration.members().stream().noneMatch(ObjectOriented.FieldDeclaration.class::isInstance)) {
             code.append("    pass\n");
         }
-        code.append(renderProgramMain(context, methods));
         return code.toString();
     }
 
@@ -1028,10 +1027,6 @@ final class ObjectOrientedPythonGenerator {
             }
         }
         return new ParentKinds(classParent, List.copyOf(interfaceParents));
-    }
-
-    private String renderProgramMain(RenderContext context, List<ObjectOriented.MethodDeclaration> methods) {
-        return "";
     }
 
     private String renderObjectOrientedInfo(RenderContext context, ObjectOriented.TypeDeclaration declaration, boolean full) {
