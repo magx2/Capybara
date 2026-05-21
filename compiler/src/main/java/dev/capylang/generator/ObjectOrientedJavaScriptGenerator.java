@@ -209,24 +209,17 @@ final class ObjectOrientedJavaScriptGenerator {
     }
 
     private String renderClassMethod(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
-        var javaScriptEntrypoint = false;
-        if (javaScriptEntrypoint) {
-            ensureEntrypointCompatible(context, method, parentNames);
-        }
         if (method.body().isEmpty()) {
             return "    " + jsIdentifier(method.name()) + "() { throw capy.unsupported('Abstract method `" + method.name() + "` was called'); }\n";
         }
         var code = new StringBuilder();
         appendDocComments(code, method.comments(), 1);
         code.append("    ");
-        if (javaScriptEntrypoint) {
-            code.append("static ");
-        }
         code.append(jsIdentifier(method.name()))
                 .append("(")
                 .append(method.parameters().stream().map(parameter -> jsIdentifier(parameter.name())).collect(joining(", ")))
                 .append(") {\n");
-        appendMethodBody(code, context, method, 2, parentNames, javaScriptEntrypoint);
+        appendMethodBody(code, context, method, 2, parentNames, false);
         code.append("    }\n");
         return code.toString();
     }
@@ -993,116 +986,6 @@ final class ObjectOrientedJavaScriptGenerator {
             }
         }
         return new ParentKinds(classParent, List.copyOf(interfaceParents));
-    }
-
-    private void ensureEntrypointCompatible(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
-        if (referencesThis(method) || referencesParents(method, parentNames)) {
-            throw unsupported(context.module(), "Entrypoint method `" + context.typeName() + ".main` cannot use instance state or parent-qualified calls");
-        }
-    }
-
-    private boolean referencesThis(ObjectOriented.MethodDeclaration method) {
-        return methodExpressions(method).stream().anyMatch(expression -> expression.contains("this"));
-    }
-
-    private boolean referencesParents(ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
-        return methodExpressions(method).stream()
-                .anyMatch(expression -> parentNames.stream().anyMatch(parent -> expression.contains(parent + ".")));
-    }
-
-    private List<String> methodExpressions(ObjectOriented.MethodDeclaration method) {
-        return method.body().stream()
-                .flatMap(body -> switch (body) {
-                    case ObjectOriented.ExpressionBody expressionBody -> Stream.of(expressionBody.expression());
-                    case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock).stream();
-                })
-                .toList();
-    }
-
-    private List<String> collectExpressions(ObjectOriented.StatementBlock block) {
-        var expressions = new ArrayList<String>();
-        collectExpressions(block, expressions);
-        return List.copyOf(expressions);
-    }
-
-    private void collectExpressions(ObjectOriented.StatementBlock block, List<String> expressions) {
-        for (var statement : block.statements()) {
-            switch (statement) {
-                case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
-                case ObjectOriented.LocalMethodStatement localMethodStatement -> {
-                    switch (localMethodStatement.body()) {
-                        case ObjectOriented.ExpressionBody expressionBody -> expressions.add(expressionBody.expression());
-                        case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock, expressions);
-                    }
-                }
-                case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
-                case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
-                case ObjectOriented.ExpressionStatement expressionStatement -> expressions.add(expressionStatement.expression());
-                case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
-                case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
-                case ObjectOriented.IfStatement ifStatement -> {
-                    expressions.add(ifStatement.condition());
-                    collectExpressions(ifStatement.thenBranch(), expressions);
-                    ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
-                }
-                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                    collectExpressions(tryCatchStatement.tryBlock(), expressions);
-                    tryCatchStatement.catches().forEach(catchClause -> collectExpressions(catchClause.body(), expressions));
-                }
-                case ObjectOriented.WhileStatement whileStatement -> {
-                    expressions.add(whileStatement.condition());
-                    collectExpressions(whileStatement.body(), expressions);
-                }
-                case ObjectOriented.DoWhileStatement doWhileStatement -> {
-                    collectExpressions(doWhileStatement.body(), expressions);
-                    expressions.add(doWhileStatement.condition());
-                }
-                case ObjectOriented.ForEachStatement forEachStatement -> {
-                    expressions.add(forEachStatement.iterable());
-                    collectExpressions(forEachStatement.body(), expressions);
-                }
-                case ObjectOriented.StatementBlock nestedBlock -> collectExpressions(nestedBlock, expressions);
-            }
-        }
-    }
-
-    private void collectExpressions(ObjectOriented.Statement statement, List<String> expressions) {
-        switch (statement) {
-            case ObjectOriented.StatementBlock block -> collectExpressions(block, expressions);
-            case ObjectOriented.IfStatement ifStatement -> {
-                expressions.add(ifStatement.condition());
-                collectExpressions(ifStatement.thenBranch(), expressions);
-                ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
-            }
-            case ObjectOriented.WhileStatement whileStatement -> {
-                expressions.add(whileStatement.condition());
-                collectExpressions(whileStatement.body(), expressions);
-            }
-            case ObjectOriented.DoWhileStatement doWhileStatement -> {
-                collectExpressions(doWhileStatement.body(), expressions);
-                expressions.add(doWhileStatement.condition());
-            }
-            case ObjectOriented.ForEachStatement forEachStatement -> {
-                expressions.add(forEachStatement.iterable());
-                collectExpressions(forEachStatement.body(), expressions);
-            }
-            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                collectExpressions(tryCatchStatement.tryBlock(), expressions);
-                tryCatchStatement.catches().forEach(catchClause -> collectExpressions(catchClause.body(), expressions));
-            }
-            case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
-            case ObjectOriented.LocalMethodStatement localMethodStatement -> {
-                switch (localMethodStatement.body()) {
-                    case ObjectOriented.ExpressionBody expressionBody -> expressions.add(expressionBody.expression());
-                    case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock, expressions);
-                }
-            }
-            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
-            case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
-            case ObjectOriented.ExpressionStatement expressionStatement -> expressions.add(expressionStatement.expression());
-            case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
-            case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
-        }
     }
 
     private String renderProgramMain(RenderContext context, List<ObjectOriented.MethodDeclaration> methods) {
