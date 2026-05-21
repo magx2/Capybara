@@ -1,11 +1,6 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - "release/*"
-    paths-ignore:
-      - "gradle.properties"
   workflow_dispatch:
 
 permissions:
