@@ -8,6 +8,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +40,7 @@ class EffectMainProgramTest {
     }
 
     @Test
-    void generatedEffectMainDoesNotPrintSuccessProgram() throws Exception {
+    void generatedEffectMainRunsEffectAndPrintsSuccessResults() throws Exception {
         var originalOut = System.out;
         var out = new ByteArrayOutputStream();
         try {
@@ -49,6 +50,9 @@ class EffectMainProgramTest {
             System.setOut(originalOut);
         }
 
-        assertThat(out.toString()).isBlank();
+        var lines = Arrays.stream(out.toString().split(System.lineSeparator()))
+                .filter(line -> !line.isBlank())
+                .toList();
+        assertThat(lines).containsExactly("effect-main:2");
     }
 }
