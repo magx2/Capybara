@@ -476,7 +476,7 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
-    void shouldGenerateJavaEntrypointForObjectOrientedMainMethod() throws Exception {
+    void shouldTreatObjectOrientedMainMethodAsOrdinaryMethod() throws Exception {
         var program = compileProgram("""
                 class Main {
                     def main(args: List[String]): int = args.size()
@@ -490,31 +490,39 @@ class ObjectOrientedJavaGeneratorTest {
                 .orElseThrow();
 
         assertThat(mainModule.code())
-                .contains("public static int main(java.util.List<String> args)")
-                .contains("public static void main(java.lang.String[] args)")
-                .contains("System.exit(main(java.util.List.of(args)));")
+                .contains("public int main(java.util.List<String> args)")
+                .doesNotContain("public static int main(java.util.List<String> args)")
+                .doesNotContain("public static void main(java.lang.String[] args)")
+                .doesNotContain("System.exit(main(java.util.List.of(args)));")
                 .doesNotContain("public Main(");
 
         var classesDir = compileGeneratedJava(generatedProgram);
         try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
             var mainType = classLoader.loadClass("foo.boo.Main");
-            assertThat(mainType.getMethod("main", java.util.List.class).invoke(null, java.util.List.of("a", "b"))).isEqualTo(2);
-            assertThat(mainType.getMethod("main", String[].class).getReturnType()).isEqualTo(void.class);
+            var main = mainType.getConstructor().newInstance();
+            assertThat(mainType.getMethod("main", java.util.List.class).invoke(main, java.util.List.of("a", "b"))).isEqualTo(2);
+            assertThatThrownBy(() -> mainType.getMethod("main", String[].class))
+                    .isInstanceOf(NoSuchMethodException.class);
         }
     }
 
 
     @Test
-    void shouldRejectObjectOrientedMainEntrypointThatRequiresConstructor() {
+    void shouldAllowObjectOrientedMainMethodThatRequiresConstructor() {
         var program = compileProgram("""
                 class Main(name: String) {
                     def main(args: List[String]): int = args.size()
                 }
                 """);
 
-        assertThatThrownBy(() -> new JavaGenerator().generate(program))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Entrypoint class `Main` cannot declare constructor state or init blocks");
+        var generatedProgram = new JavaGenerator().generate(program);
+
+        assertThat(generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .doesNotContain("public static void main");
     }
 
     @Test
@@ -743,7 +751,7 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
-    void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
+    void shouldAllowObjectOrientedMainMethodThatUsesInstanceState() {
         var program = compileProgram("""
                 class Main {
                     def helper(): int = 1
@@ -752,9 +760,14 @@ class ObjectOrientedJavaGeneratorTest {
                 }
                 """);
 
-        assertThatThrownBy(() -> new JavaGenerator().generate(program))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Entrypoint method `Main.main` cannot use instance state");
+        var generatedProgram = new JavaGenerator().generate(program);
+
+        assertThat(generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .doesNotContain("public static void main");
     }
 
     private CompiledProgram compileProgram(String source) {

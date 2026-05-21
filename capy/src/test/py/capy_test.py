@@ -116,7 +116,7 @@ class CapyPythonCliTest(unittest.TestCase):
 
         python = run_python([str(generated_dir / "foo" / "Main.py"), "one", "two"])
         self.assertEqual(python.returncode, 0, python.stderr)
-        self.assertEqual(python.stdout.strip(), "2")
+        self.assertEqual(python.stdout.strip(), "")
 
         python = run_python([
             "-c",

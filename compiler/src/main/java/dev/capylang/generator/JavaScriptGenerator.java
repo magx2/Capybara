@@ -476,11 +476,8 @@ public final class JavaScriptGenerator implements Generator {
             }
             var mainName = main.orElseThrow().name();
             return "\nif (require.main === module) {\n"
-                   + "    const result = " + mainName + "(process.argv.slice(2));\n"
-                   + "    const value = capy.isEffect(result) ? result.unsafe_run() : result;\n"
-                   + "    if (value !== undefined && value !== null) {\n"
-                   + "        capy.writeProgramResult(value);\n"
-                   + "    }\n"
+                   + "    const value = " + mainName + "(process.argv.slice(2)).unsafe_run();\n"
+                   + "    capy.writeProgramResult(value);\n"
                    + "}\n";
         }
 
@@ -1351,6 +1348,17 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String dataConstructorReference(CompiledDataType dataType) {
+            var qualifiedOwner = qualifiedTypeOwnerClassName(dataType.name());
+            if (qualifiedOwner.isPresent()) {
+                var ownerClassName = qualifiedOwner.orElseThrow();
+                var typeName = programContext.emittedTypeName(ownerClassName, dataType.name());
+                if (isCurrentClassReference(ownerClassName)) {
+                    return typeName;
+                }
+                var className = programContext.resolveClassName(ownerClassName).orElse(ownerClassName);
+                require(className);
+                return moduleVar(className) + "." + typeName;
+            }
             var typeName = programContext.emittedTypeName(moduleInfo.className(), dataType.name());
             if (programContext.localTypeNames(moduleInfo.className()).contains(typeName)) {
                 return typeName;
@@ -1374,6 +1382,18 @@ public final class JavaScriptGenerator implements Generator {
                 return moduleVar(className) + "." + typeName;
             }
             return typeName;
+        }
+
+        private static Optional<String> qualifiedTypeOwnerClassName(String typeName) {
+            if (!typeName.startsWith("/")) {
+                return Optional.empty();
+            }
+            var ownerPath = typeName.substring(1);
+            var dot = ownerPath.lastIndexOf('.');
+            if (dot < 0) {
+                return Optional.empty();
+            }
+            return Optional.of(ownerPath.substring(0, dot).replace('/', '.'));
         }
 
         private Optional<String> ownerClassNameForNestedType(String typeName) {
@@ -1869,7 +1889,13 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.Option", Set.of("Some", "None"));
             exports.put("capy.lang.Result", Set.of("Success", "Error"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
-            exports.put("capy.lang.Program", Set.of("Success", "Failed"));
+            exports.put("capy.lang.Program", Set.of(
+                    "Success", "Failed", "__constructor__primitive__failed_exit_code",
+                    "next__name_next__failed_exit_code", "previous__name_previous__failed_exit_code",
+                    "DEFAULT_FAILED_EXIT_CODE", "LAST_FAILED_EXIT_CODE",
+                    "SIGHUP", "SIGINT", "SIGQUIT", "SIGABRT", "SIGFPE", "SIGKILL",
+                    "SIGSEGV", "SIGPIPE", "SIGALRM", "SIGTERM", "__capybaraPrimitiveTypes"
+            ));
             exports.put("capy.lang.Primitives", Set.of(
                     "to_int", "toInt", "to_long", "toLong", "to_double", "toDouble", "to_float", "toFloat", "to_bool", "toBool",
                     "mAXINTVALUE", "MAX_INT_VALUE", "mININTVALUE", "MIN_INT_VALUE",
@@ -2091,28 +2117,79 @@ public final class JavaScriptGenerator implements Generator {
                     'use strict';
                     const capy = require('../../dev/capylang/capybara.js');
 
-                    class Success {
-                        constructor(fields = {}) {
-                            this.__capybaraType = 'Success';
-                            this.__capybaraTypes = ['Success', 'Program'];
-                            this.results = fields.results ?? [];
-                        }
-                        toString() { return capy.dataToString(this); }
+                    const MIN_FAILED_EXIT_CODE = 1;
+                    const MAX_FAILED_EXIT_CODE = 255;
+                    const DEFAULT_FAILED_EXIT_CODE = MIN_FAILED_EXIT_CODE;
+                    const LAST_FAILED_EXIT_CODE = MAX_FAILED_EXIT_CODE;
+                    const SIGHUP = 129;
+                    const SIGINT = 130;
+                    const SIGQUIT = 131;
+                    const SIGABRT = 134;
+                    const SIGFPE = 136;
+                    const SIGKILL = 137;
+                    const SIGSEGV = 139;
+                    const SIGPIPE = 141;
+                    const SIGALRM = 142;
+                    const SIGTERM = 143;
+                    const __capybaraPrimitiveTypes = Object.freeze({
+                        failed_exit_code: Object.freeze({ cfunType: '/capy/lang/Program.failed_exit_code', backingType: 'int' })
+                    });
+
+                    const Success = Object.freeze({
+                        __capybaraType: 'Success',
+                        __capybaraTypes: ['Success', 'Program'],
+                        toString() { return capy.dataToString(this); },
                         capybaraDataValueInfo() { return capy.dataValueInfo(this, 'Success', 'capy.lang', 'capy/lang/Program'); }
-                    }
+                    });
 
                     class Failed {
                         constructor(fields = {}) {
                             this.__capybaraType = 'Failed';
                             this.__capybaraTypes = ['Failed', 'Program'];
-                            this.exitCode = fields.exitCode ?? 1;
-                            this.errors = fields.errors ?? [];
+                            this.exit_code = fields.exit_code ?? 1;
                         }
                         toString() { return capy.dataToString(this); }
                         capybaraDataValueInfo() { return capy.dataValueInfo(this, 'Failed', 'capy.lang', 'capy/lang/Program'); }
                     }
 
-                    module.exports = { Success, Failed };
+                    function __constructor__primitive__failed_exit_code(value) {
+                        if (value < MIN_FAILED_EXIT_CODE) {
+                            return new capy.Error({ message: `failed_exit_code must be greater or equals to ${MIN_FAILED_EXIT_CODE}, was \\`${value}\\`.` });
+                        }
+                        if (value > MAX_FAILED_EXIT_CODE) {
+                            return new capy.Error({ message: `failed_exit_code must be less than or equal to ${MAX_FAILED_EXIT_CODE}, was \\`${value}\\`.` });
+                        }
+                        return new capy.Success({ value });
+                    }
+
+                    function next__name_next__failed_exit_code(this_) {
+                        return this_ >= MAX_FAILED_EXIT_CODE ? LAST_FAILED_EXIT_CODE : this_ + 1;
+                    }
+
+                    function previous__name_previous__failed_exit_code(this_) {
+                        return this_ <= MIN_FAILED_EXIT_CODE ? DEFAULT_FAILED_EXIT_CODE : this_ - 1;
+                    }
+
+                    module.exports = {
+                        Success,
+                        Failed,
+                        __constructor__primitive__failed_exit_code,
+                        next__name_next__failed_exit_code,
+                        previous__name_previous__failed_exit_code,
+                        DEFAULT_FAILED_EXIT_CODE,
+                        LAST_FAILED_EXIT_CODE,
+                        SIGHUP,
+                        SIGINT,
+                        SIGQUIT,
+                        SIGABRT,
+                        SIGFPE,
+                        SIGKILL,
+                        SIGSEGV,
+                        SIGPIPE,
+                        SIGALRM,
+                        SIGTERM,
+                        __capybaraPrimitiveTypes,
+                    };
                     """;
         }
 
@@ -5285,17 +5362,11 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function writeProgramResult(value) {
-                        if (isType(value, 'Program') && isType(value, 'Success') && Array.isArray(value.results)) {
-                            for (const result of value.results) {
-                                console.log(toStringValue(result));
-                            }
+                        if (isType(value, 'Program') && isType(value, 'Success')) {
                             return;
                         }
                         if (isType(value, 'Program') && isType(value, 'Failed')) {
-                            for (const error of value.errors ?? []) {
-                                console.error(toStringValue(error));
-                            }
-                            process.exitCode = value.exitCode ?? 1;
+                            process.exitCode = value.exit_code ?? 1;
                             return;
                         }
                         console.log(toStringValue(value));

@@ -21,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapyTest {
+    private static final long FILE_TIMESTAMP_TICK_MILLIS = 2100;
+
     @TempDir
     Path tempDir;
 
@@ -146,8 +148,8 @@ class CapyTest {
         assertEquals("", stderr.toString());
         assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
         var generatedMain = Files.readString(generatedDir.resolve("foo").resolve("Main.java"));
-        assertTrue(generatedMain.contains("public static int main(java.util.List<String> args)"));
-        assertTrue(generatedMain.contains("public static void main(java.lang.String[] args)"));
+        assertTrue(generatedMain.contains("public int main(java.util.List<String> args)"));
+        assertFalse(generatedMain.contains("public static void main"));
         assertTrue(Files.exists(linkedDir.resolve("program.json")));
     }
 
@@ -272,7 +274,7 @@ class CapyTest {
         assertTrue(Files.exists(removedModule));
 
         Files.delete(sourceDir.resolve("foo").resolve("Extra.cfun"));
-        Thread.sleep(1100);
+        Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
 
         assertEquals(0, Capy.execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
@@ -346,7 +348,7 @@ class CapyTest {
         var initialBuildInfoTime = Files.getLastModifiedTime(buildInfoFile);
         var initialManifestTime = Files.getLastModifiedTime(manifestFile);
 
-        Thread.sleep(1100);
+        Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
 
         assertEquals(0, Capy.execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
@@ -377,7 +379,7 @@ class CapyTest {
         var moduleFile = linkedDir.resolve("foo").resolve("Main.json");
         var initialModifiedTime = Files.getLastModifiedTime(moduleFile);
 
-        Thread.sleep(1100);
+        Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
         Files.writeString(sourceFile, "fun main(): int = 1000\n");
 
         assertEquals(0, Capy.execute(
@@ -510,7 +512,7 @@ class CapyTest {
         var initialRuntimeTime = Files.getLastModifiedTime(runtimeFile);
         var initialManifestTime = Files.getLastModifiedTime(manifestFile);
 
-        Thread.sleep(1100);
+        Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
 
         assertEquals(0, Capy.execute(
                 new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},

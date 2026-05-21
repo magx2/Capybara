@@ -996,12 +996,7 @@ final class ObjectOrientedJavaScriptGenerator {
     }
 
     private boolean isJavaScriptEntrypoint(ObjectOriented.MethodDeclaration method) {
-        return method.name().equals("main")
-               && method.returnType().equals("int")
-               && method.parameters().size() == 1
-               && method.parameters().getFirst().type().equals("List[String]")
-               && method.body().isPresent()
-               && !method.modifiers().contains("abstract");
+        return false;
     }
 
     private void ensureEntrypointCompatible(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {

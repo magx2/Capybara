@@ -1,5 +1,18 @@
 const test = require('node:test');
-const { assert, captureOutput, generatedModule } = require('./_support');
+const { spawnSync } = require('node:child_process');
+const { assert, captureOutput, generatedModule, modulePath } = require('./_support');
+
+test('main method is ordinary instance method only', () => {
+    const { Main } = generatedModule('dev/capylang/test/Main.js');
+    const main = new Main();
+
+    assert.equal(main.main(['one', 'two']), 2);
+
+    const run = spawnSync('node', [modulePath('dev/capylang/test/Main.js'), 'one', 'two'], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), '');
+    assert.equal(run.stderr.trim(), '');
+});
 
 test('class methods use constructor state and inherited behavior', () => {
     const { Person } = generatedModule('dev/capylang/test/Person.js');

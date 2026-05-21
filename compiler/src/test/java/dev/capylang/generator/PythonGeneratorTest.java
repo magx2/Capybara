@@ -332,6 +332,44 @@ class PythonGeneratorTest {
         assertThat(output).isEqualTo("42");
     }
 
+    @Test
+    void shouldExecuteOnlyEffectProgramMainAndUseProgramExitCodeContract() throws Exception {
+        var generated = new PythonGenerator().generate(compileProgram(List.of(
+                new RawModule("Main", "/foo", """
+                        from /capy/lang/Effect import { * }
+                        from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+                        from /capy/collection/List import { * }
+
+                        fun main(args: List[String]): Effect[/capy/lang/Program] =
+                            if args.size() > 0
+                            then pure(/capy/lang/Program.Success {})
+                            else pure(/capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                        """),
+                new RawModule("SecondaryMain", "/foo", """
+                        from /capy/collection/List import { * }
+
+                        fun main(args: List[String]): /capy/lang/Program =
+                            /capy/lang/Program.Success {}
+                        """)
+        )));
+        writeGenerated(generated);
+
+        var successRun = runPythonCommand("-m", "foo.Main", "ok");
+        assertThat(successRun.exitCode()).isEqualTo(0);
+        assertThat(successRun.stdout()).isBlank();
+        assertThat(successRun.stderr()).isBlank();
+
+        var failedRun = runPythonCommand("-m", "foo.Main");
+        assertThat(failedRun.exitCode()).isEqualTo(1);
+        assertThat(failedRun.stdout()).isBlank();
+        assertThat(failedRun.stderr()).isBlank();
+
+        var nonExecutableRun = runPythonCommand("-m", "foo.SecondaryMain");
+        assertThat(nonExecutableRun.exitCode()).isEqualTo(0);
+        assertThat(nonExecutableRun.stdout()).isBlank();
+        assertThat(nonExecutableRun.stderr()).isBlank();
+    }
+
     private static CompiledProgram compileProgram(String source) {
         return compileProgram(List.of(new RawModule("Main", "/foo", source)));
     }
@@ -369,5 +407,21 @@ class PythonGeneratorTest {
         var exit = process.waitFor();
         assertThat(exit).as(output).isEqualTo(0);
         return output;
+    }
+
+    private ProcessResult runPythonCommand(String... args) throws Exception {
+        var command = new java.util.ArrayList<String>();
+        command.add("python3");
+        command.addAll(List.of(args));
+        var process = new ProcessBuilder(command)
+                .directory(tempDir.toFile())
+                .start();
+        var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var exit = process.waitFor();
+        return new ProcessResult(exit, stdout, stderr);
+    }
+
+    private record ProcessResult(int exitCode, String stdout, String stderr) {
     }
 }

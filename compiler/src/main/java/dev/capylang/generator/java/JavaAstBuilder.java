@@ -461,7 +461,7 @@ public class JavaAstBuilder {
                 emittedFunctionName(function),
                 function.name(),
                 isPrivateFunction(function),
-                function.programMain(),
+                isExecutableProgramMain(function),
                 function.tailRecursive(),
                 selfCallNames(function, qualifiedJavaClassNames),
                 methodTypeParameters,
@@ -474,6 +474,46 @@ public class JavaAstBuilder {
                 expression,
                 function.comments()
         );
+    }
+
+    private boolean isExecutableProgramMain(CompiledFunction function) {
+        if (!function.programMain()) {
+            return false;
+        }
+        if (function.parameters().size() != 1
+            || !(function.parameters().getFirst().type() instanceof CollectionLinkedType.CompiledList listType)
+            || listType.elementType() != PrimitiveLinkedType.STRING) {
+            return false;
+        }
+        if (!(function.returnType() instanceof GenericDataType returnType)) {
+            return false;
+        }
+        return isCanonicalEffectType(returnType)
+               && typeParameters(returnType).size() == 1
+               && isCanonicalProgramDescriptor(typeParameters(returnType).getFirst());
+    }
+
+    private boolean isCanonicalEffectType(GenericDataType type) {
+        return "Effect".equals(type.name())
+               || normalizeQualifiedTypeName(type.name()).equals("/capy/lang/Effect");
+    }
+
+    private boolean isCanonicalProgramDescriptor(String descriptor) {
+        var rawType = descriptor;
+        var genericStart = rawType.indexOf('[');
+        if (genericStart >= 0) {
+            rawType = rawType.substring(0, genericStart);
+        }
+        return "Program".equals(rawType)
+               || normalizeQualifiedTypeName(rawType).equals("/capy/lang/Program");
+    }
+
+    private List<String> typeParameters(GenericDataType type) {
+        return switch (type) {
+            case CompiledDataType dataType -> dataType.typeParameters();
+            case CompiledDataParentType parentType -> parentType.typeParameters();
+            case CompiledPrimitiveBackedType ignored -> List.of();
+        };
     }
 
     private boolean isPrivateFunction(CompiledFunction function) {

@@ -330,9 +330,8 @@ and returned from `main`.
 from /capy/lang/Effect import { * }
 from /capy/collection/List import { * }
 
-fun main(args: List[String]): /capy/lang/Effect[/capy/lang/Program] =
-    let count <- pure(args.size())
-    /capy/lang/Program.Success { results: ["args:" + count] }
+fun main(args: List[String]): Effect[/capy/lang/Program] =
+    pure(/capy/lang/Program.Success {})
 ```
 
 Use `Result[T]` for value-level errors and `Effect[T]` for delayed side effects.

@@ -1,5 +1,6 @@
 package dev.capylang.test;
 
+import capy.lang.Effect;
 import capy.lang.Program;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -7,7 +8,8 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Modifier;
-import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,8 +22,9 @@ class MainProgramTest {
 
         assertThat(Modifier.isPublic(mainMethod.getModifiers())).isTrue();
         assertThat(Modifier.isStatic(mainMethod.getModifiers())).isTrue();
+        assertThat(Modifier.isFinal(mainMethod.getModifiers())).isTrue();
         assertThat(mainMethod.getReturnType()).isEqualTo(void.class);
-        assertThat(mainMethod.isVarArgs()).isFalse();
+        assertThat(mainMethod.isVarArgs()).isTrue();
     }
 
     @Test
@@ -30,16 +33,25 @@ class MainProgramTest {
 
         assertThat(Modifier.isPublic(mainMethod.getModifiers())).isTrue();
         assertThat(Modifier.isStatic(mainMethod.getModifiers())).isTrue();
-        assertThat(mainMethod.getReturnType()).isEqualTo(Program.class);
+        assertThat(mainMethod.getReturnType()).isEqualTo(Effect.class);
 
-        var program = (Program) mainMethod.invoke(null, List.of("ok"));
+        var program = ((Effect<?>) mainMethod.invoke(null, List.of("ok"))).unsafeRun();
 
         assertThat(program).isInstanceOf(Program.Success.class);
-        assertThat(((Program.Success) program).results()).containsExactly("ok");
     }
 
     @Test
-    void generatedMainPrintsSuccessResults() throws Exception {
+    void generatedMainKeepsFailedProgramExitCode() throws Exception {
+        var mainMethod = MainProgram.class.getMethod("main", List.class);
+
+        var program = ((Effect<?>) mainMethod.invoke(null, List.of())).unsafeRun();
+
+        assertThat(program).isInstanceOf(Program.Failed.class);
+        assertThat(((Program.Failed) program).exit_code()).isEqualTo(1);
+    }
+
+    @Test
+    void generatedMainDoesNotPrintSuccessProgram() throws Exception {
         var originalOut = System.out;
         var out = new ByteArrayOutputStream();
         try {
@@ -49,9 +61,24 @@ class MainProgramTest {
             System.setOut(originalOut);
         }
 
-        var lines = Arrays.stream(out.toString().split(System.lineSeparator()))
-                .filter(line -> !line.isBlank())
-                .toList();
-        assertThat(lines).containsExactly("ok");
+        assertThat(out.toString()).isBlank();
+    }
+
+    @Test
+    void generatedMainExitsWithFailedProgramCode() throws Exception {
+        var process = new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-cp",
+                System.getProperty("java.class.path"),
+                MainProgram.class.getName()
+        ).start();
+
+        var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var exit = process.waitFor();
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(stdout).isBlank();
+        assertThat(stderr).isBlank();
     }
 }

@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ObjectOrientedCompilationErrorTest {
     @Test
@@ -236,7 +235,7 @@ class ObjectOrientedCompilationErrorTest {
     }
 
     @Test
-    void shouldRejectEntrypointClassThatRequiresConstructor() {
+    void shouldAllowMainMethodInClassThatRequiresConstructor() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(
                         "Main",
@@ -252,13 +251,11 @@ class ObjectOrientedCompilationErrorTest {
 
         assertThat(result).isInstanceOf(Result.Success.class);
         var program = ((Result.Success<CompiledProgram>) result).value();
-        assertThatThrownBy(() -> new JavaGenerator().generate(program))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Entrypoint class `Main` cannot declare constructor state or init blocks");
+        assertThat(new JavaGenerator().generate(program).modules()).isNotEmpty();
     }
 
     @Test
-    void shouldRejectEntrypointMethodThatUsesInstanceState() {
+    void shouldAllowMainMethodThatUsesInstanceState() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(
                         "Main",
@@ -276,9 +273,7 @@ class ObjectOrientedCompilationErrorTest {
 
         assertThat(result).isInstanceOf(Result.Success.class);
         var program = ((Result.Success<CompiledProgram>) result).value();
-        assertThatThrownBy(() -> new JavaGenerator().generate(program))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Entrypoint method `Main.main` cannot use instance state");
+        assertThat(new JavaGenerator().generate(program).modules()).isNotEmpty();
     }
 
 }

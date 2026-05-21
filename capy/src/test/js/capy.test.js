@@ -125,7 +125,8 @@ class Main {
 
     const node = runNode([join(generatedDir, 'foo', 'Main.js'), 'one', 'two']);
     assert.equal(node.status, 0, node.stderr);
-    assert.equal(node.stdout.trim(), '2');
+    assert.equal(node.stdout.trim(), '');
+    assert.equal(node.stderr.trim(), '');
 });
 
 test('generated JS output is pruned by manifest on reuse', async () => {

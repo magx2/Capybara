@@ -8,7 +8,6 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Modifier;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,8 +20,9 @@ class EffectMainProgramTest {
 
         assertThat(Modifier.isPublic(mainMethod.getModifiers())).isTrue();
         assertThat(Modifier.isStatic(mainMethod.getModifiers())).isTrue();
+        assertThat(Modifier.isFinal(mainMethod.getModifiers())).isTrue();
         assertThat(mainMethod.getReturnType()).isEqualTo(void.class);
-        assertThat(mainMethod.isVarArgs()).isFalse();
+        assertThat(mainMethod.isVarArgs()).isTrue();
     }
 
     @Test
@@ -36,11 +36,10 @@ class EffectMainProgramTest {
         var program = ((Effect<?>) mainMethod.invoke(null, List.of("one", "two"))).unsafeRun();
 
         assertThat(program).isInstanceOf(Program.Success.class);
-        assertThat(((Program.Success) program).results()).containsExactly("effect-main:2");
     }
 
     @Test
-    void generatedEffectMainRunsEffectAndPrintsSuccessResults() throws Exception {
+    void generatedEffectMainDoesNotPrintSuccessProgram() throws Exception {
         var originalOut = System.out;
         var out = new ByteArrayOutputStream();
         try {
@@ -50,9 +49,6 @@ class EffectMainProgramTest {
             System.setOut(originalOut);
         }
 
-        var lines = Arrays.stream(out.toString().split(System.lineSeparator()))
-                .filter(line -> !line.isBlank())
-                .toList();
-        assertThat(lines).containsExactly("effect-main:2");
+        assertThat(out.toString()).isBlank();
     }
 }

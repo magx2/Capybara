@@ -5,12 +5,23 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ResourceLock("java.lang.System.out")
 class ObjectOrientedRuntimeTest {
+    @Test
+    void mainMethodIsOrdinaryInstanceMethodOnly() throws Exception {
+        var main = new Main();
+
+        assertThat(main.main(List.of("one", "two"))).isEqualTo(2);
+        assertThatThrownBy(() -> Main.class.getMethod("main", String[].class))
+                .isInstanceOf(NoSuchMethodException.class);
+    }
+
     @Test
     void classMethodsUseConstructorStateAndInheritedBehavior() {
         var person = new Person("Capy");
