@@ -1,173 +1,599 @@
 # Capybara
 
+Capybara is an experimental multi-backend language and compiler. The repository
+currently contains two source languages:
+
+- Capybara Functional (`.cfun`): expression-oriented, immutable by default, and
+  built around algebraic data types, pattern matching, higher-order functions,
+  explicit effects, and backend-independent code generation.
+- Capybara Object-Oriented (`.coo`): class/trait/interface syntax for cohesive
+  object models, with a shared expression core and interoperability with
+  `.cfun` modules.
+
+The compiler can generate Java, JavaScript, and Python. JavaScript output is
+CommonJS-compatible and includes the Capybara runtime helper in the generated
+tree.
+
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `compiler/` | Parsers, linker, validators, IR, and Java/JavaScript/Python generators. |
+| `capy/` | CLI entrypoint and end-to-end tests for `.cfun` and `.coo`. |
+| `lib/java-lib/` | Java runtime helpers used by generated Java. |
+| `lib/capybara-lib/` | Standard library written in Capybara plus generated tests. |
+| `Intellij/` | IntelliJ syntax bundle and editor docs. |
+| `adr/` | Architecture decision records for language and compiler decisions. |
+
+Generated files under `build/generated/...` are build outputs. Change source
+`.cfun`, `.coo`, `.java`, grammar, or library files instead.
+
 ## Development
 
-Enable the repository Git hooks after cloning:
+The repository uses Java 21 through the Gradle toolchain.
+
+Enable repository Git hooks after cloning:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-The hooks validate branch names and commit subjects before commits and pushes. Branch names must be the repository default branch, `{feature|bug|chore}/#{issue-number}{description}`, or `release/{major}.{minor}.x`. Commit subjects must start with a conventional type, optionally followed by an issue number, for example `feat: add parser support` or `feat(#111): add parser support`.
+Common commands from the repository root:
 
-## Language
-
-### Functional part
-
-Extension: `.cfun`
-
-#### Example
-
-```cfun
-fun main(params: List[String]): ProgramResult =
-    let name = params | head | default("world")
-    yield Success { result = Some { value = "Hello, " + name + "!" }}
-
-// local aliases with let
-fun greeting(firstName: String, lastName: String): String =
-    let fullName = firstName + " " + lastName
-    yield "Hello, " + fullName
-
-fun score_label(score: int): String =
-    let normalized = score / 10
-    if normalized > 8 then "great"
-    else "ok"
-
-fun rectangle_area(width: float, height: float): float =
-    let area = width * height
-    yield area
- 
-union ProgramResult = Success { result: Option[String] } | Failure { errorCode: int }
- 
-fun test_if(x: int): String =
-    if x > 0 then "positive"
-    else if x < 0 then "negative"
-    else "zero"
-    
-fun fibbonacci(n: int): int =
-    if n <= 1 then n
-    else fibonacci(n - 1) + fibonacci(n - 2)
-    
-fun test_pipe(n: int): String = n | fibbonacci | test_if
-
-fun test_val(x: int): String {
-    val y = x * 2
-    if y > 10 then "big" else "small"
-}
-
-fun test_list(list: List[int]): List[int] =
-    list 
-        // filter
-        |- x => x > 0
-        // map
-        | x => x * 2
-
-fun test_list_reduce(list: List[int]): List[int] =
-    list 
-        // filter
-        |- x => x > 0
-        // map
-        | x => x * 2
-        // reduce right (default)
-        |> 0 | a,b => a + b
-        // reduce left 
-        // |l> 0 | a,b => a + b
-
-fun test_new_static_list(): List[int] = [1, 2, 3]
-
-fun build_list(n: int): List[int] =
-    if n <= 0 then None
-    else Cons { "head": n, "tail": build_list(n - 1) }
-
-// check: `fun add on List[T]`
-fun add_to_list(n: int, list: List[int]): List[int] =
-    list + n
-    // or `list add n`
-    // or `add(list, n)` 
-    // or `+ (list, n)`
-    // or `list.add(n)`
-    
-fun test_new_static_set(): Set[int] = {1, 2, 3}
-
-fun test_new_static_dictonary(): Dict[int] =
-    {
-        "one": 1,
-        "two": 2,
-        "three": 3
-    }
-
-// algebraic type
-union Shape = Circle | Rectangle
-data Circle { radius: float }
-data Rectangle { width: float, height: float }
-
-fun area(shape: Shape): float =
-    match shape with
-    | Circle { radius } => 3.14 * radius * radius
-    | Rectangle { width, height } => width * height
-
-fun circle(radius: float): Circle = Circle { "radius": radius }
-fun rectangle(width: float, height: float): Rectangle = Rectangle { "width": width, "height": height }
-
-union Option[T] = Some(T) | None
-data Some[T] { value: T }
-single None
-
-fun positive_or_none(x: int): Option[int] =
-    if x > 0 then Some { "value": x }
-    else None
-
-// type with common value
-union Person { name: String, age: int } = Student | Teacher
-data Student { grade: int }
-data Teacher { subject: String }
-fun ppl_in_school(persons: Person): List[String] = persons | p => p.name + " is age of " + p.age
-
-// type extension
-data Point { x: float, y: float }
-data Point3D =  { z: float, ...Point }
-
-fun new_point3d(x: float, y: float, z: float): Point3D = Point3D { "x": x, "y": y, "z": z }
-fun new_point3d(p: Point, z: float): Point3D = Point3D { ...p, "z": z }
-fun length2d(p: Point): float = sqrt(p.x * p.x + p.y * p.y)
-/// whenever Point is required I can put a Point3D and it will work because of the extension
-fun test_substitution(p3d: Point3D): float = length2d(p3d)
-// TODO: think about diamond problem and multiple extension (inheritance)
-
-// higher order functions
-fun apply_twice(f: (int) => int, x: int): int = x | f | f
-
-fun compose(f: (int) => int, g: (int) => int): (int) => int = x => x | f | g
-
-union BuildIn = Primitive | Collection | Tuple
-union Primitive = Number | String | bool
-union Number = int | long | float | double
-union Collection[T] = List[T] | Set[T] | Dict[T]
-union List[T] = Cons[T] | None
-data Cons[T] { head: T, tail: List[T] }
-
-// method on types
-fun add on List[T](list: List[T], element: T): List[T] =
-    match list with
-    | None => Cons { "head": element, "tail": None }
-    | Cons { head, tail } => Cons { "head": head, "tail": add(tail, element) }
-fun `+` on List[T](list: List[T], element: T): List[T] = add(list, element)
-
-fun add on List[T](list1: List[T], list2: List[T]): List[T] =
-    match list1 with
-    | None => list2
-    | Cons { head, tail } => Cons { "head": head, "tail": add(tail, list2) }
-// there is an operation overload so `+` have 2 different implementations based on the type of the second argument
-fun `+` on List[T](list1: List[T], list2: List[T]): List[T] = add(list1, list2)
-
-fun pop on List[T](list: List[T]): Option[Tuple[T, List[T]]] =
-    match list with
-    | None => None
-    | Cons { head, tail } =>  Option { value: (head, tail) }
+```bash
+./gradlew clean test
+./gradlew :compiler:test
+./gradlew :capy:e2e-cfun
+./gradlew :capy:e2e-coo
+./gradlew :capy:e2eTests
+./gradlew :capy:jsTests
+./gradlew :capy:e2e-cfun-js
+./gradlew :capy:e2e-coo-js
+./gradlew :lib:capybara-lib:compileCapybara
+./gradlew :lib:capybara-lib:testCapybara
 ```
 
-### Object-oriented part
+If Gradle has sandbox or cache permission issues, use a temporary Gradle home:
 
-Extension: `.coo`
+```bash
+env GRADLE_USER_HOME=/tmp/gradle-home ./gradlew clean check
+```
 
-Status: frontend scaffold only in this patch. `.coo` files are discovered, parsed, and highlighted, but the compiler still rejects them with an explicit unsupported-pipeline diagnostic until OO semantic analysis and backend lowering land.
+## CLI
+
+The CLI main class is `dev.capylang.Capy`. Its core commands are:
+
+```bash
+capy compile -i <source-dir> -o <linked-output-dir>
+capy compile-generate <java|python|javascript|js> -i <source-dir> -o <generated-output-dir>
+capy generate <java|python|javascript|js> [-i <linked-input-dir>] -o <generated-output-dir>
+capy package (-ci <linked-input-dir> | -i <source-dir>) -m <capy.yml>
+```
+
+Useful options:
+
+- `-l|--libs <dir1,dir2,...>` adds linked library modules for `compile` and
+  `compile-generate`.
+- `--compile-tests` compiles Capybara test producers into the test runtime.
+- `--linked-output <dir>` writes linked JSON during `compile-generate`; without
+  it, generation happens without linked intermediates.
+- `--test-input <dir> --test-output <dir>` compiles test sources against the
+  freshly compiled main program in one invocation. These options must be
+  provided together.
+- `--skip-java-lib` omits bundled Java runtime sources when the caller already
+  has them on the compile classpath.
+- `--log <DEBUG|INFO|WARN|ERROR>` controls CLI logging.
+
+Generated output directories are reusable. The CLI records generated files in
+`.capy-output-manifest` and prunes stale generated files automatically.
+
+## Gradle Plugin
+
+The Gradle plugin supports Capybara sources in conventional source sets:
+
+- `src/main/capybara` for main `.cfun` and `.coo` sources.
+- `src/test/capybara` for Capybara test sources.
+
+Plugin tasks include:
+
+- `compileCapybara`: compiles `src/main/capybara` and generates Java sources.
+- `linkCapybaraLinked`: compiles main sources to linked JSON without generating
+  Java.
+- `compileTestCapybara`: compiles `src/test/capybara` against the linked main
+  program.
+- `testCapybara`: runs Capybara tests through generated Java classes.
+
+The plugin wires generated Java into the normal `main` and `test` Java source
+sets and integrates Capybara tests with `test`/`check` when test sources exist.
+
+## Source Files, Modules, And Imports
+
+Only `.cfun` and `.coo` files are Capybara sources; source discovery ignores
+other files.
+
+Source file names become module names. Subdirectories become module paths.
+
+- `src/User.cfun` defines functional module `User`.
+- `src/domain/User.coo` defines object-oriented module `domain/User`.
+
+Both source languages support import lines before declarations:
+
+```cfun
+from /capy/collection/List import { * }
+from Pck2 import { * } except { add }
+from /dev/example/Math import { clamp, average }
+```
+
+Unqualified imports use sibling modules or modules on the library path. A
+leading `/` names a fully qualified module path.
+
+Top-level `.cfun` declarations are exported by default. Use `private` for
+module-private declarations and `local` for package/subpackage-visible
+declarations. Leading underscores are only part of the identifier name; they are
+not the visibility mechanism.
+
+## Backend Support
+
+| Feature | Java | JavaScript | Python |
+| --- | --- | --- | --- |
+| `.cfun` parse, link, validate, generate | Yes | Yes | Yes |
+| `.coo` parse, validate, generate | Yes | Yes | Yes |
+| `.cfun` standard library generation | Yes | Yes | Yes |
+| `.coo` classes, fields, constructors, methods | Yes | Yes | Yes |
+| `.coo` interfaces and behavior-only traits | Yes | Yes | Yes |
+| `.coo` FP interop and `type()` metadata | Yes | Yes | Yes |
+
+Current `.coo` limits:
+
+- Trait fields and trait `init` blocks are rejected.
+- Primitive-backed type construction from `.coo` is allowed only when the type
+  has no custom constructor. Constructor bypass syntax is rejected from `.coo`,
+  and custom-constructor types should be created through exported `.cfun`
+  factories.
+- Java entrypoint classes cannot declare constructor state or `init` blocks.
+  Java, JavaScript, and Python entrypoint methods must not use instance state or
+  parent-qualified calls.
+- Some visibility and modifier checks are stricter in Java than in the
+  JavaScript and Python backends.
+
+## Capybara Functional (`.cfun`)
+
+`.cfun` is expression-oriented. Functions return expressions, `let` introduces
+immutable local names, and side effects are represented explicitly with library
+types such as `Effect` and `Program`.
+
+### Basic Functions
+
+```cfun
+fun greet(name: String): String = "Hello, " + name
+
+fun classify(x: int): String =
+    if x > 0 then "positive" else "non-positive"
+
+fun add_then_classify(left: int, right: int): String =
+    let total = left + right
+    classify(total)
+```
+
+Function types use `A => B` for one argument and `(A, B) => C` for multiple
+arguments:
+
+```cfun
+fun apply_twice(f: int => int, value: int): int =
+    f(f(value))
+
+fun combine(f: (int, int) => int, left: int, right: int): int =
+    f(left, right)
+```
+
+Use `:name` to pass a named function as a value:
+
+```cfun
+fun is_positive(value: int): bool = value > 0
+fun any_positive(values: List[int]): bool = values.any(:is_positive)
+```
+
+### Local Definitions
+
+Top-level functions may contain local functions, local types, local data,
+singletons, and constants before a `---` separator:
+
+```cfun
+fun adjusted(value: int): int =
+    fun double(x: int): int = x * 2
+    const OFFSET = 1
+    ---
+    double(value) + OFFSET
+```
+
+Use this form for local declarations. Braces are expression grouping, not
+imperative statement blocks.
+
+### Data, Unions, Enums, And Singletons
+
+Capybara models domain values with product types (`data`) and sum types
+(`union`):
+
+```cfun
+union Pet = Dog | Cat
+data Dog { name: String }
+data Cat { age: int }
+
+fun pet_text(pet: Pet): String =
+    match pet with
+    case Dog { name } -> "dog:" + name
+    case Cat { age } -> "cat:" + age
+```
+
+Other declaration forms:
+
+```cfun
+enum Status { READY, DONE }
+
+single Empty
+
+data User {
+    name: String,
+    age: int,
+}
+```
+
+Value construction uses braces. Singletons are also constructed as values:
+
+```cfun
+fun make_dog(name: String): Pet = Dog { name: name }
+fun empty_value(): Empty = Empty {}
+```
+
+### Constructors And Invariants
+
+`with constructor` lets a type validate or normalize input. Inside a constructor,
+`* { ... }` creates the raw value.
+
+```cfun
+from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
+
+data User { age: int } with constructor {
+    if age <= 0 then
+        Error { "Age has to be greater than 0. Was " + age + "." }
+    else
+        Success { * { age: age } }
+}
+
+fun validate_age(age: int): String =
+    match User { age: age } with
+    case Success { value } -> "ok:" + value.age
+    case Error { message } -> "err:" + message
+```
+
+`DataName! { ... }` bypasses a `Result`-returning constructor. It is allowed
+only inside the module that defines the data type and should be reserved for
+values already known to satisfy the invariant.
+
+```cfun
+fun default_user(): User = User! { age: 1 }
+```
+
+Primitive-backed types wrap primitive values while preserving a domain name:
+
+```cfun
+from /capy/lang/Result import { * }
+
+type user_id -> int with constructor {
+    if value > 0
+    then Success { value }
+    else Error { message: "bad user id" }
+}
+
+fun new_user_id(value: int): Result[user_id] = user_id { value }
+fun unwrap_user_id(id: user_id): int = id.value
+```
+
+### Collections, Tuples, Indexing, And Slicing
+
+```cfun
+fun sample_list(): List[int] = [1, 2, 3]
+fun sample_set(): Set[int] = {1, 2, 3}
+fun one_value_set(): Set[int] = {1,}
+fun sample_dict(): Dict[int] = {"one": 1, "two": 2}
+fun empty_dict(): Dict[int] = {:}
+fun pair(): Tuple[String, int] = ("age", 42)
+```
+
+Notes:
+
+- `{1}` is expression grouping. Use `{1,}` for a one-value set.
+- `{:}` is an empty dictionary.
+- `values[index]` returns an `Option` for collection access.
+- List slices use `values[from:to]`, `values[from:]`, and `values[:to]`.
+- String slices use `text[from, to]`.
+
+### Pattern Matching
+
+`match` supports constructor, literal, type, wildcard, and guarded cases:
+
+```cfun
+fun describe(value: any): String =
+    match value with
+    case int number when number > 0 -> "positive int"
+    case String text -> "string:" + text
+    case _ -> "other"
+```
+
+Runtime type patterns are intentionally shallow in v1. Match concrete nominal
+types or bare collection/data shapes, but do not rely on erased parameterized
+runtime checks such as `List[String]`.
+
+### Pipelines And Higher-Order Operations
+
+The pipe family supports common collection transformations:
+
+```cfun
+fun doubled(values: List[int]): Seq[int] =
+    values | value => value * 2
+
+fun positives(values: List[int]): Seq[int] =
+    values |- value => value > 0
+
+fun duplicate(values: List[int]): Seq[int] =
+    values |* value => [value, value]
+
+fun sum(values: List[int]): int =
+    values |> 0, (acc, value) => acc + value
+
+fun dict_sum(values: Dict[int]): int =
+    values |> 0, (acc, _, value) => acc + value
+```
+
+Named methods such as `.map(...)`, `.filter(...)`, `.flat_map(...)`,
+`.reduce(...)`, `.any(...)`, and `.all(...)` are available through the standard
+library.
+
+### Methods And Operators
+
+Methods are functions whose first receiver is implicit as `this`:
+
+```cfun
+data Total { value: int }
+
+fun Total.plus(amount: int): Total =
+    Total { value: this.value + amount }
+
+fun Total.`+`(amount: int): Total =
+    this.plus(amount)
+
+fun add_two(total: Total): Total =
+    total + 2
+```
+
+Backticks declare symbolic methods. Overload resolution uses argument and
+receiver types.
+
+### Recursion
+
+Recursive functions are allowed. `fun rec` is a compiler-checked direct
+tail-recursion contract:
+
+```cfun
+fun rec sum_to(n: int, acc: int): int =
+    if n <= 0 then acc else sum_to(n - 1, acc + n)
+```
+
+If a `fun rec` self-call is not in tail position, compilation fails. Unmarked
+recursive functions remain valid, but `fun rec` documents and verifies the
+tail-recursive shape.
+
+### Derive And Reflection
+
+Derivers are deterministic compile-time templates that generate ordinary methods
+from type metadata. Generated methods go through normal linking, validation, and
+backend generation.
+
+```cfun
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
+deriver Show {
+    fun show(): String =
+        let info: DataValueInfo = reflection(receiver)
+        info.name
+}
+
+data Account { name: String } derive Show
+
+fun show_account(): String =
+    Account { name: "main" }.show()
+```
+
+The generated receiver is named `receiver` inside a deriver method. Reflection
+v1 is intentionally small: it supports `.cfun` data value metadata, derive use
+cases, shallow runtime type patterns, and static `.coo` type metadata.
+
+### Effects And Programs
+
+Pure functions are the default. Effects are explicit values that can be composed
+and returned from `main`.
+
+```cfun
+from /capy/lang/Effect import { * }
+from /capy/collection/List import { * }
+
+fun main(args: List[String]): /capy/lang/Effect[/capy/lang/Program] =
+    let count <- pure(args.size())
+    /capy/lang/Program.Success { results: ["args:" + count] }
+```
+
+Use `Result[T]` for value-level errors and `Effect[T]` for delayed side effects.
+There is no implicit conversion between thrown OO exceptions and functional
+`Result.Error`.
+
+## Capybara Object-Oriented (`.coo`)
+
+`.coo` is for object models with state, behavior, inheritance, and explicit
+statement blocks. It shares imports, many expression forms, lambdas, collection
+syntax, matching, and type references with `.cfun`, but declarations use
+`class`, `trait`, `interface`, `field`, and `def`.
+
+### Classes, Interfaces, And Traits
+
+```coo
+from /capy/io/Stdout import { * }
+
+open class GreeterBase {
+    field prefix: String = "hello"
+
+    open def describe(name: String): String = prefix + " " + name
+}
+
+interface Printable {
+    def print(): String
+}
+
+trait BracketNaming {
+    def bracket(name: String): String = "[" + name + "]"
+}
+
+class Person(name: String): GreeterBase, Printable, BracketNaming {
+    field name: String = name
+
+    def greet(): String = this.describe(this.name)
+
+    override def print(): String {
+        let label: String = GreeterBase.describe(this.name)
+        return label + "!"
+    }
+
+    def emit_greeting(): void = println(this.greet())
+}
+```
+
+Class methods may use expression bodies (`= expression`) or statement blocks.
+Interfaces declare method contracts. Traits provide behavior-only reusable
+methods in the current backends.
+
+### OO Statements
+
+Statement blocks support immutable locals, mutable locals, assignment, returns,
+conditionals, loops, exceptions, local methods, and nested blocks:
+
+```coo
+class Counter(seed: int) {
+    field seed: int = seed
+
+    def first_positive(values: List[int]): int {
+        for value in values {
+            if value > 0 {
+                return value
+            }
+        }
+        return 0
+    }
+
+    def mutable_label(): String {
+        def label = "start"
+        label = "done"
+        return label
+    }
+
+    def recover(flag: bool): String {
+        try {
+            if flag {
+                throw "boom"
+            }
+            return "ok"
+        } catch error {
+            return error.getMessage()
+        }
+    }
+}
+```
+
+Use `let` for immutable local values. Use mutable `def` locals only when the OO
+workflow needs assignment. Prefer behavior on cohesive objects over utility-style
+procedural blocks.
+
+### Arrays And Entrypoints
+
+`.coo` supports array types and literals:
+
+```coo
+class Names {
+    def second(values: String[]): String = values[1]
+    def defaults(): String[] = String[]{"zero", "one"}
+    def slots(size: int): int[] = int[size]
+}
+```
+
+An OO `main(args: List[String])` entrypoint can be generated when the method is
+static-compatible. Java also requires the entrypoint class to avoid constructor
+state and `init` blocks.
+
+### Functional Interop
+
+`.coo` can import `.cfun` data and call exported functional module functions.
+Functional `snake_case` exports are called by their generated lower-camel names
+from OO source and generated backends.
+
+```coo
+from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, user_id }
+
+class PetInteractor {
+    def create_fp_data(name: String): InteropPet =
+        InteropDog { name: name }
+
+    def invoke_fp_function(name: String): String =
+        ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))
+
+    def match_fp_type(pet_name: String): String {
+        let pet: InteropPet = InteropDog { name: pet_name }
+        return match pet with
+        case InteropDog { name } -> ("dog:" + name)
+        case InteropCat { age } -> ("cat:" + age)
+    }
+
+    def echo_user_id(id: user_id): user_id = id
+}
+```
+
+Primitive-backed `.cfun` types without custom constructors can be constructed
+directly from `.coo`. For types with custom constructors, expose and call a
+functional factory.
+
+### OO Reflection
+
+Classes, interfaces, and traits expose static `type()` metadata in generated
+code. The metadata includes names, fields, methods, parent types, and modifier
+information used by the reflection APIs and tests.
+
+## Language Guardrails
+
+Keep these boundaries in mind when changing code or examples:
+
+- `.cfun` is expression-oriented. Avoid legacy draft keywords and old
+  pipe-prefixed match branch examples.
+- Match branches use `case Pattern -> expression`.
+- `.cfun` methods are declared on the receiver type with dotted method syntax.
+- `fun rec` is a tail-recursion assertion, not a general recursion keyword.
+- `* { ... }` is constructor-local raw construction.
+- `DataName! { ... }` is an unsafe same-module constructor bypass for
+  `Result`-returning constructors.
+- `.coo` methods use `def`; `.cfun` functions use `fun`.
+- Trait state and trait initialization are not supported by the current OO
+  backends.
+
+## Architecture Decisions
+
+Important language decisions are recorded in:
+
+- `adr/ADR-2026-04-14-capybara-oo-v1.md`
+- `adr/2026-04-12-unsafe-constructor-bypass.md`
+- `adr/ADR-2026-04-29-cfun-rec-tail-recursion.md`
+- `adr/ADR-2026-05-07-cfun-derive-v1.md`
+- `adr/ADR-2026-05-08-reflection-v1.md`
+
+Some older ADR sections describe the first Java-only implementation slice.
+Where those sections conflict with the backend matrix above, the ADR
+implementation notes and current tests are the source of truth.
+
+When grammar, validation, diagnostics, or code generation changes, update this
+README, the relevant ADR, and focused tests in the same change.
