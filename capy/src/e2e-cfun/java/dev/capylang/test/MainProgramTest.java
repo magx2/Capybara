@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,7 +52,7 @@ class MainProgramTest {
     }
 
     @Test
-    void generatedMainDoesNotPrintSuccessProgram() throws Exception {
+    void generatedMainPrintsSuccessResults() throws Exception {
         var originalOut = System.out;
         var out = new ByteArrayOutputStream();
         try {
@@ -61,7 +62,10 @@ class MainProgramTest {
             System.setOut(originalOut);
         }
 
-        assertThat(out.toString()).isBlank();
+        var lines = Arrays.stream(out.toString().split(System.lineSeparator()))
+                .filter(line -> !line.isBlank())
+                .toList();
+        assertThat(lines).containsExactly("ok");
     }
 
     @Test
