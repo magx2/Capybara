@@ -353,13 +353,3 @@ jobs:
               --title "Capybara ${VERSION}" \
               --notes "Release ${VERSION}"
           fi
-
-      - name: Dispatch merge back
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run merge_back.yml \
-            --ref "${{ needs.release-metadata.outputs.default_branch }}" \
-            -f release_branch="${{ needs.release-metadata.outputs.release_branch }}"
