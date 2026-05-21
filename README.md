@@ -14,51 +14,6 @@ The compiler can generate Java, JavaScript, and Python. JavaScript output is
 CommonJS-compatible and includes the Capybara runtime helper in the generated
 tree.
 
-## Repository Layout
-
-| Path | Purpose |
-| --- | --- |
-| `compiler/` | Parsers, linker, validators, IR, and Java/JavaScript/Python generators. |
-| `capy/` | CLI entrypoint and end-to-end tests for `.cfun` and `.coo`. |
-| `lib/java-lib/` | Java runtime helpers used by generated Java. |
-| `lib/capybara-lib/` | Standard library written in Capybara plus generated tests. |
-| `Intellij/` | IntelliJ syntax bundle and editor docs. |
-| `adr/` | Architecture decision records for language and compiler decisions. |
-
-Generated files under `build/generated/...` are build outputs. Change source
-`.cfun`, `.coo`, `.java`, grammar, or library files instead.
-
-## Development
-
-The repository uses Java 21 through the Gradle toolchain.
-
-Enable repository Git hooks after cloning:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-Common commands from the repository root:
-
-```bash
-./gradlew clean test
-./gradlew :compiler:test
-./gradlew :capy:e2e-cfun
-./gradlew :capy:e2e-coo
-./gradlew :capy:e2eTests
-./gradlew :capy:jsTests
-./gradlew :capy:e2e-cfun-js
-./gradlew :capy:e2e-coo-js
-./gradlew :lib:capybara-lib:compileCapybara
-./gradlew :lib:capybara-lib:testCapybara
-```
-
-If Gradle has sandbox or cache permission issues, use a temporary Gradle home:
-
-```bash
-env GRADLE_USER_HOME=/tmp/gradle-home ./gradlew clean check
-```
-
 ## CLI
 
 The CLI main class is `dev.capylang.Capy`. Its core commands are:
@@ -87,25 +42,6 @@ Useful options:
 Generated output directories are reusable. The CLI records generated files in
 `.capy-output-manifest` and prunes stale generated files automatically.
 
-## Gradle Plugin
-
-The Gradle plugin supports Capybara sources in conventional source sets:
-
-- `src/main/capybara` for main `.cfun` and `.coo` sources.
-- `src/test/capybara` for Capybara test sources.
-
-Plugin tasks include:
-
-- `compileCapybara`: compiles `src/main/capybara` and generates Java sources.
-- `linkCapybaraLinked`: compiles main sources to linked JSON without generating
-  Java.
-- `compileTestCapybara`: compiles `src/test/capybara` against the linked main
-  program.
-- `testCapybara`: runs Capybara tests through generated Java classes.
-
-The plugin wires generated Java into the normal `main` and `test` Java source
-sets and integrates Capybara tests with `test`/`check` when test sources exist.
-
 ## Source Files, Modules, And Imports
 
 Only `.cfun` and `.coo` files are Capybara sources; source discovery ignores
@@ -131,30 +67,6 @@ Top-level `.cfun` declarations are exported by default. Use `private` for
 module-private declarations and `local` for package/subpackage-visible
 declarations. Leading underscores are only part of the identifier name; they are
 not the visibility mechanism.
-
-## Backend Support
-
-| Feature | Java | JavaScript | Python |
-| --- | --- | --- | --- |
-| `.cfun` parse, link, validate, generate | Yes | Yes | Yes |
-| `.coo` parse, validate, generate | Yes | Yes | Yes |
-| `.cfun` standard library generation | Yes | Yes | Yes |
-| `.coo` classes, fields, constructors, methods | Yes | Yes | Yes |
-| `.coo` interfaces and behavior-only traits | Yes | Yes | Yes |
-| `.coo` FP interop and `type()` metadata | Yes | Yes | Yes |
-
-Current `.coo` limits:
-
-- Trait fields and trait `init` blocks are rejected.
-- Primitive-backed type construction from `.coo` is allowed only when the type
-  has no custom constructor. Constructor bypass syntax is rejected from `.coo`,
-  and custom-constructor types should be created through exported `.cfun`
-  factories.
-- Java entrypoint classes cannot declare constructor state or `init` blocks.
-  Java, JavaScript, and Python entrypoint methods must not use instance state or
-  parent-qualified calls.
-- Some visibility and modifier checks are stricter in Java than in the
-  JavaScript and Python backends.
 
 ## Capybara Functional (`.cfun`)
 
@@ -580,20 +492,3 @@ Keep these boundaries in mind when changing code or examples:
 - `.coo` methods use `def`; `.cfun` functions use `fun`.
 - Trait state and trait initialization are not supported by the current OO
   backends.
-
-## Architecture Decisions
-
-Important language decisions are recorded in:
-
-- `adr/ADR-2026-04-14-capybara-oo-v1.md`
-- `adr/2026-04-12-unsafe-constructor-bypass.md`
-- `adr/ADR-2026-04-29-cfun-rec-tail-recursion.md`
-- `adr/ADR-2026-05-07-cfun-derive-v1.md`
-- `adr/ADR-2026-05-08-reflection-v1.md`
-
-Some older ADR sections describe the first Java-only implementation slice.
-Where those sections conflict with the backend matrix above, the ADR
-implementation notes and current tests are the source of truth.
-
-When grammar, validation, diagnostics, or code generation changes, update this
-README, the relevant ADR, and focused tests in the same change.
