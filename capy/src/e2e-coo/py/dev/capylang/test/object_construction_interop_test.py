@@ -50,3 +50,14 @@ class ObjectConstructionInteropPythonE2ETest(unittest.TestCase):
         result, output = self.capture(lambda: interop.sequenceTwo("A", "B").unsafe_run())
         self.assertEqual(result, "A:B")
         self.assertEqual(output, "constructed:A\nconstructed:B\n")
+
+    def test_qualified_import_object_construction(self):
+        person, output = self.capture(lambda: interop.makeQualifiedPerson("Qual").unsafe_run())
+        self.assertIsInstance(person, TrackedPerson)
+        self.assertEqual(person.label(), "Qual")
+        self.assertEqual(output, "constructed:Qual\n")
+
+        printable, output = self.capture(lambda: interop.makeQualifiedPrintable("Iface").unsafe_run())
+        self.assertIsInstance(printable, TrackedPerson)
+        self.assertEqual(printable.label(), "Iface")
+        self.assertEqual(output, "constructed:Iface\n")

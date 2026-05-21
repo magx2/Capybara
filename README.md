@@ -58,10 +58,13 @@ Both source languages support import lines before declarations:
 from /capy/collection/List import { * }
 from Pck2 import { * } except { add }
 from /dev/example/Math import { clamp, average }
+import /dev/example/Geometry
 ```
 
 Unqualified imports use sibling modules or modules on the library path. A
-leading `/` names a fully qualified module path.
+leading `/` names a fully qualified module path. `import ModuleName` imports a
+module for qualified access without bringing its exported symbols into the
+current scope, for example `Geometry.Point`.
 
 Top-level `.cfun` declarations are exported by default. Use `private` for
 module-private declarations and `local` for package/subpackage-visible
@@ -337,6 +340,33 @@ fun main(args: List[String]): Effect[/capy/lang/Program] =
 Use `Result[T]` for value-level errors and `Effect[T]` for delayed side effects.
 There is no implicit conversion between thrown OO exceptions and functional
 `Result.Error`.
+
+### Object Construction From CFun
+
+`.cfun` can construct imported `.coo` classes. Object construction is effectful:
+calling a class constructor returns `Effect[Class]`, so constructor side effects
+and `init` blocks run only when the effect is executed.
+
+```coo
+class Person(name: String) {
+    field name: String = name
+}
+```
+
+```cfun
+from /capy/lang/Effect import { * }
+import Person
+
+fun make_person(name: String): Effect[Person.Person] =
+    Person.Person(name)
+
+fun second_person(left: String, right: String): Effect[Person.Person] =
+    let ignored <- Person.Person(left)
+    Person.Person(right)
+```
+
+Use `from Person import { Person }` when you want the unqualified
+`Person(name)` constructor form instead.
 
 ## Capybara Object-Oriented (`.coo`)
 

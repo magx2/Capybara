@@ -564,12 +564,7 @@ public class CapybaraTypeCompiler {
                     primitiveBackedType.comments(),
                     primitiveBackedType.visibility()
             );
-            case CompiledObjectType objectType -> new CompiledObjectType(
-                    requestedName,
-                    objectType.backendClassName(),
-                    objectType.parents(),
-                    objectType.visibility()
-            );
+            case CompiledObjectType objectType -> objectType;
         };
     }
 

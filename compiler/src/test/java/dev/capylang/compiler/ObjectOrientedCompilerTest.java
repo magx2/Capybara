@@ -115,12 +115,26 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldFallbackToCallableConstWhenTypeLikeInvokeIsNotObjectConstruction() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule("CallableConstUse", "/foo/app", """
+                        const PARSER: String => String = input => input
+
+                        fun parse(input: String): String =
+                            PARSER(input)
+                        """)
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+    }
+
+    @Test
     void shouldRejectInvalidObjectConstructionTargetsAndArguments() {
         assertThat(errorMessages(compileInvalid("""
                 fun bad(): any =
                     Missing()
                 """))).anySatisfy(message -> assertThat(message)
-                .contains("Object type `Missing` is not imported or not found"));
+                .contains("Expression is not callable, was `ANY`"));
 
         assertThat(errorMessages(compileInvalid("""
                 from Constructibles import { Person }
