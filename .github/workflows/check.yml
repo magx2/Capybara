@@ -4,7 +4,31 @@ on:
   push:
     branches:
       - "**"
+    paths:
+      - ".github/workflows/**"
+      - "build-tool/**"
+      - "buildSrc/**"
+      - "capy/**"
+      - "compiler/**"
+      - "gradle/**"
+      - "lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
   pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "build-tool/**"
+      - "buildSrc/**"
+      - "capy/**"
+      - "compiler/**"
+      - "gradle/**"
+      - "lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
   workflow_dispatch:
 
 permissions:
