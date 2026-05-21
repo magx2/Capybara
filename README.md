@@ -111,7 +111,7 @@ fun any_positive(values: List[int]): bool = values.any(:is_positive)
 ### Local Definitions
 
 Top-level functions may contain local functions, local types, local data,
-singletons, and constants before a `---` separator:
+and constants before a `---` separator:
 
 ```cfun
 fun adjusted(value: int): int =
@@ -124,7 +124,7 @@ fun adjusted(value: int): int =
 Use this form for local declarations. Braces are expression grouping, not
 imperative statement blocks.
 
-### Data, Unions, Enums, And Singletons
+### Data, Unions, And Enums
 
 Capybara models domain values with product types (`data`) and sum types
 (`union`):
@@ -145,15 +145,14 @@ Other declaration forms:
 ```cfun
 enum Status { READY, DONE }
 
-single Empty
-
+data Empty {}
 data User {
     name: String,
     age: int,
 }
 ```
 
-Value construction uses braces. Singletons are also constructed as values:
+Value construction uses braces, including empty data values:
 
 ```cfun
 fun make_dog(name: String): Pet = Dog { name: name }

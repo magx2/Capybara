@@ -34,6 +34,7 @@ public final class JavaGenerator implements Generator {
         var staticExtensionMethodOwners = buildStaticExtensionMethodOwners(program);
         var enumValueOwnerOverrides = buildEnumValueOwnerOverrides(program);
         var primitiveBackedTypeInfo = primitiveBackedTypeInfo(program);
+        var singletonTypeInfo = singletonTypeInfo(program);
         var astBuilder = new JavaAstBuilder(functionNameOverrides, enumValueOwnerOverrides, program);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         JavaExpressionEvaluator.setStaticExtensionMethodOwners(staticExtensionMethodOwners);
@@ -42,7 +43,7 @@ public final class JavaGenerator implements Generator {
         for (var module : program.modules()) {
             modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides));
         }
-        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(primitiveBackedTypeInfo);
+        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(primitiveBackedTypeInfo, singletonTypeInfo);
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
@@ -172,6 +173,70 @@ public final class JavaGenerator implements Generator {
         return java.util.Map.copyOf(result);
     }
 
+    private java.util.Map<String, ObjectOrientedJavaGenerator.SingletonTypeInfo> singletonTypeInfo(CompiledProgram program) {
+        var result = new java.util.LinkedHashMap<String, ObjectOrientedJavaGenerator.SingletonTypeInfo>();
+        program.modules().forEach(module -> module.types().values().stream()
+                .filter(dev.capylang.compiler.CompiledDataType.class::isInstance)
+                .map(dev.capylang.compiler.CompiledDataType.class::cast)
+                .filter(dev.capylang.compiler.CompiledDataType::singleton)
+                .filter(type -> !type.enumValue())
+                .forEach(type -> putSingletonTypeAliases(
+                        result,
+                        new ObjectOrientedJavaGenerator.SingletonTypeInfo(
+                                type.name(),
+                                cfunTypeName(module, type.name())
+                        ),
+                        module
+                )));
+        putRuntimeSingletonTypeAliases(result);
+        putUniqueSimpleSingletonTypeAliases(result);
+        return java.util.Map.copyOf(result);
+    }
+
+    private static void putRuntimeSingletonTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.SingletonTypeInfo> result
+    ) {
+        putSingletonTypeAliases(result, new ObjectOrientedJavaGenerator.SingletonTypeInfo("None", "/capy/lang/Option.None"));
+        putSingletonTypeAliases(result, new ObjectOrientedJavaGenerator.SingletonTypeInfo("Success", "/capy/lang/Program.Success"));
+    }
+
+    private static void putSingletonTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.SingletonTypeInfo> result,
+            ObjectOrientedJavaGenerator.SingletonTypeInfo info,
+            CompiledModule module
+    ) {
+        putSingletonTypeAliases(result, info);
+        result.putIfAbsent(module.name() + "." + info.name(), info);
+    }
+
+    private static void putSingletonTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.SingletonTypeInfo> result,
+            ObjectOrientedJavaGenerator.SingletonTypeInfo info
+    ) {
+        if (info.name().contains("/") || info.name().contains(".")) {
+            result.putIfAbsent(info.name(), info);
+        }
+        result.putIfAbsent(info.cfunType(), info);
+        result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
+    }
+
+    private static void putUniqueSimpleSingletonTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.SingletonTypeInfo> result
+    ) {
+        var bySimpleName = result.values().stream()
+                .distinct()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        info -> simpleTypeName(info.name()),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        bySimpleName.forEach((simpleName, infos) -> {
+            if (infos.size() == 1) {
+                result.putIfAbsent(simpleName, infos.getFirst());
+            }
+        });
+    }
+
     private static java.util.stream.Stream<dev.capylang.compiler.CompiledPrimitiveBackedType> primitiveBackedTypes(
             dev.capylang.compiler.CompiledType type
     ) {
@@ -263,6 +328,12 @@ public final class JavaGenerator implements Generator {
 
     private static String withoutLeadingSlash(String value) {
         return value.startsWith("/") ? value.substring(1) : value;
+    }
+
+    private static String cfunTypeName(CompiledModule module, String typeName) {
+        var path = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+        var owner = path.isBlank() ? "/" + module.name() : "/" + path + "/" + module.name();
+        return owner + "." + typeName;
     }
 
     private static String simpleTypeName(String name) {

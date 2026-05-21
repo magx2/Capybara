@@ -23,14 +23,23 @@ public final class ObjectOrientedJavaGenerator {
             "null", "record", "sealed", "permits", "var", "yield"
     );
     private final Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes;
+    private final Map<String, SingletonTypeInfo> singletonTypes;
     private int syntheticCounter = 0;
 
     public ObjectOrientedJavaGenerator() {
-        this(Map.of());
+        this(Map.of(), Map.of());
     }
 
     public ObjectOrientedJavaGenerator(Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes) {
+        this(primitiveBackedTypes, Map.of());
+    }
+
+    public ObjectOrientedJavaGenerator(
+            Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes,
+            Map<String, SingletonTypeInfo> singletonTypes
+    ) {
         this.primitiveBackedTypes = Map.copyOf(primitiveBackedTypes);
+        this.singletonTypes = Map.copyOf(singletonTypes);
     }
 
     public List<GeneratedModule> generate(List<ObjectOrientedModule> modules) {
@@ -1344,6 +1353,13 @@ public final class ObjectOrientedJavaGenerator {
         if (primitiveBackedType.isPresent()) {
             return renderPrimitiveBackedDataCreation(module, type, body, parentNames, localMethodBindings, primitiveBackedType.orElseThrow());
         }
+        var singletonType = singletonType(module, type);
+        if (singletonType.isPresent()) {
+            if (!body.isBlank()) {
+                throw unsupported(module, "Singleton data type `" + singletonType.orElseThrow().name() + "` requires empty construction body");
+            }
+            return Optional.of(renderType(module, type, false) + ".INSTANCE");
+        }
         var arguments = splitTopLevel(body).stream()
                 .map(assignment -> renderDataCreationArgument(module, assignment, parentNames, localMethodBindings))
                 .collect(Collectors.joining(", "));
@@ -1833,6 +1849,53 @@ public final class ObjectOrientedJavaGenerator {
         return Optional.ofNullable(primitiveBackedTypes.get(simpleTypeName(normalized)));
     }
 
+    private Optional<SingletonTypeInfo> singletonType(ObjectOrientedModule module, String rawType) {
+        var normalized = rawType.trim();
+        if (normalized.endsWith("!")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        var direct = singletonTypes.get(normalized);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        if (module != null) {
+            var imported = importedSingletonType(module, normalized);
+            if (imported.isPresent()) {
+                return imported;
+            }
+        }
+        return Optional.ofNullable(singletonTypes.get(simpleTypeName(normalized)));
+    }
+
+    private Optional<SingletonTypeInfo> importedSingletonType(ObjectOrientedModule module, String typeName) {
+        var simpleName = simpleTypeName(typeName);
+        for (var importDeclaration : module.imports()) {
+            if (importDeclaration.excludedSymbols().contains(simpleName)) {
+                continue;
+            }
+            if (!importDeclaration.isStarImport() && !importDeclaration.symbols().contains(simpleName)) {
+                continue;
+            }
+            var qualifiedName = importedModuleName(module, importDeclaration.moduleName()) + "." + simpleName;
+            var direct = singletonTypes.get(qualifiedName);
+            if (direct != null) {
+                return Optional.of(direct);
+            }
+            if (importDeclaration.isStarImport()) {
+                var modulePrefix = importedModuleName(module, importDeclaration.moduleName()) + ".";
+                var imported = singletonTypes.values().stream()
+                        .distinct()
+                        .filter(type -> type.cfunType().startsWith(modulePrefix))
+                        .filter(type -> simpleTypeName(type.name()).equals(simpleName))
+                        .findFirst();
+                if (imported.isPresent()) {
+                    return imported;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     private Optional<PrimitiveBackedTypeInfo> importedPrimitiveBackedType(ObjectOrientedModule module, String typeName) {
         var simpleName = simpleTypeName(typeName);
         for (var importDeclaration : module.imports()) {
@@ -1975,5 +2038,8 @@ public final class ObjectOrientedJavaGenerator {
             PrimitiveLinkedType backingType,
             boolean directConstructionAllowed
     ) {
+    }
+
+    public record SingletonTypeInfo(String name, String cfunType) {
     }
 }

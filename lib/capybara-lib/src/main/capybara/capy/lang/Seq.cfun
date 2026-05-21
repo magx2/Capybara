@@ -5,8 +5,7 @@ from /capy/collection/Dict import { * }
 
 union Seq[T] = Cons[T] | End
 data Cons[T] { value: T, rest: () => Seq[T] }
-single End
-
+data End {}
 /// Returns an infinite sequence of natural numbers starting at `0`.
 ///
 /// To start at `1`, drop the first element.

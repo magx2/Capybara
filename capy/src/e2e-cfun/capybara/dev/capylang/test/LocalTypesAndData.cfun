@@ -45,7 +45,7 @@ fun local_generic_data_used_in_local_function_return_type(v: int): String =
 fun local_single_used_in_local_type_and_function(use_stop: bool): String =
     union Token = Value | Stop
     data Value { value: int }
-    single Stop
+    data Stop {}
     fun describe(token: Token): String =
         match token with
         case Value { value } -> "value:" + value

@@ -5680,7 +5680,7 @@ public class CapybaraCompiler {
 
     private Optional<String> firstEscapedPrivateLocalType(Type type) {
         return switch (type) {
-            case DataType dataType -> dataType.name().contains("__local_type_") || dataType.name().contains("__local_single_")
+            case DataType dataType -> dataType.name().contains("__local_type_")
                     ? Optional.of(dataType.name())
                     : Optional.empty();
             case CollectionType.ListType listType -> firstEscapedPrivateLocalType(listType.elementType());
@@ -5752,13 +5752,11 @@ public class CapybaraCompiler {
     }
 
     private String restorePrivateTypeNameForDisplay(String typeName) {
-        var restoredLocalSingles = replacePrivateLocalNamesInText(typeName, "__local_single_", false);
-        return replacePrivateLocalNamesInText(restoredLocalSingles, "__local_type_", true);
+        return replacePrivateLocalNamesInText(typeName, "__local_type_", false);
     }
 
     private String toUserPrivateTypeName(String typeName) {
-        var localSingle = toUserPrivateLocalName(typeName, "__local_single_", false);
-        return toUserPrivateLocalName(localSingle, "__local_type_", true);
+        return toUserPrivateLocalName(typeName, "__local_type_", false);
     }
 
     private String restorePrivateFunctionNameForDisplay(String functionName) {
@@ -5793,8 +5791,7 @@ public class CapybaraCompiler {
         }
         var restoredLocalFunctions = replacePrivateLocalNamesInText(message, "__local_fun_", false);
         var restoredLocalConsts = replacePrivateLocalNamesInText(restoredLocalFunctions, "__local_const_", true);
-        var restoredLocalSingles = replacePrivateLocalNamesInText(restoredLocalConsts, "__local_single_", false);
-        return replacePrivateLocalNamesInText(restoredLocalSingles, "__local_type_", true);
+        return replacePrivateLocalNamesInText(restoredLocalConsts, "__local_type_", false);
     }
 
     private String replacePrivateLocalNamesInText(String text, String marker, boolean withPrivatePrefix) {
@@ -6525,22 +6522,12 @@ public class CapybaraCompiler {
                 module.imports(),
                 normalizedFile
         );
-        var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
-                .stream()
-                .map(this::linkSingleDeclaration)
-                .collect(new ResultCollectionCollector<>());
-
         if (dataDeclarationsOrError instanceof Result.Error<?> error) {
             return new Result.Error<>(error.errors());
         }
         var dataDeclarations = ((Result.Success<List<CompiledDataType>>) dataDeclarationsOrError).value();
-        if (singlesDeclarationsOrError instanceof Result.Error<?> error) {
-            return new Result.Error<>(error.errors());
-        }
-        var singleDeclarations = ((Result.Success<List<CompiledDataType>>) singlesDeclarationsOrError).value();
         Map<String, GenericDataType> knownDataTypes = new HashMap<>();
         dataDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
-        singleDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
         enumDeclarations.forEach(enumType -> knownDataTypes.put(enumType.name(), enumType));
         primitiveBackedTypes.forEach(type -> knownDataTypes.put(type.name(), type));
 
@@ -6549,7 +6536,7 @@ public class CapybaraCompiler {
                 .map(typeDeclaration -> linkTypeDeclaration(
                         typeDeclaration,
                         Stream.concat(
-                                Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()),
+                                dataDeclarations.stream(),
                                 enumDeclarations.stream().flatMap(enumType -> enumType.subTypes().stream())
                         ).toList(),
                         rawTypeDeclarationsByName,
@@ -6564,7 +6551,6 @@ public class CapybaraCompiler {
 
         var set = new HashSet<GenericDataType>();
         set.addAll(dataDeclarations);
-        set.addAll(singleDeclarations);
         set.addAll(enumDeclarations);
         set.addAll(typeDeclarations);
         set.addAll(primitiveBackedTypes);
@@ -6748,6 +6734,7 @@ public class CapybaraCompiler {
             if (ownDuplicateError != null) {
                 return Result.error(ownDuplicateError);
             }
+            var singleton = isZeroFieldSingletonData(dataDeclaration);
             return Result.success(new CompiledDataType(
                     dataDeclaration.name(),
                     List.copyOf(fields),
@@ -6755,13 +6742,22 @@ public class CapybaraCompiler {
                     dataDeclaration.extendsTypes(),
                     dataDeclaration.comments(),
                     dataDeclaration.visibility(),
-                    false
+                    singleton
             ));
         });
         visiting.remove(dataDeclaration.name());
         var withPosition = withPosition(linked, dataDeclaration.position(), normalizedFile);
         cache.put(dataDeclaration.name(), withPosition);
         return withPosition;
+    }
+
+    private boolean isZeroFieldSingletonData(DataDeclaration dataDeclaration) {
+        return dataDeclaration.fields().isEmpty()
+               && dataDeclaration.extendsTypes().isEmpty()
+               && dataDeclaration.typeParameters().isEmpty()
+               && dataDeclaration.constructor().isEmpty()
+               && dataDeclaration.derives().isEmpty()
+               && !dataDeclaration.nativeType();
     }
 
     private String mergeDataFields(
@@ -6793,17 +6789,6 @@ public class CapybaraCompiler {
             }
         }
         return null;
-    }
-
-    private Result<CompiledDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
-        return Result.success(new CompiledDataType(
-                singleDeclaration.name(),
-                List.of(),
-                List.of(),
-                List.of(),
-                singleDeclaration.comments(),
-                true
-        ));
     }
 
     private CompiledDataParentType linkEnumDeclaration(EnumDeclaration enumDeclaration) {

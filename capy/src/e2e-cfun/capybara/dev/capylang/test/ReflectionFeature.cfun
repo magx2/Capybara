@@ -6,10 +6,10 @@ from /capy/collection/Dict import { * }
 union Letter { name: String } = A | B
 data A { a: int }
 data B { b: List[String] }
-single ReflectedEmpty
+data ReflectedEmpty {}
 data ReflectedEntity { id: String }
 data ReflectedEmployee { department: String, active: bool, ...ReflectedEntity }
-single ReflectedSingleton
+data ReflectedSingleton {}
 enum ReflectedStatus { REFLECTED_READY, REFLECTED_DONE }
 data ReflectedEnvelope { label: String, payload: A }
 
@@ -18,8 +18,7 @@ data ReflectedJsonObject { value: Dict[ReflectedJson] }
 data ReflectedJsonString { value: String }
 data ReflectedJsonNumber { value: int }
 data ReflectedJsonBool { value: bool }
-single ReflectedJsonNull
-
+data ReflectedJsonNull {}
 fun reflection_data_a(a: A): DataValueInfo = reflection(a)
 
 fun reflection_data_b(b: B): DataValueInfo = reflection(b)

@@ -65,7 +65,7 @@ public class CompilationErrorTest {
                         fun parse(value: int): int =
                             union __Token = __Number | Stop
                             data __Number { value: int }
-                            single Stop
+                            data Stop {}
                             ---
                             let token: __Token = __Number { value }
                             match token with
@@ -76,21 +76,58 @@ public class CompilationErrorTest {
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
                 .contains("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`Stop`.")
-                .doesNotContain("__local_type_")
-                .doesNotContain("__local_single_");
+                .doesNotContain("__local_type_");
     }
 
     @Test
-    void shouldRejectBareSingleExpression() {
+    void shouldRejectBareEmptyDataExpression() {
         var errors = compileProgram("""
-                        single Empty
+                        data Empty {}
                         fun empty(): Empty = Empty
                         """,
-                "bare_single_expression");
+                "bare_empty_data_expression");
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
                 .contains("Singleton data value `Empty` must be constructed with `Empty {}`");
+    }
+
+    @Test
+    void shouldRejectRemovedSingleDeclaration() {
+        var errors = compileProgram("""
+                        single __Empty // removed keyword
+                        """,
+                "removed_single_declaration");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`single` was removed; use `data __Empty {}`");
+    }
+
+    @Test
+    void shouldRejectUnknownEmptyDataFieldAssignment() {
+        var errors = compileProgram("""
+                        data Empty {}
+                        fun empty(): Empty = Empty { bogus: 1 }
+                        """,
+                "unknown_empty_data_field_assignment");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Field `bogus` not found in type `Empty`");
+    }
+
+    @Test
+    void shouldRejectDuplicateDataFieldAssignment() {
+        var errors = compileProgram("""
+                        data Foo { a: int }
+                        fun foo(): Foo = Foo { a: 1, a: 2 }
+                        """,
+                "duplicate_data_field_assignment");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Field `a` is assigned more than once");
     }
 
     @Test
@@ -1017,7 +1054,7 @@ public class CompilationErrorTest {
                         """
                                 union Json = JsonArray | JsonNull
                                 data JsonArray { value: List[Json] }
-                                single JsonNull
+                                data JsonNull {}
                                 fun foo(left: JsonArray, right: Json): Json =
                                     left + right
                                 """,
@@ -1136,34 +1173,6 @@ public class CompilationErrorTest {
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
-                        "empty_data_declaration",
-                        "data Empty {}",
-                        new Position(1, 0),
-                        """
-                                error: mismatched types
-                                 --> /foo/boo/empty_data_declaration.cfun:%d:%d
-                                data Empty {}
-                                ^ Data `Empty` must declare at least one field; use `single` for empty values
-                                """
-                ),
-                Arguments.of(
-                        "empty_local_data_declaration",
-                        """
-                                fun parse(): int =
-                                    data __Empty {}
-                                    ---
-                                    1
-                                """,
-                        new Position(2, 4),
-                        """
-                                error: mismatched types
-                                 --> /foo/boo/empty_local_data_declaration.cfun:%d:%d
-                                fun parse(): int =
-                                    data __Empty {}
-                                %s^ Data `__Empty` must declare at least one field; use `single` for empty values
-                                """
-                ),
-                Arguments.of(
                         "data_extension_conflicting_inherited_field_types",
                         """
                                 data Foo { a: int, b: int }
@@ -1178,7 +1187,7 @@ public class CompilationErrorTest {
                         """
                                 union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
-                                single End
+                                data End {}
                                 fun to_seq(list: List[int]): Seq[int] =
                                     if list.size() > 0
                                     then Cons { list[0], to_seq(list[1:])
@@ -1189,7 +1198,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/parser_syntax_error_missing_brace_in_then_branch.cfun:%d:%d
                                 data Cons[T] { value: T, rest: Seq[T] }
-                                single End
+                                data End {}
                                 fun to_seq(list: List[int]): Seq[int] =
                                     if list.size() > 0
                                     then Cons { list[0], to_seq(list[1:])
@@ -1232,7 +1241,7 @@ public class CompilationErrorTest {
                         """
                                 union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
-                                single End
+                                data End {}
                                 fun Seq[T].take(n: int): List[T] =
                                     match this with
                                     case End => []
@@ -1243,7 +1252,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/seq_match_case_wrong_arrow.cfun:%d:%d
                                 data Cons[T] { value: T, rest: Seq[T] }
-                                single End
+                                data End {}
                                 fun Seq[T].take(n: int): List[T] =
                                     match this with
                                     case End => []
@@ -1273,7 +1282,7 @@ public class CompilationErrorTest {
                         """
                                 union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Sqe[T] }
-                                single End
+                                data End {}
                                 """,
                         new Position(2, 31),
                         """
@@ -1362,7 +1371,7 @@ public class CompilationErrorTest {
                                 data Error { message: String }
                                 data _Parse[T] { value: T, parsing_string: String }
                                 data JsonBool { value: bool }
-                                single JsonNull
+                                data JsonNull {}
                                 from /capy/lang/String import { * }
                                   fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =
                                     let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4, json.size()] }

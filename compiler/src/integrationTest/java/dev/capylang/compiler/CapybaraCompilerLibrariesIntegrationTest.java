@@ -117,7 +117,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
         return new RawModule("Option", "/capy/lang", """
                 union Option[T] = Some[T] | None
                 data Some[T] { value: T }
-                single None
+                data None {}
                 """);
     }
 

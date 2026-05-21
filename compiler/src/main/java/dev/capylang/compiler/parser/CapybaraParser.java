@@ -197,6 +197,21 @@ public class CapybaraParser {
     }
 
     private Result.Error.SingleError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
+        var lines = source.split("\\R", -1);
+        var lineText = lines[Math.max(0, Math.min(syntaxError.line() - 1, lines.length - 1))].stripLeading();
+        var removedSingle = Pattern.compile("^single\\s+((?:_*)[A-Z][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s*(?://.*)?$").matcher(lineText);
+        if (removedSingle.matches()) {
+            var name = removedSingle.group(1);
+            return formatParserError(
+                    module,
+                    source,
+                    "line %d:%d: `single` was removed; use `data %s {}`".formatted(
+                            syntaxError.line(),
+                            syntaxError.column(),
+                            name
+                    )
+            );
+        }
         return formatParserError(module, source, formatSyntaxError(syntaxError));
     }
 
@@ -353,7 +368,6 @@ public class CapybaraParser {
                 || stripped.startsWith("data ")
                 || stripped.startsWith("type ")
                 || stripped.startsWith("enum ")
-                || stripped.startsWith("single ")
                 || stripped.startsWith("const ")
                 || stripped.startsWith("local ")
                 || stripped.startsWith("///")) {
@@ -424,11 +438,6 @@ public class CapybaraParser {
             return List.of(enumDeclaration(enumDeclaration));
         }
 
-        var singleDeclaration = context.singleDeclaration();
-        if (singleDeclaration != null) {
-            return List.of(singleDeclaration(singleDeclaration));
-        }
-
         var constDeclaration = context.constDeclaration();
         if (constDeclaration != null) {
             return List.of(constDeclaration(constDeclaration));
@@ -485,9 +494,6 @@ public class CapybaraParser {
         var nativeType = isNativeDataBody(context.dataBody());
         var dataFields = dataFieldDeclarationList(fieldDeclarationList(context.dataBody()));
         var dataName = genericTypeName(declaration);
-        if (!nativeType) {
-            reportEmptyDataDeclaration(context, dataName, dataFields);
-        }
         return new DataDeclaration(
                 dataName,
                 dataFields.fields(),
@@ -555,16 +561,6 @@ public class CapybaraParser {
         return new EnumDeclaration(
                 context.TYPE(0).getText(),
                 values,
-                context.docComment().stream()
-                        .map(comment -> stripDocComment(comment.getText()))
-                        .toList(),
-                position(context)
-        );
-    }
-
-    private SingleDeclaration singleDeclaration(FunctionalParser.SingleDeclarationContext context) {
-        return new SingleDeclaration(
-                context.TYPE().getText(),
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
@@ -662,7 +658,7 @@ public class CapybaraParser {
                 }
                 localTypeNameMap.put(
                         localTypeName,
-                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + normalizeLocalDefinitionName(localTypeName)
+                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + localTypeName
                 );
                 localTypeIndex++;
             }
@@ -674,19 +670,7 @@ public class CapybaraParser {
                 }
                 localTypeNameMap.put(
                         localDataName,
-                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + normalizeLocalDefinitionName(localDataName)
-                );
-                localTypeIndex++;
-            }
-            var localSingle = localDefinition.localSingleDeclaration();
-            if (localSingle != null) {
-                var localSingleName = localSingle.TYPE().getText();
-                if (localTypeNameMap.containsKey(localSingleName)) {
-                    throw new IllegalStateException("Duplicate local type/data/single name: " + localSingleName);
-                }
-                localTypeNameMap.put(
-                        localSingleName,
-                        localScopePrefix + "__local_single_" + localTypeIndex + "_" + localSingleName
+                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + localDataName
                 );
                 localTypeIndex++;
             }
@@ -743,13 +727,6 @@ public class CapybaraParser {
                                 localFunctionNameMap,
                                 localTypeNameMap,
                                 localConstNameMap
-                        )
-                );
-            } else if (localDefinition.localSingleDeclaration() != null) {
-                extractedLocalDefinitions.add(
-                        localSingleDeclaration(
-                                localDefinition.localSingleDeclaration(),
-                                localTypeNameMap
                         )
                 );
             } else if (localDefinition.localConstDeclaration() != null) {
@@ -917,9 +894,6 @@ public class CapybaraParser {
         }
         var nativeType = isNativeDataBody(context.dataBody());
         var dataFields = dataFieldDeclarationList(fieldDeclarationList(context.dataBody()));
-        if (!nativeType) {
-            reportEmptyDataDeclaration(context, localDataName, dataFields);
-        }
         return new DataDeclaration(
                 mappedDataName,
                 dataFields.fields().stream()
@@ -938,24 +912,6 @@ public class CapybaraParser {
                 List.of(),
                 null,
                 nativeType,
-                position(context)
-        );
-    }
-
-    private SingleDeclaration localSingleDeclaration(
-            FunctionalParser.LocalSingleDeclarationContext context,
-            java.util.Map<String, String> localTypeNameMap
-    ) {
-        var localSingleName = context.TYPE().getText();
-        var mappedSingleName = localTypeNameMap.get(localSingleName);
-        if (mappedSingleName == null) {
-            throw new IllegalStateException("Unknown local single mapping for: " + localSingleName);
-        }
-        return new SingleDeclaration(
-                mappedSingleName,
-                context.docComment().stream()
-                        .map(comment -> stripDocComment(comment.getText()))
-                        .toList(),
                 position(context)
         );
     }
@@ -2629,28 +2585,6 @@ public class CapybaraParser {
             return null;
         }
         return context.fieldDeclarationList();
-    }
-
-    private void reportEmptyDataDeclaration(
-            ParserRuleContext context,
-            String dataName,
-            DataFieldDeclarations dataFields
-    ) {
-        if (currentModule == null || currentSource == null) {
-            return;
-        }
-        if (!dataFields.fields().isEmpty() || !dataFields.extendsTypes().isEmpty()) {
-            return;
-        }
-        var token = context.getStart();
-        parserErrors.add(
-                formatParserError(
-                        currentModule,
-                        currentSource,
-                        "line %d:%d: Data `%s` must declare at least one field; use `single` for empty values"
-                                .formatted(token.getLine(), token.getCharPositionInLine(), dataName)
-                )
-        );
     }
 
     private void reportSpreadTypeMustBeAtEnd(Token token) {

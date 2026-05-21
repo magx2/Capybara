@@ -15,8 +15,7 @@ class InfixOperatorCompilerTest {
         var error = compileFailure("""
                 union Json = JsonArray | JsonNull
                 data JsonArray { value: List[Json] }
-                single JsonNull
-
+                data JsonNull {}
                 fun foo(left: JsonArray, right: Json): Json =
                     left + right
                 """);
@@ -33,8 +32,7 @@ class InfixOperatorCompilerTest {
 
                 union Json = JsonArray | JsonNull
                 data JsonArray { value: List[Json] }
-                single JsonNull
-
+                data JsonNull {}
                 fun append(values: List[Json], value: JsonArray): List[Json] =
                     values + value
                 """);
@@ -165,11 +163,10 @@ class InfixOperatorCompilerTest {
                 new RawModule("Seq", "/capy/lang", """
                         union Seq[T] = Cons[T] | End
                         data Cons[T] { value: T, rest: () => Seq[T] }
-                        single End
+                        data End {}
                         union Option[T] = Some[T] | None
                         data Some[T] { value: T }
-                        single None
-
+                        data None {}
                         fun to_seq(values: List[T]): Seq[T] = End {}
                         fun Seq[T].first_match(pred: T => bool): Option[T] = None {}
                         """)
@@ -195,8 +192,7 @@ class InfixOperatorCompilerTest {
                 new RawModule("Seq", "/capy/lang", """
                         union Seq[T] = Cons[T] | End
                         data Cons[T] { value: T, rest: () => Seq[T] }
-                        single End
-
+                        data End {}
                         fun to_seq(values: List[T]): Seq[T] = End {}
                         """)
         )).modules();

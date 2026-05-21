@@ -32,8 +32,7 @@ fun JsonValueObject.get(key: String): Option[Json] = this.value.get(key)
 data JsonValueArray { value: JsonArray }
 fun JsonValueArray.get(idx: index): Option[Json] = this.value.get(idx)
 data JsonBool { value: bool }
-single JsonNull
-
+data JsonNull {}
 deriver Jsonable {
     fun to_json(): Result[JsonObject] = to_json(receiver)
 }

@@ -149,9 +149,9 @@ expressionNoLet
     | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
     | expressionNoLet DOT identifier
     | expressionNoLet infixOperator expressionNoLet
-    | value
     | newData
     | constructorData
+    | value
     | matchExpression
     | thisExpression
     ;
@@ -190,9 +190,9 @@ expressionNoLetNoPipe
     | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
     | expressionNoLetNoPipe DOT identifier
     | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
-    | value
     | newData
     | constructorData
+    | value
     | matchExpressionNoPipe
     | thisExpression
     ;

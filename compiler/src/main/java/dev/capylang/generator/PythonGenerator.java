@@ -88,7 +88,7 @@ public final class PythonGenerator implements Generator {
                 .filter(module -> !isRuntimeProvidedModule(module))
                 .map(module -> ModuleInfo.from(module, astBuilder.build(module)))
                 .toList();
-        var context = ProgramContext.build(moduleInfos, program.objectOrientedModules(), functionNameOverrides);
+        var context = ProgramContext.build(moduleInfos, program.modules(), program.objectOrientedModules(), functionNameOverrides);
 
         for (var moduleInfo : moduleInfos) {
             modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
@@ -1459,14 +1459,21 @@ public final class PythonGenerator implements Generator {
             Map<String, List<String>> fieldsByType,
             Map<String, List<String>> parentTypesByType,
             Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypesByName,
+            Map<String, SingletonDataTypeInfo> singletonDataTypesByName,
             Map<String, String> functionNameOverrides
     ) {
         static ProgramContext build(List<ModuleInfo> modules, Map<String, String> functionNameOverrides) {
-            return build(modules, List.of(), functionNameOverrides);
+            return build(
+                    modules,
+                    modules.stream().map(ModuleInfo::module).toList(),
+                    List.of(),
+                    functionNameOverrides
+            );
         }
 
         static ProgramContext build(
                 List<ModuleInfo> modules,
+                Collection<CompiledModule> compiledModules,
                 List<dev.capylang.compiler.parser.ObjectOrientedModule> objectOrientedModules,
                 Map<String, String> functionNameOverrides
         ) {
@@ -1475,10 +1482,22 @@ public final class PythonGenerator implements Generator {
             var localTypes = new LinkedHashMap<String, Set<String>>();
             var fields = standardFields();
             var parentTypes = new LinkedHashMap<String, List<String>>();
+            var singletonDataTypes = new LinkedHashMap<String, SingletonDataTypeInfo>();
 
             for (var runtimeClassName : RuntimeModules.classNames()) {
                 paths.put(runtimeClassName, classNamePath(runtimeClassName));
             }
+            compiledModules.forEach(module -> module.types().values().stream()
+                    .filter(CompiledDataType.class::isInstance)
+                    .map(CompiledDataType.class::cast)
+                    .filter(CompiledDataType::singleton)
+                    .filter(type -> !type.enumValue())
+                    .forEach(type -> putSingletonDataTypeAliases(
+                            singletonDataTypes,
+                            new SingletonDataTypeInfo(type.name(), cfunTypeName(module, type.name())),
+                            module
+                    )));
+            putRuntimeSingletonDataTypeAliases(singletonDataTypes);
             for (var module : modules) {
                 paths.put(module.className(), module.relativePath());
                 var moduleExports = new LinkedHashSet<String>();
@@ -1574,6 +1593,7 @@ public final class PythonGenerator implements Generator {
                 importedOwners.put(module.className(), Map.copyOf(imported));
             }
             var primitiveBackedTypes = primitiveBackedTypes(modules);
+            putUniqueSimpleSingletonDataTypeAliases(singletonDataTypes);
 
             return new ProgramContext(
                     Map.copyOf(paths),
@@ -1583,8 +1603,59 @@ public final class PythonGenerator implements Generator {
                     Map.copyOf(fields),
                     Map.copyOf(parentTypes),
                     Map.copyOf(primitiveBackedTypes),
+                    Map.copyOf(singletonDataTypes),
                     Map.copyOf(functionNameOverrides)
             );
+        }
+
+        private static void putSingletonDataTypeAliases(
+                Map<String, SingletonDataTypeInfo> result,
+                SingletonDataTypeInfo info,
+                CompiledModule module
+        ) {
+            putSingletonDataTypeAliases(result, info);
+            result.putIfAbsent(module.name() + "." + info.name(), info);
+        }
+
+        private static void putRuntimeSingletonDataTypeAliases(Map<String, SingletonDataTypeInfo> result) {
+            putSingletonDataTypeAliases(result, new SingletonDataTypeInfo("None", "/capy/lang/Option.None"));
+            putSingletonDataTypeAliases(result, new SingletonDataTypeInfo("Success", "/capy/lang/Program.Success"));
+        }
+
+        private static void putSingletonDataTypeAliases(
+                Map<String, SingletonDataTypeInfo> result,
+                SingletonDataTypeInfo info
+        ) {
+            if (info.name().contains("/") || info.name().contains(".")) {
+                result.putIfAbsent(info.name(), info);
+            }
+            result.putIfAbsent(info.cfunType(), info);
+            result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
+        }
+
+        private static void putUniqueSimpleSingletonDataTypeAliases(Map<String, SingletonDataTypeInfo> result) {
+            var bySimpleName = result.values().stream()
+                    .distinct()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            info -> simpleTypeName(info.name()),
+                            LinkedHashMap::new,
+                            java.util.stream.Collectors.toList()
+                    ));
+            bySimpleName.forEach((simpleName, infos) -> {
+                if (infos.size() == 1) {
+                    result.putIfAbsent(simpleName, infos.getFirst());
+                }
+            });
+        }
+
+        private static String cfunTypeName(ModuleInfo module, String typeName) {
+            return cfunTypeName(module.module(), typeName);
+        }
+
+        private static String cfunTypeName(CompiledModule module, String typeName) {
+            var path = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+            var owner = path.isBlank() ? "/" + module.name() : "/" + path + "/" + module.name();
+            return owner + "." + typeName;
         }
 
         private static Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes(List<ModuleInfo> modules) {
@@ -1705,6 +1776,53 @@ public final class PythonGenerator implements Generator {
             return Optional.ofNullable(primitiveBackedTypesByName.get(simpleTypeName(normalized)));
         }
 
+        Optional<SingletonDataTypeInfo> singletonDataType(ObjectOrientedModule module, String rawType) {
+            var normalized = rawType.trim();
+            if (normalized.endsWith("!")) {
+                normalized = normalized.substring(0, normalized.length() - 1).trim();
+            }
+            var direct = singletonDataTypesByName.get(normalized);
+            if (direct != null) {
+                return Optional.of(direct);
+            }
+            if (module != null) {
+                var imported = importedSingletonDataType(module, normalized);
+                if (imported.isPresent()) {
+                    return imported;
+                }
+            }
+            return Optional.ofNullable(singletonDataTypesByName.get(simpleTypeName(normalized)));
+        }
+
+        private Optional<SingletonDataTypeInfo> importedSingletonDataType(ObjectOrientedModule module, String typeName) {
+            var simpleName = simpleTypeName(typeName);
+            for (var importDeclaration : module.imports()) {
+                if (importDeclaration.excludedSymbols().contains(simpleName)) {
+                    continue;
+                }
+                if (!importDeclaration.isStarImport() && !importDeclaration.symbols().contains(simpleName)) {
+                    continue;
+                }
+                var qualifiedName = importedModuleName(module, importDeclaration.moduleName()) + "." + simpleName;
+                var direct = singletonDataTypesByName.get(qualifiedName);
+                if (direct != null) {
+                    return Optional.of(direct);
+                }
+                if (importDeclaration.isStarImport()) {
+                    var modulePrefix = importedModuleName(module, importDeclaration.moduleName()) + ".";
+                    var imported = singletonDataTypesByName.values().stream()
+                            .distinct()
+                            .filter(type -> type.cfunType().startsWith(modulePrefix))
+                            .filter(type -> simpleTypeName(type.name()).equals(simpleName))
+                            .findFirst();
+                    if (imported.isPresent()) {
+                        return imported;
+                    }
+                }
+            }
+            return Optional.empty();
+        }
+
         private Optional<PrimitiveBackedTypeInfo> importedPrimitiveBackedType(ObjectOrientedModule module, String typeName) {
             var simpleName = simpleTypeName(typeName);
             for (var importDeclaration : module.imports()) {
@@ -1750,6 +1868,9 @@ public final class PythonGenerator implements Generator {
         }
 
         record PrimitiveBackedTypeInfo(String name, String cfunType, String backingType, boolean directConstructionAllowed) {
+        }
+
+        record SingletonDataTypeInfo(String name, String cfunType) {
         }
 
         Optional<Path> pathForClassName(String className) {

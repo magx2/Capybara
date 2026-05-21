@@ -1,4 +1,5 @@
-from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, RecInteropValue, user_id }
+from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, InteropMaybe, InteropNone, RecInteropValue, user_id }
+from /capy/lang/Option import { None }
 
 class PetInteractor {
     def invoke_fp_function(name: String): String =
@@ -13,6 +14,17 @@ class PetInteractor {
         case InteropDog { name } -> ("dog:" + name)
         case InteropCat { age } -> ("cat:" + age)
     }
+
+    def create_fp_empty(): InteropMaybe =
+        InteropNone {}
+
+    def match_fp_empty(): String {
+        let maybe: InteropMaybe = InteropNone {}
+        return ObjectOrientedFpInterop.maybeText(maybe)
+    }
+
+    def create_runtime_none(): any =
+        None {}
 
     def invoke_rec_function(seed: int): int {
         let value: RecInteropValue = RecInteropValue { value: seed }
