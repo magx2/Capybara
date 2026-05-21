@@ -83,22 +83,6 @@ jobs:
           git branch "${RELEASE_BRANCH}"
           git push origin "${RELEASE_BRANCH}"
 
-      - name: Dispatch Build & Check for release branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run check.yml --ref "${{ steps.version.outputs.release_branch }}"
-
-      - name: Dispatch Verify Version for release branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run verify_version.yml --ref "${{ steps.version.outputs.release_branch }}"
-
       - name: Bump minor on default branch
         shell: bash
         run: |
@@ -109,11 +93,3 @@ jobs:
           git add gradle.properties
           git commit -m "chore: bump version to ${NEXT_MINOR_VERSION}"
           git push origin "HEAD:${DEFAULT_BRANCH}"
-
-      - name: Dispatch Build & Check for default branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run check.yml --ref "${{ github.event.repository.default_branch }}"
