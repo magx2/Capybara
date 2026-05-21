@@ -517,6 +517,7 @@ public final class JavaScriptGenerator implements Generator {
                 case CompiledFieldAccess fieldAccess -> "(" + render(fieldAccess.source(), scope) + ")." + fieldAccess.field();
                 case CompiledFunctionCall functionCall -> renderFunctionCall(functionCall, scope);
                 case CompiledFunctionInvoke functionInvoke -> renderFunctionInvoke(functionInvoke, scope);
+                case CompiledObjectConstruction objectConstruction -> renderObjectConstruction(objectConstruction, scope);
                 case CompiledIfExpression ifExpression -> "((" + renderBoolean(ifExpression.condition(), scope) + ") ? ("
                                                           + render(ifExpression.thenBranch(), scope) + ") : ("
                                                           + render(ifExpression.elseBranch(), scope) + "))";
@@ -549,6 +550,20 @@ public final class JavaScriptGenerator implements Generator {
             return newSet.values().stream()
                     .map(value -> render(value, scope))
                     .collect(joining(", ", "capy.set([", "])"));
+        }
+
+        private String renderObjectConstruction(CompiledObjectConstruction objectConstruction, Scope scope) {
+            var className = programContext.resolveClassName(objectConstruction.objectType().backendClassName())
+                    .orElse(objectConstruction.objectType().backendClassName());
+            require(className);
+            var typeName = simpleTypeName(className);
+            var constructorReference = isCurrentClassReference(className)
+                    ? typeName
+                    : moduleVar(className) + "." + typeName;
+            var arguments = objectConstruction.arguments().stream()
+                    .map(argument -> render(argument, scope))
+                    .collect(joining(", "));
+            return "capy.delay(() => new " + constructorReference + "(" + arguments + "))";
         }
 
         private String renderNumericWidening(CompiledNumericWidening numericWidening, Scope scope) {

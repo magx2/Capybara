@@ -24,6 +24,7 @@ public class CompiledExpressionPrinter {
             case CompiledFloatValue linkedFloatValue -> printLinkedFloatValue(linkedFloatValue, level);
             case CompiledFunctionCall linkedFunctionCall -> printLinkedFunctionCall(linkedFunctionCall, level);
             case CompiledFunctionInvoke linkedFunctionInvoke -> printLinkedFunctionInvoke(linkedFunctionInvoke, level);
+            case CompiledObjectConstruction linkedObjectConstruction -> printLinkedObjectConstruction(linkedObjectConstruction, level);
             case CompiledIfExpression linkedIfExpression -> printLinkedIfExpression(linkedIfExpression, level);
             case CompiledIndexExpression linkedIndexExpression -> printLinkedIndexExpression(linkedIndexExpression, level);
             case CompiledInfixExpression linkedInfixExpression ->
@@ -94,6 +95,12 @@ public class CompiledExpressionPrinter {
                + "(\n"
                + linkedFunctionInvoke.arguments().stream().map(ex -> printExpression(ex, level + 1)).collect(joining())
                + LINE_BREAK + tabs(level + 1) + "): " + linkedFunctionInvoke.returnType();
+    }
+
+    private static String printLinkedObjectConstruction(CompiledObjectConstruction linkedObjectConstruction, int level) {
+        return LINE_BREAK + tabs(level) + "new " + linkedObjectConstruction.objectType().name() + "(\n"
+               + linkedObjectConstruction.arguments().stream().map(ex -> printExpression(ex, level + 1)).collect(joining())
+               + LINE_BREAK + tabs(level + 1) + "): " + linkedObjectConstruction.effectType();
     }
 
     private static String printLinkedInfixExpression(CompiledInfixExpression linkedInfixExpression, int level) {

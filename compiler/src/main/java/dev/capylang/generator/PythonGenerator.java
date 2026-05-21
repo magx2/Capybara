@@ -525,6 +525,7 @@ public final class PythonGenerator implements Generator {
                 case CompiledFieldAccess fieldAccess -> "getattr((" + render(fieldAccess.source(), scope) + "), " + pyString(fieldAccess.field()) + ")";
                 case CompiledFunctionCall functionCall -> renderFunctionCall(functionCall, scope);
                 case CompiledFunctionInvoke functionInvoke -> renderFunctionInvoke(functionInvoke, scope);
+                case CompiledObjectConstruction objectConstruction -> renderObjectConstruction(objectConstruction, scope);
                 case CompiledIfExpression ifExpression -> "((" + render(ifExpression.thenBranch(), scope) + ") if ("
                                                           + renderBoolean(ifExpression.condition(), scope) + ") else ("
                                                           + render(ifExpression.elseBranch(), scope) + "))";
@@ -557,6 +558,20 @@ public final class PythonGenerator implements Generator {
             return newSet.values().stream()
                     .map(value -> render(value, scope))
                     .collect(joining(", ", "capy.set_([", "])"));
+        }
+
+        private String renderObjectConstruction(CompiledObjectConstruction objectConstruction, Scope scope) {
+            var className = programContext.resolveClassName(objectConstruction.objectType().backendClassName())
+                    .orElse(objectConstruction.objectType().backendClassName());
+            require(className);
+            var typeName = simpleTypeName(className);
+            var constructorReference = isCurrentClassReference(className)
+                    ? typeName
+                    : moduleVar(className) + "." + typeName;
+            var arguments = objectConstruction.arguments().stream()
+                    .map(argument -> render(argument, scope))
+                    .collect(joining(", "));
+            return "capy.delay(lambda: " + constructorReference + "(" + arguments + "))";
         }
 
         private String renderNumericWidening(CompiledNumericWidening numericWidening, Scope scope) {

@@ -5,6 +5,7 @@ import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunctionType;
 import dev.capylang.compiler.CompiledGenericTypeParameter;
+import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledTupleType;
 import dev.capylang.compiler.PrimitiveLinkedType;
@@ -110,6 +111,10 @@ public final class ReflectionValueInfoJava {
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(dataType.name())) + ", "
                     + reflectionPackageInfo(dataType.name(), fallbackPackagePath) + ")";
+            case CompiledObjectType objectType ->
+                    "new capy.metaProg.Reflection.DataInfo("
+                    + javaString(simpleReflectionTypeName(objectType.name())) + ", "
+                    + reflectionPackageInfo(objectType.name(), fallbackPackagePath) + ")";
         };
     }
 

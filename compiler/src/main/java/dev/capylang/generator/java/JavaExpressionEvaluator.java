@@ -383,6 +383,7 @@ public class JavaExpressionEvaluator {
             case CompiledFloatValue floatValue -> evaluateFloatValue(floatValue, scope);
             case CompiledFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
             case CompiledFunctionInvoke functionInvoke -> evaluateFunctionInvoke(functionInvoke, scope);
+            case CompiledObjectConstruction objectConstruction -> evaluateObjectConstruction(objectConstruction, scope);
             case CompiledIfExpression ifExpression -> evaluateIfExpression(ifExpression, scope);
             case CompiledIndexExpression indexExpression -> evaluateIndexExpression(indexExpression, scope);
             case CompiledInfixExpression infixExpression -> evaluateInfixExpression(infixExpression, scope);
@@ -1743,6 +1744,27 @@ public class JavaExpressionEvaluator {
         }
         var statements = String.join("; ", addedStatements);
         return scope.addExpression("capy.lang.Effect.delay(() -> { " + statements + "; return (" + bodyExSc.expression() + "); })");
+    }
+
+    private static Scope evaluateObjectConstruction(CompiledObjectConstruction objectConstruction, Scope scope) {
+        var current = scope;
+        var arguments = new ArrayList<String>();
+        for (var argument : objectConstruction.arguments()) {
+            var argumentExSc = evaluateExpression(argument, current).popExpression();
+            current = argumentExSc.scope();
+            arguments.add(argumentExSc.expression());
+        }
+        var constructorExpression = "new "
+                                    + normalizeJavaClassReference(objectConstruction.objectType().backendClassName())
+                                    + "("
+                                    + String.join(", ", arguments)
+                                    + ")";
+        var addedStatements = addedStatements(scope, current);
+        if (addedStatements.isEmpty()) {
+            return scope.addExpression("capy.lang.Effect.delay(() -> (" + constructorExpression + "))");
+        }
+        var statements = String.join("; ", addedStatements);
+        return scope.addExpression("capy.lang.Effect.delay(() -> { " + statements + "; return (" + constructorExpression + "); })");
     }
 
     private static Scope evaluateEffectBindExpression(CompiledEffectBindExpression bind, Scope scope) {
@@ -3806,6 +3828,22 @@ public class JavaExpressionEvaluator {
 
     private static String normalizeJavaTypeReference(String typeName) {
         return NORMALIZED_TYPE_REFERENCE_CACHE.computeIfAbsent(typeName, JavaExpressionEvaluator::computeNormalizedJavaTypeReference);
+    }
+
+    private static String normalizeJavaClassReference(String classReference) {
+        var parts = Arrays.stream(classReference.split("\\."))
+                .filter(part -> !part.isBlank())
+                .toList();
+        if (parts.isEmpty()) {
+            return classReference;
+        }
+        var normalized = new ArrayList<String>(parts.size());
+        for (var i = 0; i < parts.size(); i++) {
+            normalized.add(i == parts.size() - 1
+                    ? normalizeJavaClassName(parts.get(i))
+                    : normalizeJavaPackageSegment(parts.get(i)));
+        }
+        return String.join(".", normalized);
     }
 
     private static String computeNormalizedJavaTypeReference(String typeName) {
