@@ -554,7 +554,13 @@ public class CapybaraParser {
     }
 
     private SingleDeclaration singleDeclaration(FunctionalParser.SingleDeclarationContext context) {
-        return new SingleDeclaration(context.TYPE().getText(), position(context));
+        return new SingleDeclaration(
+                context.TYPE().getText(),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
+                position(context)
+        );
     }
 
     private Function constDeclaration(FunctionalParser.ConstDeclarationContext context) {
@@ -936,7 +942,13 @@ public class CapybaraParser {
         if (mappedSingleName == null) {
             throw new IllegalStateException("Unknown local single mapping for: " + localSingleName);
         }
-        return new SingleDeclaration(mappedSingleName, position(context));
+        return new SingleDeclaration(
+                mappedSingleName,
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
+                position(context)
+        );
     }
 
     private Expression rewriteLocalNames(

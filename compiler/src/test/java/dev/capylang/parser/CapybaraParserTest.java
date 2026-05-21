@@ -46,6 +46,7 @@ class CapybaraParserTest {
                     case EnumDeclaration enumDeclaration -> enumDeclaration.name().equals(name);
                     case PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration ->
                             primitiveBackedTypeDeclaration.name().equals(name);
+                    case SingleDeclaration singleDeclaration -> singleDeclaration.name().equals(name);
                     default -> false;
                 })
                 .findAny()
@@ -709,6 +710,24 @@ class CapybaraParserTest {
         assertThat(data.comments()).containsExactly("See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)");
         assertThat(type.comments()).containsExactly("Represents a single suite");
         assertThat(enumType.comments()).containsExactly("The result of comparing two values.");
+    }
+
+    @Test
+    @DisplayName("should parse line and doc comments for single declarations")
+    void parseSingleComments() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                union Program = Success | Failed
+
+                // Normal comments are skipped before singles.
+                /// Successful program completion
+                /// with exit code zero.
+                single Success
+
+                data Failed { exit_code: int }
+                """));
+
+        var single = findDefinition(SingleDeclaration.class, "Success", module.functional());
+        assertThat(single.comments()).containsExactly("Successful program completion", "with exit code zero.");
     }
 
     @Test

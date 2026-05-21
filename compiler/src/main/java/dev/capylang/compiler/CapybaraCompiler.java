@@ -6494,7 +6494,14 @@ public class CapybaraCompiler {
     }
 
     private Result<CompiledDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
-        return Result.success(new CompiledDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
+        return Result.success(new CompiledDataType(
+                singleDeclaration.name(),
+                List.of(),
+                List.of(),
+                List.of(),
+                singleDeclaration.comments(),
+                true
+        ));
     }
 
     private CompiledDataParentType linkEnumDeclaration(EnumDeclaration enumDeclaration) {

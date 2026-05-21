@@ -1,6 +1,7 @@
 /// Process result returned by an executable Capybara `main` function.
 union Program = Success | Failed
 
+/// Successful program completion with exit code `0`.
 single Success
 
 /// Failed program completion with a non-zero exit code.
