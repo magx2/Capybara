@@ -209,7 +209,7 @@ final class ObjectOrientedJavaScriptGenerator {
     }
 
     private String renderClassMethod(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
-        var javaScriptEntrypoint = isJavaScriptEntrypoint(method);
+        var javaScriptEntrypoint = false;
         if (javaScriptEntrypoint) {
             ensureEntrypointCompatible(context, method, parentNames);
         }
@@ -995,10 +995,6 @@ final class ObjectOrientedJavaScriptGenerator {
         return new ParentKinds(classParent, List.copyOf(interfaceParents));
     }
 
-    private boolean isJavaScriptEntrypoint(ObjectOriented.MethodDeclaration method) {
-        return false;
-    }
-
     private void ensureEntrypointCompatible(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
         if (referencesThis(method) || referencesParents(method, parentNames)) {
             throw unsupported(context.module(), "Entrypoint method `" + context.typeName() + ".main` cannot use instance state or parent-qualified calls");
@@ -1110,17 +1106,7 @@ final class ObjectOrientedJavaScriptGenerator {
     }
 
     private String renderProgramMain(RenderContext context, List<ObjectOriented.MethodDeclaration> methods) {
-        var main = methods.stream().filter(this::isJavaScriptEntrypoint).findFirst();
-        if (main.isEmpty()) {
-            return "";
-        }
-        return "\nif (require.main === module) {\n"
-               + "    const result = " + context.typeName() + ".main(process.argv.slice(2));\n"
-               + "    const value = capy.isEffect(result) ? result.unsafe_run() : result;\n"
-               + "    if (value !== undefined && value !== null) {\n"
-               + "        capy.writeProgramResult(value);\n"
-               + "    }\n"
-               + "}\n";
+        return "";
     }
 
     private String renderExports(String typeName) {
