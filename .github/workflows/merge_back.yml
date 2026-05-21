@@ -1,12 +1,11 @@
 name: Merge Back
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_branch:
-        description: Release branch to merge back, for example release/1.2.x.
-        required: true
-        type: string
+  push:
+    branches:
+      - "release/*"
+    paths:
+      - "gradle.properties"
 
 permissions:
   actions: write
@@ -47,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RELEASE_BRANCH="${{ inputs.release_branch || github.ref_name }}"
+          RELEASE_BRANCH="${GITHUB_REF_NAME}"
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
           if [[ ! "${RELEASE_BRANCH}" =~ ^release/[0-9]+\.[0-9]+\.x$ ]]; then
             echo "::error::Merge Back requires a release/{major}.{minor}.x branch, got '${RELEASE_BRANCH}'."
