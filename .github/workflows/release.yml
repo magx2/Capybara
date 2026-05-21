@@ -341,7 +341,22 @@ jobs:
             exit 1
           fi
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${ASSETS[@]}" --clobber
+            mapfile -t EXISTING_ASSETS < <(gh release view "${TAG}" --json assets --jq '.assets[].name')
+            MISSING_ASSETS=()
+            for asset in "${ASSETS[@]}"; do
+              asset_name="$(basename "${asset}")"
+              if printf '%s\n' "${EXISTING_ASSETS[@]}" | grep -Fxq "${asset_name}"; then
+                echo "Release asset ${asset_name} already exists; skipping upload."
+              else
+                MISSING_ASSETS+=("${asset}")
+              fi
+            done
+
+            if (( ${#MISSING_ASSETS[@]} > 0 )); then
+              gh release upload "${TAG}" "${MISSING_ASSETS[@]}"
+            else
+              echo "All release assets already exist."
+            fi
           else
             gh release create "${TAG}" "${ASSETS[@]}" \
               --verify-tag \
