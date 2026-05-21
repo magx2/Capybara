@@ -4,6 +4,25 @@
 - Deciders: Codex, repository maintainers
 - Date: 2026-04-14
 
+## Implementation Update
+
+As of 2026-05-21, this ADR records the initial frontend and Java-backend
+boundary, but the implementation has moved beyond that first slice.
+
+- `.coo` modules are parsed, validated, and generated for Java, JavaScript, and
+  Python.
+- The tested OO surface includes classes, interfaces, behavior-only traits,
+  class fields, constructor parameters, expression-bodied and block-bodied
+  methods, loops, exceptions, arrays, stdout calls, FP interop, and static
+  `type()` metadata.
+- Trait fields and trait `init` blocks remain unsupported.
+- Java still has the strictest entrypoint checks: entrypoint classes cannot
+  declare constructor state or `init` blocks. All backends reject entrypoint
+  methods that use instance state or parent-qualified calls.
+- JavaScript and Python no longer reject `.coo` modules by default; references
+  below to Java-only OO generation describe the original v1 slice, not current
+  backend coverage.
+
 ## Context
 
 Capybara currently ships only the functional frontend. The compiler, linked JSON, CLI source discovery, diagnostics, tests, and IntelliJ syntax support all assume `.cfun` inputs parsed by `Functional.g4`.

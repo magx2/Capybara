@@ -4,6 +4,15 @@
 - Deciders: Codex workflow
 - Date: 2026-05-08
 
+## Implementation Update
+
+As of 2026-05-21, `.coo` static `type()` metadata is generated beyond the
+original Java-only slice. JavaScript and Python also emit static OO metadata for
+classes, interfaces, and traits, including names, fields, methods, parent
+types, and modifier information where the backend represents it. References
+below to Java-only OO metadata describe the original v1 implementation boundary,
+not current backend coverage.
+
 ## Context
 
 Derive, JSON encoding, runtime type patterns, and OO Java generation now all need a small, explicit reflection model. The first branch exposed this through `/capy/meta_prog/Reflection`; that module works, but it mixes value reflection, `.cfun` type metadata, and `.coo` type metadata in one namespace.
