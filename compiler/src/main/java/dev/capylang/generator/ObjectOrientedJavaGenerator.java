@@ -395,7 +395,7 @@ public final class ObjectOrientedJavaGenerator {
             Set<String> parentNames
     ) {
         var code = new StringBuilder();
-        var javaEntrypoint = isJavaEntrypoint(method);
+        var javaEntrypoint = false;
         if (javaEntrypoint) {
             ensureEntrypointCompatible(module, owner, method, parentNames);
         }
@@ -1050,10 +1050,6 @@ public final class ObjectOrientedJavaGenerator {
                 code.append(indent(indentLevel)).append('}');
             }
         });
-    }
-
-    private boolean isJavaEntrypoint(ObjectOriented.MethodDeclaration method) {
-        return false;
     }
 
     private void ensureEntrypointCompatible(
