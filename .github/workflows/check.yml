@@ -34,3 +34,14 @@ jobs:
 
       - name: Run Gradle check
         run: ./gradlew clean check --no-daemon
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-check-test-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**/*.xml
+          if-no-files-found: ignore
+          retention-days: 5
