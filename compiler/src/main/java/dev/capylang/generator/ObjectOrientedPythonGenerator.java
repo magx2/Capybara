@@ -625,7 +625,11 @@ final class ObjectOrientedPythonGenerator {
         }
         var typeName = PythonGenerator.simpleTypeName(type);
         var constructor = typeReference(context, typeName);
-        if ("None_".equals(typeName) && body.isBlank()) {
+        var singletonType = programContext.singletonDataType(context.module(), type);
+        if (singletonType.isPresent()) {
+            if (!body.isBlank()) {
+                throw unsupported(context.module(), "Singleton data type `" + singletonType.orElseThrow().name() + "` requires empty construction body");
+            }
             return Optional.of(constructor);
         }
         var fields = programContext.fieldsForType(typeName);

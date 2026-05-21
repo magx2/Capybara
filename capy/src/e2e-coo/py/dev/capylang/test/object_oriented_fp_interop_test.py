@@ -8,11 +8,17 @@ generated_dir = pathlib.Path(os.environ["CAPY_E2E_COO_PY_GENERATED_DIR"])
 sys.path.insert(0, str(generated_dir))
 
 from dev.capylang.test.PetInteractor import PetInteractor
+import dev.capylang.capybara as capy
+import dev.capylang.test.ObjectOrientedFpInterop as fp
 
 
 class ObjectOrientedFpInteropPythonE2ETest(unittest.TestCase):
     def test_object_oriented_code_uses_primitive_backed_functional_types(self):
         interactor = PetInteractor()
+
+        self.assertIs(interactor.create_fp_empty(), fp.InteropNone)
+        self.assertEqual(interactor.match_fp_empty(), "none")
+        self.assertIs(interactor.create_runtime_none(), capy.None_)
 
         self.assertEqual(interactor.echo_user_id(7), 7)
         self.assertEqual(interactor.construct_user_id(11), 11)

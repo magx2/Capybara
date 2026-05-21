@@ -23,9 +23,8 @@ fun nested_guard(option: Option[int]): String =
 data Sign { value: String, weight: int, enabled: bool }
 
 union Letter = Vowel | Consonant
-single Vowel
-single Consonant
-
+data Vowel {}
+data Consonant {}
 fun sign(sign: Sign): String =
     match sign with
     case Sign { value, weight, enabled } when enabled & value == '-' & weight > 10 -> "heavy minus"

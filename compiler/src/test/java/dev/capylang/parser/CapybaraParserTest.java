@@ -47,7 +47,6 @@ class CapybaraParserTest {
                     case EnumDeclaration enumDeclaration -> enumDeclaration.name().equals(name);
                     case PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration ->
                             primitiveBackedTypeDeclaration.name().equals(name);
-                    case SingleDeclaration singleDeclaration -> singleDeclaration.name().equals(name);
                     default -> false;
                 })
                 .findAny()
@@ -146,8 +145,7 @@ class CapybaraParserTest {
                         """
                                 union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
-                                single End
-
+                                data End {}
                                 fun seq_first_wildcard(s: Seq[int]): Option[int] =
                                     match s with
                                     case End -> None {}
@@ -159,8 +157,7 @@ class CapybaraParserTest {
                         """
                                 union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
-                                single End
-
+                                data End {}
                                 fun seq_first_wildcard_fq_singleton(s: Seq[int]): /capy/lang/Option[int] =
                                     match s with
                                     case End -> /capy/lang/Option.None {}
@@ -726,21 +723,21 @@ class CapybaraParserTest {
     }
 
     @Test
-    @DisplayName("should parse line and doc comments for single declarations")
-    void parseSingleComments() {
+    @DisplayName("should parse line and doc comments for empty data declarations")
+    void parseEmptyDataComments() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 union Program = Success | Failed
 
-                // Normal comments are skipped before singles.
+                // Normal comments are skipped before data.
                 /// Successful program completion
                 /// with exit code zero.
-                single Success
-
+                data Success {}
                 data Failed { exit_code: int }
                 """));
 
-        var single = findDefinition(SingleDeclaration.class, "Success", module.functional());
-        assertThat(single.comments()).containsExactly("Successful program completion", "with exit code zero.");
+        var data = findDefinition(DataDeclaration.class, "Success", module.functional());
+        assertThat(data.fields()).isEmpty();
+        assertThat(data.comments()).containsExactly("Successful program completion", "with exit code zero.");
     }
 
     @Test

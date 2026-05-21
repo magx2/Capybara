@@ -20,8 +20,7 @@ data Boo[T] { boo: T }
 
 union Knight = EnglishKnight | Tom
 data EnglishKnight { power: double }
-single Tom
-
+data Tom {}
 fun summon_tom(): Knight = Tom {}
 
 fun is_tom(knight: Knight): bool =
@@ -31,8 +30,7 @@ fun is_tom(knight: Knight): bool =
 
 union King[T] = FrenchKing[T] | Jerry
 data FrenchKing[T] { head: bool, foo: T }
-single Jerry
-
+data Jerry {}
 fun summon_jerry(): King[int] = Jerry {}
 
 fun jerry_or_french(king: King[int]): String =

@@ -112,8 +112,7 @@ class CompilationTest {
                         """
                                 union Option[T] = Some[T] | None
                                 data Some[T] { value: T }
-                                single None
-
+                                data None {}
                                 fun tuple(): Tuple[int, String, double] = (1, "foo", 5.0)
                                 fun tuple2(): Tuple[int, Option[String], double] = (1, Some { value: "foo" }, 5.0)
                                 fun tuple_index(): Option[String] = (1, "foo", 5.0)[1]

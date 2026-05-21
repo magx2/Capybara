@@ -93,8 +93,7 @@ fun reduce_list_to_box_values(values: List[int]): Box[List[int]] =
 
 union SeqEnd[T] = ConsEnd[T] | EndEnd
 data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
-single EndEnd
-
+data EndEnd {}
 union Outcome = ParseSucceeded | ParseFailed
 data ParseSucceeded { source: String }
 data ParseFailed { source: String }

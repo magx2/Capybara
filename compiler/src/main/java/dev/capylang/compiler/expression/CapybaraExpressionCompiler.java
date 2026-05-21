@@ -9693,9 +9693,24 @@ public class CapybaraExpressionCompiler {
         if (!(type instanceof GenericDataType genericDataType)) {
             return Result.success(List.copyOf(assignments));
         }
-        var assignedNames = assignments.stream()
-                .map(CompiledNewData.FieldAssignment::name)
+        var fieldNames = genericDataType.fields().stream()
+                .map(CompiledDataType.CompiledField::name)
                 .collect(java.util.stream.Collectors.toSet());
+        var assignedNames = new java.util.LinkedHashSet<String>();
+        for (var assignment : assignments) {
+            if (!fieldNames.contains(assignment.name())) {
+                return withPosition(
+                        Result.error("Field `" + assignment.name() + "` not found in type `" + genericDataType.name() + "`"),
+                        findAssignmentValuePosition(source, assignment.name()).or(source::position)
+                );
+            }
+            if (!assignedNames.add(assignment.name())) {
+                return withPosition(
+                        Result.error("Field `" + assignment.name() + "` is assigned more than once"),
+                        findAssignmentValuePosition(source, assignment.name()).or(source::position)
+                );
+            }
+        }
         var missingField = genericDataType.fields().stream()
                 .map(CompiledDataType.CompiledField::name)
                 .filter(fieldName -> !assignedNames.contains(fieldName))

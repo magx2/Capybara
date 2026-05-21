@@ -2,8 +2,7 @@
 union Program = Success | Failed
 
 /// Successful program completion with exit code `0`.
-single Success
-
+data Success {}
 /// Failed program completion with a non-zero exit code.
 data Failed { exit_code: failed_exit_code }
 

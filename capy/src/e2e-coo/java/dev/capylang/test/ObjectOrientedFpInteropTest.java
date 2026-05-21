@@ -13,6 +13,9 @@ class ObjectOrientedFpInteropTest {
         assertThat(interactor.create_fp_data("Bara")).isInstanceOf(ObjectOrientedFpInterop.InteropDog.class);
         assertThat(((ObjectOrientedFpInterop.InteropDog) interactor.create_fp_data("Bara")).name()).isEqualTo("Bara");
         assertThat(interactor.match_fp_type("Mochi")).isEqualTo("dog:Mochi");
+        assertThat(interactor.create_fp_empty()).isEqualTo(ObjectOrientedFpInterop.InteropNone.INSTANCE);
+        assertThat(interactor.match_fp_empty()).isEqualTo("none");
+        assertThat(interactor.create_runtime_none()).isEqualTo(capy.lang.Option.None.INSTANCE);
         assertThat(interactor.invoke_rec_function(10)).isEqualTo(36);
         assertThat(interactor.echo_user_id(7)).isEqualTo(7);
         assertThat(interactor.construct_user_id(11)).isEqualTo(11);

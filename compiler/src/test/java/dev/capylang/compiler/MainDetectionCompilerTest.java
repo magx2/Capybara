@@ -95,7 +95,7 @@ class MainDetectionCompilerTest {
         var program = compileModules(List.of(
                 new RawModule("Program", "/cap/lang", """
                         union Program = Success
-                        single Success
+                        data Success {}
                         """),
                 new RawModule("Effect", "/cap/lang", """
                         union Effect[T] = UnsafeEffect[T]

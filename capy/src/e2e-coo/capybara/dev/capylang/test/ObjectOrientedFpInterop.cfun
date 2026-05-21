@@ -1,6 +1,9 @@
 union InteropPet = InteropDog | InteropCat
 data InteropDog { name: String }
 data InteropCat { age: int }
+union InteropMaybe = InteropSome | InteropNone
+data InteropSome { value: String }
+data InteropNone {}
 data RecInteropValue { value: int }
 type user_id -> int
 
@@ -16,6 +19,11 @@ fun pet_text(pet: InteropPet): String =
     match pet with
     case InteropDog { name } -> "dog:" + name
     case InteropCat { age } -> "cat:" + age
+
+fun maybe_text(value: InteropMaybe): String =
+    match value with
+    case InteropSome { value } -> value
+    case InteropNone -> "none"
 
 fun RecInteropValue.step(delta: int): int = this.value + delta
 

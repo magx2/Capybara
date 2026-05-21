@@ -267,7 +267,7 @@ class JavaExpressionEvaluatorTest {
                 enum Ordering { LESS, EQUAL, GREATER }
 
                 /// Successful program completion
-                single Success
+                data Success {}
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -339,7 +339,7 @@ class JavaExpressionEvaluatorTest {
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
                 union Assert { assertions: List[Assertion] } = StringAssert
-                single Passed
+                data Passed {}
                 union TestResult = Passed
                 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: long }
 
@@ -372,7 +372,7 @@ class JavaExpressionEvaluatorTest {
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
                 union Assert { assertions: List[Assertion] } = StringAssert
-                single Passed
+                data Passed {}
                 union TestResult = Passed
                 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: long }
 
@@ -412,7 +412,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateRuntimeDataValueCarrierForSingletonAndEnumValues() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("Consumer", "/foo/app", """
-                single Lonely
+                data Lonely {}
                 enum Color { RED, BLUE }
                 """));
         var generated = generatedProgram.modules().stream()
@@ -532,7 +532,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldStillRequireBracesForSingleValues() {
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
-                single Done
+                data Done {}
                 fun done(): Done = Done
                 """)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
@@ -561,7 +561,7 @@ class JavaExpressionEvaluatorTest {
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 from /foo/lib/Statuses import { * }
 
-                single DONE
+                data DONE {}
                 fun done(): DONE = DONE
                 """)), libraries);
         assertThat(programResult).isInstanceOf(Result.Error.class);
@@ -1241,8 +1241,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/List import { * }
 
                 union TestSeq[T] = TestSeqEnd
-                single TestSeqEnd
-
+                data TestSeqEnd {}
                 data Text { chars: List[String] }
 
                 fun Text.reduce(initial: R, reducer: (R, String) => R): R =
@@ -1409,7 +1408,7 @@ class JavaExpressionEvaluatorTest {
                         """
                                 union Knight = EnglishKnight | Tom
                                 data EnglishKnight { power: float }
-                                single Tom
+                                data Tom {}
                                 fun summon_tom(): Knight = Tom {}
                                 """,
                         "return Tom.INSTANCE;"

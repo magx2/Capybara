@@ -31,7 +31,7 @@ deriver FieldValueSummary {
 }
 
 data DerivedUser { name: String, age: int } derive Show, AgeComparable, FieldValueSummary
-single Empty
+data Empty {}
 data Entity { id: String }
 data Employee { department: String, ...Entity } derive Show
 union Named { id: String } = DerivedEntity derive Show
