@@ -102,7 +102,15 @@ class CapyPythonCliTest(unittest.TestCase):
         regenerated_dir = root / "regenerated"
         native_wiring_file = root / "capy.native.json"
         (source_dir / "foo").mkdir(parents=True)
+        (source_dir / "dev" / "capylang" / "test").mkdir(parents=True)
         (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
+        (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
+            interface Clock {
+                def now(): String
+            }
+
+            native provider system_clock: Clock key "system"
+        """))
         native_wiring_file.write_text(textwrap.dedent("""
             {
               "providers": [
@@ -132,6 +140,7 @@ class CapyPythonCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         program_json = (linked_dir / "program.json").read_text()
         self.assertIn("nativeProviders", program_json)
+        self.assertIn("nativeProviderCatalog", program_json)
         self.assertIn("nativeinterop.system_clock", program_json)
 
         generate = run_capy(["generate", "python", "-i", str(linked_dir), "-o", str(regenerated_dir)])

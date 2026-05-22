@@ -13,6 +13,7 @@ import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledFunction;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderCatalog;
 import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.Result;
@@ -737,7 +738,22 @@ public class Capy {
         var objectOrientedModules = new ArrayList<>(first.objectOrientedModules());
         objectOrientedModules.addAll(second.objectOrientedModules());
         var nativeProviders = first.nativeProviders().isEmpty() ? second.nativeProviders() : first.nativeProviders();
-        return new CompiledProgram(modules, objectOrientedModules, nativeProviders);
+        var nativeProviderCatalog = mergeNativeProviderCatalog(first.nativeProviderCatalog(), second.nativeProviderCatalog());
+        return new CompiledProgram(modules, objectOrientedModules, nativeProviders, nativeProviderCatalog);
+    }
+
+    private static NativeProviderCatalog mergeNativeProviderCatalog(NativeProviderCatalog first, NativeProviderCatalog second) {
+        if (first.isEmpty()) {
+            return second;
+        }
+        if (second.isEmpty()) {
+            return first;
+        }
+        var declarations = new ArrayList<>(first.declarations());
+        declarations.addAll(second.declarations());
+        var bindings = new ArrayList<>(first.bindings());
+        bindings.addAll(second.bindings());
+        return new NativeProviderCatalog(declarations, bindings);
     }
 
     static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
@@ -1484,7 +1500,12 @@ public class Capy {
         outputModules.add(createCapyTestRuntimeModule(testFunctions));
         log.info("Created CapyTestRuntime module in " + Duration.ofNanos(System.nanoTime() - runtimeModuleStartedAt));
         log.info("Prepared compiled tests in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
-        return new CompiledProgram(outputModules, linkedProgram.objectOrientedModules(), linkedProgram.nativeProviders());
+        return new CompiledProgram(
+                outputModules,
+                linkedProgram.objectOrientedModules(),
+                linkedProgram.nativeProviders(),
+                linkedProgram.nativeProviderCatalog()
+        );
     }
 
     private static List<TestFunctionRef> discoverTestFunctions(CompiledProgram linkedProgram) {
@@ -1741,7 +1762,8 @@ public class Capy {
                 linkedProgram.objectOrientedModules().stream()
                         .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
                         .toList(),
-                linkedProgram.nativeProviders()
+                linkedProgram.nativeProviders(),
+                linkedProgram.nativeProviderCatalog()
         );
         var shouldCopyJavaLibResources = includeJavaLibResources
                                          && (!filteredProgram.modules().isEmpty() || !filteredProgram.objectOrientedModules().isEmpty());

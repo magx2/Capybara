@@ -307,7 +307,15 @@ class CapyTest {
     void shouldCompileGenerateWithNativeWiringManifest() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-native-source"));
         Files.createDirectories(sourceDir.resolve("foo"));
+        Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
+                interface Clock {
+                    def now(): String
+                }
+
+                native provider system_clock: Clock key "system"
+                """);
         var generatedDir = tempDir.resolve("compile-generate-native-output");
         var linkedDir = tempDir.resolve("compile-generate-native-linked");
         var manifestFile = tempDir.resolve("capy.native.json");
@@ -361,6 +369,8 @@ class CapyTest {
         assertEquals("dev.capylang.test.nativeinterop.SystemClock", provider.javaBinding().className());
         assertEquals("./nativeinterop/system_clock.js", provider.javascriptBinding().moduleName());
         assertEquals("nativeinterop.system_clock", provider.pythonBinding().moduleName());
+        assertEquals(1, program.nativeProviderCatalog().declarations().size());
+        assertEquals(1, program.nativeProviderCatalog().bindings().size());
     }
 
     @Test

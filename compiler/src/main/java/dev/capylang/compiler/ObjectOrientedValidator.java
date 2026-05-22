@@ -25,7 +25,48 @@ public final class ObjectOrientedValidator {
     }
 
     private void validateModule(ObjectOrientedModule module, TreeSet<Result.Error.SingleError> errors) {
+        validateNativeProviders(module, errors);
         module.objectOriented().definitions().forEach(definition -> validateDefinition(module, definition, errors));
+    }
+
+    private void validateNativeProviders(ObjectOrientedModule module, TreeSet<Result.Error.SingleError> errors) {
+        var typeNames = module.objectOriented().definitions().stream()
+                .map(ObjectOriented.TypeDeclaration::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var providerNames = new HashSet<String>();
+        for (var provider : module.objectOriented().nativeProviders()) {
+            if (!providerNames.add(provider.name())) {
+                errors.add(nativeProviderError(
+                        module,
+                        provider,
+                        "Native provider `" + provider.name() + "` duplicates another provider in module `" + module.name()
+                        + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
+                ));
+            }
+            if (typeNames.contains(provider.name())) {
+                errors.add(nativeProviderError(
+                        module,
+                        provider,
+                        "Native provider `" + provider.name() + "` collides with type name `" + provider.name()
+                        + "` in module `" + module.name() + "` for target `" + provider.targetType()
+                        + "` with qualifier `" + provider.qualifier() + "`"
+                ));
+            }
+        }
+    }
+
+    private Result.Error.SingleError nativeProviderError(
+            ObjectOrientedModule module,
+            ObjectOriented.NativeProviderDeclaration provider,
+            String message
+    ) {
+        var sourceFile = module.moduleFile();
+        return new Result.Error.SingleError(
+                0,
+                0,
+                sourceFile,
+                message + " in source `" + sourceFile + "`"
+        );
     }
 
     private void validateDefinition(
