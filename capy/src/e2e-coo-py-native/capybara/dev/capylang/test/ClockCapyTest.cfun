@@ -1,0 +1,19 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Clock import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Clock.coo", [
+        native_provider_composition_root_can_reach_python_backend().map(assertion => test("composition root can reach Python native provider", () => assertion)),
+        native_provider_can_be_injected_through_generated_interface().map(assertion => test("native provider can be injected through generated interface", () => assertion)),
+    ])
+
+fun native_provider_composition_root_can_reach_python_backend(): Effect[Assert] =
+    let app <- NativeProviderApp()
+    assert_that(app.read_system_clock()).is_equal_to(1700000000042L)
+
+fun native_provider_can_be_injected_through_generated_interface(): Effect[Assert] =
+    let clock = system_clock()
+    let domain <- NativeProviderDomain(clock)
+    assert_that(domain.read()).is_equal_to(1700000000042L)

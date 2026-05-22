@@ -382,6 +382,12 @@ def e2eCooJsNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources
 def e2eCooJsNativeWiringFile = layout.projectDirectory.file('src/e2e-coo-js-native/native-providers.json')
 def e2eCooJsNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js-native')
 def e2eCooNativeJsSourceDir = layout.projectDirectory.dir('src/e2e-coo/native/js')
+def e2eCooPyNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-py-native/capybara')
+def e2eCooPyNativeGeneratedPyDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-coo-py-native')
+def e2eCooPyNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo-py-native')
+def e2eCooPyNativeWiringFile = layout.projectDirectory.file('src/e2e-coo-py-native/native-providers.json')
+def e2eCooPyNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python-native')
+def e2eCooNativePySourceDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
 def jsTestSourcePath = 'src/test/js'
 def jsTestRunner = layout.projectDirectory.file("${jsTestSourcePath}/run-tests.js")
 def pyTestSourcePath = 'src/test/py'
@@ -682,6 +688,33 @@ def e2eCooPythonTests = tasks.register('e2e-coo-python', CapybaraPythonTestTask)
     shouldRunAfter e2eCooJsTests
 }
 
+def e2eCooPythonNativeTests = tasks.register('e2e-coo-python-native', CapybaraPythonTestTask) {
+    description = 'Runs object-oriented Python native provider Capybara e2e tests.'
+    group = 'verification'
+    dependsOn ':capy:classes'
+    dependsOn ':compiler:classes'
+    dependsOn 'copyE2eCooPyNativeFixtures'
+    configurePythonTask(delegate)
+    workingDir layout.projectDirectory.asFile
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
+    doFirst {
+        resetCapybaraTestResults(e2eCooPyNativeTestResultsDir)
+        setArgs([capybaraPyTestRunner.asFile.absolutePath] + capybaraRunnerArgs(e2eCooPyNativeGeneratedPyDir, e2eCooPyNativeTestResultsDir, getTests(), getPrintAvailableTests()))
+    }
+    inputs.file(capybaraPyTestRunner)
+            .withPropertyName('capybaraPyTestRunner')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(e2eCooPyNativeGeneratedPyDir)
+            .withPropertyName('e2eCooPyNativeGeneratedPySources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(e2eCooNativePySourceDir)
+            .withPropertyName('e2eCooNativePySources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(e2eCooPyNativeTestResultsDir)
+    shouldRunAfter e2eCooPythonTests
+}
+
 tasks.register('e2eTests') {
     description = 'Runs all e2e tests.'
     group = 'verification'
@@ -692,6 +725,7 @@ tasks.register('e2eTests') {
     dependsOn e2eCooJsTests
     dependsOn e2eCooJsNativeTests
     dependsOn e2eCooPythonTests
+    dependsOn e2eCooPythonNativeTests
 }
 
 check {
@@ -702,6 +736,7 @@ check {
     dependsOn e2eCooJsTests
     dependsOn e2eCooJsNativeTests
     dependsOn e2eCooPythonTests
+    dependsOn e2eCooPythonNativeTests
     dependsOn jsTests
     dependsOn pythonTests
 }
@@ -801,6 +836,22 @@ def linkCapybaraE2eCooPySources = registerCapybaraE2eLinkTask(
         e2eCooLinkedPyOutputDir,
         e2eCooGeneratedPyDir
 )
+def linkCapybaraE2eCooPyNativeSources = registerCapybaraE2eLinkTask(
+        'linkCapybaraE2eCooPyNativeSources',
+        'Compiles object-oriented Python native provider e2e-test Capybara files and generates Python in one pass without launching a separate JVM.',
+        'PYTHON',
+        e2eCooPyNativeCapybaraSourceDir,
+        e2eCooPyNativeLinkedOutputDir,
+        e2eCooPyNativeGeneratedPyDir
+)
+linkCapybaraE2eCooPyNativeSources.configure {
+    nativeWiringFile.set(e2eCooPyNativeWiringFile)
+}
+def copyE2eCooPyNativeFixtures = tasks.register('copyE2eCooPyNativeFixtures', Copy) {
+    dependsOn linkCapybaraE2eCooPyNativeSources
+    from(e2eCooNativePySourceDir)
+    into(e2eCooPyNativeGeneratedPyDir)
+}
 
 tasks.named('compileE2eCfunJava') {
     dependsOn linkCapybaraE2eCfunSources

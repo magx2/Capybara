@@ -333,14 +333,216 @@ class PythonGeneratorTest {
                 .orElseThrow();
 
         assertThat(app.code())
-                .contains("import dev.capylang.native_providers as __capy_native")
-                .contains("return __capy_native.system_clock()")
+                .contains("import dev.capylang.native_providers as capy_native")
+                .contains("return capy_native.system_clock()")
                 .doesNotContain("host_clock")
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
-                .contains("__capy_importlib.import_module('host_clock')")
-                .contains("getattr(__capy_provider_system_clock_module, 'SystemClock')()")
-                .contains("'now_millis'");
+                .contains("import dev.capylang.capybara as capy")
+                .contains("from host_clock import SystemClock as __capy_provider_system_clock_class")
+                .contains("_providers = capy.define_native_providers({")
+                .contains("interface_id='/Providers.Clock'")
+                .contains("qualifier='system'")
+                .contains("lifetime='singleton'")
+                .contains("factory='call'")
+                .contains("create=lambda: __capy_provider_system_clock_class()")
+                .contains("{'name': 'now_millis', 'arity': 0}")
+                .contains("return _providers.resolve('/Providers.Clock', 'system')");
+    }
+
+    @Test
+    void shouldRunPythonNativeProviderWithStructuralInterfaceValidation() throws Exception {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def read(): long = system_clock().now_millis()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(pythonProviderBinding(
+                "/Providers.Clock",
+                "system",
+                "factory",
+                "nativeinterop.system_clock",
+                "SystemClock",
+                "call"
+        )));
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class SystemClock:
+                    def __init__(self):
+                        self.offset = 9000
+
+                    def now_millis(self):
+                        return self.offset + 123
+                """);
+
+        var output = runPython("""
+                import dev.capylang.capybara as capy
+                import dev.capylang.native_providers as native_providers
+                from App import App
+                first = native_providers.system_clock()
+                second = native_providers.system_clock()
+                print('|'.join([
+                    str(App().read()),
+                    str(first.now_millis()),
+                    str(capy.is_type(first, 'Clock')).lower(),
+                    str(first is second).lower(),
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("9123|9123|true|false");
+    }
+
+    @Test
+    void shouldCachePythonNativeProviderSingleton() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "singleton",
+                        "nativeinterop.system_clock",
+                        "SystemClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class SystemClock:
+                    def now_millis(self):
+                        return 1
+                """);
+
+        var output = runPython("""
+                import dev.capylang.native_providers as native_providers
+                print(str(native_providers.system_clock() is native_providers.system_clock()).lower())
+                """);
+
+        assertThat(output).isEqualTo("true");
+    }
+
+    @Test
+    void shouldFailPythonNativeProviderStartupWhenClassIsMissing() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "nativeinterop.system_clock",
+                        "SystemClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class OtherClock:
+                    pass
+                """);
+
+        var result = runPythonCommand("-c", "import dev.capylang.native_providers");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("ImportError")
+                .contains("SystemClock")
+                .contains("nativeinterop.system_clock");
+    }
+
+    @Test
+    void shouldFailPythonNativeProviderValidationWhenMethodIsMissing() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "nativeinterop.system_clock",
+                        "SystemClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class SystemClock:
+                    pass
+                """);
+
+        var result = runPythonCommand("-c", "import dev.capylang.native_providers as providers; providers.system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("missing method `now_millis`");
+    }
+
+    @Test
+    void shouldFailPythonNativeProviderValidationWhenMethodArityIsTooSmall() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def plus(value: long): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "nativeinterop.system_clock",
+                        "SystemClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class SystemClock:
+                    def plus(self):
+                        return 1
+                """);
+
+        var result = runPythonCommand("-c", "import dev.capylang.native_providers as providers; providers.system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("requires arity at least 1, got 0");
+    }
+
+    @Test
+    void shouldFailPythonNativeProviderValidationWhenFactoryReturnsNone() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "nativeinterop.system_clock",
+                        "make_clock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                def make_clock():
+                    return None
+                """);
+
+        var result = runPythonCommand("-c", "import dev.capylang.native_providers as providers; providers.system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("returned None");
     }
 
     @Test
@@ -762,14 +964,40 @@ class PythonGeneratorTest {
     }
 
     private static NativeProviderBinding pythonProviderBinding(String interfaceId, String qualifier) {
+        return pythonProviderBinding(interfaceId, qualifier, "singleton", "host_clock", "SystemClock", "call");
+    }
+
+    private static NativeProviderBinding pythonProviderBinding(
+            String interfaceId,
+            String qualifier,
+            String lifetime,
+            String moduleName,
+            String className,
+            String factory
+    ) {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                "singleton",
+                lifetime,
                 null,
                 null,
-                new NativeProviderBackendBinding("SystemClock", "host_clock", null, "call")
+                new NativeProviderBackendBinding(className, moduleName, null, factory)
         );
+    }
+
+    private static CompiledProgram nativeProviderProgram(String methodDeclaration, NativeProviderBinding binding) {
+        return compileProgram(List.of(new RawModule(
+                "Providers",
+                "",
+                """
+                        interface Clock {
+                            %s
+                        }
+
+                        native provider system_clock: Clock key "system"
+                        """.formatted(methodDeclaration),
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(binding));
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {
@@ -781,6 +1009,15 @@ class PythonGeneratorTest {
             }
             Files.writeString(target, module.code(), StandardCharsets.UTF_8);
         }
+    }
+
+    private void writeHostModule(String relativePath, String code) throws Exception {
+        var target = tempDir.resolve(relativePath);
+        var parent = target.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(target, code, StandardCharsets.UTF_8);
     }
 
     private String runPython(String script) throws Exception {
