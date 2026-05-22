@@ -312,7 +312,10 @@ class ObjectOrientedCompilerTest {
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
-                        .contains("Native provider `system_clock` does not accept arguments")
+                        .contains("TypeMismatch")
+                        .contains("Native provider `system_clock`")
+                        .contains("qualifier `system`")
+                        .contains("does not accept arguments")
                         .contains("system_clock()")
                         .contains("/dev/capylang/test/Clock.coo"));
     }

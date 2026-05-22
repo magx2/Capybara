@@ -70,8 +70,11 @@ public final class JavaGenerator implements Generator {
                                 info.providerSymbolName(),
                                 info.bootstrapMethodName(),
                                 info.targetBackendType(),
+                                info.interfaceId(),
+                                info.qualifier(),
                                 info.sourceModulePath(),
-                                info.sourceModuleName()
+                                info.sourceModuleName(),
+                                info.sourceFile()
                         ))
                         .toList()
         );
@@ -109,15 +112,18 @@ public final class JavaGenerator implements Generator {
             var binding = bindings.get(nativeProviderKey(declaration.interfaceId(), declaration.qualifier()));
             var javaBinding = binding == null ? null : binding.javaBinding();
             if (javaBinding == null) {
-                throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + declaration.providerName()
                                                    + "` for interface `" + declaration.interfaceId()
                                                    + "` with qualifier `" + declaration.qualifier()
-                                                   + "` has no java binding");
+                                                   + "` for backend `java` has no java binding in source `"
+                                                   + declaration.sourceFile() + "`");
             }
             var interfaceType = interfaces.get(declaration.interfaceId());
             if (interfaceType == null) {
-                throw new IllegalArgumentException("Native provider `" + declaration.providerName()
-                                                   + "` targets unknown interface `" + declaration.interfaceId() + "`");
+                throw new IllegalArgumentException("TypeMismatch: Native provider `" + declaration.providerName()
+                                                   + "` targets unknown interface `" + declaration.interfaceId()
+                                                   + "` with qualifier `" + declaration.qualifier()
+                                                   + "` in source `" + declaration.sourceFile() + "`");
             }
             var baseName = sanitizeJavaIdentifier(declaration.providerName());
             var bootstrapName = baseNames.getOrDefault(baseName, 0) == 1
@@ -132,6 +138,7 @@ public final class JavaGenerator implements Generator {
                     interfaceType.backendClassName(),
                     declaration.sourceModulePath(),
                     declaration.sourceModuleName(),
+                    declaration.sourceFile(),
                     binding.lifetime(),
                     javaBinding
             ));
@@ -246,22 +253,27 @@ public final class JavaGenerator implements Generator {
     private String renderNativeProviderRegistration(NativeProviderInfo provider) {
         var binding = provider.binding();
         if (binding.className() == null || binding.className().isBlank()) {
-            throw new IllegalArgumentException("Native provider `" + provider.providerSymbolName()
+            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
                                                + "` for interface `" + provider.interfaceId()
                                                + "` with qualifier `" + provider.qualifier()
-                                               + "` requires manifest field `java.className`");
+                                               + "` for backend `java` requires manifest field `java.className` in source `"
+                                               + provider.sourceFile() + "`");
         }
         if (!"constructor".equals(binding.factory())) {
-            throw new IllegalArgumentException("Native provider `" + provider.providerSymbolName()
+            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
                                                + "` for interface `" + provider.interfaceId()
                                                + "` with qualifier `" + provider.qualifier()
-                                               + "` has unsupported java factory `" + binding.factory()
-                                               + "`. Supported values: constructor");
+                                               + "` for backend `java`"
+                                               + " has unsupported java factory `" + binding.factory()
+                                               + "`. Supported values: constructor. Source `" + provider.sourceFile() + "`");
         }
         var lifetimeMethod = provider.lifetime() == NativeProviderLifetime.FACTORY ? "factory" : "singleton";
         return "            NativeProviders." + lifetimeMethod + "(\n"
                + "                    " + javaString(provider.interfaceId()) + ",\n"
                + "                    " + javaString(provider.qualifier()) + ",\n"
+               + "                    " + javaString(provider.providerSymbolName()) + ",\n"
+               + "                    \"java\",\n"
+               + "                    " + javaString(provider.sourceFile()) + ",\n"
                + "                    " + provider.targetBackendType() + ".class,\n"
                + "                    " + binding.className() + "::new\n"
                + "            )";
@@ -271,6 +283,9 @@ public final class JavaGenerator implements Generator {
         return "    public static " + provider.targetBackendType() + " " + provider.bootstrapMethodName() + "() {\n"
                + "        return PROVIDERS.resolve(" + javaString(provider.interfaceId())
                + ", " + javaString(provider.qualifier())
+               + ", " + javaString(provider.providerSymbolName())
+               + ", \"java\""
+               + ", " + javaString(provider.sourceFile())
                + ", " + provider.targetBackendType() + ".class);\n"
                + "    }\n";
     }
@@ -1309,6 +1324,7 @@ public final class JavaGenerator implements Generator {
             String targetBackendType,
             String sourceModulePath,
             String sourceModuleName,
+            String sourceFile,
             NativeProviderLifetime lifetime,
             NativeProviderBackendBinding binding
     ) {

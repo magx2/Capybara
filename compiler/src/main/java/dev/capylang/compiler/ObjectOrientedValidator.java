@@ -4,9 +4,11 @@ import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public final class ObjectOrientedValidator {
     public static final ObjectOrientedValidator INSTANCE = new ObjectOrientedValidator();
@@ -40,7 +42,7 @@ public final class ObjectOrientedValidator {
                 errors.add(nativeProviderError(
                         module,
                         provider,
-                        "Native provider `" + provider.name() + "` duplicates another provider in module `" + module.name()
+                        "DuplicateProvider: Native provider `" + provider.name() + "` duplicates another provider in module `" + module.name()
                         + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
                 ));
             }
@@ -48,7 +50,7 @@ public final class ObjectOrientedValidator {
                 errors.add(nativeProviderError(
                         module,
                         provider,
-                        "Native provider `" + provider.name() + "` collides with type name `" + provider.name()
+                        "TypeMismatch: Native provider `" + provider.name() + "` collides with type name `" + provider.name()
                         + "` in module `" + module.name() + "` for target `" + provider.targetType()
                         + "` with qualifier `" + provider.qualifier() + "`"
                 ));
@@ -74,107 +76,112 @@ public final class ObjectOrientedValidator {
         if (module.objectOriented().nativeProviders().isEmpty()) {
             return;
         }
-        var providerNames = module.objectOriented().nativeProviders().stream()
-                .map(ObjectOriented.NativeProviderDeclaration::name)
-                .toList();
+        var providersByName = module.objectOriented().nativeProviders().stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        ObjectOriented.NativeProviderDeclaration::name,
+                        java.util.function.Function.identity(),
+                        (first, ignored) -> first
+                ));
         for (var definition : module.objectOriented().definitions()) {
             for (var member : definition.members()) {
-                validateNativeProviderCalls(module, providerNames, member, errors);
+                validateNativeProviderCalls(module, providersByName, member, errors);
             }
         }
     }
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            List<String> providerNames,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
             ObjectOriented.MemberDeclaration member,
             TreeSet<Result.Error.SingleError> errors
     ) {
         switch (member) {
             case ObjectOriented.FieldDeclaration fieldDeclaration ->
-                    fieldDeclaration.initializer().ifPresent(expression -> validateNativeProviderCalls(module, providerNames, expression, errors));
+                    fieldDeclaration.initializer().ifPresent(expression -> validateNativeProviderCalls(module, providersByName, expression, errors));
             case ObjectOriented.MethodDeclaration methodDeclaration ->
-                    methodDeclaration.body().ifPresent(body -> validateNativeProviderCalls(module, providerNames, body, errors));
+                    methodDeclaration.body().ifPresent(body -> validateNativeProviderCalls(module, providersByName, body, errors));
             case ObjectOriented.InitBlock initBlock ->
-                    validateNativeProviderCalls(module, providerNames, initBlock.body(), errors);
+                    validateNativeProviderCalls(module, providersByName, initBlock.body(), errors);
         }
     }
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            List<String> providerNames,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
             ObjectOriented.MethodBody body,
             TreeSet<Result.Error.SingleError> errors
     ) {
         switch (body) {
-            case ObjectOriented.ExpressionBody expressionBody -> validateNativeProviderCalls(module, providerNames, expressionBody.expression(), errors);
-            case ObjectOriented.StatementBlock statementBlock -> validateNativeProviderCalls(module, providerNames, statementBlock, errors);
+            case ObjectOriented.ExpressionBody expressionBody -> validateNativeProviderCalls(module, providersByName, expressionBody.expression(), errors);
+            case ObjectOriented.StatementBlock statementBlock -> validateNativeProviderCalls(module, providersByName, statementBlock, errors);
         }
     }
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            List<String> providerNames,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
             ObjectOriented.StatementBlock block,
             TreeSet<Result.Error.SingleError> errors
     ) {
         for (var statement : block.statements()) {
-            validateNativeProviderCalls(module, providerNames, statement, errors);
+            validateNativeProviderCalls(module, providersByName, statement, errors);
         }
     }
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            List<String> providerNames,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
             ObjectOriented.Statement statement,
             TreeSet<Result.Error.SingleError> errors
     ) {
         switch (statement) {
-            case ObjectOriented.LetStatement letStatement -> validateNativeProviderCalls(module, providerNames, letStatement.expression(), errors);
-            case ObjectOriented.LocalMethodStatement localMethodStatement -> validateNativeProviderCalls(module, providerNames, localMethodStatement.body(), errors);
-            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> validateNativeProviderCalls(module, providerNames, mutableVariableStatement.expression(), errors);
-            case ObjectOriented.AssignmentStatement assignmentStatement -> validateNativeProviderCalls(module, providerNames, assignmentStatement.expression(), errors);
-            case ObjectOriented.ExpressionStatement expressionStatement -> validateNativeProviderCalls(module, providerNames, expressionStatement.expression(), errors);
-            case ObjectOriented.ThrowStatement throwStatement -> validateNativeProviderCalls(module, providerNames, throwStatement.expression(), errors);
-            case ObjectOriented.ReturnStatement returnStatement -> validateNativeProviderCalls(module, providerNames, returnStatement.expression(), errors);
+            case ObjectOriented.LetStatement letStatement -> validateNativeProviderCalls(module, providersByName, letStatement.expression(), errors);
+            case ObjectOriented.LocalMethodStatement localMethodStatement -> validateNativeProviderCalls(module, providersByName, localMethodStatement.body(), errors);
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> validateNativeProviderCalls(module, providersByName, mutableVariableStatement.expression(), errors);
+            case ObjectOriented.AssignmentStatement assignmentStatement -> validateNativeProviderCalls(module, providersByName, assignmentStatement.expression(), errors);
+            case ObjectOriented.ExpressionStatement expressionStatement -> validateNativeProviderCalls(module, providersByName, expressionStatement.expression(), errors);
+            case ObjectOriented.ThrowStatement throwStatement -> validateNativeProviderCalls(module, providersByName, throwStatement.expression(), errors);
+            case ObjectOriented.ReturnStatement returnStatement -> validateNativeProviderCalls(module, providersByName, returnStatement.expression(), errors);
             case ObjectOriented.IfStatement ifStatement -> {
-                validateNativeProviderCalls(module, providerNames, ifStatement.condition(), errors);
-                validateNativeProviderCalls(module, providerNames, ifStatement.thenBranch(), errors);
-                ifStatement.elseBranch().ifPresent(elseBranch -> validateNativeProviderCalls(module, providerNames, elseBranch, errors));
+                validateNativeProviderCalls(module, providersByName, ifStatement.condition(), errors);
+                validateNativeProviderCalls(module, providersByName, ifStatement.thenBranch(), errors);
+                ifStatement.elseBranch().ifPresent(elseBranch -> validateNativeProviderCalls(module, providersByName, elseBranch, errors));
             }
             case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                validateNativeProviderCalls(module, providerNames, tryCatchStatement.tryBlock(), errors);
-                tryCatchStatement.catches().forEach(catchClause -> validateNativeProviderCalls(module, providerNames, catchClause.body(), errors));
+                validateNativeProviderCalls(module, providersByName, tryCatchStatement.tryBlock(), errors);
+                tryCatchStatement.catches().forEach(catchClause -> validateNativeProviderCalls(module, providersByName, catchClause.body(), errors));
             }
             case ObjectOriented.WhileStatement whileStatement -> {
-                validateNativeProviderCalls(module, providerNames, whileStatement.condition(), errors);
-                validateNativeProviderCalls(module, providerNames, whileStatement.body(), errors);
+                validateNativeProviderCalls(module, providersByName, whileStatement.condition(), errors);
+                validateNativeProviderCalls(module, providersByName, whileStatement.body(), errors);
             }
             case ObjectOriented.DoWhileStatement doWhileStatement -> {
-                validateNativeProviderCalls(module, providerNames, doWhileStatement.body(), errors);
-                validateNativeProviderCalls(module, providerNames, doWhileStatement.condition(), errors);
+                validateNativeProviderCalls(module, providersByName, doWhileStatement.body(), errors);
+                validateNativeProviderCalls(module, providersByName, doWhileStatement.condition(), errors);
             }
             case ObjectOriented.ForEachStatement forEachStatement -> {
-                validateNativeProviderCalls(module, providerNames, forEachStatement.iterable(), errors);
-                validateNativeProviderCalls(module, providerNames, forEachStatement.body(), errors);
+                validateNativeProviderCalls(module, providersByName, forEachStatement.iterable(), errors);
+                validateNativeProviderCalls(module, providersByName, forEachStatement.body(), errors);
             }
-            case ObjectOriented.StatementBlock nestedBlock -> validateNativeProviderCalls(module, providerNames, nestedBlock, errors);
+            case ObjectOriented.StatementBlock nestedBlock -> validateNativeProviderCalls(module, providersByName, nestedBlock, errors);
         }
     }
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            List<String> providerNames,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
             String expression,
             TreeSet<Result.Error.SingleError> errors
     ) {
-        for (var providerName : providerNames) {
-            if (callsProviderWithArguments(expression, providerName)) {
+        for (var provider : providersByName.values()) {
+            if (callsProviderWithArguments(expression, provider.name())) {
                 errors.add(new Result.Error.SingleError(
                         0,
                         0,
                         module.moduleFile(),
-                        "Native provider `" + providerName + "` does not accept arguments; call it as `" + providerName + "()` in source `" + module.moduleFile() + "`"
+                        "TypeMismatch: Native provider `" + provider.name() + "` for target `" + provider.targetType()
+                        + "` with qualifier `" + provider.qualifier() + "` does not accept arguments; call it as `"
+                        + provider.name() + "()` in source `" + module.moduleFile() + "`"
                 ));
             }
         }

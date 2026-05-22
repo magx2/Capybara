@@ -28,7 +28,7 @@ public enum NativeProviderBackend {
             }
         }
         throw new IllegalArgumentException(
-                "Unknown native provider backend `" + value + "`. Supported values: " + supportedValues() + "."
+                "UnsupportedBackend: Unknown native provider backend `" + value + "`. Supported values: " + supportedValues() + "."
         );
     }
 

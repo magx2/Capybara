@@ -238,7 +238,7 @@ class JavaScriptGeneratorTest {
                 .contains("create: () => new __capy_provider_system_clock_module.SystemClock()")
                 .contains("{ name: 'now_millis', arity: 0 }")
                 .contains("function system_clock()")
-                .contains("return providers.resolve('/Providers.Clock', 'system');")
+                .contains("return providers.resolve('/Providers.Clock', 'system', 'system_clock', 'javascript', '/Providers.coo');")
                 .contains("module.exports = {")
                 .doesNotContain("import ");
     }

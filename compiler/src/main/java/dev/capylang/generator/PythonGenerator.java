@@ -167,6 +167,9 @@ public final class PythonGenerator implements Generator {
         return "    " + pyString(nativeProviderBootstrapKey(provider.interfaceId(), provider.qualifier())) + ": capy.native_factory(\n"
                + "        interface_id=" + pyString(provider.interfaceId()) + ",\n"
                + "        qualifier=" + pyString(provider.qualifier()) + ",\n"
+               + "        provider_symbol=" + pyString(provider.providerSymbolName()) + ",\n"
+               + "        backend='python',\n"
+               + "        source_file=" + pyString(provider.sourceFile()) + ",\n"
                + "        lifetime=" + pyString(provider.lifetime().jsonValue()) + ",\n"
                + "        module_name=" + pyString(provider.binding().moduleName()) + ",\n"
                + "        class_name=" + pyString(provider.binding().className()) + ",\n"
@@ -178,13 +181,17 @@ public final class PythonGenerator implements Generator {
 
     private String renderNativeProviderFunction(ProgramContext.NativeProviderInfo provider) {
         return "def " + provider.bootstrapFunctionName() + "():\n"
-               + "    return _providers.resolve(" + pyString(provider.interfaceId()) + ", " + pyString(provider.qualifier()) + ")\n";
+               + "    return _providers.resolve(" + pyString(provider.interfaceId()) + ", " + pyString(provider.qualifier())
+               + ", " + pyString(provider.providerSymbolName()) + ", 'python', " + pyString(provider.sourceFile()) + ")\n";
     }
 
     private String renderNativeProviderFactory(ProgramContext.NativeProviderInfo provider) {
         if (!"call".equals(provider.binding().factory())) {
-            throw new IllegalArgumentException("Python native provider `" + provider.providerSymbolName()
-                                               + "` has unsupported factory `" + provider.binding().factory() + "`");
+            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
+                                               + "` for interface `" + provider.interfaceId()
+                                               + "` with qualifier `" + provider.qualifier()
+                                               + "` for backend `python` has unsupported Python factory `"
+                                               + provider.binding().factory() + "` in source `" + provider.sourceFile() + "`");
         }
         return nativeProviderClassVariable(provider) + "()";
     }
@@ -2059,15 +2066,18 @@ public final class PythonGenerator implements Generator {
                 var binding = bindings.get(nativeProviderKey(declaration.interfaceId(), declaration.qualifier()));
                 var pythonBinding = binding == null ? null : binding.pythonBinding();
                 if (pythonBinding == null) {
-                    throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                    throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + declaration.providerName()
                                                        + "` for interface `" + declaration.interfaceId()
                                                        + "` with qualifier `" + declaration.qualifier()
-                                                       + "` has no python binding");
+                                                       + "` for backend `python` has no python binding in source `"
+                                                       + declaration.sourceFile() + "`");
                 }
                 var interfaceType = interfaces.get(declaration.interfaceId());
                 if (interfaceType == null) {
-                    throw new IllegalArgumentException("Native provider `" + declaration.providerName()
-                                                       + "` targets unknown interface `" + declaration.interfaceId() + "`");
+                    throw new IllegalArgumentException("TypeMismatch: Native provider `" + declaration.providerName()
+                                                       + "` targets unknown interface `" + declaration.interfaceId()
+                                                       + "` with qualifier `" + declaration.qualifier()
+                                                       + "` in source `" + declaration.sourceFile() + "`");
                 }
                 var baseName = nativeProviderIdentifier(declaration.providerName());
                 var bootstrapName = baseNames.getOrDefault(baseName, 0) == 1
@@ -2082,6 +2092,7 @@ public final class PythonGenerator implements Generator {
                         declaration.qualifier(),
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
+                        declaration.sourceFile(),
                         binding.lifetime(),
                         pythonBinding,
                         interfaceType.methods()
@@ -2494,6 +2505,7 @@ public final class PythonGenerator implements Generator {
                 String qualifier,
                 String sourceModulePath,
                 String sourceModuleName,
+                String sourceFile,
                 NativeProviderLifetime lifetime,
                 NativeProviderBackendBinding binding,
                 List<NativeProviderMethodInfo> methods
@@ -3598,12 +3610,21 @@ public final class PythonGenerator implements Generator {
                             metadata = metadata or {}
                             self.interface_id = metadata.get('interfaceId') or metadata.get('interface_id')
                             self.qualifier = metadata.get('qualifier')
+                            self.provider_symbol = metadata.get('providerSymbol') or metadata.get('provider_symbol')
+                            self.backend = metadata.get('backend')
+                            self.source_file = metadata.get('sourceFile') or metadata.get('source_file')
 
                     def _native_provider_key(interface_id, qualifier):
                         return f'{interface_id}#{qualifier}'
 
                     def _native_provider_context(metadata):
-                        return 'interface `' + str(metadata.get('interfaceId') or metadata.get('interface_id')) + '` with qualifier `' + str(metadata.get('qualifier')) + '`'
+                        provider_symbol = metadata.get('providerSymbol') or metadata.get('provider_symbol')
+                        backend = metadata.get('backend')
+                        source_file = metadata.get('sourceFile') or metadata.get('source_file')
+                        symbol = 'provider symbol `' + str(provider_symbol) + '`, ' if provider_symbol else ''
+                        backend_text = ' for backend `' + str(backend) + '`' if backend else ''
+                        source_text = ' in source `' + str(source_file) + '`' if source_file else ''
+                        return symbol + 'interface `' + str(metadata.get('interfaceId') or metadata.get('interface_id')) + '` with qualifier `' + str(metadata.get('qualifier')) + '`' + backend_text + source_text
 
                     def _native_provider_error(message, metadata=None):
                         return NativeProviderError(message, metadata or {})
@@ -3618,30 +3639,33 @@ public final class PythonGenerator implements Generator {
 
                     def _native_required_text(value, name, metadata):
                         if not isinstance(value, str) or value.strip() == '':
-                            raise _native_provider_error('Native provider ' + name + ' is required for ' + _native_provider_context(metadata) + '.', metadata)
+                            raise _native_provider_error('TypeMismatch: Native provider ' + name + ' is required for ' + _native_provider_context(metadata) + '.', metadata)
                         return value
 
                     def native_factory(options=None, **kwargs):
                         if options is None:
                             options = {}
                         if not isinstance(options, dict):
-                            raise _native_provider_error('Native provider options must be a dict.')
+                            raise _native_provider_error('TypeMismatch: Native provider options must be a dict.')
                         options = {**options, **kwargs}
                         metadata = {
                             'interfaceId': options.get('interface_id') or options.get('interfaceId'),
                             'qualifier': options.get('qualifier'),
+                            'providerSymbol': options.get('provider_symbol') or options.get('providerSymbol'),
+                            'backend': options.get('backend'),
+                            'sourceFile': options.get('source_file') or options.get('sourceFile'),
                         }
                         interface_id = _native_required_text(metadata.get('interfaceId'), 'interface_id', metadata)
                         qualifier = _native_required_text(metadata.get('qualifier'), 'qualifier', metadata)
                         lifetime = options.get('lifetime', 'factory')
                         if lifetime not in ('singleton', 'factory'):
-                            raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' has unsupported lifetime `' + str(lifetime) + '`.', metadata)
+                            raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported lifetime `' + str(lifetime) + '`.', metadata)
                         factory = options.get('factory', 'call')
                         if factory != 'call':
-                            raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' has unsupported Python factory `' + str(factory) + '`.', metadata)
+                            raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported Python factory `' + str(factory) + '`.', metadata)
                         create = options.get('create')
                         if not callable(create):
-                            raise _native_provider_error('Native provider factory is required for ' + _native_provider_context(metadata) + '.', metadata)
+                            raise _native_provider_error('UnsupportedBackend: Native provider factory is required for ' + _native_provider_context(metadata) + '.', metadata)
                         raw_metadata = options.get('metadata') or {}
                         methods = []
                         for method in _native_option(raw_metadata, 'methods', default=[]):
@@ -3652,45 +3676,64 @@ public final class PythonGenerator implements Generator {
                         return SimpleNamespace(
                             interfaceId=interface_id,
                             qualifier=qualifier,
+                            providerSymbol=metadata.get('providerSymbol'),
+                            backend=metadata.get('backend'),
+                            sourceFile=metadata.get('sourceFile'),
                             lifetime=lifetime,
-                            metadata={'interfaceId': interface_id, 'qualifier': qualifier, 'methods': tuple(methods)},
+                            metadata={
+                                'interfaceId': interface_id,
+                                'qualifier': qualifier,
+                                'providerSymbol': metadata.get('providerSymbol'),
+                                'backend': metadata.get('backend'),
+                                'sourceFile': metadata.get('sourceFile'),
+                                'methods': tuple(methods),
+                            },
                             create=create,
                         )
 
                     class _NativeProviderResolver:
                         def __init__(self, providers):
                             self._providers = providers
-                        def resolve(self, interface_id, qualifier):
-                            return resolve_native_implementation(interface_id, qualifier, self)
+                        def resolve(self, interface_id, qualifier, provider_symbol=None, backend=None, source_file=None):
+                            return resolve_native_implementation(interface_id, qualifier, self, provider_symbol, backend, source_file)
 
                     def define_native_providers(provider_table):
                         if not isinstance(provider_table, dict):
-                            raise _native_provider_error('Native provider table must be a dict.')
+                            raise _native_provider_error('TypeMismatch: Native provider table must be a dict.')
                         providers = {}
                         for key, provider in provider_table.items():
                             if provider is None:
-                                raise _native_provider_error('Native provider table entry `' + str(key) + '` is invalid.')
+                                raise _native_provider_error('TypeMismatch: Native provider table entry `' + str(key) + '` is invalid.')
                             metadata = {
                                 'interfaceId': _native_option(provider, 'interfaceId', 'interface_id'),
                                 'qualifier': _native_option(provider, 'qualifier'),
+                                'providerSymbol': _native_option(provider, 'providerSymbol', 'provider_symbol'),
+                                'backend': _native_option(provider, 'backend'),
+                                'sourceFile': _native_option(provider, 'sourceFile', 'source_file'),
                             }
                             expected_key = _native_provider_key(metadata.get('interfaceId'), metadata.get('qualifier'))
                             if key != expected_key:
-                                raise _native_provider_error('Native provider table key `' + str(key) + '` does not match ' + _native_provider_context(metadata) + '.', metadata)
+                                raise _native_provider_error('TypeMismatch: Native provider table key `' + str(key) + '` does not match ' + _native_provider_context(metadata) + '.', metadata)
                             if key in providers:
-                                raise _native_provider_error('Duplicate native provider for ' + _native_provider_context(metadata) + '.', metadata)
+                                raise _native_provider_error('DuplicateProvider: Duplicate native provider for ' + _native_provider_context(metadata) + '.', metadata)
                             providers[key] = {'provider': provider, 'singleton_set': False, 'singleton_value': None}
                         return _NativeProviderResolver(providers)
 
-                    def resolve_native_implementation(interface_id, qualifier, provider_table=None):
+                    def resolve_native_implementation(interface_id, qualifier, provider_table=None, provider_symbol=None, backend=None, source_file=None):
                         providers = getattr(provider_table, '_providers', None)
-                        metadata = {'interfaceId': interface_id, 'qualifier': qualifier}
+                        metadata = {
+                            'interfaceId': interface_id,
+                            'qualifier': qualifier,
+                            'providerSymbol': provider_symbol,
+                            'backend': backend,
+                            'sourceFile': source_file,
+                        }
                         if not isinstance(providers, dict):
-                            raise _native_provider_error('No native provider table is bound for ' + _native_provider_context(metadata) + '.', metadata)
+                            raise _native_provider_error('NotWired: No native provider table is bound for ' + _native_provider_context(metadata) + '.', metadata)
                         key = _native_provider_key(interface_id, qualifier)
                         entry = providers.get(key)
                         if entry is None:
-                            raise _native_provider_error('No native provider registered for ' + _native_provider_context(metadata) + '.', metadata)
+                            raise _native_provider_error('NotWired: No native provider registered for ' + _native_provider_context(metadata) + '.', metadata)
                         provider = entry['provider']
                         if provider.lifetime == 'singleton':
                             if not entry['singleton_set']:
@@ -3705,7 +3748,7 @@ public final class PythonGenerator implements Generator {
                         except NativeProviderError:
                             raise
                         except Exception as error:
-                            raise _native_provider_error('Native provider for ' + _native_provider_context(provider.metadata) + ' failed during construction: ' + str(error), provider.metadata) from error
+                            raise _native_provider_error('InvocationFailure: Native provider for ' + _native_provider_context(provider.metadata) + ' failed during construction: ' + str(error), provider.metadata) from error
                         return validate_native_implementation(provider.metadata, value)
 
                     def _native_callable_arity(fn):
@@ -3756,23 +3799,26 @@ public final class PythonGenerator implements Generator {
                         metadata = {
                             'interfaceId': _native_option(interface_metadata, 'interfaceId', 'interface_id'),
                             'qualifier': _native_option(interface_metadata, 'qualifier'),
+                            'providerSymbol': _native_option(interface_metadata, 'providerSymbol', 'provider_symbol'),
+                            'backend': _native_option(interface_metadata, 'backend'),
+                            'sourceFile': _native_option(interface_metadata, 'sourceFile', 'source_file'),
                         }
                         if value is None:
-                            raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' returned None.', metadata)
+                            raise _native_provider_error('TypeMismatch: Native provider for ' + _native_provider_context(metadata) + ' returned None.', metadata)
                         for method in _native_option(interface_metadata, 'methods', default=[]):
                             name = _native_option(method, 'name')
                             implementation = getattr(value, name, None)
                             if implementation is None:
-                                raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' is missing method `' + str(name) + '`.', metadata)
+                                raise _native_provider_error('TypeMismatch: Native provider for ' + _native_provider_context(metadata) + ' is missing method `' + str(name) + '`.', metadata)
                             if not callable(implementation):
-                                raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' method `' + str(name) + '` must be callable.', metadata)
+                                raise _native_provider_error('TypeMismatch: Native provider for ' + _native_provider_context(metadata) + ' method `' + str(name) + '` must be callable.', metadata)
                             expected_arity = int(_native_option(method, 'arity', default=0) or 0)
                             actual_arity = _native_callable_arity(implementation)
                             if actual_arity is not None:
                                 if actual_arity.max is not None and expected_arity > actual_arity.max:
-                                    raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' method `' + str(name) + '` requires arity at least ' + str(expected_arity) + ', got ' + str(actual_arity.max) + '.', metadata)
+                                    raise _native_provider_error('TypeMismatch: Native provider for ' + _native_provider_context(metadata) + ' method `' + str(name) + '` requires arity at least ' + str(expected_arity) + ', got ' + str(actual_arity.max) + '.', metadata)
                                 if actual_arity.min > expected_arity:
-                                    raise _native_provider_error('Native provider for ' + _native_provider_context(metadata) + ' method `' + str(name) + '` requires arity compatible with ' + str(expected_arity) + ', got minimum ' + str(actual_arity.min) + '.', metadata)
+                                    raise _native_provider_error('TypeMismatch: Native provider for ' + _native_provider_context(metadata) + ' method `' + str(name) + '` requires arity compatible with ' + str(expected_arity) + ', got minimum ' + str(actual_arity.min) + '.', metadata)
                         return _NativeImplementationProxy(metadata, value)
                     """, """
                     class Some:

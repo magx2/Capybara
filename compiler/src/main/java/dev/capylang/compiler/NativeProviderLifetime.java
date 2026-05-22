@@ -27,7 +27,7 @@ public enum NativeProviderLifetime {
             }
         }
         throw new IllegalArgumentException(
-                "Unknown native provider lifetime `" + value + "`. Supported values: " + supportedValues() + "."
+                "UnsupportedBackend: Unknown native provider lifetime `" + value + "`. Supported values: " + supportedValues() + "."
         );
     }
 
