@@ -88,6 +88,11 @@ final class ObjectOrientedJavaScriptGenerator {
         output.append("const capy = require(")
                 .append(JavaScriptGenerator.jsString(JavaScriptGenerator.relativeRequire(context.relativePath(), JavaScriptGenerator.RUNTIME_PATH)))
                 .append(");\n");
+        if (context.usesNativeProviderBootstrap()) {
+            output.append("const __capy_native = require(")
+                    .append(JavaScriptGenerator.jsString(JavaScriptGenerator.relativeRequire(context.relativePath(), JavaScriptGenerator.NATIVE_PROVIDER_BOOTSTRAP_PATH)))
+                    .append(");\n");
+        }
         for (var entry : context.requiredModules().entrySet()) {
             output.append("const ")
                     .append(JavaScriptGenerator.moduleVar(entry.getKey()))
@@ -564,6 +569,7 @@ final class ObjectOrientedJavaScriptGenerator {
         }
         trimmed = rewriteParentQualifiedCalls(trimmed, parentNames);
         trimmed = rewriteModuleQualifiedReferences(context, trimmed);
+        trimmed = rewriteNativeProviderCalls(context, trimmed, scope);
         trimmed = rewriteImportedFunctionCalls(context, trimmed);
         trimmed = rewriteKnownCollectionMethods(trimmed);
         trimmed = rewriteArrayIndexing(trimmed);
@@ -865,6 +871,50 @@ final class ObjectOrientedJavaScriptGenerator {
             );
         }
         return rewritten;
+    }
+
+    private String rewriteNativeProviderCalls(RenderContext context, String expression, ExpressionScope scope) {
+        var providers = context.visibleNativeProviders();
+        if (providers.isEmpty()) {
+            return expression;
+        }
+        var rewritten = expression;
+        for (var entry : providers.entrySet().stream()
+                .sorted((left, right) -> Integer.compare(right.getKey().length(), left.getKey().length()))
+                .toList()) {
+            if (scope.hasBinding(entry.getKey())) {
+                continue;
+            }
+            rejectNativeProviderCallsWithArguments(context, rewritten, entry.getKey());
+            var replacement = "__capy_native." + entry.getValue().bootstrapFunctionName() + "()";
+            var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(\\s*\\)").matcher(rewritten);
+            var buffer = new StringBuilder();
+            var used = false;
+            while (matcher.find()) {
+                matcher.appendReplacement(buffer, "$1" + Matcher.quoteReplacement(replacement));
+                used = true;
+            }
+            matcher.appendTail(buffer);
+            if (used) {
+                context.requireNativeProviderBootstrap();
+                rewritten = buffer.toString();
+            }
+        }
+        return rewritten;
+    }
+
+    private void rejectNativeProviderCallsWithArguments(RenderContext context, String expression, String providerName) {
+        var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(providerName) + "\\s*\\(").matcher(expression);
+        while (matcher.find()) {
+            var openParen = matcher.end() - 1;
+            var closeParen = findMatchingParen(expression, openParen);
+            if (closeParen < 0) {
+                continue;
+            }
+            if (!expression.substring(openParen + 1, closeParen).trim().isBlank()) {
+                throw unsupported(context.module(), "Native provider `" + providerName + "` does not accept arguments; call it as `" + providerName + "()`");
+            }
+        }
     }
 
     private String rewriteKnownCollectionMethods(String expression) {
@@ -1391,6 +1441,39 @@ final class ObjectOrientedJavaScriptGenerator {
         return -1;
     }
 
+    private int findMatchingParen(String value, int openParen) {
+        var depth = 0;
+        char stringDelimiter = 0;
+        for (int index = openParen; index < value.length(); index++) {
+            var current = value.charAt(index);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    index++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            if (current == '(') {
+                depth++;
+                continue;
+            }
+            if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
     private List<String> splitTopLevel(String value) {
         if (value.isBlank()) {
             return List.of();
@@ -1508,7 +1591,9 @@ final class ObjectOrientedJavaScriptGenerator {
         private final LinkedHashMap<String, Path> requiredModules = new LinkedHashMap<>();
         private final Map<String, String> importedTypeOwners;
         private final Map<String, String> importedFunctionOwners;
+        private final Map<String, JavaScriptGenerator.ProgramContext.NativeProviderInfo> visibleNativeProviders;
         private final Set<String> fieldNames;
+        private boolean usesNativeProviderBootstrap;
 
         private RenderContext(
                 ObjectOrientedModule module,
@@ -1524,6 +1609,7 @@ final class ObjectOrientedJavaScriptGenerator {
             this.relativePath = ObjectOrientedJavaScriptGenerator.relativePath(module, typeName);
             this.importedTypeOwners = importedTypeOwners(module);
             this.importedFunctionOwners = importedFunctionOwners(module);
+            this.visibleNativeProviders = programContext.visibleNativeProviders(module);
             this.fieldNames = declaration.members().stream()
                     .filter(ObjectOriented.FieldDeclaration.class::isInstance)
                     .map(ObjectOriented.FieldDeclaration.class::cast)
@@ -1609,12 +1695,24 @@ final class ObjectOrientedJavaScriptGenerator {
             return requiredModules;
         }
 
+        private void requireNativeProviderBootstrap() {
+            usesNativeProviderBootstrap = true;
+        }
+
+        private boolean usesNativeProviderBootstrap() {
+            return usesNativeProviderBootstrap;
+        }
+
         private Map<String, String> importedTypeOwners() {
             return importedTypeOwners;
         }
 
         private Map<String, String> importedFunctionOwners() {
             return importedFunctionOwners;
+        }
+
+        private Map<String, JavaScriptGenerator.ProgramContext.NativeProviderInfo> visibleNativeProviders() {
+            return visibleNativeProviders;
         }
 
         private Set<String> fieldNames() {

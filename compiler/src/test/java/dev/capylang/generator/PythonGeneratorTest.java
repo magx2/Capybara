@@ -2,6 +2,9 @@ package dev.capylang.generator;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderBackendBinding;
+import dev.capylang.compiler.NativeProviderBinding;
+import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -298,6 +301,46 @@ class PythonGeneratorTest {
                 """);
 
         assertThat(output).isEqualTo("TypeMarker|entity|FieldMarker|display_name|MethodMarker|greet");
+    }
+
+    @Test
+    void shouldLowerObjectOrientedNativeProviderCallToPythonBootstrap() {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def clock(): Clock = system_clock()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(pythonProviderBinding("/Providers.Clock", "system")));
+
+        var generated = new PythonGenerator().generate(program);
+        var app = generated.modules().stream()
+                .filter(module -> module.relativePath().endsWith("App.py"))
+                .findFirst()
+                .orElseThrow();
+        var bootstrap = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("dev", "capylang", "native_providers.py")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(app.code())
+                .contains("import dev.capylang.native_providers as __capy_native")
+                .contains("return __capy_native.system_clock()")
+                .doesNotContain("host_clock")
+                .doesNotContain("SystemClock");
+        assertThat(bootstrap.code())
+                .contains("__capy_importlib.import_module('host_clock')")
+                .contains("getattr(__capy_provider_system_clock_module, 'SystemClock')()")
+                .contains("'now_millis'");
     }
 
     @Test
@@ -697,9 +740,14 @@ class PythonGeneratorTest {
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
+        return compileProgram(modules, NativeProviderManifest.empty());
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
         var result = CapybaraCompiler.INSTANCE.compile(
                 modules,
-                new TreeSet<>()
+                new TreeSet<>(),
+                nativeProviders
         );
         if (result instanceof Result.Error<CompiledProgram> error) {
             throw new AssertionError(error.errors().stream()
@@ -707,6 +755,21 @@ class PythonGeneratorTest {
                     .collect(joining(", ")));
         }
         return ((Result.Success<CompiledProgram>) result).value();
+    }
+
+    private static NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
+        return new NativeProviderManifest(List.of(bindings));
+    }
+
+    private static NativeProviderBinding pythonProviderBinding(String interfaceId, String qualifier) {
+        return new NativeProviderBinding(
+                interfaceId,
+                qualifier,
+                "singleton",
+                null,
+                null,
+                new NativeProviderBackendBinding("SystemClock", "host_clock", null, "call")
+        );
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {
