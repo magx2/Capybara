@@ -3558,6 +3558,7 @@ public class CapybaraCompiler {
         var manifestBindingsByKey = nativeProviderManifestBindings(manifest, errors);
         var declarations = new ArrayList<CompiledNativeProviderDeclaration>();
         var bindings = new ArrayList<CompiledNativeProviderBinding>();
+        var declaredProviderKeys = new LinkedHashSet<NativeProviderKey>();
         var usedManifestKeys = new LinkedHashSet<NativeProviderKey>();
 
         for (var module : objectOrientedModules) {
@@ -3603,6 +3604,16 @@ public class CapybaraCompiler {
                 }
 
                 var interfaceId = nativeProviderInterfaceId(resolvedTarget.ownerModule(), objectType.name());
+                var key = new NativeProviderKey(interfaceId, provider.qualifier());
+                if (!declaredProviderKeys.add(key)) {
+                    errors.add(nativeProviderError(
+                            module,
+                            provider,
+                            "Duplicate native provider declaration for interface `" + interfaceId
+                            + "` with qualifier `" + provider.qualifier() + "`"
+                    ));
+                    continue;
+                }
                 declarations.add(new CompiledNativeProviderDeclaration(
                         provider.name(),
                         module.path(),
@@ -3612,7 +3623,6 @@ public class CapybaraCompiler {
                         provider.qualifier(),
                         module.moduleFile()
                 ));
-                var key = new NativeProviderKey(interfaceId, provider.qualifier());
                 var binding = manifestBindingsByKey.get(key);
                 if (binding == null) {
                     errors.add(nativeProviderError(

@@ -238,6 +238,25 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldRejectDuplicateNativeProviderDeclarationsForSameInterfaceAndQualifier() {
+        var result = compileProviders("""
+                interface Clock {
+                    def now(zone: String): String
+                }
+
+                native provider system_clock: Clock key "system"
+                native provider backup_clock: Clock key "system"
+                """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("Duplicate native provider declaration")
+                        .contains("interface `/dev/capylang/test/Clock`")
+                        .contains("qualifier `system`")
+                        .contains("/dev/capylang/test/Clock.coo"));
+    }
+
+    @Test
     void shouldRejectDuplicateNativeProviderManifestEntries() {
         var result = compileProviders(clockProviderSource(), providerManifest(
                 providerBinding("/dev/capylang/test/Clock", "system"),
@@ -274,6 +293,27 @@ class ObjectOrientedCompilerTest {
                         .contains("Native provider `system_clock`")
                         .contains("unsupported lifetime `request`")
                         .contains("qualifier `system`")
+                        .contains("/dev/capylang/test/Clock.coo"));
+    }
+
+    @Test
+    void shouldRejectNativeProviderCallWithArgumentsDuringValidation() {
+        var result = compileProviders("""
+                interface Clock {
+                    def now(zone: String): String
+                }
+
+                native provider system_clock: Clock key "system"
+
+                class App {
+                    def clock(): Clock = system_clock(1)
+                }
+                """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("Native provider `system_clock` does not accept arguments")
+                        .contains("system_clock()")
                         .contains("/dev/capylang/test/Clock.coo"));
     }
 

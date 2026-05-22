@@ -212,6 +212,9 @@ class JavaScriptGeneratorTest {
         )), providerManifest(javascriptProviderBinding("/Providers.Clock", "system", "singleton", "host-clock", "SystemClock", "new")));
 
         var generated = new JavaScriptGenerator().generate(program);
+        assertThat(generated.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains(Path.of("dev", "capylang", "native_providers.js"));
         var app = generated.modules().stream()
                 .filter(module -> module.relativePath().endsWith("App.js"))
                 .findFirst()
@@ -234,6 +237,8 @@ class JavaScriptGeneratorTest {
                 .contains("exportValue: __capy_provider_system_clock_module.SystemClock")
                 .contains("create: () => new __capy_provider_system_clock_module.SystemClock()")
                 .contains("{ name: 'now_millis', arity: 0 }")
+                .contains("function system_clock()")
+                .contains("return providers.resolve('/Providers.Clock', 'system');")
                 .contains("module.exports = {")
                 .doesNotContain("import ");
     }

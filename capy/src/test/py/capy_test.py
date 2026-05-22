@@ -142,10 +142,34 @@ class CapyPythonCliTest(unittest.TestCase):
         self.assertIn("nativeProviders", program_json)
         self.assertIn("nativeProviderCatalog", program_json)
         self.assertIn("nativeinterop.system_clock", program_json)
+        self.assertTrue((generated_dir / "dev" / "capylang" / "native_providers.py").exists())
 
         generate = run_capy(["generate", "python", "-i", str(linked_dir), "-o", str(regenerated_dir)])
         self.assertEqual(generate.returncode, 0, generate.stderr)
         self.assertTrue((regenerated_dir / "foo" / "Main.py").exists())
+        self.assertTrue((regenerated_dir / "dev" / "capylang" / "native_providers.py").exists())
+
+    def test_compile_generate_python_rejects_malformed_native_wiring_manifest(self):
+        root = self.temp_project()
+        source_dir = root / "src"
+        generated_dir = root / "generated"
+        native_wiring_file = root / "capy.native.json"
+        source_dir.mkdir(parents=True)
+        (source_dir / "Main.cfun").write_text("fun answer(): int = 1\n")
+        native_wiring_file.write_text("{ not json")
+
+        result = run_capy([
+            "compile-generate",
+            "py",
+            "-i", str(source_dir),
+            "-o", str(generated_dir),
+            "--native-wiring", str(native_wiring_file),
+        ])
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout.strip(), "")
+        self.assertIn("Unable to read native wiring manifest", result.stderr)
+        self.assertIn(str(native_wiring_file), result.stderr)
 
     def test_compile_generate_python_accepts_object_oriented_modules(self):
         root = self.temp_project()
