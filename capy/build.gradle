@@ -371,6 +371,7 @@ def e2eCooLinkedPyOutputDir = layout.buildDirectory.dir('generated/sources/capyb
 def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
 def e2eCooJsTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js')
 def e2eCooPyTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python')
+def e2eCooNativeWiringFile = layout.projectDirectory.file('src/e2e-coo/native/capy.native.json')
 def e2eCooJavaNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/capybara')
 def e2eCooJavaNativeJavaSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/java')
 def e2eCooJavaNativeGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo-java-native')
@@ -793,6 +794,9 @@ def linkCapybaraE2eCooSources = registerCapybaraE2eLinkTask(
         e2eCooLinkedOutputDir,
         e2eCooGeneratedJavaDir
 )
+linkCapybaraE2eCooSources.configure {
+    nativeWiringFile.set(e2eCooNativeWiringFile)
+}
 def linkCapybaraE2eCooJavaNativeSources = registerCapybaraE2eLinkTask(
         'linkCapybaraE2eCooJavaNativeSources',
         'Compiles object-oriented Java native provider e2e-test Capybara files and generates Java in one pass without launching a separate JVM.',
@@ -812,6 +816,9 @@ def linkCapybaraE2eCooJsSources = registerCapybaraE2eLinkTask(
         e2eCooLinkedJsOutputDir,
         e2eCooGeneratedJsDir
 )
+linkCapybaraE2eCooJsSources.configure {
+    nativeWiringFile.set(e2eCooNativeWiringFile)
+}
 def linkCapybaraE2eCooJsNativeSources = registerCapybaraE2eLinkTask(
         'linkCapybaraE2eCooJsNativeSources',
         'Compiles object-oriented JavaScript native provider e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
@@ -828,6 +835,11 @@ def copyE2eCooJsNativeFixtures = tasks.register('copyE2eCooJsNativeFixtures', Co
     from(e2eCooNativeJsSourceDir)
     into(e2eCooJsNativeGeneratedJsDir)
 }
+def copyE2eCooJsNativeWiringFixtures = tasks.register('copyE2eCooJsNativeWiringFixtures', Copy) {
+    dependsOn linkCapybaraE2eCooJsSources
+    from(e2eCooNativeJsSourceDir)
+    into(e2eCooGeneratedJsDir)
+}
 def linkCapybaraE2eCooPySources = registerCapybaraE2eLinkTask(
         'linkCapybaraE2eCooPySources',
         'Compiles object-oriented e2e-test Capybara files and generates Python in one pass without launching a separate JVM.',
@@ -836,6 +848,9 @@ def linkCapybaraE2eCooPySources = registerCapybaraE2eLinkTask(
         e2eCooLinkedPyOutputDir,
         e2eCooGeneratedPyDir
 )
+linkCapybaraE2eCooPySources.configure {
+    nativeWiringFile.set(e2eCooNativeWiringFile)
+}
 def linkCapybaraE2eCooPyNativeSources = registerCapybaraE2eLinkTask(
         'linkCapybaraE2eCooPyNativeSources',
         'Compiles object-oriented Python native provider e2e-test Capybara files and generates Python in one pass without launching a separate JVM.',
@@ -851,6 +866,11 @@ def copyE2eCooPyNativeFixtures = tasks.register('copyE2eCooPyNativeFixtures', Co
     dependsOn linkCapybaraE2eCooPyNativeSources
     from(e2eCooNativePySourceDir)
     into(e2eCooPyNativeGeneratedPyDir)
+}
+def copyE2eCooPyNativeWiringFixtures = tasks.register('copyE2eCooPyNativeWiringFixtures', Copy) {
+    dependsOn linkCapybaraE2eCooPySources
+    from(e2eCooNativePySourceDir)
+    into(e2eCooGeneratedPyDir)
 }
 
 tasks.named('compileE2eCfunJava') {
@@ -872,10 +892,12 @@ tasks.named('compileE2eCooJava') {
 
 tasks.named('e2e-coo-js') {
     dependsOn linkCapybaraE2eCooJsSources
+    dependsOn copyE2eCooJsNativeWiringFixtures
 }
 
 tasks.named('e2e-coo-python') {
     dependsOn linkCapybaraE2eCooPySources
+    dependsOn copyE2eCooPyNativeWiringFixtures
 }
 
 jar {

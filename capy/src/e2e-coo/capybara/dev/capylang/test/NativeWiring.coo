@@ -1,0 +1,17 @@
+interface NativeClock {
+    def now_millis(): long
+}
+
+native provider system_clock: NativeClock key "system"
+
+class NativeClockConsumer(clock: NativeClock) {
+    field clock: NativeClock = clock
+
+    def read(): long =
+        this.clock.now_millis()
+}
+
+class NativeWiringApp {
+    def read(): long =
+        NativeClockConsumer(system_clock()).read()
+}

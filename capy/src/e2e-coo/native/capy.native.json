@@ -1,0 +1,23 @@
+{
+  "providers": [
+    {
+      "interface": "/dev/capylang/test/NativeWiring.NativeClock",
+      "qualifier": "system",
+      "lifetime": "factory",
+      "java": {
+        "className": "dev.capylang.test.nativeinterop.SystemClock",
+        "factory": "constructor"
+      },
+      "javascript": {
+        "module": "../../nativeinterop/system_clock.js",
+        "export": "SystemClock",
+        "factory": "new"
+      },
+      "python": {
+        "module": "nativeinterop.system_clock",
+        "className": "SystemClock",
+        "factory": "call"
+      }
+    }
+  ]
+}

@@ -559,6 +559,7 @@ final class ObjectOrientedPythonGenerator {
         trimmed = rewriteBooleanLiterals(trimmed);
         trimmed = rewriteParentQualifiedCalls(trimmed, parentNames);
         trimmed = rewriteModuleQualifiedReferences(context, trimmed);
+        trimmed = rewriteObjectConstructorCalls(context, trimmed);
         trimmed = rewriteNativeProviderCalls(context, trimmed, scope);
         trimmed = rewriteImportedFunctionCalls(context, trimmed);
         trimmed = rewriteKnownCollectionMethods(trimmed);
@@ -566,6 +567,25 @@ final class ObjectOrientedPythonGenerator {
         trimmed = rewriteOperators(trimmed);
         trimmed = rewriteBareFieldsAndLocals(trimmed, scope);
         return trimmed;
+    }
+
+    private String rewriteObjectConstructorCalls(RenderContext context, String expression) {
+        var rewritten = expression;
+        for (var className : context.definitionsByName.entrySet().stream()
+                .filter(entry -> entry.getValue() instanceof ObjectOriented.ClassDeclaration)
+                .map(Map.Entry::getKey)
+                .sorted((left, right) -> Integer.compare(right.length(), left.length()))
+                .toList()) {
+            var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(className) + "\\s*\\(").matcher(rewritten);
+            if (!matcher.find()) {
+                continue;
+            }
+            var constructor = typeReference(context, className);
+            rewritten = matcher.replaceAll(
+                    "$1" + Matcher.quoteReplacement(constructor) + "("
+            );
+        }
+        return rewritten;
     }
 
     private Optional<String> renderArrayWithValues(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {

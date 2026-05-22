@@ -1341,9 +1341,28 @@ public final class ObjectOrientedJavaGenerator {
             trimmed = trimmed.replaceAll("(^|[^A-Za-z0-9_])" + Pattern.quote(parentName) + "\\s*\\.", "$1super.");
         }
         trimmed = rewriteLocalMethodCalls(trimmed, localMethodBindings);
+        trimmed = rewriteObjectConstructorCalls(module, trimmed);
         trimmed = rewriteNativeProviderCalls(module, trimmed, localMethodBindings);
         trimmed = rewriteImportedFunctionCalls(module, trimmed);
         return trimmed;
+    }
+
+    private String rewriteObjectConstructorCalls(ObjectOrientedModule module, String expression) {
+        var rewritten = expression;
+        for (var className : module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.ClassDeclaration.class::isInstance)
+                .map(ObjectOriented.TypeDeclaration::name)
+                .sorted((left, right) -> Integer.compare(right.length(), left.length()))
+                .toList()) {
+            var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(className) + "\\s*\\(").matcher(rewritten);
+            if (!matcher.find()) {
+                continue;
+            }
+            rewritten = matcher.replaceAll(
+                    "$1new " + Matcher.quoteReplacement(className) + "("
+            );
+        }
+        return rewritten;
     }
 
     private String rewriteNativeProviderCalls(
