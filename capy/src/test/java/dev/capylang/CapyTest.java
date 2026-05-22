@@ -214,6 +214,48 @@ class CapyTest {
     }
 
     @Test
+    void shouldRejectUnsupportedNativeWiringFactoryWhileReadingManifest() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("native-wiring-unsupported-factory-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var outputDir = tempDir.resolve("native-wiring-unsupported-factory-linked");
+        var manifestFile = tempDir.resolve("capy.native.unsupported-factory.json");
+        Files.writeString(manifestFile, """
+                {
+                  "providers": [
+                    {
+                      "interface": "/dev/capylang/test/Clock",
+                      "qualifier": "system",
+                      "lifetime": "factory",
+                      "java": {
+                        "className": "dev.capylang.test.nativeinterop.SystemClock",
+                        "factory": "call"
+                      }
+                    }
+                  ]
+                }
+                """);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.execute(
+                new String[]{
+                        "compile",
+                        "-i", sourceDir.toString(),
+                        "-o", outputDir.toString(),
+                        "--native-wiring", manifestFile.toString()
+                },
+                new PrintStream(stdout),
+                new PrintStream(stderr)
+        );
+
+        assertEquals(1, exitCode);
+        assertEquals("", stdout.toString().trim());
+        assertTrue(stderr.toString().contains("Unable to read native wiring manifest"));
+        assertTrue(stderr.toString().contains("java.factory"));
+        assertTrue(stderr.toString().contains("unsupported value `call`"));
+    }
+
+    @Test
     void shouldRejectNativeWiringOnGenerate() {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
