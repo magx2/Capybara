@@ -151,10 +151,35 @@ native provider system_clock: Clock key "system"
     assert.match(programJson, /nativeProviders/);
     assert.match(programJson, /nativeProviderCatalog/);
     assert.match(programJson, /nativeinterop\/system_clock\.js/);
+    assert.equal(await exists(join(generatedDir, 'dev', 'capylang', 'native_providers.js')), true);
 
     const generate = runCapy(['generate', 'js', '-i', linkedDir, '-o', regeneratedDir]);
     assert.equal(generate.status, 0, generate.stderr);
     assert.equal(await exists(join(regeneratedDir, 'foo', 'Main.js')), true);
+    assert.equal(await exists(join(regeneratedDir, 'dev', 'capylang', 'native_providers.js')), true);
+});
+
+test('compile-generate JS rejects malformed native wiring manifest', async () => {
+    const root = await tempProject();
+    const sourceDir = join(root, 'src');
+    const generatedDir = join(root, 'generated');
+    const nativeWiringFile = join(root, 'capy.native.json');
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(join(sourceDir, 'Main.cfun'), 'fun answer(): int = 1\n');
+    await writeFile(nativeWiringFile, '{ not json');
+
+    const result = runCapy([
+        'compile-generate',
+        'js',
+        '-i', sourceDir,
+        '-o', generatedDir,
+        '--native-wiring', nativeWiringFile,
+    ]);
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout.trim(), '');
+    assert.match(result.stderr, /Unable to read native wiring manifest/);
+    assert.match(result.stderr, new RegExp(nativeWiringFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('compile-generate JS accepts object-oriented modules', async () => {

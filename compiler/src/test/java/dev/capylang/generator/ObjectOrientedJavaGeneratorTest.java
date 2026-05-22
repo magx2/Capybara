@@ -62,6 +62,9 @@ class ObjectOrientedJavaGeneratorTest {
         )), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
 
         var generatedProgram = new JavaGenerator().generate(program);
+        assertThat(generatedProgram.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains(Path.of("dev", "capylang", "NativeProviderBootstrap.java"));
         var appModule = generatedProgram.modules().stream()
                 .filter(module -> module.relativePath().endsWith("App.java"))
                 .findFirst()
@@ -260,7 +263,7 @@ class ObjectOrientedJavaGeneratorTest {
 
     @Test
     void shouldRejectNativeProviderCallsWithArguments() {
-        var program = compileProgram(List.of(new RawModule(
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule(
                 "Providers",
                 "/foo/boo",
                 """
@@ -275,12 +278,14 @@ class ObjectOrientedJavaGeneratorTest {
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+        )), new TreeSet<>(), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
 
-        assertThatThrownBy(() -> new JavaGenerator().generate(program))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Native provider `system_clock` does not accept arguments")
-                .hasMessageContaining("system_clock()");
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<CompiledProgram>) result).errors())
+                .extracting(Result.Error.SingleError::message)
+                .anySatisfy(message -> assertThat(message)
+                        .contains("Native provider `system_clock` does not accept arguments")
+                        .contains("system_clock()"));
     }
 
     @Test
