@@ -94,6 +94,50 @@ class CapyPythonCliTest(unittest.TestCase):
         self.assertEqual(python.returncode, 0, python.stderr)
         self.assertEqual(python.stdout.strip(), "7")
 
+    def test_compile_generate_python_accepts_native_wiring_manifest(self):
+        root = self.temp_project()
+        source_dir = root / "src"
+        generated_dir = root / "generated"
+        linked_dir = root / "linked"
+        regenerated_dir = root / "regenerated"
+        native_wiring_file = root / "capy.native.json"
+        (source_dir / "foo").mkdir(parents=True)
+        (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
+        native_wiring_file.write_text(textwrap.dedent("""
+            {
+              "providers": [
+                {
+                  "interface": "/dev/capylang/test/Clock",
+                  "qualifier": "system",
+                  "lifetime": "factory",
+                  "python": {
+                    "module": "nativeinterop.system_clock",
+                    "className": "SystemClock",
+                    "factory": "call"
+                  }
+                }
+              ]
+            }
+        """))
+
+        result = run_capy([
+            "compile-generate",
+            "py",
+            "-i", str(source_dir),
+            "-o", str(generated_dir),
+            "--linked-output", str(linked_dir),
+            "--native-wiring", str(native_wiring_file),
+        ])
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        program_json = (linked_dir / "program.json").read_text()
+        self.assertIn("nativeProviders", program_json)
+        self.assertIn("nativeinterop.system_clock", program_json)
+
+        generate = run_capy(["generate", "python", "-i", str(linked_dir), "-o", str(regenerated_dir)])
+        self.assertEqual(generate.returncode, 0, generate.stderr)
+        self.assertTrue((regenerated_dir / "foo" / "Main.py").exists())
+
     def test_compile_generate_python_accepts_object_oriented_modules(self):
         root = self.temp_project()
         source_dir = root / "src"

@@ -4,12 +4,15 @@ import org.gradle.api.GradleException
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -115,6 +118,11 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @Input
     abstract Property<String> getOutputTypeName()
 
+    @Optional
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract RegularFileProperty getNativeWiringFile()
+
     @TaskAction
     void compileCapybara() {
         def errors = new ByteArrayOutputStream()
@@ -125,6 +133,9 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
             def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
             readLinkedProgram.accessible = true
             def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
+            def nativeProviderManifestClass = Class.forName('dev.capylang.compiler.NativeProviderManifest', true, classLoader)
+            def readNativeProviderManifest = capyClass.getDeclaredMethod('readNativeProviderManifest', Path)
+            readNativeProviderManifest.accessible = true
             def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName.get() }
             def compileGenerate = capyClass.getMethod(
                     'compileGenerate',
@@ -140,6 +151,21 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                     String,
                     PrintStream
             )
+            def compileGenerateWithNativeWiring = capyClass.getMethod(
+                    'compileGenerate',
+                    outputTypeClass,
+                    Path,
+                    Path,
+                    Path,
+                    Path,
+                    Path,
+                    TreeSet,
+                    Boolean.TYPE,
+                    Boolean.TYPE,
+                    nativeProviderManifestClass,
+                    String,
+                    PrintStream
+            )
 
             def libraries = new TreeSet()
             additionalInputDirs.files.each { libraryDir ->
@@ -151,20 +177,39 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                 libraries.addAll(program.modules())
             }
 
-            def exitCode = compileGenerate.invoke(
-                    null,
-                    outputType,
-                    inputDir.get().asFile.toPath(),
-                    generatedOutputDir.get().asFile.toPath(),
-                    linkedOutputDir.get().asFile.toPath(),
-                    null,
-                    null,
-                    libraries,
-                    compileTests.getOrElse(false),
-                    includeJavaLibResources.getOrElse(true),
-                    compilerVersion.get(),
-                    new PrintStream(errors)
-            ) as Integer
+            def nativeProviders = nativeWiringFile.present
+                    ? readNativeProviderManifest.invoke(null, nativeWiringFile.get().asFile.toPath())
+                    : null
+            def exitCode = nativeProviders == null
+                    ? compileGenerate.invoke(
+                            null,
+                            outputType,
+                            inputDir.get().asFile.toPath(),
+                            generatedOutputDir.get().asFile.toPath(),
+                            linkedOutputDir.get().asFile.toPath(),
+                            null,
+                            null,
+                            libraries,
+                            compileTests.getOrElse(false),
+                            includeJavaLibResources.getOrElse(true),
+                            compilerVersion.get(),
+                            new PrintStream(errors)
+                    ) as Integer
+                    : compileGenerateWithNativeWiring.invoke(
+                            null,
+                            outputType,
+                            inputDir.get().asFile.toPath(),
+                            generatedOutputDir.get().asFile.toPath(),
+                            linkedOutputDir.get().asFile.toPath(),
+                            null,
+                            null,
+                            libraries,
+                            compileTests.getOrElse(false),
+                            includeJavaLibResources.getOrElse(true),
+                            nativeProviders,
+                            compilerVersion.get(),
+                            new PrintStream(errors)
+                    ) as Integer
             if (exitCode != 0) {
                 def message = errors.toString().trim()
                 throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")

@@ -13,6 +13,7 @@ import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledFunction;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.expression.CompiledExpression;
@@ -86,6 +87,7 @@ public class Capy {
     private static final int EXIT_FAILURE = 2;
     private static final int EXIT_COMPILATION_ERROR = 100;
     private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+    private static final ObjectMapper NATIVE_MANIFEST_OBJECT_MAPPER = createNativeManifestObjectMapper();
     private static final ObjectWriter PRETTY_JSON_WRITER = OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
 
     public static void main(String[] args) {
@@ -118,8 +120,20 @@ public class Capy {
             PrintStream err,
             String compilerVersion
     ) {
+        return compile(input, linkedOutputDir, libraries, compileTests, NativeProviderManifest.empty(), err, compilerVersion);
+    }
+
+    public static int compile(
+            Path input,
+            Path linkedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            NativeProviderManifest nativeProviders,
+            PrintStream err,
+            String compilerVersion
+    ) {
         try {
-            return compileOrThrow(input, linkedOutputDir, libraries, compileTests, err, compilerVersion);
+            return compileOrThrow(input, linkedOutputDir, libraries, compileTests, nativeProviders, err, compilerVersion);
         } catch (CliException e) {
             err.println(e.getMessage());
             return EXIT_USAGE;
@@ -177,6 +191,36 @@ public class Capy {
                 libraries,
                 compileTests,
                 includeJavaLibResources,
+                NativeProviderManifest.empty(),
+                readCompilerVersion(),
+                err
+        );
+    }
+
+    public static int compileGenerate(
+            OutputType outputType,
+            Path input,
+            Path generatedOutputDir,
+            Path linkedOutputDir,
+            Path testInput,
+            Path testGeneratedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            boolean includeJavaLibResources,
+            NativeProviderManifest nativeProviders,
+            PrintStream err
+    ) {
+        return compileGenerate(
+                outputType,
+                input,
+                generatedOutputDir,
+                linkedOutputDir,
+                testInput,
+                testGeneratedOutputDir,
+                libraries,
+                compileTests,
+                includeJavaLibResources,
+                nativeProviders,
                 readCompilerVersion(),
                 err
         );
@@ -195,6 +239,36 @@ public class Capy {
             String compilerVersion,
             PrintStream err
     ) {
+        return compileGenerate(
+                outputType,
+                input,
+                generatedOutputDir,
+                linkedOutputDir,
+                testInput,
+                testGeneratedOutputDir,
+                libraries,
+                compileTests,
+                includeJavaLibResources,
+                NativeProviderManifest.empty(),
+                compilerVersion,
+                err
+        );
+    }
+
+    public static int compileGenerate(
+            OutputType outputType,
+            Path input,
+            Path generatedOutputDir,
+            Path linkedOutputDir,
+            Path testInput,
+            Path testGeneratedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            boolean includeJavaLibResources,
+            NativeProviderManifest nativeProviders,
+            String compilerVersion,
+            PrintStream err
+    ) {
         try {
             return compileGenerateOrThrow(
                     outputType,
@@ -206,6 +280,7 @@ public class Capy {
                     libraries,
                     compileTests,
                     includeJavaLibResources,
+                    nativeProviders,
                     compilerVersion,
                     err
             );
@@ -262,8 +337,9 @@ public class Capy {
         var output = requiredPath(options.values(), "output", "compile");
         var libraries = readLibraryModules(options.values().get("libs"));
         var compileTests = options.values().containsKey("compile-tests");
+        var nativeProviders = readNativeProviderManifest(optionalPath(options.values(), "native-wiring"));
 
-        return compile(input, output, libraries, compileTests, err, readCompilerVersion());
+        return compile(input, output, libraries, compileTests, nativeProviders, err, readCompilerVersion());
     }
 
     private static int executeCompileGenerate(String[] args, PrintStream err) {
@@ -283,6 +359,7 @@ public class Capy {
         var libraries = readLibraryModules(options.values().get("libs"));
         var compileTests = options.values().containsKey("compile-tests");
         var includeJavaLibResources = !options.values().containsKey("skip-java-lib");
+        var nativeProviders = readNativeProviderManifest(optionalPath(options.values(), "native-wiring"));
 
         return compileGenerate(
                 outputType,
@@ -294,6 +371,7 @@ public class Capy {
                 libraries,
                 compileTests,
                 includeJavaLibResources,
+                nativeProviders,
                 readCompilerVersion(),
                 err
         );
@@ -380,6 +458,14 @@ public class Capy {
                     }
                     var value = nextValue(args, i, arg);
                     values.put("libs", value);
+                    i++;
+                }
+                case "--native-wiring" -> {
+                    if (!allowLibs) {
+                        throw new CliException("Option `" + arg + "` is supported only for `compile` and `compile-generate`.");
+                    }
+                    var value = nextValue(args, i, arg);
+                    values.put("native-wiring", value);
                     i++;
                 }
                 case "--compile-tests" -> {
@@ -483,6 +569,29 @@ public class Capy {
         return Path.of(value);
     }
 
+    static NativeProviderManifest readNativeProviderManifest(Path manifestFile) {
+        if (manifestFile == null) {
+            return NativeProviderManifest.empty();
+        }
+        if (!Files.isRegularFile(manifestFile)) {
+            throw new CliException("Native wiring manifest is not a file: " + manifestFile);
+        }
+        try (var input = Files.newInputStream(manifestFile)) {
+            return NATIVE_MANIFEST_OBJECT_MAPPER.readValue(input, NativeProviderManifest.class);
+        } catch (IOException e) {
+            throw new CliException("Unable to read native wiring manifest `" + manifestFile + "`: " + rootCauseMessage(e));
+        }
+    }
+
+    private static String rootCauseMessage(Throwable throwable) {
+        var cause = throwable;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        var message = cause.getMessage();
+        return message == null || message.isBlank() ? cause.getClass().getSimpleName() : message;
+    }
+
     private static Level parseLogLevel(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
             case "DEBUG" -> Level.FINE;
@@ -521,11 +630,12 @@ public class Capy {
             Path linkedOutputDir,
             TreeSet<CompiledModule> libraries,
             boolean compileTests,
+            NativeProviderManifest nativeProviders,
             PrintStream err,
             String compilerVersion
     ) throws IOException {
         validateOutputDirectory(linkedOutputDir, "Compile output path");
-        var compilation = compileSources(input, libraries, compileTests, err);
+        var compilation = compileSources(input, libraries, compileTests, nativeProviders, err);
         if (compilation == null) {
             return EXIT_COMPILATION_ERROR;
         }
@@ -572,13 +682,14 @@ public class Capy {
             TreeSet<CompiledModule> libraries,
             boolean compileTests,
             boolean includeJavaLibResources,
+            NativeProviderManifest nativeProviders,
             String compilerVersion,
             PrintStream err
     ) throws IOException {
         if ((testInput == null) != (testGeneratedOutputDir == null)) {
             throw new CliException("`compile-generate` requires both `--test-input` and `--test-output` when either is provided.");
         }
-        var compilation = compileSources(input, libraries, compileTests, err);
+        var compilation = compileSources(input, libraries, compileTests, nativeProviders, err);
         if (compilation == null) {
             return EXIT_COMPILATION_ERROR;
         }
@@ -589,7 +700,7 @@ public class Capy {
         validateOutputDirectory(generatedOutputDir, "Generated output path");
         var mainGenerationInput = selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources);
         if (testInput != null) {
-            var testCompilation = compileSources(testInput, mergeLibraries(libraries, compilation), true, err);
+            var testCompilation = compileSources(testInput, mergeLibraries(libraries, compilation), true, nativeProviders, err);
             if (testCompilation == null) {
                 return EXIT_COMPILATION_ERROR;
             }
@@ -625,10 +736,21 @@ public class Capy {
         modules.addAll(second.modules());
         var objectOrientedModules = new ArrayList<>(first.objectOrientedModules());
         objectOrientedModules.addAll(second.objectOrientedModules());
-        return new CompiledProgram(modules, objectOrientedModules);
+        var nativeProviders = first.nativeProviders().isEmpty() ? second.nativeProviders() : first.nativeProviders();
+        return new CompiledProgram(modules, objectOrientedModules, nativeProviders);
     }
 
     static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
+        return compileSources(input, libraries, compileTests, NativeProviderManifest.empty(), err);
+    }
+
+    static CompilationArtifacts compileSources(
+            Path input,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            NativeProviderManifest nativeProviders,
+            PrintStream err
+    ) throws IOException {
         validateInputDirectory(input);
 
         log.info("Compiling files from: " + input);
@@ -639,7 +761,7 @@ public class Capy {
         log.info("Built " + rawModules.size() + " raw modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - rawModuleBuildStartedAt));
 
         var linkingStartedAt = System.nanoTime();
-        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries, nativeProviders);
         log.info("Linked " + rawModules.size() + " modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - linkingStartedAt));
         if (linking instanceof Result.Error<CompiledProgram> error) {
             err.println("Compilation failed with " + error.errors().size() + " error(s):");
@@ -686,7 +808,7 @@ public class Capy {
         }
 
         var tempDir = Files.createTempDirectory("capy-package-");
-        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), false, err, readCompilerVersion());
+        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), false, NativeProviderManifest.empty(), err, readCompilerVersion());
         if (exitCode != EXIT_SUCCESS) {
             throw new CliException("Unable to compile package input from: " + options.input());
         }
@@ -1362,7 +1484,7 @@ public class Capy {
         outputModules.add(createCapyTestRuntimeModule(testFunctions));
         log.info("Created CapyTestRuntime module in " + Duration.ofNanos(System.nanoTime() - runtimeModuleStartedAt));
         log.info("Prepared compiled tests in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
-        return new CompiledProgram(outputModules, linkedProgram.objectOrientedModules());
+        return new CompiledProgram(outputModules, linkedProgram.objectOrientedModules(), linkedProgram.nativeProviders());
     }
 
     private static List<TestFunctionRef> discoverTestFunctions(CompiledProgram linkedProgram) {
@@ -1618,7 +1740,8 @@ public class Capy {
                         .toList(),
                 linkedProgram.objectOrientedModules().stream()
                         .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
-                        .toList()
+                        .toList(),
+                linkedProgram.nativeProviders()
         );
         var shouldCopyJavaLibResources = includeJavaLibResources
                                          && (!filteredProgram.modules().isEmpty() || !filteredProgram.objectOrientedModules().isEmpty());
@@ -1627,6 +1750,10 @@ public class Capy {
 
     static ObjectMapper objectMapper() {
         return OBJECT_MAPPER;
+    }
+
+    private static ObjectMapper createNativeManifestObjectMapper() {
+        return createObjectMapper().deactivateDefaultTyping();
     }
 
     private static ObjectMapper createObjectMapper() {
@@ -1663,14 +1790,15 @@ public class Capy {
                 "Usage:",
                 "  capy -v | --version",
                 "  capy -h | --help",
-                "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
-                "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--linked-output <dir>] [--test-input <dir> --test-output <dir>] [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--linked-output <dir>] [--test-input <dir> --test-output <dir>] [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "",
                 "Notes:",
                 "  compile output directory may be reused; stale generated files are pruned automatically.",
                 "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided.",
+                "  --native-wiring reads host provider bindings from a JSON manifest and stores them in linked program output.",
                 "  compile-generate --test-input/--test-output also compiles test Capybara sources against the freshly compiled main program in the same invocation.",
                 "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/List[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",
@@ -1864,6 +1992,3 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
-
-

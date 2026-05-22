@@ -43,7 +43,16 @@ public class CapybaraCompiler {
     private static volatile SortedSet<CompiledModule> bundledLibrariesCache;
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+        return compile(rawModules, libraries, NativeProviderManifest.empty());
+    }
+
+    public Result<CompiledProgram> compile(
+            Collection<RawModule> rawModules,
+            SortedSet<CompiledModule> libraries,
+            NativeProviderManifest nativeProviders
+    ) {
         try {
+            var providerCatalog = nativeProviders == null ? NativeProviderManifest.empty() : nativeProviders;
             var objectOrientedModules = rawModules.stream()
                     .filter(rawModule -> rawModule.sourceKind() == SourceKind.OBJECT_ORIENTED)
                     .toList();
@@ -79,7 +88,7 @@ public class CapybaraCompiler {
                 return error;
             }
             var functionalProgram = ((Result.Success<CompiledProgram>) compiledProgram).value();
-            return Result.success(functionalProgram);
+            return Result.success(new CompiledProgram(functionalProgram.modules(), parsedObjectOrientedModules, providerCatalog));
         } catch (RuntimeException e) {
             // Public boundary: source/compiler errors should not escape as exceptions.
             return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
