@@ -54,9 +54,9 @@ public record NativeProviderBinding(
     }
 
     public NativeProviderBinding {
-        interfaceId = requireText(interfaceId, "Native provider `interface` is required.");
-        qualifier = requireText(qualifier, "Native provider `qualifier` is required.");
-        lifetime = requireText(lifetime, "Native provider `lifetime` is required.");
+        interfaceId = requireText(interfaceId, "TypeMismatch: Native provider `interface` is required.");
+        qualifier = requireText(qualifier, "TypeMismatch: Native provider `qualifier` is required.");
+        lifetime = requireText(lifetime, "UnsupportedBackend: Native provider `lifetime` is required.");
     }
 
     private static String requireText(String value, String message) {
@@ -72,17 +72,17 @@ public record NativeProviderBinding(
         }
         switch (backend) {
             case JAVA -> {
-                requireText(binding.className(), "Native provider `java.className` is required.");
+                requireText(binding.className(), "UnsupportedBackend: Native provider backend `java` requires manifest field `java.className`.");
                 requireFactory(backend, binding.factory(), "constructor");
             }
             case JAVASCRIPT -> {
-                requireText(binding.moduleName(), "Native provider `javascript.module` is required.");
-                requireText(binding.exportName(), "Native provider `javascript.export` is required.");
+                requireText(binding.moduleName(), "UnsupportedBackend: Native provider backend `javascript` requires manifest field `javascript.module`.");
+                requireText(binding.exportName(), "UnsupportedBackend: Native provider backend `javascript` requires manifest field `javascript.export`.");
                 requireFactory(backend, binding.factory(), "new", "call");
             }
             case PYTHON -> {
-                requireText(binding.moduleName(), "Native provider `python.module` is required.");
-                requireText(binding.className(), "Native provider `python.className` is required.");
+                requireText(binding.moduleName(), "UnsupportedBackend: Native provider backend `python` requires manifest field `python.module`.");
+                requireText(binding.className(), "UnsupportedBackend: Native provider backend `python` requires manifest field `python.className`.");
                 requireFactory(backend, binding.factory(), "call");
             }
         }
@@ -95,7 +95,8 @@ public record NativeProviderBinding(
             }
         }
         throw new IllegalArgumentException(
-                "Native provider `" + backend.jsonValue() + ".factory` has unsupported value `" + actual
+                "UnsupportedBackend: Native provider backend `" + backend.jsonValue() + "` manifest field `"
+                + backend.jsonValue() + ".factory` has unsupported value `" + actual
                 + "`. Supported values: " + String.join(", ", supported) + "."
         );
     }

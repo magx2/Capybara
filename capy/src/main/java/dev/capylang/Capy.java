@@ -578,7 +578,8 @@ public class Capy {
             throw new CliException("Native wiring manifest is not a file: " + manifestFile);
         }
         try (var input = Files.newInputStream(manifestFile)) {
-            return NATIVE_MANIFEST_OBJECT_MAPPER.readValue(input, NativeProviderManifest.class);
+            return NATIVE_MANIFEST_OBJECT_MAPPER.readValue(input, NativeProviderManifest.class)
+                    .withSourceFile(manifestFile.toString());
         } catch (IOException e) {
             throw new CliException("Unable to read native wiring manifest `" + manifestFile + "`: " + rootCauseMessage(e));
         }
@@ -1820,7 +1821,7 @@ public class Capy {
                 "Notes:",
                 "  compile output directory may be reused; stale generated files are pruned automatically.",
                 "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided.",
-                "  --native-wiring reads host provider bindings from a JSON manifest and stores them in linked program output.",
+                "  --native-wiring <file> is supported by compile and compile-generate; it reads native provider bindings from a JSON manifest and stores them in linked program output.",
                 "  compile-generate --test-input/--test-output also compiles test Capybara sources against the freshly compiled main program in the same invocation.",
                 "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/List[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",

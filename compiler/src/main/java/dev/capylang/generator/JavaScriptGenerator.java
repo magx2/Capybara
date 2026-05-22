@@ -164,6 +164,9 @@ public final class JavaScriptGenerator implements Generator {
         return "    " + jsString(nativeProviderBootstrapKey(provider.interfaceId(), provider.qualifier())) + ": capy.nativeFactory({\n"
                + "        interfaceId: " + jsString(provider.interfaceId()) + ",\n"
                + "        qualifier: " + jsString(provider.qualifier()) + ",\n"
+               + "        providerSymbol: " + jsString(provider.providerSymbolName()) + ",\n"
+               + "        backend: 'javascript',\n"
+               + "        sourceFile: " + jsString(provider.sourceFile()) + ",\n"
                + "        lifetime: " + jsString(provider.lifetime().jsonValue()) + ",\n"
                + "        moduleName: " + jsString(provider.binding().moduleName()) + ",\n"
                + "        exportName: " + jsString(provider.binding().exportName()) + ",\n"
@@ -179,7 +182,8 @@ public final class JavaScriptGenerator implements Generator {
 
     private String renderNativeProviderFunction(ProgramContext.NativeProviderInfo provider) {
         return "function " + provider.bootstrapFunctionName() + "() {\n"
-               + "    return providers.resolve(" + jsString(provider.interfaceId()) + ", " + jsString(provider.qualifier()) + ");\n"
+               + "    return providers.resolve(" + jsString(provider.interfaceId()) + ", " + jsString(provider.qualifier())
+               + ", " + jsString(provider.providerSymbolName()) + ", 'javascript', " + jsString(provider.sourceFile()) + ");\n"
                + "}\n";
     }
 
@@ -2124,15 +2128,18 @@ public final class JavaScriptGenerator implements Generator {
                 var binding = bindings.get(nativeProviderKey(declaration.interfaceId(), declaration.qualifier()));
                 var javascriptBinding = binding == null ? null : binding.javascriptBinding();
                 if (javascriptBinding == null) {
-                    throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                    throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + declaration.providerName()
                                                        + "` for interface `" + declaration.interfaceId()
                                                        + "` with qualifier `" + declaration.qualifier()
-                                                       + "` has no javascript binding");
+                                                       + "` for backend `javascript` has no javascript binding in source `"
+                                                       + declaration.sourceFile() + "`");
                 }
                 var interfaceType = interfaces.get(declaration.interfaceId());
                 if (interfaceType == null) {
-                    throw new IllegalArgumentException("Native provider `" + declaration.providerName()
-                                                       + "` targets unknown interface `" + declaration.interfaceId() + "`");
+                    throw new IllegalArgumentException("TypeMismatch: Native provider `" + declaration.providerName()
+                                                       + "` targets unknown interface `" + declaration.interfaceId()
+                                                       + "` with qualifier `" + declaration.qualifier()
+                                                       + "` in source `" + declaration.sourceFile() + "`");
                 }
                 var baseName = nativeProviderIdentifier(declaration.providerName());
                 var bootstrapName = baseNames.getOrDefault(baseName, 0) == 1
@@ -2147,6 +2154,7 @@ public final class JavaScriptGenerator implements Generator {
                         declaration.qualifier(),
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
+                        declaration.sourceFile(),
                         binding.lifetime(),
                         javascriptBinding,
                         interfaceType.methods()
@@ -2559,6 +2567,7 @@ public final class JavaScriptGenerator implements Generator {
                 String qualifier,
                 String sourceModulePath,
                 String sourceModuleName,
+                String sourceFile,
                 NativeProviderLifetime lifetime,
                 NativeProviderBackendBinding binding,
                 List<NativeProviderMethodInfo> methods
@@ -5339,6 +5348,9 @@ public final class JavaScriptGenerator implements Generator {
                             this.name = 'NativeProviderError';
                             this.interfaceId = metadata.interfaceId;
                             this.qualifier = metadata.qualifier;
+                            this.providerSymbol = metadata.providerSymbol;
+                            this.backend = metadata.backend;
+                            this.sourceFile = metadata.sourceFile;
                         }
                     }
 
@@ -5351,12 +5363,15 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function nativeProviderContext(metadata) {
-                        return 'interface `' + metadata.interfaceId + '` with qualifier `' + metadata.qualifier + '`';
+                        const symbol = metadata.providerSymbol ? 'provider symbol `' + metadata.providerSymbol + '`, ' : '';
+                        const backend = metadata.backend ? ' for backend `' + metadata.backend + '`' : '';
+                        const source = metadata.sourceFile ? ' in source `' + metadata.sourceFile + '`' : '';
+                        return symbol + 'interface `' + metadata.interfaceId + '` with qualifier `' + metadata.qualifier + '`' + backend + source;
                     }
 
                     function requireNativeText(value, name, metadata) {
                         if (typeof value !== 'string' || value.trim() === '') {
-                            throw nativeProviderError('Native provider ' + name + ' is required for ' + nativeProviderContext(metadata) + '.', metadata);
+                            throw nativeProviderError('TypeMismatch: Native provider ' + name + ' is required for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
                         return value;
                     }
@@ -5365,29 +5380,38 @@ public final class JavaScriptGenerator implements Generator {
                         const metadata = {
                             interfaceId: options?.interfaceId,
                             qualifier: options?.qualifier,
+                            providerSymbol: options?.providerSymbol,
+                            backend: options?.backend,
+                            sourceFile: options?.sourceFile,
                         };
                         const interfaceId = requireNativeText(options?.interfaceId, 'interfaceId', metadata);
                         const qualifier = requireNativeText(options?.qualifier, 'qualifier', metadata);
                         const lifetime = options?.lifetime ?? 'factory';
                         if (lifetime !== 'singleton' && lifetime !== 'factory') {
-                            throw nativeProviderError('Native provider for ' + nativeProviderContext({ interfaceId, qualifier }) + ' has unsupported lifetime `' + lifetime + '`.', { interfaceId, qualifier });
+                            throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported lifetime `' + lifetime + '`.', metadata);
                         }
                         if (options?.factory !== 'new' && options?.factory !== 'call') {
-                            throw nativeProviderError('Native provider for ' + nativeProviderContext({ interfaceId, qualifier }) + ' has unsupported JavaScript factory `' + options?.factory + '`.', { interfaceId, qualifier });
+                            throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported JavaScript factory `' + options?.factory + '`.', metadata);
                         }
                         if (options?.exportExists !== true || typeof options?.exportValue !== 'function') {
-                            throw nativeProviderError('Native provider for ' + nativeProviderContext({ interfaceId, qualifier }) + ' requires export `' + options?.exportName + '` from module `' + options?.moduleName + '`.', { interfaceId, qualifier });
+                            throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' requires export `' + options?.exportName + '` from module `' + options?.moduleName + '`.', metadata);
                         }
                         if (typeof options?.create !== 'function') {
-                            throw nativeProviderError('Native provider factory is required for ' + nativeProviderContext({ interfaceId, qualifier }) + '.', { interfaceId, qualifier });
+                            throw nativeProviderError('UnsupportedBackend: Native provider factory is required for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
                         return Object.freeze({
                             interfaceId,
                             qualifier,
+                            providerSymbol: options?.providerSymbol,
+                            backend: options?.backend,
+                            sourceFile: options?.sourceFile,
                             lifetime,
                             metadata: Object.freeze({
                                 interfaceId,
                                 qualifier,
+                                providerSymbol: options?.providerSymbol,
+                                backend: options?.backend,
+                                sourceFile: options?.sourceFile,
                                 methods: Object.freeze([...(options?.metadata?.methods ?? [])].map(method => Object.freeze({
                                     name: method.name,
                                     arity: method.arity ?? 0,
@@ -5399,19 +5423,19 @@ public final class JavaScriptGenerator implements Generator {
 
                     function defineNativeProviders(providerTable) {
                         if (providerTable === null || typeof providerTable !== 'object') {
-                            throw nativeProviderError('Native provider table must be an object.');
+                            throw nativeProviderError('TypeMismatch: Native provider table must be an object.');
                         }
                         const providers = new Map();
                         for (const [key, provider] of Object.entries(providerTable)) {
                             if (!provider || typeof provider !== 'object') {
-                                throw nativeProviderError('Native provider table entry `' + key + '` is invalid.');
+                                throw nativeProviderError('TypeMismatch: Native provider table entry `' + key + '` is invalid.');
                             }
                             const expectedKey = nativeProviderKey(provider.interfaceId, provider.qualifier);
                             if (key !== expectedKey) {
-                                throw nativeProviderError('Native provider table key `' + key + '` does not match ' + nativeProviderContext(provider) + '.', provider);
+                                throw nativeProviderError('TypeMismatch: Native provider table key `' + key + '` does not match ' + nativeProviderContext(provider) + '.', provider);
                             }
                             if (providers.has(key)) {
-                                throw nativeProviderError('Duplicate native provider for ' + nativeProviderContext(provider) + '.', provider);
+                                throw nativeProviderError('DuplicateProvider: Duplicate native provider for ' + nativeProviderContext(provider) + '.', provider);
                             }
                             providers.set(key, { provider, singletonSet: false, singletonValue: undefined });
                         }
@@ -5421,15 +5445,16 @@ public final class JavaScriptGenerator implements Generator {
                         });
                     }
 
-                    function resolveNativeImplementation(interfaceId, qualifier) {
+                    function resolveNativeImplementation(interfaceId, qualifier, providerSymbol, backend, sourceFile) {
                         const providers = this?.__capybaraNativeProviders;
+                        const metadata = { interfaceId, qualifier, providerSymbol, backend, sourceFile };
                         if (!(providers instanceof Map)) {
-                            throw nativeProviderError('No native provider table is bound for ' + nativeProviderContext({ interfaceId, qualifier }) + '.', { interfaceId, qualifier });
+                            throw nativeProviderError('NotWired: No native provider table is bound for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
                         const key = nativeProviderKey(interfaceId, qualifier);
                         const entry = providers.get(key);
                         if (!entry) {
-                            throw nativeProviderError('No native provider registered for ' + nativeProviderContext({ interfaceId, qualifier }) + '.', { interfaceId, qualifier });
+                            throw nativeProviderError('NotWired: No native provider registered for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
                         if (entry.provider.lifetime === 'singleton') {
                             if (!entry.singletonSet) {
@@ -5449,7 +5474,7 @@ public final class JavaScriptGenerator implements Generator {
                             if (error instanceof NativeProviderError) {
                                 throw error;
                             }
-                            throw nativeProviderError('Native provider for ' + nativeProviderContext(provider) + ' failed during construction: ' + (error?.message ?? String(error)), provider);
+                            throw nativeProviderError('InvocationFailure: Native provider for ' + nativeProviderContext(provider) + ' failed during construction: ' + (error?.message ?? String(error)), provider);
                         }
                         return validateNativeImplementation(provider.metadata, value);
                     }
@@ -5458,26 +5483,29 @@ public final class JavaScriptGenerator implements Generator {
                         const metadata = {
                             interfaceId: interfaceMetadata?.interfaceId,
                             qualifier: interfaceMetadata?.qualifier,
+                            providerSymbol: interfaceMetadata?.providerSymbol,
+                            backend: interfaceMetadata?.backend,
+                            sourceFile: interfaceMetadata?.sourceFile,
                         };
                         if (value === null || value === undefined) {
-                            throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' returned null.', metadata);
+                            throw nativeProviderError('TypeMismatch: Native provider for ' + nativeProviderContext(metadata) + ' returned null.', metadata);
                         }
                         const methods = interfaceMetadata?.methods ?? [];
                         for (const method of methods) {
                             const name = method.name;
                             const implementation = value[name];
                             if (implementation === undefined || implementation === null) {
-                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' is missing method `' + name + '`.', metadata);
+                                throw nativeProviderError('TypeMismatch: Native provider for ' + nativeProviderContext(metadata) + ' is missing method `' + name + '`.', metadata);
                             }
                             if (typeof implementation !== 'function') {
-                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` must be a function.', metadata);
+                                throw nativeProviderError('TypeMismatch: Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` must be a function.', metadata);
                             }
                             const arity = method.arity ?? 0;
                             if (implementation.length < arity) {
-                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` requires arity at least ' + arity + ', got ' + implementation.length + '.', metadata);
+                                throw nativeProviderError('TypeMismatch: Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` requires arity at least ' + arity + ', got ' + implementation.length + '.', metadata);
                             }
                             if (implementation.constructor?.name === 'AsyncFunction') {
-                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` is async; async host methods are unsupported in native provider wiring v1.', metadata);
+                                throw nativeProviderError('TypeMismatch: Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` is async; async host methods are unsupported in native provider wiring v1.', metadata);
                             }
                         }
                         return nativeImplementationProxy(interfaceMetadata, value);
@@ -5500,7 +5528,7 @@ public final class JavaScriptGenerator implements Generator {
                                     return (...args) => {
                                         const result = method.apply(target, args);
                                         if (result && typeof result.then === 'function') {
-                                            throw nativeProviderError('Native provider for ' + nativeProviderContext(interfaceMetadata) + ' method `' + property + '` returned a Promise; async host methods are unsupported in native provider wiring v1.', interfaceMetadata);
+                                            throw nativeProviderError('InvocationFailure: Native provider for ' + nativeProviderContext(interfaceMetadata) + ' method `' + property + '` returned a Promise; async host methods are unsupported in native provider wiring v1.', interfaceMetadata);
                                         }
                                         return result;
                                     };

@@ -1,12 +1,14 @@
 # ADR-2026-05-22: Native Provider Wiring v1
 
-- Status: proposed
+- Status: accepted
 - Deciders: Codex, repository maintainers
 - Date: 2026-05-22
 
 ## Status
 
-Proposed.
+Accepted. The v1 slice is implemented for compile-time provider declarations,
+manifest wiring, and Java, JavaScript CommonJS, and Python provider bootstrap
+generation.
 
 ## Context
 
@@ -127,6 +129,69 @@ Non-goals for this slice are:
 - provider disposal, scopes beyond singleton/factory, and async host APIs;
 - pure `.cfun` host calls or automatic conversion of host effects into pure
   functional values.
+
+## Implemented v1
+
+Supported `.coo` syntax:
+
+```coo
+interface Clock {
+    def now_millis(): long
+}
+
+native provider system_clock: Clock key "system"
+```
+
+The provider symbol is callable as `system_clock()` and returns the declared
+Capybara interface type. `.coo` still contains only Capybara type names and
+qualifiers; host class or module names live in the manifest.
+
+Implemented manifest format:
+
+```json
+{
+  "providers": [
+    {
+      "interface": "/dev/capylang/test/Clock",
+      "qualifier": "system",
+      "lifetime": "factory",
+      "java": {
+        "className": "dev.capylang.test.nativeinterop.SystemClock",
+        "factory": "constructor"
+      },
+      "javascript": {
+        "module": "./nativeinterop/system_clock.js",
+        "export": "SystemClock",
+        "factory": "new"
+      },
+      "python": {
+        "module": "nativeinterop.system_clock",
+        "className": "SystemClock",
+        "factory": "call"
+      }
+    }
+  ]
+}
+```
+
+Supported lifetimes are `singleton` and `factory`.
+
+Supported backend factories are:
+
+- Java `className` with `factory: "constructor"`;
+- JavaScript CommonJS `module` plus `export` with `factory: "new"` or
+  `"call"`;
+- Python `module` plus `className` with `factory: "call"`.
+
+Implemented diagnostics use these stable terms: `NotWired`,
+`DuplicateProvider`, `TypeMismatch`, `UnsupportedBackend`, and
+`InvocationFailure`. Provider-related diagnostics include the provider symbol
+when known, interface id, qualifier, backend for backend-specific failures, and
+source or manifest file path when the reporting layer has it.
+
+Recorded v1 non-goals are: no mutable runtime registration, no direct `.coo`
+host imports, no automatic async handling, no scoped/request lifetime, no
+resource disposal hooks, and no pure `.cfun` native lookup.
 
 ## Consequences
 

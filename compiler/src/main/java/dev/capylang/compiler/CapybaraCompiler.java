@@ -3576,7 +3576,7 @@ public class CapybaraCompiler {
                     errors.add(nativeProviderError(
                             module,
                             provider,
-                            "Native provider `" + provider.name() + "` target type `" + provider.targetType()
+                            "TypeMismatch: Native provider `" + provider.name() + "` target type `" + provider.targetType()
                             + "` with qualifier `" + provider.qualifier() + "` is not an interface"
                     ));
                     continue;
@@ -3586,7 +3586,7 @@ public class CapybaraCompiler {
                     errors.add(nativeProviderError(
                             module,
                             provider,
-                            "Native provider `" + provider.name() + "` targets unknown type `" + provider.targetType()
+                            "TypeMismatch: Native provider `" + provider.name() + "` targets unknown type `" + provider.targetType()
                             + "` with qualifier `" + provider.qualifier() + "`"
                     ));
                     continue;
@@ -3596,7 +3596,7 @@ public class CapybaraCompiler {
                     errors.add(nativeProviderError(
                             module,
                             provider,
-                            "Native provider `" + provider.name() + "` target type `" + provider.targetType()
+                            "TypeMismatch: Native provider `" + provider.name() + "` target type `" + provider.targetType()
                             + "` resolves to " + nativeProviderTargetKind(resolvedTarget.type())
                             + " and is not an interface; qualifier `" + provider.qualifier() + "`"
                     ));
@@ -3609,7 +3609,8 @@ public class CapybaraCompiler {
                     errors.add(nativeProviderError(
                             module,
                             provider,
-                            "Duplicate native provider declaration for interface `" + interfaceId
+                            "DuplicateProvider: Duplicate native provider declaration for native provider `" + provider.name()
+                            + "` and interface `" + interfaceId
                             + "` with qualifier `" + provider.qualifier() + "`"
                     ));
                     continue;
@@ -3621,14 +3622,14 @@ public class CapybaraCompiler {
                         provider.targetType(),
                         interfaceId,
                         provider.qualifier(),
-                        module.moduleFile()
+                        nativeProviderSourceFile(module)
                 ));
                 var binding = manifestBindingsByKey.get(key);
                 if (binding == null) {
                     errors.add(nativeProviderError(
                             module,
                             provider,
-                            "Native provider `" + provider.name() + "` for interface `" + interfaceId
+                            "NotWired: Native provider `" + provider.name() + "` for interface `" + interfaceId
                             + "` with qualifier `" + provider.qualifier() + "` has no matching manifest entry"
                     ));
                     continue;
@@ -3644,10 +3645,10 @@ public class CapybaraCompiler {
                 errors.add(new Result.Error.SingleError(
                         0,
                         0,
-                        "",
-                        "Native provider manifest entry for interface `" + key.interfaceId()
+                        nativeProviderManifestSource(manifest),
+                        "NotWired: Native provider manifest entry for interface `" + key.interfaceId()
                         + "` with qualifier `" + key.qualifier()
-                        + "` has no matching provider declaration"
+                        + "` has no matching provider declaration" + nativeProviderManifestSourceSuffix(manifest)
                 ));
             }
         });
@@ -3670,13 +3671,21 @@ public class CapybaraCompiler {
                 errors.add(new Result.Error.SingleError(
                         0,
                         0,
-                        "",
-                        "Duplicate native provider manifest entry for interface `" + binding.interfaceId()
-                        + "` with qualifier `" + binding.qualifier() + "`"
+                        nativeProviderManifestSource(manifest),
+                        "DuplicateProvider: Duplicate native provider manifest entry for interface `" + binding.interfaceId()
+                        + "` with qualifier `" + binding.qualifier() + "`" + nativeProviderManifestSourceSuffix(manifest)
                 ));
             }
         }
         return Map.copyOf(bindingsByKey);
+    }
+
+    private String nativeProviderManifestSource(NativeProviderManifest manifest) {
+        return manifest.sourceFile() == null ? "" : manifest.sourceFile();
+    }
+
+    private String nativeProviderManifestSourceSuffix(NativeProviderManifest manifest) {
+        return manifest.sourceFile() == null ? "" : " in manifest `" + manifest.sourceFile() + "`";
     }
 
     private Result<Map<String, NativeProviderTarget>> availableNativeProviderTypes(
@@ -3817,7 +3826,7 @@ public class CapybaraCompiler {
             errors.add(nativeProviderError(
                     module,
                     provider,
-                    "Native provider `" + provider.name() + "` for interface `" + interfaceId
+                    "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
                     + "` with qualifier `" + provider.qualifier()
                     + "` has unsupported lifetime `" + lifetime + "`"
             ));
@@ -3837,14 +3846,14 @@ public class CapybaraCompiler {
             return;
         }
         switch (backend) {
-            case JAVA -> requireNativeProviderBackendText(module, provider, interfaceId, "java.className", binding.className(), errors);
+            case JAVA -> requireNativeProviderBackendText(module, provider, interfaceId, backend, "java.className", binding.className(), errors);
             case JAVASCRIPT -> {
-                requireNativeProviderBackendText(module, provider, interfaceId, "javascript.module", binding.moduleName(), errors);
-                requireNativeProviderBackendText(module, provider, interfaceId, "javascript.export", binding.exportName(), errors);
+                requireNativeProviderBackendText(module, provider, interfaceId, backend, "javascript.module", binding.moduleName(), errors);
+                requireNativeProviderBackendText(module, provider, interfaceId, backend, "javascript.export", binding.exportName(), errors);
             }
             case PYTHON -> {
-                requireNativeProviderBackendText(module, provider, interfaceId, "python.module", binding.moduleName(), errors);
-                requireNativeProviderBackendText(module, provider, interfaceId, "python.className", binding.className(), errors);
+                requireNativeProviderBackendText(module, provider, interfaceId, backend, "python.module", binding.moduleName(), errors);
+                requireNativeProviderBackendText(module, provider, interfaceId, backend, "python.className", binding.className(), errors);
             }
         }
         var allowed = supportedNativeProviderFactories(backend);
@@ -3854,8 +3863,8 @@ public class CapybaraCompiler {
         errors.add(nativeProviderError(
                 module,
                 provider,
-                "Native provider `" + provider.name() + "` for interface `" + interfaceId
-                + "` with qualifier `" + provider.qualifier() + "` has unsupported "
+                "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
+                + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue() + "` has unsupported "
                 + backend.jsonValue() + " factory `" + binding.factory()
                 + "`. Supported values: " + String.join(", ", allowed)
         ));
@@ -3865,6 +3874,7 @@ public class CapybaraCompiler {
             ObjectOrientedModule module,
             ObjectOriented.NativeProviderDeclaration provider,
             String interfaceId,
+            NativeProviderBackend backend,
             String fieldName,
             String value,
             TreeSet<Result.Error.SingleError> errors
@@ -3875,8 +3885,9 @@ public class CapybaraCompiler {
         errors.add(nativeProviderError(
                 module,
                 provider,
-                "Native provider `" + provider.name() + "` for interface `" + interfaceId
-                + "` with qualifier `" + provider.qualifier() + "` requires manifest field `" + fieldName + "`"
+                "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
+                + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue()
+                + "` requires manifest field `" + fieldName + "`"
         ));
     }
 
@@ -3921,13 +3932,17 @@ public class CapybaraCompiler {
             ObjectOriented.NativeProviderDeclaration provider,
             String message
     ) {
-        var sourceFile = module.moduleFile();
+        var sourceFile = nativeProviderSourceFile(module);
         return new Result.Error.SingleError(
                 0,
                 0,
                 sourceFile,
                 message + " in source `" + sourceFile + "`"
         );
+    }
+
+    private String nativeProviderSourceFile(ObjectOrientedModule module) {
+        return module.moduleFile().replaceFirst("^/+", "/");
     }
 
     private String objectBackendClassName(ObjectOrientedModule module, String typeName) {

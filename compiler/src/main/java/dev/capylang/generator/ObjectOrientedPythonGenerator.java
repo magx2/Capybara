@@ -894,7 +894,7 @@ final class ObjectOrientedPythonGenerator {
             if (scope.hasBinding(entry.getKey())) {
                 continue;
             }
-            rejectNativeProviderCallsWithArguments(context, rewritten, entry.getKey());
+            rejectNativeProviderCallsWithArguments(context, rewritten, entry.getKey(), entry.getValue());
             var replacement = "__capy_native." + entry.getValue().bootstrapFunctionName() + "()";
             var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(\\s*\\)").matcher(rewritten);
             var buffer = new StringBuilder();
@@ -912,7 +912,12 @@ final class ObjectOrientedPythonGenerator {
         return rewritten;
     }
 
-    private void rejectNativeProviderCallsWithArguments(RenderContext context, String expression, String providerName) {
+    private void rejectNativeProviderCallsWithArguments(
+            RenderContext context,
+            String expression,
+            String providerName,
+            PythonGenerator.ProgramContext.NativeProviderInfo provider
+    ) {
         var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(providerName) + "\\s*\\(").matcher(expression);
         while (matcher.find()) {
             var openParen = matcher.end() - 1;
@@ -921,7 +926,14 @@ final class ObjectOrientedPythonGenerator {
                 continue;
             }
             if (!expression.substring(openParen + 1, closeParen).trim().isBlank()) {
-                throw unsupported(context.module(), "Native provider `" + providerName + "` does not accept arguments; call it as `" + providerName + "()`");
+                throw unsupported(
+                        context.module(),
+                        "TypeMismatch: Native provider `" + provider.providerSymbolName()
+                        + "` for interface `" + provider.interfaceId()
+                        + "` with qualifier `" + provider.qualifier()
+                        + "` for backend `python` does not accept arguments; call it as `"
+                        + providerName + "()` in source `" + provider.sourceFile() + "`"
+                );
             }
         }
     }

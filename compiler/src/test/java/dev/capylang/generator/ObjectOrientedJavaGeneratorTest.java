@@ -93,7 +93,7 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("\"system\",")
                 .contains("foo.boo.Clock.class,")
                 .contains("dev.capylang.test.SystemClock::new")
-                .contains("return PROVIDERS.resolve(\"/foo/boo/Providers.Clock\", \"system\", foo.boo.Clock.class);");
+                .contains("return PROVIDERS.resolve(\"/foo/boo/Providers.Clock\", \"system\", \"system_clock\", \"java\", \"/foo/boo/Providers.coo\", foo.boo.Clock.class);");
     }
 
     @Test
@@ -163,7 +163,12 @@ class ObjectOrientedJavaGeneratorTest {
 
         assertThatThrownBy(() -> new JavaGenerator().generate(program))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Native provider `system_clock` for interface `/foo/boo/Providers.Clock` with qualifier `system` has no java binding");
+                .hasMessageContaining("UnsupportedBackend")
+                .hasMessageContaining("Native provider `system_clock`")
+                .hasMessageContaining("interface `/foo/boo/Providers.Clock`")
+                .hasMessageContaining("qualifier `system`")
+                .hasMessageContaining("backend `java`")
+                .hasMessageContaining("/foo/boo/Providers.coo");
     }
 
     @Test
@@ -284,7 +289,10 @@ class ObjectOrientedJavaGeneratorTest {
         assertThat(((Result.Error<CompiledProgram>) result).errors())
                 .extracting(Result.Error.SingleError::message)
                 .anySatisfy(message -> assertThat(message)
-                        .contains("Native provider `system_clock` does not accept arguments")
+                        .contains("TypeMismatch")
+                        .contains("Native provider `system_clock`")
+                        .contains("qualifier `system`")
+                        .contains("does not accept arguments")
                         .contains("system_clock()"));
     }
 
