@@ -1,0 +1,15 @@
+interface Clock {
+    def now_millis(): long
+}
+
+native provider system_clock: Clock key "system"
+
+class NativeProviderApp {
+    def read_system_clock(): long = system_clock().now_millis()
+}
+
+class NativeProviderDomain(clock: Clock) {
+    field clock: Clock = clock
+
+    def read(): long = this.clock.now_millis()
+}

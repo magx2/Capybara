@@ -11,6 +11,7 @@ import dev.capylang.compiler.CompiledGenericTypeParameter;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledNativeProviderBinding;
 import dev.capylang.compiler.CompiledNativeProviderDeclaration;
+import dev.capylang.compiler.CompiledObjectMethod;
 import dev.capylang.compiler.CompiledObjectKind;
 import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledPrimitiveBackedType;
@@ -132,32 +133,21 @@ public final class JavaScriptGenerator implements Generator {
     private String renderNativeProviderBootstrap(List<ProgramContext.NativeProviderInfo> providers) {
         var code = new StringBuilder();
         code.append("'use strict';\n\n");
-        code.append("function __capy_validate(providerName, value, methods) {\n");
-        code.append("    if (value === null || value === undefined) {\n");
-        code.append("        throw new Error('Native provider `' + providerName + '` returned no value');\n");
-        code.append("    }\n");
-        code.append("    for (const method of methods) {\n");
-        code.append("        if (typeof value[method] !== 'function') {\n");
-        code.append("            throw new Error('Native provider `' + providerName + '` does not implement method `' + method + '`');\n");
-        code.append("        }\n");
-        code.append("    }\n");
-        code.append("    return value;\n");
-        code.append("}\n\n");
+        code.append("const capy = require('./capybara.js');\n");
         for (var provider : providers) {
-            code.append("const __capy_provider_")
-                    .append(provider.bootstrapFunctionName())
-                    .append("_module = require(")
+            code.append("const ")
+                    .append(nativeProviderModuleVariable(provider))
+                    .append(" = require(")
                     .append(jsString(provider.binding().moduleName()))
                     .append(");\n");
-            if (provider.lifetime() == NativeProviderLifetime.SINGLETON) {
-                code.append("let __capy_provider_")
-                        .append(provider.bootstrapFunctionName())
-                        .append("_singleton;\n");
-                code.append("let __capy_provider_")
-                        .append(provider.bootstrapFunctionName())
-                        .append("_hasSingleton = false;\n");
-            }
-            code.append("\n");
+        }
+        code.append("\n");
+        code.append("const providers = capy.defineNativeProviders({\n");
+        for (var provider : providers) {
+            code.append(renderNativeProviderEntry(provider));
+        }
+        code.append("});\n\n");
+        for (var provider : providers) {
             code.append(renderNativeProviderFunction(provider)).append("\n");
         }
         code.append("module.exports = {\n");
@@ -168,33 +158,57 @@ public final class JavaScriptGenerator implements Generator {
         return code.toString();
     }
 
+    private String renderNativeProviderEntry(ProgramContext.NativeProviderInfo provider) {
+        var moduleVariable = nativeProviderModuleVariable(provider);
+        var exportAccess = renderPropertyAccess(moduleVariable, provider.binding().exportName());
+        return "    " + jsString(nativeProviderBootstrapKey(provider.interfaceId(), provider.qualifier())) + ": capy.nativeFactory({\n"
+               + "        interfaceId: " + jsString(provider.interfaceId()) + ",\n"
+               + "        qualifier: " + jsString(provider.qualifier()) + ",\n"
+               + "        lifetime: " + jsString(provider.lifetime().jsonValue()) + ",\n"
+               + "        moduleName: " + jsString(provider.binding().moduleName()) + ",\n"
+               + "        exportName: " + jsString(provider.binding().exportName()) + ",\n"
+               + "        exportExists: Object.prototype.hasOwnProperty.call(" + moduleVariable + ", " + jsString(provider.binding().exportName()) + "),\n"
+               + "        exportValue: " + exportAccess + ",\n"
+               + "        factory: " + jsString(provider.binding().factory()) + ",\n"
+               + "        metadata: {\n"
+               + "            methods: " + renderNativeProviderMethods(provider.methods()) + "\n"
+               + "        },\n"
+               + "        create: () => " + renderNativeProviderFactory(provider, exportAccess) + "\n"
+               + "    }),\n";
+    }
+
     private String renderNativeProviderFunction(ProgramContext.NativeProviderInfo provider) {
-        if (provider.lifetime() == NativeProviderLifetime.FACTORY) {
-            return "function " + provider.bootstrapFunctionName() + "() {\n"
-                   + "    return __capy_validate(" + jsString(provider.providerSymbolName()) + ", "
-                   + renderNativeProviderFactory(provider) + ", "
-                   + jsArray(provider.methodNames()) + ");\n"
-                   + "}\n";
-        }
-        var singleton = "__capy_provider_" + provider.bootstrapFunctionName() + "_singleton";
-        var hasSingleton = "__capy_provider_" + provider.bootstrapFunctionName() + "_hasSingleton";
         return "function " + provider.bootstrapFunctionName() + "() {\n"
-               + "    if (!" + hasSingleton + ") {\n"
-               + "        " + singleton + " = __capy_validate(" + jsString(provider.providerSymbolName()) + ", "
-               + renderNativeProviderFactory(provider) + ", "
-               + jsArray(provider.methodNames()) + ");\n"
-               + "        " + hasSingleton + " = true;\n"
-               + "    }\n"
-               + "    return " + singleton + ";\n"
+               + "    return providers.resolve(" + jsString(provider.interfaceId()) + ", " + jsString(provider.qualifier()) + ");\n"
                + "}\n";
     }
 
-    private String renderNativeProviderFactory(ProgramContext.NativeProviderInfo provider) {
-        var factory = "__capy_provider_" + provider.bootstrapFunctionName() + "_module[" + jsString(provider.binding().exportName()) + "]";
+    private String renderNativeProviderFactory(ProgramContext.NativeProviderInfo provider, String factory) {
         if ("new".equals(provider.binding().factory())) {
             return "new " + factory + "()";
         }
         return factory + "()";
+    }
+
+    private static String nativeProviderModuleVariable(ProgramContext.NativeProviderInfo provider) {
+        return "__capy_provider_" + provider.bootstrapFunctionName() + "_module";
+    }
+
+    private static String nativeProviderBootstrapKey(String interfaceId, String qualifier) {
+        return interfaceId + "#" + qualifier;
+    }
+
+    private static String renderPropertyAccess(String target, String propertyName) {
+        if (isValidJsIdentifier(propertyName) && !JS_KEYWORDS.contains(propertyName)) {
+            return target + "." + propertyName;
+        }
+        return target + "[" + jsString(propertyName) + "]";
+    }
+
+    private static String renderNativeProviderMethods(List<ProgramContext.NativeProviderMethodInfo> methods) {
+        return methods.stream()
+                .map(method -> "{ name: " + jsString(method.name()) + ", arity: " + method.arity() + " }")
+                .collect(joining(", ", "[", "]"));
     }
 
     private static boolean isRuntimeProvidedModule(CompiledModule module) {
@@ -2129,11 +2143,13 @@ public final class JavaScriptGenerator implements Generator {
                         declaration.providerName(),
                         bootstrapName,
                         interfaceType.backendClassName(),
+                        declaration.interfaceId(),
+                        declaration.qualifier(),
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
                         binding.lifetime(),
                         javascriptBinding,
-                        interfaceType.methodNames()
+                        interfaceType.methods()
                 ));
             }
             return List.copyOf(infos);
@@ -2157,7 +2173,7 @@ public final class JavaScriptGenerator implements Generator {
                     if (type instanceof CompiledObjectType objectType && objectType.kind() == CompiledObjectKind.INTERFACE) {
                         var info = new ProviderInterfaceInfo(
                                 objectType.backendClassName(),
-                                objectType.methods().stream().map(method -> nativeProviderIdentifier(method.name())).toList()
+                                objectType.methods().stream().map(ProgramContext::nativeProviderMethodInfo).toList()
                         );
                         result.put(cfunTypeName(module, objectType.name()), info);
                         if (module.name().equals(objectType.name())) {
@@ -2176,7 +2192,10 @@ public final class JavaScriptGenerator implements Generator {
                                         definition.members().stream()
                                                 .filter(ObjectOriented.MethodDeclaration.class::isInstance)
                                                 .map(ObjectOriented.MethodDeclaration.class::cast)
-                                                .map(method -> nativeProviderIdentifier(method.name()))
+                                                .map(method -> new NativeProviderMethodInfo(
+                                                        nativeProviderIdentifier(method.name()),
+                                                        method.parameters().size()
+                                                ))
                                                 .toList()
                                 )
                         );
@@ -2184,6 +2203,13 @@ public final class JavaScriptGenerator implements Generator {
                 }
             }
             return Map.copyOf(result);
+        }
+
+        private static NativeProviderMethodInfo nativeProviderMethodInfo(CompiledObjectMethod method) {
+            return new NativeProviderMethodInfo(
+                    nativeProviderIdentifier(method.name()),
+                    method.parameters().size()
+            );
         }
 
         private static String objectInterfaceId(ObjectOrientedModule module, String typeName) {
@@ -2529,20 +2555,25 @@ public final class JavaScriptGenerator implements Generator {
                 String providerSymbolName,
                 String bootstrapFunctionName,
                 String targetBackendType,
+                String interfaceId,
+                String qualifier,
                 String sourceModulePath,
                 String sourceModuleName,
                 NativeProviderLifetime lifetime,
                 NativeProviderBackendBinding binding,
-                List<String> methodNames
+                List<NativeProviderMethodInfo> methods
         ) {
             NativeProviderInfo {
-                methodNames = List.copyOf(methodNames);
+                methods = List.copyOf(methods);
             }
         }
 
-        private record ProviderInterfaceInfo(String backendClassName, List<String> methodNames) {
+        record NativeProviderMethodInfo(String name, int arity) {
+        }
+
+        private record ProviderInterfaceInfo(String backendClassName, List<NativeProviderMethodInfo> methods) {
             private ProviderInterfaceInfo {
-                methodNames = List.copyOf(methodNames);
+                methods = List.copyOf(methods);
             }
         }
 
@@ -5302,6 +5333,183 @@ public final class JavaScriptGenerator implements Generator {
             return """
                     'use strict';
 
+                    class NativeProviderError extends Error {
+                        constructor(message, metadata = {}) {
+                            super(message);
+                            this.name = 'NativeProviderError';
+                            this.interfaceId = metadata.interfaceId;
+                            this.qualifier = metadata.qualifier;
+                        }
+                    }
+
+                    function nativeProviderError(message, metadata = {}) {
+                        return new NativeProviderError(message, metadata);
+                    }
+
+                    function nativeProviderKey(interfaceId, qualifier) {
+                        return `${interfaceId}#${qualifier}`;
+                    }
+
+                    function nativeProviderContext(metadata) {
+                        return 'interface `' + metadata.interfaceId + '` with qualifier `' + metadata.qualifier + '`';
+                    }
+
+                    function requireNativeText(value, name, metadata) {
+                        if (typeof value !== 'string' || value.trim() === '') {
+                            throw nativeProviderError('Native provider ' + name + ' is required for ' + nativeProviderContext(metadata) + '.', metadata);
+                        }
+                        return value;
+                    }
+
+                    function nativeFactory(options) {
+                        const metadata = {
+                            interfaceId: options?.interfaceId,
+                            qualifier: options?.qualifier,
+                        };
+                        const interfaceId = requireNativeText(options?.interfaceId, 'interfaceId', metadata);
+                        const qualifier = requireNativeText(options?.qualifier, 'qualifier', metadata);
+                        const lifetime = options?.lifetime ?? 'factory';
+                        if (lifetime !== 'singleton' && lifetime !== 'factory') {
+                            throw nativeProviderError('Native provider for ' + nativeProviderContext({ interfaceId, qualifier }) + ' has unsupported lifetime `' + lifetime + '`.', { interfaceId, qualifier });
+                        }
+                        if (options?.factory !== 'new' && options?.factory !== 'call') {
+                            throw nativeProviderError('Native provider for ' + nativeProviderContext({ interfaceId, qualifier }) + ' has unsupported JavaScript factory `' + options?.factory + '`.', { interfaceId, qualifier });
+                        }
+                        if (options?.exportExists !== true || typeof options?.exportValue !== 'function') {
+                            throw nativeProviderError('Native provider for ' + nativeProviderContext({ interfaceId, qualifier }) + ' requires export `' + options?.exportName + '` from module `' + options?.moduleName + '`.', { interfaceId, qualifier });
+                        }
+                        if (typeof options?.create !== 'function') {
+                            throw nativeProviderError('Native provider factory is required for ' + nativeProviderContext({ interfaceId, qualifier }) + '.', { interfaceId, qualifier });
+                        }
+                        return Object.freeze({
+                            interfaceId,
+                            qualifier,
+                            lifetime,
+                            metadata: Object.freeze({
+                                interfaceId,
+                                qualifier,
+                                methods: Object.freeze([...(options?.metadata?.methods ?? [])].map(method => Object.freeze({
+                                    name: method.name,
+                                    arity: method.arity ?? 0,
+                                }))),
+                            }),
+                            create: options.create,
+                        });
+                    }
+
+                    function defineNativeProviders(providerTable) {
+                        if (providerTable === null || typeof providerTable !== 'object') {
+                            throw nativeProviderError('Native provider table must be an object.');
+                        }
+                        const providers = new Map();
+                        for (const [key, provider] of Object.entries(providerTable)) {
+                            if (!provider || typeof provider !== 'object') {
+                                throw nativeProviderError('Native provider table entry `' + key + '` is invalid.');
+                            }
+                            const expectedKey = nativeProviderKey(provider.interfaceId, provider.qualifier);
+                            if (key !== expectedKey) {
+                                throw nativeProviderError('Native provider table key `' + key + '` does not match ' + nativeProviderContext(provider) + '.', provider);
+                            }
+                            if (providers.has(key)) {
+                                throw nativeProviderError('Duplicate native provider for ' + nativeProviderContext(provider) + '.', provider);
+                            }
+                            providers.set(key, { provider, singletonSet: false, singletonValue: undefined });
+                        }
+                        const table = Object.freeze({ __capybaraNativeProviders: providers });
+                        return Object.freeze({
+                            resolve: resolveNativeImplementation.bind(table),
+                        });
+                    }
+
+                    function resolveNativeImplementation(interfaceId, qualifier) {
+                        const providers = this?.__capybaraNativeProviders;
+                        if (!(providers instanceof Map)) {
+                            throw nativeProviderError('No native provider table is bound for ' + nativeProviderContext({ interfaceId, qualifier }) + '.', { interfaceId, qualifier });
+                        }
+                        const key = nativeProviderKey(interfaceId, qualifier);
+                        const entry = providers.get(key);
+                        if (!entry) {
+                            throw nativeProviderError('No native provider registered for ' + nativeProviderContext({ interfaceId, qualifier }) + '.', { interfaceId, qualifier });
+                        }
+                        if (entry.provider.lifetime === 'singleton') {
+                            if (!entry.singletonSet) {
+                                entry.singletonValue = createNativeImplementation(entry.provider);
+                                entry.singletonSet = true;
+                            }
+                            return entry.singletonValue;
+                        }
+                        return createNativeImplementation(entry.provider);
+                    }
+
+                    function createNativeImplementation(provider) {
+                        let value;
+                        try {
+                            value = provider.create();
+                        } catch (error) {
+                            if (error instanceof NativeProviderError) {
+                                throw error;
+                            }
+                            throw nativeProviderError('Native provider for ' + nativeProviderContext(provider) + ' failed during construction: ' + (error?.message ?? String(error)), provider);
+                        }
+                        return validateNativeImplementation(provider.metadata, value);
+                    }
+
+                    function validateNativeImplementation(interfaceMetadata, value) {
+                        const metadata = {
+                            interfaceId: interfaceMetadata?.interfaceId,
+                            qualifier: interfaceMetadata?.qualifier,
+                        };
+                        if (value === null || value === undefined) {
+                            throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' returned null.', metadata);
+                        }
+                        const methods = interfaceMetadata?.methods ?? [];
+                        for (const method of methods) {
+                            const name = method.name;
+                            const implementation = value[name];
+                            if (implementation === undefined || implementation === null) {
+                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' is missing method `' + name + '`.', metadata);
+                            }
+                            if (typeof implementation !== 'function') {
+                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` must be a function.', metadata);
+                            }
+                            const arity = method.arity ?? 0;
+                            if (implementation.length < arity) {
+                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` requires arity at least ' + arity + ', got ' + implementation.length + '.', metadata);
+                            }
+                            if (implementation.constructor?.name === 'AsyncFunction') {
+                                throw nativeProviderError('Native provider for ' + nativeProviderContext(metadata) + ' method `' + name + '` is async; async host methods are unsupported in native provider wiring v1.', metadata);
+                            }
+                        }
+                        return nativeImplementationProxy(interfaceMetadata, value);
+                    }
+
+                    function nativeImplementationProxy(interfaceMetadata, value) {
+                        const methods = new Map((interfaceMetadata?.methods ?? []).map(method => [method.name, method]));
+                        const interfaceName = String(interfaceMetadata?.interfaceId ?? '').split(/[/.]/).filter(Boolean).pop();
+                        return new Proxy(value, {
+                            get(target, property, receiver) {
+                                if (property === '__capybaraType') {
+                                    return target.__capybaraType ?? interfaceName;
+                                }
+                                if (property === '__capybaraTypes') {
+                                    const existing = Array.isArray(target.__capybaraTypes) ? target.__capybaraTypes : [];
+                                    return interfaceName && !existing.includes(interfaceName) ? [...existing, interfaceName] : existing;
+                                }
+                                if (typeof property === 'string' && methods.has(property)) {
+                                    const method = target[property];
+                                    return (...args) => {
+                                        const result = method.apply(target, args);
+                                        if (result && typeof result.then === 'function') {
+                                            throw nativeProviderError('Native provider for ' + nativeProviderContext(interfaceMetadata) + ' method `' + property + '` returned a Promise; async host methods are unsupported in native provider wiring v1.', interfaceMetadata);
+                                        }
+                                        return result;
+                                    };
+                                }
+                                return Reflect.get(target, property, receiver);
+                            },
+                        });
+                    }
+
                     class Some {
                         constructor(fields = {}) {
                             this.__capybaraType = 'Some';
@@ -6446,6 +6654,12 @@ public final class JavaScriptGenerator implements Generator {
                         reflection,
                         writeProgramResult,
                         unsupported,
+                        NativeProviderError,
+                        nativeProviderError,
+                        nativeFactory,
+                        defineNativeProviders,
+                        resolveNativeImplementation,
+                        validateNativeImplementation,
                     };
                     """;
         }
