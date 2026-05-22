@@ -1,0 +1,14 @@
+{
+  "providers": [
+    {
+      "interface": "/dev/capylang/test/Clock",
+      "qualifier": "system",
+      "lifetime": "factory",
+      "python": {
+        "module": "nativeinterop.system_clock",
+        "className": "SystemClock",
+        "factory": "call"
+      }
+    }
+  ]
+}
