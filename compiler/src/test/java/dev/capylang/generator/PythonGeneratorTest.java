@@ -352,7 +352,7 @@ class PythonGeneratorTest {
                 .contains("create=lambda: __capy_provider_system_clock_class()")
                 .contains("{'name': 'now_millis', 'arity': 0}")
                 .contains("def system_clock():")
-                .contains("return _providers.resolve('/Providers.Clock', 'system')");
+                .contains("return _providers.resolve('/Providers.Clock', 'system', 'system_clock', 'python', '/Providers.coo')");
     }
 
     @Test

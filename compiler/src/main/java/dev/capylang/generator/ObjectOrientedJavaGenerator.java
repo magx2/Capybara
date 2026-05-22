@@ -1381,7 +1381,7 @@ public final class ObjectOrientedJavaGenerator {
             if (localMethodBindings.replacements().containsKey(entry.getKey())) {
                 continue;
             }
-            rejectNativeProviderCallsWithArguments(module, rewritten, entry.getKey());
+            rejectNativeProviderCallsWithArguments(module, rewritten, entry.getKey(), entry.getValue());
             rewritten = rewritten.replaceAll(
                     "(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(\\s*\\)",
                     "$1dev.capylang.NativeProviderBootstrap." + Matcher.quoteReplacement(entry.getValue().bootstrapMethodName()) + "()"
@@ -1390,7 +1390,12 @@ public final class ObjectOrientedJavaGenerator {
         return rewritten;
     }
 
-    private void rejectNativeProviderCallsWithArguments(ObjectOrientedModule module, String expression, String providerName) {
+    private void rejectNativeProviderCallsWithArguments(
+            ObjectOrientedModule module,
+            String expression,
+            String providerName,
+            NativeProviderInfo provider
+    ) {
         var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(providerName) + "\\s*\\(").matcher(expression);
         while (matcher.find()) {
             var openParen = matcher.end() - 1;
@@ -1399,7 +1404,14 @@ public final class ObjectOrientedJavaGenerator {
                 continue;
             }
             if (!expression.substring(openParen + 1, closeParen).trim().isBlank()) {
-                throw unsupported(module, "Native provider `" + providerName + "` does not accept arguments; call it as `" + providerName + "()`");
+                throw unsupported(
+                        module,
+                        "TypeMismatch: Native provider `" + provider.providerSymbolName()
+                        + "` for interface `" + provider.interfaceId()
+                        + "` with qualifier `" + provider.qualifier()
+                        + "` for backend `java` does not accept arguments; call it as `" + providerName
+                        + "()` in source `" + provider.sourceFile() + "`"
+                );
             }
         }
     }
@@ -2244,8 +2256,11 @@ public final class ObjectOrientedJavaGenerator {
             String providerSymbolName,
             String bootstrapMethodName,
             String targetBackendType,
+            String interfaceId,
+            String qualifier,
             String sourceModulePath,
-            String sourceModuleName
+            String sourceModuleName,
+            String sourceFile
     ) {
     }
 }
