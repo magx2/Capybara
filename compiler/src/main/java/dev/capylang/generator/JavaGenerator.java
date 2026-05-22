@@ -127,6 +127,8 @@ public final class JavaGenerator implements Generator {
             infos.add(new NativeProviderInfo(
                     declaration.providerName(),
                     bootstrapName,
+                    declaration.interfaceId(),
+                    declaration.qualifier(),
                     interfaceType.backendClassName(),
                     declaration.sourceModulePath(),
                     declaration.sourceModuleName(),
@@ -223,46 +225,64 @@ public final class JavaGenerator implements Generator {
         code.append("package dev.capylang;\n\n");
         code.append("@javax.annotation.processing.Generated(\"Capybara Compiler\")\n");
         code.append("public final class NativeProviderBootstrap {\n");
+        code.append("    private static final NativeProviders PROVIDERS = NativeProviders.of(\n");
+        for (int i = 0; i < providers.size(); i++) {
+            code.append(renderNativeProviderRegistration(providers.get(i)));
+            if (i < providers.size() - 1) {
+                code.append(",");
+            }
+            code.append("\n");
+        }
+        code.append("    );\n\n");
         code.append("    private NativeProviderBootstrap() {\n");
         code.append("    }\n\n");
         for (var provider : providers) {
-            if (provider.lifetime() == NativeProviderLifetime.SINGLETON) {
-                code.append("    private static volatile ")
-                        .append(provider.targetBackendType())
-                        .append(" __capybara_")
-                        .append(provider.bootstrapMethodName())
-                        .append("_singleton;\n\n");
-            }
             code.append(renderNativeProviderMethod(provider)).append("\n");
         }
         code.append("}\n");
         return code.toString();
     }
 
-    private String renderNativeProviderMethod(NativeProviderInfo provider) {
-        if (provider.lifetime() == NativeProviderLifetime.FACTORY) {
-            return "    public static " + provider.targetBackendType() + " " + provider.bootstrapMethodName() + "() {\n"
-                   + "        return " + renderNativeProviderFactory(provider) + ";\n"
-                   + "    }\n";
+    private String renderNativeProviderRegistration(NativeProviderInfo provider) {
+        var binding = provider.binding();
+        if (binding.className() == null || binding.className().isBlank()) {
+            throw new IllegalArgumentException("Native provider `" + provider.providerSymbolName()
+                                               + "` for interface `" + provider.interfaceId()
+                                               + "` with qualifier `" + provider.qualifier()
+                                               + "` requires manifest field `java.className`");
         }
-        var fieldName = "__capybara_" + provider.bootstrapMethodName() + "_singleton";
+        if (!"constructor".equals(binding.factory())) {
+            throw new IllegalArgumentException("Native provider `" + provider.providerSymbolName()
+                                               + "` for interface `" + provider.interfaceId()
+                                               + "` with qualifier `" + provider.qualifier()
+                                               + "` has unsupported java factory `" + binding.factory()
+                                               + "`. Supported values: constructor");
+        }
+        var lifetimeMethod = provider.lifetime() == NativeProviderLifetime.FACTORY ? "factory" : "singleton";
+        return "            NativeProviders." + lifetimeMethod + "(\n"
+               + "                    " + javaString(provider.interfaceId()) + ",\n"
+               + "                    " + javaString(provider.qualifier()) + ",\n"
+               + "                    " + provider.targetBackendType() + ".class,\n"
+               + "                    " + binding.className() + "::new\n"
+               + "            )";
+    }
+
+    private String renderNativeProviderMethod(NativeProviderInfo provider) {
         return "    public static " + provider.targetBackendType() + " " + provider.bootstrapMethodName() + "() {\n"
-               + "        var existing = " + fieldName + ";\n"
-               + "        if (existing == null) {\n"
-               + "            synchronized (NativeProviderBootstrap.class) {\n"
-               + "                existing = " + fieldName + ";\n"
-               + "                if (existing == null) {\n"
-               + "                    existing = " + renderNativeProviderFactory(provider) + ";\n"
-               + "                    " + fieldName + " = existing;\n"
-               + "                }\n"
-               + "            }\n"
-               + "        }\n"
-               + "        return existing;\n"
+               + "        return PROVIDERS.resolve(" + javaString(provider.interfaceId())
+               + ", " + javaString(provider.qualifier())
+               + ", " + provider.targetBackendType() + ".class);\n"
                + "    }\n";
     }
 
-    private String renderNativeProviderFactory(NativeProviderInfo provider) {
-        return "new " + provider.binding().className() + "()";
+    private static String javaString(String value) {
+        return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 
     private List<GeneratedModule> modules(
@@ -1284,6 +1304,8 @@ public final class JavaGenerator implements Generator {
     private record NativeProviderInfo(
             String providerSymbolName,
             String bootstrapMethodName,
+            String interfaceId,
+            String qualifier,
             String targetBackendType,
             String sourceModulePath,
             String sourceModuleName,
