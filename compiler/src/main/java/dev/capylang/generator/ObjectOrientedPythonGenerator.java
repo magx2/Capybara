@@ -87,7 +87,8 @@ final class ObjectOrientedPythonGenerator {
         output.append(PythonGenerator.renderSysPathBootstrap(context.relativePath()));
         output.append("import dev.capylang.capybara as capy\n");
         if (context.usesNativeProviderBootstrap()) {
-            output.append("import dev.capylang.native_providers as capy_native\n");
+            output.append("import dev.capylang.native_providers as __capy_native\n");
+            output.append(nativeProviderBootstrapAlias(context)).append(" = __capy_native\n");
         }
         for (var entry : context.requiredModules().entrySet()) {
             output.append("import ")
@@ -894,7 +895,7 @@ final class ObjectOrientedPythonGenerator {
                 continue;
             }
             rejectNativeProviderCallsWithArguments(context, rewritten, entry.getKey());
-            var replacement = "capy_native." + entry.getValue().bootstrapFunctionName() + "()";
+            var replacement = "__capy_native." + entry.getValue().bootstrapFunctionName() + "()";
             var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(\\s*\\)").matcher(rewritten);
             var buffer = new StringBuilder();
             var used = false;
@@ -957,6 +958,13 @@ final class ObjectOrientedPythonGenerator {
                 .replaceAll("(?<![A-Za-z0-9_])true(?![A-Za-z0-9_])", "True")
                 .replaceAll("(?<![A-Za-z0-9_])false(?![A-Za-z0-9_])", "False")
                 .replaceAll("(?<![A-Za-z0-9_])null(?![A-Za-z0-9_])", "None");
+    }
+
+    private String nativeProviderBootstrapAlias(RenderContext context) {
+        var className = context.typeName().replaceFirst("^_+", "");
+        return className.isBlank()
+                ? "__capy_native"
+                : "_" + className + "__capy_native";
     }
 
     private String rewriteOperators(String expression) {

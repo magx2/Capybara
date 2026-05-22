@@ -336,8 +336,9 @@ class PythonGeneratorTest {
                 .orElseThrow();
 
         assertThat(app.code())
-                .contains("import dev.capylang.native_providers as capy_native")
-                .contains("return capy_native.system_clock()")
+                .contains("import dev.capylang.native_providers as __capy_native")
+                .contains("_App__capy_native = __capy_native")
+                .contains("return __capy_native.system_clock()")
                 .doesNotContain("host_clock")
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
