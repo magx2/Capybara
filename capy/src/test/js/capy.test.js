@@ -115,7 +115,15 @@ test('compile-generate JS accepts native wiring manifest', async () => {
     const regeneratedDir = join(root, 'regenerated');
     const nativeWiringFile = join(root, 'capy.native.json');
     await mkdir(join(sourceDir, 'foo'), { recursive: true });
+    await mkdir(join(sourceDir, 'dev', 'capylang', 'test'), { recursive: true });
     await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
+    await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
+interface Clock {
+    def now(): String
+}
+
+native provider system_clock: Clock key "system"
+`);
     await writeFile(nativeWiringFile, JSON.stringify({
         providers: [{
             interface: '/dev/capylang/test/Clock',
@@ -141,6 +149,7 @@ test('compile-generate JS accepts native wiring manifest', async () => {
     assert.equal(result.status, 0, result.stderr);
     const programJson = await readFile(join(linkedDir, 'program.json'), 'utf8');
     assert.match(programJson, /nativeProviders/);
+    assert.match(programJson, /nativeProviderCatalog/);
     assert.match(programJson, /nativeinterop\/system_clock\.js/);
 
     const generate = runCapy(['generate', 'js', '-i', linkedDir, '-o', regeneratedDir]);
