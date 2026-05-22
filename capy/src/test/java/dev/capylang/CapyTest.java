@@ -54,6 +54,7 @@ class CapyTest {
         assertTrue(text.contains("capy generate"));
         assertTrue(text.contains("--compile-tests"));
         assertTrue(text.contains("--test-input <dir> --test-output <dir>"));
+        assertTrue(text.contains("--native-wiring <file>"));
         assertTrue(text.contains("capy package"));
     }
 
@@ -157,6 +158,54 @@ class CapyTest {
     }
 
     @Test
+    void shouldRejectMalformedNativeWiringJson() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("native-wiring-malformed-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var outputDir = tempDir.resolve("native-wiring-malformed-linked");
+        var manifestFile = tempDir.resolve("capy.native.json");
+        Files.writeString(manifestFile, "{ not json");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.execute(
+                new String[]{
+                        "compile",
+                        "-i", sourceDir.toString(),
+                        "-o", outputDir.toString(),
+                        "--native-wiring", manifestFile.toString()
+                },
+                new PrintStream(stdout),
+                new PrintStream(stderr)
+        );
+
+        assertEquals(1, exitCode);
+        assertEquals("", stdout.toString().trim());
+        assertTrue(stderr.toString().contains("Unable to read native wiring manifest"));
+        assertTrue(stderr.toString().contains(manifestFile.toString()));
+    }
+
+    @Test
+    void shouldRejectNativeWiringOnGenerate() {
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.execute(
+                new String[]{
+                        "generate",
+                        "java",
+                        "--native-wiring", tempDir.resolve("capy.native.json").toString(),
+                        "-o", tempDir.resolve("generated").toString()
+                },
+                new PrintStream(stdout),
+                new PrintStream(stderr)
+        );
+
+        assertEquals(1, exitCode);
+        assertEquals("", stdout.toString().trim());
+        assertTrue(stderr.toString().contains("Option `--native-wiring` is supported only for `compile` and `compile-generate`."));
+    }
+
+    @Test
     void shouldCompileGenerateObjectOrientedFilesToJava() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("oo-source-input"));
         Files.createDirectories(sourceDir.resolve("foo"));
@@ -252,6 +301,66 @@ class CapyTest {
         assertEquals(0, exitCode);
         assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
         assertTrue(Files.readString(linkedDir.resolve("build-info.json")).contains("test-version"));
+    }
+
+    @Test
+    void shouldCompileGenerateWithNativeWiringManifest() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-native-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        var generatedDir = tempDir.resolve("compile-generate-native-output");
+        var linkedDir = tempDir.resolve("compile-generate-native-linked");
+        var manifestFile = tempDir.resolve("capy.native.json");
+        Files.writeString(manifestFile, """
+                {
+                  "providers": [
+                    {
+                      "interface": "/dev/capylang/test/Clock",
+                      "qualifier": "system",
+                      "lifetime": "factory",
+                      "java": {
+                        "className": "dev.capylang.test.nativeinterop.SystemClock",
+                        "factory": "constructor"
+                      },
+                      "javascript": {
+                        "module": "./nativeinterop/system_clock.js",
+                        "export": "SystemClock",
+                        "factory": "new"
+                      },
+                      "python": {
+                        "module": "nativeinterop.system_clock",
+                        "className": "SystemClock",
+                        "factory": "call"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        var exitCode = Capy.execute(
+                new String[]{
+                        "compile-generate",
+                        "java",
+                        "-i", sourceDir.toString(),
+                        "-o", generatedDir.toString(),
+                        "--linked-output", linkedDir.toString(),
+                        "--native-wiring", manifestFile.toString(),
+                        "--skip-java-lib"
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        );
+
+        assertEquals(0, exitCode);
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
+        var program = Capy.readLinkedProgram(linkedDir, true);
+        assertEquals(1, program.nativeProviders().providers().size());
+        var provider = program.nativeProviders().providers().getFirst();
+        assertEquals("/dev/capylang/test/Clock", provider.interfaceId());
+        assertEquals("system", provider.qualifier());
+        assertEquals("dev.capylang.test.nativeinterop.SystemClock", provider.javaBinding().className());
+        assertEquals("./nativeinterop/system_clock.js", provider.javascriptBinding().moduleName());
+        assertEquals("nativeinterop.system_clock", provider.pythonBinding().moduleName());
     }
 
     @Test

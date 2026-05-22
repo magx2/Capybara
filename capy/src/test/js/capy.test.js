@@ -107,6 +107,47 @@ test('generate JS from linked input', async () => {
     assert.equal(node.stdout.trim(), '7');
 });
 
+test('compile-generate JS accepts native wiring manifest', async () => {
+    const root = await tempProject();
+    const sourceDir = join(root, 'src');
+    const generatedDir = join(root, 'generated');
+    const linkedDir = join(root, 'linked');
+    const regeneratedDir = join(root, 'regenerated');
+    const nativeWiringFile = join(root, 'capy.native.json');
+    await mkdir(join(sourceDir, 'foo'), { recursive: true });
+    await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
+    await writeFile(nativeWiringFile, JSON.stringify({
+        providers: [{
+            interface: '/dev/capylang/test/Clock',
+            qualifier: 'system',
+            lifetime: 'factory',
+            javascript: {
+                module: './nativeinterop/system_clock.js',
+                export: 'SystemClock',
+                factory: 'new',
+            },
+        }],
+    }, null, 2));
+
+    const result = runCapy([
+        'compile-generate',
+        'JS',
+        '-i', sourceDir,
+        '-o', generatedDir,
+        '--linked-output', linkedDir,
+        '--native-wiring', nativeWiringFile,
+    ]);
+
+    assert.equal(result.status, 0, result.stderr);
+    const programJson = await readFile(join(linkedDir, 'program.json'), 'utf8');
+    assert.match(programJson, /nativeProviders/);
+    assert.match(programJson, /nativeinterop\/system_clock\.js/);
+
+    const generate = runCapy(['generate', 'js', '-i', linkedDir, '-o', regeneratedDir]);
+    assert.equal(generate.status, 0, generate.stderr);
+    assert.equal(await exists(join(regeneratedDir, 'foo', 'Main.js')), true);
+});
+
 test('compile-generate JS accepts object-oriented modules', async () => {
     const root = await tempProject();
     const sourceDir = join(root, 'src');
