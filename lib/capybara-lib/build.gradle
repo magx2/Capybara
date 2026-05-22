@@ -1,5 +1,4 @@
 import com.github.gradle.node.task.NodeTask
-import com.pswidersk.gradle.python.VenvTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Task
@@ -49,6 +48,52 @@ node {
 
 pythonPlugin {
     pythonVersion = '3.12.8'
+}
+
+def pythonEnvDir = providers.provider {
+    def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    def pythonOs = osName.contains('windows') ? 'Windows' : osName.contains('mac') ? 'MacOSX' : 'Linux'
+    pythonPlugin.installDir.get()
+            .dir("${pythonOs}/${pythonPlugin.condaInstaller.get()}-${pythonPlugin.condaVersion.get()}/envs/python-${pythonPlugin.pythonVersion.get()}")
+            .asFile
+}
+def pythonExecutable = pythonEnvDir.map { envDir ->
+    new File(envDir, System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'python.exe' : 'bin/python')
+}
+def pythonPath = pythonEnvDir.map { envDir ->
+    def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    def pathEntries = osName.contains('windows')
+            ? [
+                    envDir,
+                    new File(envDir, 'Library/mingw-w64/bin'),
+                    new File(envDir, 'Library/usr/bin'),
+                    new File(envDir, 'Library/bin'),
+                    new File(envDir, 'Scripts')
+            ]
+            : [new File(envDir, 'bin')]
+    (pathEntries.collect { it.absolutePath } + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
+}
+def configurePythonTask = { Exec task ->
+    task.dependsOn tasks.named('envSetup')
+    task.executable = pythonExecutable.get().absolutePath
+    task.environment 'CONDA_PREFIX', pythonEnvDir.get().absolutePath
+    task.environment 'PATH', pythonPath.get()
+}
+
+// The Python plugin's IDE SDK import finalizer runs locatePython during normal
+// builds when .idea exists. Test tasks run the environment Python directly.
+def pythonSdkImportRequested = gradle.startParameter.taskNames.any { taskName ->
+    def separator = taskName.lastIndexOf(':')
+    def basename = separator >= 0 ? taskName.substring(separator + 1) : taskName
+    basename == 'locatePython' || basename == 'saveSdkImportConfig'
+}
+
+tasks.named('locatePython') {
+    onlyIf { pythonSdkImportRequested }
+}
+
+tasks.named('saveSdkImportConfig') {
+    onlyIf { pythonSdkImportRequested }
 }
 
 // The Python plugin installs Miniforge and environments under the root .gradle/python
@@ -691,20 +736,21 @@ def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) 
     outputs.dir(capybaraJsTestResultsDir)
 }
 
-def testCapybaraPython = tasks.register('testCapybaraPython', VenvTask) {
+def testCapybaraPython = tasks.register('testCapybaraPython', Exec) {
     group = 'verification'
     description = 'Runs Capybara tests from generated Python.'
     dependsOn tasks.named('compileTestCapybaraPythonDirect')
     shouldRunAfter testCapybaraJavaScript
+    configurePythonTask(delegate)
 
-    workingDir.set(layout.projectDirectory)
-    args = [
+    workingDir layout.projectDirectory.asFile
+    args([
             capybaraPyTestRunner.asFile.absolutePath,
             '--generated-dir', capybaraGeneratedTestPyDir.get().asFile.absolutePath,
             '--output-dir', capybaraPyTestResultsDir.get().asFile.absolutePath,
             '--report-type', 'JUNIT',
             '--log', 'TC'
-    ]
+    ])
     inputs.file(capybaraPyTestRunner)
             .withPropertyName('capybaraPyTestRunner')
             .withPathSensitivity(PathSensitivity.RELATIVE)
