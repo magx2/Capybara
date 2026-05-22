@@ -9,15 +9,22 @@ import dev.capylang.compiler.CompiledFunction;
 import dev.capylang.compiler.CompiledFunctionType;
 import dev.capylang.compiler.CompiledGenericTypeParameter;
 import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.CompiledNativeProviderBinding;
+import dev.capylang.compiler.CompiledNativeProviderDeclaration;
+import dev.capylang.compiler.CompiledObjectKind;
 import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledTupleType;
 import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.GenericDataType;
+import dev.capylang.compiler.NativeProviderBackendBinding;
+import dev.capylang.compiler.NativeProviderCatalog;
+import dev.capylang.compiler.NativeProviderLifetime;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
+import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.generator.java.JavaAstBuilder;
 import dev.capylang.generator.java.JavaClass;
@@ -50,6 +57,7 @@ public final class JavaScriptGenerator implements Generator {
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
+    static final Path NATIVE_PROVIDER_BOOTSTRAP_PATH = Path.of("dev", "capylang", "native_providers.js");
     private static final Set<String> RUNTIME_PROVIDED_MODULE_NAMES = Set.of(
             "capy/collection/Dict",
             "capy/collection/List",
@@ -97,14 +105,96 @@ public final class JavaScriptGenerator implements Generator {
                 .filter(module -> !isRuntimeProvidedModule(module))
                 .map(module -> ModuleInfo.from(module, astBuilder.build(module)))
                 .toList();
-        var context = ProgramContext.build(moduleInfos, program.modules(), program.objectOrientedModules(), functionNameOverrides);
+        var context = ProgramContext.build(
+                moduleInfos,
+                program.modules(),
+                program.objectOrientedModules(),
+                program.nativeProviderCatalog(),
+                functionNameOverrides
+        );
 
         for (var moduleInfo : moduleInfos) {
             modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
         }
         modules.addAll(new ObjectOrientedJavaScriptGenerator(context).generate(program.objectOrientedModules()));
+        modules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
         modules.addAll(RuntimeModules.modules());
         return new GeneratedProgram(List.copyOf(modules));
+    }
+
+    private List<GeneratedModule> nativeProviderBootstrapModules(List<ProgramContext.NativeProviderInfo> providers) {
+        if (providers.isEmpty()) {
+            return List.of();
+        }
+        return List.of(new GeneratedModule(NATIVE_PROVIDER_BOOTSTRAP_PATH, renderNativeProviderBootstrap(providers)));
+    }
+
+    private String renderNativeProviderBootstrap(List<ProgramContext.NativeProviderInfo> providers) {
+        var code = new StringBuilder();
+        code.append("'use strict';\n\n");
+        code.append("function __capy_validate(providerName, value, methods) {\n");
+        code.append("    if (value === null || value === undefined) {\n");
+        code.append("        throw new Error('Native provider `' + providerName + '` returned no value');\n");
+        code.append("    }\n");
+        code.append("    for (const method of methods) {\n");
+        code.append("        if (typeof value[method] !== 'function') {\n");
+        code.append("            throw new Error('Native provider `' + providerName + '` does not implement method `' + method + '`');\n");
+        code.append("        }\n");
+        code.append("    }\n");
+        code.append("    return value;\n");
+        code.append("}\n\n");
+        for (var provider : providers) {
+            code.append("const __capy_provider_")
+                    .append(provider.bootstrapFunctionName())
+                    .append("_module = require(")
+                    .append(jsString(provider.binding().moduleName()))
+                    .append(");\n");
+            if (provider.lifetime() == NativeProviderLifetime.SINGLETON) {
+                code.append("let __capy_provider_")
+                        .append(provider.bootstrapFunctionName())
+                        .append("_singleton;\n");
+                code.append("let __capy_provider_")
+                        .append(provider.bootstrapFunctionName())
+                        .append("_hasSingleton = false;\n");
+            }
+            code.append("\n");
+            code.append(renderNativeProviderFunction(provider)).append("\n");
+        }
+        code.append("module.exports = {\n");
+        for (var provider : providers) {
+            code.append("    ").append(provider.bootstrapFunctionName()).append(",\n");
+        }
+        code.append("};\n");
+        return code.toString();
+    }
+
+    private String renderNativeProviderFunction(ProgramContext.NativeProviderInfo provider) {
+        if (provider.lifetime() == NativeProviderLifetime.FACTORY) {
+            return "function " + provider.bootstrapFunctionName() + "() {\n"
+                   + "    return __capy_validate(" + jsString(provider.providerSymbolName()) + ", "
+                   + renderNativeProviderFactory(provider) + ", "
+                   + jsArray(provider.methodNames()) + ");\n"
+                   + "}\n";
+        }
+        var singleton = "__capy_provider_" + provider.bootstrapFunctionName() + "_singleton";
+        var hasSingleton = "__capy_provider_" + provider.bootstrapFunctionName() + "_hasSingleton";
+        return "function " + provider.bootstrapFunctionName() + "() {\n"
+               + "    if (!" + hasSingleton + ") {\n"
+               + "        " + singleton + " = __capy_validate(" + jsString(provider.providerSymbolName()) + ", "
+               + renderNativeProviderFactory(provider) + ", "
+               + jsArray(provider.methodNames()) + ");\n"
+               + "        " + hasSingleton + " = true;\n"
+               + "    }\n"
+               + "    return " + singleton + ";\n"
+               + "}\n";
+    }
+
+    private String renderNativeProviderFactory(ProgramContext.NativeProviderInfo provider) {
+        var factory = "__capy_provider_" + provider.bootstrapFunctionName() + "_module[" + jsString(provider.binding().exportName()) + "]";
+        if ("new".equals(provider.binding().factory())) {
+            return "new " + factory + "()";
+        }
+        return factory + "()";
     }
 
     private static boolean isRuntimeProvidedModule(CompiledModule module) {
@@ -1838,6 +1928,8 @@ public final class JavaScriptGenerator implements Generator {
             Map<String, List<String>> parentTypesByType,
             Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypesByName,
             Map<String, SingletonDataTypeInfo> singletonDataTypesByName,
+            List<NativeProviderInfo> nativeProviderInfos,
+            Map<String, List<NativeProviderInfo>> nativeProvidersByModule,
             Map<String, String> functionNameOverrides
     ) {
         static ProgramContext build(List<ModuleInfo> modules, Map<String, String> functionNameOverrides) {
@@ -1845,6 +1937,7 @@ public final class JavaScriptGenerator implements Generator {
                     modules,
                     modules.stream().map(ModuleInfo::module).toList(),
                     List.of(),
+                    NativeProviderCatalog.empty(),
                     functionNameOverrides
             );
         }
@@ -1853,6 +1946,7 @@ public final class JavaScriptGenerator implements Generator {
                 List<ModuleInfo> modules,
                 Collection<CompiledModule> compiledModules,
                 List<dev.capylang.compiler.parser.ObjectOrientedModule> objectOrientedModules,
+                NativeProviderCatalog nativeProviderCatalog,
                 Map<String, String> functionNameOverrides
         ) {
             var paths = new LinkedHashMap<String, Path>();
@@ -1971,6 +2065,13 @@ public final class JavaScriptGenerator implements Generator {
                 importedOwners.put(module.className(), Map.copyOf(imported));
             }
             var primitiveBackedTypes = primitiveBackedTypes(modules);
+            var nativeProviderInfos = nativeProviderInfos(nativeProviderCatalog, compiledModules, objectOrientedModules);
+            var nativeProvidersByModule = nativeProviderInfos.stream()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            provider -> moduleKey(provider.sourceModulePath(), provider.sourceModuleName()),
+                            LinkedHashMap::new,
+                            java.util.stream.Collectors.toUnmodifiableList()
+                    ));
             putUniqueSimpleSingletonDataTypeAliases(singletonDataTypes);
 
             return new ProgramContext(
@@ -1982,8 +2083,181 @@ public final class JavaScriptGenerator implements Generator {
                     Map.copyOf(parentTypes),
                     Map.copyOf(primitiveBackedTypes),
                     Map.copyOf(singletonDataTypes),
+                    List.copyOf(nativeProviderInfos),
+                    Map.copyOf(nativeProvidersByModule),
                     Map.copyOf(functionNameOverrides)
             );
+        }
+
+        private static List<NativeProviderInfo> nativeProviderInfos(
+                NativeProviderCatalog catalog,
+                Collection<CompiledModule> compiledModules,
+                List<ObjectOrientedModule> objectOrientedModules
+        ) {
+            if (catalog.declarations().isEmpty()) {
+                return List.of();
+            }
+            var bindings = nativeProviderBindings(catalog.bindings());
+            var interfaces = nativeProviderInterfaceTypes(compiledModules, objectOrientedModules);
+            var baseNames = new LinkedHashMap<String, Integer>();
+            for (var declaration : catalog.declarations()) {
+                baseNames.merge(nativeProviderIdentifier(declaration.providerName()), 1, Integer::sum);
+            }
+
+            var usedNames = new LinkedHashSet<String>();
+            var infos = new ArrayList<NativeProviderInfo>();
+            for (var declaration : catalog.declarations()) {
+                var binding = bindings.get(nativeProviderKey(declaration.interfaceId(), declaration.qualifier()));
+                var javascriptBinding = binding == null ? null : binding.javascriptBinding();
+                if (javascriptBinding == null) {
+                    throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                                                       + "` for interface `" + declaration.interfaceId()
+                                                       + "` with qualifier `" + declaration.qualifier()
+                                                       + "` has no javascript binding");
+                }
+                var interfaceType = interfaces.get(declaration.interfaceId());
+                if (interfaceType == null) {
+                    throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                                                       + "` targets unknown interface `" + declaration.interfaceId() + "`");
+                }
+                var baseName = nativeProviderIdentifier(declaration.providerName());
+                var bootstrapName = baseNames.getOrDefault(baseName, 0) == 1
+                        ? baseName
+                        : uniqueNativeProviderBootstrapName(baseName, declaration, usedNames);
+                usedNames.add(bootstrapName);
+                infos.add(new NativeProviderInfo(
+                        declaration.providerName(),
+                        bootstrapName,
+                        interfaceType.backendClassName(),
+                        declaration.sourceModulePath(),
+                        declaration.sourceModuleName(),
+                        binding.lifetime(),
+                        javascriptBinding,
+                        interfaceType.methodNames()
+                ));
+            }
+            return List.copyOf(infos);
+        }
+
+        private static Map<String, CompiledNativeProviderBinding> nativeProviderBindings(List<CompiledNativeProviderBinding> bindings) {
+            var result = new LinkedHashMap<String, CompiledNativeProviderBinding>();
+            for (var binding : bindings) {
+                result.putIfAbsent(nativeProviderKey(binding.interfaceId(), binding.qualifier()), binding);
+            }
+            return Map.copyOf(result);
+        }
+
+        private static Map<String, ProviderInterfaceInfo> nativeProviderInterfaceTypes(
+                Collection<CompiledModule> modules,
+                List<ObjectOrientedModule> objectOrientedModules
+        ) {
+            var result = new LinkedHashMap<String, ProviderInterfaceInfo>();
+            for (var module : modules) {
+                for (var type : module.types().values()) {
+                    if (type instanceof CompiledObjectType objectType && objectType.kind() == CompiledObjectKind.INTERFACE) {
+                        var info = new ProviderInterfaceInfo(
+                                objectType.backendClassName(),
+                                objectType.methods().stream().map(method -> nativeProviderIdentifier(method.name())).toList()
+                        );
+                        result.put(cfunTypeName(module, objectType.name()), info);
+                        if (module.name().equals(objectType.name())) {
+                            result.put(cfunModuleName(module), info);
+                        }
+                    }
+                }
+            }
+            for (var module : objectOrientedModules) {
+                for (var definition : module.objectOriented().definitions()) {
+                    if (definition instanceof ObjectOriented.InterfaceDeclaration) {
+                        result.put(
+                                objectInterfaceId(module, definition.name()),
+                                new ProviderInterfaceInfo(
+                                        objectBackendClassName(module, definition.name()),
+                                        definition.members().stream()
+                                                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                                                .map(ObjectOriented.MethodDeclaration.class::cast)
+                                                .map(method -> nativeProviderIdentifier(method.name()))
+                                                .toList()
+                                )
+                        );
+                    }
+                }
+            }
+            return Map.copyOf(result);
+        }
+
+        private static String objectInterfaceId(ObjectOrientedModule module, String typeName) {
+            var moduleName = objectModuleName(module);
+            var qualified = module.name().equals(typeName)
+                    ? moduleName
+                    : moduleName + "." + typeName;
+            return qualified.startsWith("/") ? qualified : "/" + qualified;
+        }
+
+        private static String objectModuleName(ObjectOrientedModule module) {
+            var path = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+            return path.isBlank() ? module.name() : path + "/" + module.name();
+        }
+
+        private static String objectBackendClassName(ObjectOrientedModule module, String typeName) {
+            var packageName = ObjectOrientedJavaScriptGenerator.packageName(module.path());
+            return packageName.isBlank() ? typeName : packageName + "." + typeName;
+        }
+
+        private static String uniqueNativeProviderBootstrapName(
+                String baseName,
+                CompiledNativeProviderDeclaration declaration,
+                Set<String> usedNames
+        ) {
+            var suffix = normalizeJsIdentifier((declaration.sourceModulePath() + "_" + declaration.sourceModuleName())
+                    .replaceAll("[^A-Za-z0-9_]+", "_"));
+            var candidate = baseName + "__" + suffix;
+            var index = 2;
+            while (usedNames.contains(candidate)) {
+                candidate = baseName + "__" + suffix + "_" + index;
+                index++;
+            }
+            return candidate;
+        }
+
+        private static String nativeProviderKey(String interfaceId, String qualifier) {
+            return interfaceId + "\u0000" + qualifier;
+        }
+
+        private static String nativeProviderIdentifier(String name) {
+            return isValidJsIdentifier(name) && !JS_KEYWORDS.contains(name)
+                    ? name
+                    : normalizeJsIdentifier(name);
+        }
+
+        private static String cfunModuleName(CompiledModule module) {
+            var path = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+            return path.isBlank() ? "/" + module.name() : "/" + path + "/" + module.name();
+        }
+
+        private static String moduleKey(String path, String name) {
+            var normalizedPath = path.replace('\\', '/')
+                    .replaceFirst("^/+", "")
+                    .replaceFirst("/+$", "");
+            if (normalizedPath.isBlank() || ".".equals(normalizedPath)) {
+                return name;
+            }
+            return normalizedPath + "/" + name;
+        }
+
+        private static String importedModuleKey(ObjectOrientedModule module, String moduleName) {
+            if (moduleName.startsWith("/")) {
+                return moduleName.replace('\\', '/')
+                        .replaceFirst("^/+", "")
+                        .replaceFirst("/+$", "");
+            }
+            var basePath = module.path().replace('\\', '/')
+                    .replaceFirst("^/+", "")
+                    .replaceFirst("/+$", "");
+            if (basePath.isBlank() || ".".equals(basePath)) {
+                return moduleName;
+            }
+            return basePath + "/" + moduleName;
         }
 
         private static void putSingletonDataTypeAliases(
@@ -2249,6 +2523,51 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         record SingletonDataTypeInfo(String name, String cfunType) {
+        }
+
+        record NativeProviderInfo(
+                String providerSymbolName,
+                String bootstrapFunctionName,
+                String targetBackendType,
+                String sourceModulePath,
+                String sourceModuleName,
+                NativeProviderLifetime lifetime,
+                NativeProviderBackendBinding binding,
+                List<String> methodNames
+        ) {
+            NativeProviderInfo {
+                methodNames = List.copyOf(methodNames);
+            }
+        }
+
+        private record ProviderInterfaceInfo(String backendClassName, List<String> methodNames) {
+            private ProviderInterfaceInfo {
+                methodNames = List.copyOf(methodNames);
+            }
+        }
+
+        Map<String, NativeProviderInfo> visibleNativeProviders(ObjectOrientedModule module) {
+            if (nativeProvidersByModule.isEmpty()) {
+                return Map.of();
+            }
+            var providers = new LinkedHashMap<String, NativeProviderInfo>();
+            nativeProvidersByModule.getOrDefault(moduleKey(module.path(), module.name()), List.of())
+                    .forEach(provider -> providers.putIfAbsent(provider.providerSymbolName(), provider));
+            for (var importDeclaration : module.imports()) {
+                var importedProviders = nativeProvidersByModule.getOrDefault(importedModuleKey(module, importDeclaration.moduleName()), List.of());
+                if (importedProviders.isEmpty()) {
+                    continue;
+                }
+                for (var provider : importedProviders) {
+                    if (importDeclaration.excludedSymbols().contains(provider.providerSymbolName())) {
+                        continue;
+                    }
+                    if (importDeclaration.isStarImport() || importDeclaration.symbols().contains(provider.providerSymbolName())) {
+                        providers.putIfAbsent(provider.providerSymbolName(), provider);
+                    }
+                }
+            }
+            return Map.copyOf(providers);
         }
 
         Optional<Path> pathForClassName(String className) {
