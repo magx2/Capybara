@@ -209,7 +209,7 @@ class JavaScriptGeneratorTest {
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javascriptProviderBinding("/Providers.Clock", "system")));
+        )), providerManifest(javascriptProviderBinding("/Providers.Clock", "system", "singleton", "host-clock", "SystemClock", "new")));
 
         var generated = new JavaScriptGenerator().generate(program);
         var app = generated.modules().stream()
@@ -227,9 +227,252 @@ class JavaScriptGeneratorTest {
                 .doesNotContain("host-clock")
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
+                .contains("const capy = require('./capybara.js');")
                 .contains("const __capy_provider_system_clock_module = require('host-clock');")
-                .contains("new __capy_provider_system_clock_module['SystemClock']()")
-                .contains("'now_millis'");
+                .contains("const providers = capy.defineNativeProviders({")
+                .contains("exportExists: Object.prototype.hasOwnProperty.call(__capy_provider_system_clock_module, 'SystemClock')")
+                .contains("exportValue: __capy_provider_system_clock_module.SystemClock")
+                .contains("create: () => new __capy_provider_system_clock_module.SystemClock()")
+                .contains("{ name: 'now_millis', arity: 0 }")
+                .contains("module.exports = {")
+                .doesNotContain("import ");
+    }
+
+    @Test
+    void shouldRunJavaScriptNativeProviderWithStructuralInterfaceValidation() throws Exception {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def read(): long = system_clock().now_millis()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(javascriptProviderBinding(
+                "/Providers.Clock",
+                "system",
+                "factory",
+                "../../nativeinterop/system_clock.js",
+                "SystemClock",
+                "new"
+        )));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                class SystemClock {
+                    constructor() {
+                        this.offset = 9000n;
+                    }
+                    now_millis() {
+                        return this.offset + 123n;
+                    }
+                }
+                module.exports = { SystemClock };
+                """);
+
+        var output = runNode("""
+                const { App } = require('./App.js');
+                const { Clock } = require('./Clock.js');
+                const nativeProviders = require('./dev/capylang/native_providers.js');
+                const first = nativeProviders.system_clock();
+                const second = nativeProviders.system_clock();
+                console.log([
+                    new App().read(),
+                    first.now_millis(),
+                    first instanceof Clock,
+                    first === second
+                ].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("9123|9123|true|false");
+    }
+
+    @Test
+    void shouldCacheJavaScriptNativeProviderSingleton() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "singleton",
+                        "../../nativeinterop/system_clock.js",
+                        "SystemClock",
+                        "new"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                class SystemClock {
+                    now_millis() {
+                        return 1n;
+                    }
+                }
+                module.exports = { SystemClock };
+                """);
+
+        var output = runNode("""
+                const nativeProviders = require('./dev/capylang/native_providers.js');
+                console.log(nativeProviders.system_clock() === nativeProviders.system_clock());
+                """);
+
+        assertThat(output).isEqualTo("true");
+    }
+
+    @Test
+    void shouldFailJavaScriptNativeProviderStartupWhenExportIsMissing() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "../../nativeinterop/system_clock.js",
+                        "SystemClock",
+                        "new"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", "module.exports = {};\n");
+
+        var result = runNodeCommand("-e", "require('./dev/capylang/native_providers.js')");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("NativeProviderError")
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("SystemClock");
+    }
+
+    @Test
+    void shouldFailJavaScriptNativeProviderValidationWhenMethodIsMissing() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "../../nativeinterop/system_clock.js",
+                        "SystemClock",
+                        "new"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                class SystemClock {}
+                module.exports = { SystemClock };
+                """);
+
+        var result = runNodeCommand("-e", "require('./dev/capylang/native_providers.js').system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("missing method `now_millis`");
+    }
+
+    @Test
+    void shouldFailJavaScriptNativeProviderValidationWhenMethodArityIsTooSmall() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def plus(value: long): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "../../nativeinterop/system_clock.js",
+                        "SystemClock",
+                        "new"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                class SystemClock {
+                    plus() {
+                        return 1n;
+                    }
+                }
+                module.exports = { SystemClock };
+                """);
+
+        var result = runNodeCommand("-e", "require('./dev/capylang/native_providers.js').system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("requires arity at least 1, got 0");
+    }
+
+    @Test
+    void shouldFailJavaScriptNativeProviderValidationWhenFactoryReturnsNull() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "../../nativeinterop/system_clock.js",
+                        "makeClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                function makeClock() {
+                    return null;
+                }
+                module.exports = { makeClock };
+                """);
+
+        var result = runNodeCommand("-e", "require('./dev/capylang/native_providers.js').system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("returned null");
+    }
+
+    @Test
+    void shouldFailJavaScriptNativeProviderMethodWhenPromiseIsReturned() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "../../nativeinterop/system_clock.js",
+                        "SystemClock",
+                        "new"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                class SystemClock {
+                    now_millis() {
+                        return Promise.resolve(1n);
+                    }
+                }
+                module.exports = { SystemClock };
+                """);
+
+        var result = runNodeCommand("-e", "require('./dev/capylang/native_providers.js').system_clock().now_millis()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("returned a Promise")
+                .contains("unsupported");
     }
 
     @Test
@@ -734,14 +977,40 @@ class JavaScriptGeneratorTest {
     }
 
     private static NativeProviderBinding javascriptProviderBinding(String interfaceId, String qualifier) {
+        return javascriptProviderBinding(interfaceId, qualifier, "singleton", "host-clock", "SystemClock", "new");
+    }
+
+    private static NativeProviderBinding javascriptProviderBinding(
+            String interfaceId,
+            String qualifier,
+            String lifetime,
+            String moduleName,
+            String exportName,
+            String factory
+    ) {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                "singleton",
+                lifetime,
                 null,
-                new NativeProviderBackendBinding(null, "host-clock", "SystemClock", "new"),
+                new NativeProviderBackendBinding(null, moduleName, exportName, factory),
                 null
         );
+    }
+
+    private static CompiledProgram nativeProviderProgram(String methodDeclaration, NativeProviderBinding binding) {
+        return compileProgram(List.of(new RawModule(
+                "Providers",
+                "",
+                """
+                        interface Clock {
+                            %s
+                        }
+
+                        native provider system_clock: Clock key "system"
+                        """.formatted(methodDeclaration),
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(binding));
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {
@@ -753,6 +1022,15 @@ class JavaScriptGeneratorTest {
             }
             Files.writeString(target, module.code(), StandardCharsets.UTF_8);
         }
+    }
+
+    private void writeHostModule(String relativePath, String code) throws Exception {
+        var target = tempDir.resolve(relativePath);
+        var parent = target.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(target, code, StandardCharsets.UTF_8);
     }
 
     private String runNode(String script) throws Exception {
