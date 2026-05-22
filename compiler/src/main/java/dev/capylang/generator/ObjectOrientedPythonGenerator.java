@@ -87,7 +87,7 @@ final class ObjectOrientedPythonGenerator {
         output.append(PythonGenerator.renderSysPathBootstrap(context.relativePath()));
         output.append("import dev.capylang.capybara as capy\n");
         if (context.usesNativeProviderBootstrap()) {
-            output.append("import dev.capylang.native_providers as __capy_native\n");
+            output.append("import dev.capylang.native_providers as capy_native\n");
         }
         for (var entry : context.requiredModules().entrySet()) {
             output.append("import ")
@@ -874,7 +874,7 @@ final class ObjectOrientedPythonGenerator {
                 continue;
             }
             rejectNativeProviderCallsWithArguments(context, rewritten, entry.getKey());
-            var replacement = "__capy_native." + entry.getValue().bootstrapFunctionName() + "()";
+            var replacement = "capy_native." + entry.getValue().bootstrapFunctionName() + "()";
             var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(\\s*\\)").matcher(rewritten);
             var buffer = new StringBuilder();
             var used = false;
