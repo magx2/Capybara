@@ -5,7 +5,11 @@ import dev.capylang.compiler.CompiledAnnotation;
 import java.util.List;
 import java.util.Optional;
 
-public record ObjectOriented(List<TypeDeclaration> definitions) {
+public record ObjectOriented(List<TypeDeclaration> definitions, List<NativeProviderDeclaration> nativeProviders) {
+    public ObjectOriented(List<TypeDeclaration> definitions) {
+        this(definitions, List.of());
+    }
+
     public sealed interface TypeDeclaration permits ClassDeclaration, TraitDeclaration, InterfaceDeclaration {
         String name();
 
@@ -129,6 +133,9 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
         ) {
             this(name, parents, members, comments, List.of(), List.of());
         }
+    }
+
+    public record NativeProviderDeclaration(String name, String targetType, String qualifier, List<String> comments) {
     }
 
     public record FieldDeclaration(

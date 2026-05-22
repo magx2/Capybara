@@ -57,13 +57,19 @@ public final class ObjectOrientedParser {
                 return new Result.Error<>(formatSyntaxError(module, syntaxErrors.getFirst()));
             }
 
-            var definitions = program.definition().stream()
-                    .map(this::definition)
-                    .toList();
+            var definitions = new ArrayList<ObjectOriented.TypeDeclaration>();
+            var nativeProviders = new ArrayList<ObjectOriented.NativeProviderDeclaration>();
+            for (var definition : program.definition()) {
+                if (definition.nativeProviderDeclaration() != null) {
+                    nativeProviders.add(nativeProviderDeclaration(definition.nativeProviderDeclaration()));
+                } else {
+                    definitions.add(typeDeclaration(definition));
+                }
+            }
             return Result.success(new ObjectOrientedModule(
                     module.name(),
                     module.path(),
-                    new ObjectOriented(definitions),
+                    new ObjectOriented(List.copyOf(definitions), List.copyOf(nativeProviders)),
                     parsedSource.imports(),
                     module.sourceKind()
             ));
@@ -121,14 +127,26 @@ public final class ObjectOrientedParser {
         return new Result.Error.SingleError(syntaxError.line(), syntaxError.column(), module.file(), details);
     }
 
-    private ObjectOriented.TypeDeclaration definition(dev.capylang.parser.antlr.ObjectOrientedParser.DefinitionContext context) {
+    private ObjectOriented.TypeDeclaration typeDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.DefinitionContext context) {
         if (context.classDeclaration() != null) {
             return classDeclaration(context.classDeclaration());
         }
         if (context.traitDeclaration() != null) {
             return traitDeclaration(context.traitDeclaration());
         }
-        return interfaceDeclaration(context.interfaceDeclaration());
+        if (context.interfaceDeclaration() != null) {
+            return interfaceDeclaration(context.interfaceDeclaration());
+        }
+        throw new IllegalStateException("Missing type declaration: " + context.getText());
+    }
+
+    private ObjectOriented.NativeProviderDeclaration nativeProviderDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.NativeProviderDeclarationContext context) {
+        return new ObjectOriented.NativeProviderDeclaration(
+                context.identifier().getText(),
+                context.type().getText(),
+                unquoteStringLiteral(context.STRING_LITERAL().getText()),
+                comments(context.docComment())
+        );
     }
 
     private ObjectOriented.ClassDeclaration classDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.ClassDeclarationContext context) {
@@ -378,6 +396,41 @@ public final class ObjectOrientedParser {
             return text.trim();
         }
         return text.substring(3).stripLeading();
+    }
+
+    private static String unquoteStringLiteral(String raw) {
+        if (raw.length() < 2) {
+            return raw;
+        }
+        if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            return normalizeDoubleQuotedContent(raw.substring(1, raw.length() - 1));
+        }
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
+            return raw.substring(1, raw.length() - 1);
+        }
+        return raw;
+    }
+
+    private static String normalizeDoubleQuotedContent(String content) {
+        var normalized = new StringBuilder(content.length());
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '\\' && i + 1 < content.length()) {
+                var next = content.charAt(i + 1);
+                if (next == '"' || next == '\\') {
+                    normalized.append(next);
+                    i++;
+                    continue;
+                }
+                if (next == '{') {
+                    normalized.append('\\').append('{');
+                    i++;
+                    continue;
+                }
+            }
+            normalized.append(ch);
+        }
+        return normalized.toString();
     }
 
     private ObjectOriented.AssignmentStatement assignmentStatement(dev.capylang.parser.antlr.ObjectOrientedParser.AssignmentStatementContext context) {
