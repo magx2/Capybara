@@ -84,7 +84,122 @@ class ObjectOrientedJavaGeneratorTest {
                 .doesNotContain("NativeProviderBootstrap");
         assertThat(bootstrapModule.code())
                 .contains("public static foo.boo.Clock system_clock()")
-                .contains("existing = new dev.capylang.test.SystemClock();");
+                .contains("private static final NativeProviders PROVIDERS = NativeProviders.of(")
+                .contains("NativeProviders.singleton(")
+                .contains("\"/foo/boo/Providers.Clock\",")
+                .contains("\"system\",")
+                .contains("foo.boo.Clock.class,")
+                .contains("dev.capylang.test.SystemClock::new")
+                .contains("return PROVIDERS.resolve(\"/foo/boo/Providers.Clock\", \"system\", foo.boo.Clock.class);");
+    }
+
+    @Test
+    void shouldGenerateAndRunJavaNativeProviderBootstrap() throws Exception {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "/foo/boo",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def now(): long = system_clock().now_millis()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(javaProviderBinding(
+                "/foo/boo/Providers.Clock",
+                "system",
+                "factory",
+                "dev.capylang.test.nativeinterop.SystemClock"
+        )));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var classesDir = compileGeneratedJava(generatedProgram, new JavaSource(
+                Path.of("dev", "capylang", "test", "nativeinterop", "SystemClock.java"),
+                """
+                        package dev.capylang.test.nativeinterop;
+
+                        public final class SystemClock implements foo.boo.Clock {
+                            public long now_millis() {
+                                return 4242L;
+                            }
+                        }
+                        """
+        ));
+        var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL(), capybaraLibClasses.toUri().toURL()})) {
+            var appType = classLoader.loadClass("foo.boo.App");
+            var app = appType.getConstructor().newInstance();
+            assertThat(appType.getMethod("now").invoke(app)).isEqualTo(4242L);
+
+            var bootstrapType = classLoader.loadClass("dev.capylang.NativeProviderBootstrap");
+            var first = bootstrapType.getMethod("system_clock").invoke(null);
+            var second = bootstrapType.getMethod("system_clock").invoke(null);
+            assertThat(first).isNotSameAs(second);
+        }
+    }
+
+    @Test
+    void shouldRejectNativeProviderWithoutJavaBindingDuringGeneration() {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "/foo/boo",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(providerBindingWithoutJava("/foo/boo/Providers.Clock", "system")));
+
+        assertThatThrownBy(() -> new JavaGenerator().generate(program))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Native provider `system_clock` for interface `/foo/boo/Providers.Clock` with qualifier `system` has no java binding");
+    }
+
+    @Test
+    void shouldFailGeneratedJavaCompileForWrongNativeProviderClassType() throws Exception {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "/foo/boo",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(javaProviderBinding(
+                "/foo/boo/Providers.Clock",
+                "system",
+                "factory",
+                "dev.capylang.test.nativeinterop.WrongClock"
+        )));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var result = compileGeneratedJavaResult(generatedProgram, new JavaSource(
+                Path.of("dev", "capylang", "test", "nativeinterop", "WrongClock.java"),
+                """
+                        package dev.capylang.test.nativeinterop;
+
+                        public final class WrongClock {
+                        }
+                        """
+        ));
+
+        assertThat(result.success())
+                .as(result.diagnostics())
+                .isFalse();
+        assertThat(result.diagnostics())
+                .contains("WrongClock")
+                .contains("Clock");
     }
 
     @Test
@@ -980,23 +1095,51 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier) {
+        return javaProviderBinding(interfaceId, qualifier, "singleton", "dev.capylang.test.SystemClock");
+    }
+
+    private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier, String lifetime, String className) {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                "singleton",
-                new NativeProviderBackendBinding("dev.capylang.test.SystemClock", null, null, "constructor"),
+                lifetime,
+                new NativeProviderBackendBinding(className, null, null, "constructor"),
                 null,
                 null
         );
     }
 
-    private Path compileGeneratedJava(GeneratedProgram generatedProgram) throws Exception {
+    private NativeProviderBinding providerBindingWithoutJava(String interfaceId, String qualifier) {
+        return new NativeProviderBinding(
+                interfaceId,
+                qualifier,
+                "singleton",
+                null,
+                null,
+                null
+        );
+    }
+
+    private Path compileGeneratedJava(GeneratedProgram generatedProgram, JavaSource... extraSources) throws Exception {
+        var result = compileGeneratedJavaResult(generatedProgram, extraSources);
+        assertThat(result.success())
+                .as(result.diagnostics())
+                .isTrue();
+        return result.classesDir();
+    }
+
+    private JavaCompilationResult compileGeneratedJavaResult(GeneratedProgram generatedProgram, JavaSource... extraSources) throws Exception {
         var sourceDir = tempDir.resolve("generated");
         var classesDir = tempDir.resolve("classes");
         for (var module : generatedProgram.modules()) {
             var path = sourceDir.resolve(module.relativePath());
             Files.createDirectories(path.getParent());
             Files.writeString(path, module.code(), StandardCharsets.UTF_8);
+        }
+        for (var source : extraSources) {
+            var path = sourceDir.resolve(source.relativePath());
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, source.code(), StandardCharsets.UTF_8);
         }
         writeReflectionStub(sourceDir);
 
@@ -1022,11 +1165,12 @@ class ObjectOrientedJavaGeneratorTest {
                     "-d", classesDir.toString()
             );
             var success = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits).call();
-            assertThat(success)
-                    .as(diagnostics.getDiagnostics().stream().map(Objects::toString).collect(joining(System.lineSeparator())))
-                    .isTrue();
+            return new JavaCompilationResult(
+                    success,
+                    diagnostics.getDiagnostics().stream().map(Objects::toString).collect(joining(System.lineSeparator())),
+                    classesDir
+            );
         }
-        return classesDir;
     }
 
     private void writeReflectionStub(Path sourceDir) throws Exception {
@@ -1065,5 +1209,11 @@ class ObjectOrientedJavaGeneratorTest {
                     public record FunctionTypeInfo(String name, PackageInfo pkg, java.util.List<AnyInfo> params, AnyInfo return_type) implements AnyInfo {}
                 }
                 """, StandardCharsets.UTF_8);
+    }
+
+    private record JavaSource(Path relativePath, String code) {
+    }
+
+    private record JavaCompilationResult(boolean success, String diagnostics, Path classesDir) {
     }
 }

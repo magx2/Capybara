@@ -371,6 +371,11 @@ def e2eCooLinkedPyOutputDir = layout.buildDirectory.dir('generated/sources/capyb
 def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
 def e2eCooJsTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js')
 def e2eCooPyTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python')
+def e2eCooJavaNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/capybara')
+def e2eCooJavaNativeJavaSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/java')
+def e2eCooJavaNativeGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo-java-native')
+def e2eCooJavaNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-coo-java-native')
+def e2eCooJavaNativeWiringFile = layout.projectDirectory.file('src/e2e-coo-java-native/native-providers.json')
 def jsTestSourcePath = 'src/test/js'
 def jsTestRunner = layout.projectDirectory.file("${jsTestSourcePath}/run-tests.js")
 def pyTestSourcePath = 'src/test/py'
@@ -397,6 +402,8 @@ sourceSets {
     }
     e2eCoo {
         java.srcDir e2eCooGeneratedJavaDir
+        java.srcDir e2eCooJavaNativeGeneratedJavaDir
+        java.srcDir e2eCooJavaNativeJavaSourceDir
         resources.srcDir file('src/e2e-coo/resources')
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
@@ -716,6 +723,17 @@ def linkCapybaraE2eCooSources = registerCapybaraE2eLinkTask(
         e2eCooLinkedOutputDir,
         e2eCooGeneratedJavaDir
 )
+def linkCapybaraE2eCooJavaNativeSources = registerCapybaraE2eLinkTask(
+        'linkCapybaraE2eCooJavaNativeSources',
+        'Compiles object-oriented Java native provider e2e-test Capybara files and generates Java in one pass without launching a separate JVM.',
+        'JAVA',
+        e2eCooJavaNativeCapybaraSourceDir,
+        e2eCooJavaNativeLinkedOutputDir,
+        e2eCooJavaNativeGeneratedJavaDir
+)
+linkCapybaraE2eCooJavaNativeSources.configure {
+    nativeWiringFile.set(e2eCooJavaNativeWiringFile)
+}
 def linkCapybaraE2eCooJsSources = registerCapybaraE2eLinkTask(
         'linkCapybaraE2eCooJsSources',
         'Compiles object-oriented e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
@@ -747,6 +765,7 @@ tasks.named('e2e-cfun-python') {
 
 tasks.named('compileE2eCooJava') {
     dependsOn linkCapybaraE2eCooSources
+    dependsOn linkCapybaraE2eCooJavaNativeSources
 }
 
 tasks.named('e2e-coo-js') {
