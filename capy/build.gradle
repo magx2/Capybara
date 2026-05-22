@@ -1,5 +1,4 @@
 import com.github.gradle.node.task.NodeTask
-import com.pswidersk.gradle.python.VenvTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
@@ -36,6 +35,52 @@ node {
 
 pythonPlugin {
     pythonVersion = '3.12.8'
+}
+
+def pythonEnvDir = providers.provider {
+    def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    def pythonOs = osName.contains('windows') ? 'Windows' : osName.contains('mac') ? 'MacOSX' : 'Linux'
+    pythonPlugin.installDir.get()
+            .dir("${pythonOs}/${pythonPlugin.condaInstaller.get()}-${pythonPlugin.condaVersion.get()}/envs/python-${pythonPlugin.pythonVersion.get()}")
+            .asFile
+}
+def pythonExecutable = pythonEnvDir.map { envDir ->
+    new File(envDir, System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'python.exe' : 'bin/python')
+}
+def pythonPath = pythonEnvDir.map { envDir ->
+    def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    def pathEntries = osName.contains('windows')
+            ? [
+                    envDir,
+                    new File(envDir, 'Library/mingw-w64/bin'),
+                    new File(envDir, 'Library/usr/bin'),
+                    new File(envDir, 'Library/bin'),
+                    new File(envDir, 'Scripts')
+            ]
+            : [new File(envDir, 'bin')]
+    (pathEntries.collect { it.absolutePath } + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
+}
+def configurePythonTask = { Exec task ->
+    task.dependsOn tasks.named('envSetup')
+    task.executable = pythonExecutable.get().absolutePath
+    task.environment 'CONDA_PREFIX', pythonEnvDir.get().absolutePath
+    task.environment 'PATH', pythonPath.get()
+}
+
+// The Python plugin's IDE SDK import finalizer runs locatePython during normal
+// builds when .idea exists. Test tasks run the environment Python directly.
+def pythonSdkImportRequested = gradle.startParameter.taskNames.any { taskName ->
+    def separator = taskName.lastIndexOf(':')
+    def basename = separator >= 0 ? taskName.substring(separator + 1) : taskName
+    basename == 'locatePython' || basename == 'saveSdkImportConfig'
+}
+
+tasks.named('locatePython') {
+    onlyIf { pythonSdkImportRequested }
+}
+
+tasks.named('saveSdkImportConfig') {
+    onlyIf { pythonSdkImportRequested }
 }
 
 abstract class InProcessCapybaraCompileTask extends DefaultTask {
@@ -297,14 +342,15 @@ def jsTests = tasks.register('jsTests', NodeTask) {
     shouldRunAfter test
 }
 
-def pythonTests = tasks.register('pythonTests', VenvTask) {
+def pythonTests = tasks.register('pythonTests', Exec) {
     description = 'Runs Python CLI tests.'
     group = 'verification'
     dependsOn ':capy:classes'
     dependsOn ':compiler:classes'
-    workingDir.set(layout.projectDirectory)
-    args = [pyTestRunner.asFile.absolutePath, pyTestSourcePath]
-    environment = ['CAPY_CLI_CLASSPATH': capyRuntimeClasspath.asPath]
+    configurePythonTask(delegate)
+    workingDir layout.projectDirectory.asFile
+    args pyTestRunner.asFile.absolutePath, pyTestSourcePath
+    environment 'CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath
     inputs.files(fileTree(pyTestSourcePath) {
         include '**/*.py'
     })
@@ -363,17 +409,16 @@ def e2eCooJsTests = tasks.register('e2e-coo-js', NodeTask) {
     shouldRunAfter e2eCooTests
 }
 
-def e2eCfunPythonTests = tasks.register('e2e-cfun-python', VenvTask) {
+def e2eCfunPythonTests = tasks.register('e2e-cfun-python', Exec) {
     description = 'Runs functional Python e2e tests.'
     group = 'verification'
     dependsOn ':capy:classes'
     dependsOn ':compiler:classes'
-    workingDir.set(layout.projectDirectory)
-    args = [pyTestRunner.asFile.absolutePath, e2eCfunPyTestSourcePath]
-    environment = [
-            'CAPY_CLI_CLASSPATH': capyRuntimeClasspath.asPath,
-            'CAPY_E2E_CFUN_PY_GENERATED_DIR': e2eCfunGeneratedPyDir.get().asFile.absolutePath
-    ]
+    configurePythonTask(delegate)
+    workingDir layout.projectDirectory.asFile
+    args pyTestRunner.asFile.absolutePath, e2eCfunPyTestSourcePath
+    environment 'CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath
+    environment 'CAPY_E2E_CFUN_PY_GENERATED_DIR', e2eCfunGeneratedPyDir.get().asFile.absolutePath
     inputs.files(fileTree(e2eCfunPyTestSourcePath) {
         include '**/*.py'
     })
@@ -388,17 +433,16 @@ def e2eCfunPythonTests = tasks.register('e2e-cfun-python', VenvTask) {
     shouldRunAfter e2eCfunJsTests
 }
 
-def e2eCooPythonTests = tasks.register('e2e-coo-python', VenvTask) {
+def e2eCooPythonTests = tasks.register('e2e-coo-python', Exec) {
     description = 'Runs object-oriented Python e2e tests.'
     group = 'verification'
     dependsOn ':capy:classes'
     dependsOn ':compiler:classes'
-    workingDir.set(layout.projectDirectory)
-    args = [pyTestRunner.asFile.absolutePath, e2eCooPyTestSourcePath]
-    environment = [
-            'CAPY_CLI_CLASSPATH': capyRuntimeClasspath.asPath,
-            'CAPY_E2E_COO_PY_GENERATED_DIR': e2eCooGeneratedPyDir.get().asFile.absolutePath
-    ]
+    configurePythonTask(delegate)
+    workingDir layout.projectDirectory.asFile
+    args pyTestRunner.asFile.absolutePath, e2eCooPyTestSourcePath
+    environment 'CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath
+    environment 'CAPY_E2E_COO_PY_GENERATED_DIR', e2eCooGeneratedPyDir.get().asFile.absolutePath
     inputs.files(fileTree(e2eCooPyTestSourcePath) {
         include '**/*.py'
     })
