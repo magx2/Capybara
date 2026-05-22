@@ -11,9 +11,9 @@ fun tests(): Effect[TestFile] =
 
 fun native_provider_composition_root_can_reach_java_backend(): Effect[Assert] =
     let app <- NativeProviderApp()
-    assert_that(app.read_system_clock()).is_equal_to(987654321)
+    assert_that(app.read_system_clock()).is_equal_to(12345L)
 
 fun native_provider_can_be_injected_through_generated_interface(): Effect[Assert] =
     let clock = system_clock()
     let domain <- NativeProviderDomain(clock)
-    assert_that(domain.read()).is_equal_to(987654321)
+    assert_that(domain.read()).is_equal_to(12345L)
