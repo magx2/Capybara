@@ -41,8 +41,11 @@ Host implementations are wired through compile-time metadata, such as a
 provider manifest consumed by the compiler or generator. v1 must not use mutable
 runtime registration as the provider selection mechanism.
 
-`.coo` code may declare a typed provider symbol, but it must not import Java
-packages, CommonJS modules, npm packages, or Python modules directly:
+The first implementation slice uses the following concrete `.coo` syntax for a
+typed provider symbol. The syntax names a Capybara interface and qualifier
+only; it does not name the host implementation. `.coo` code may declare a typed
+provider symbol, but it must not import Java packages, CommonJS modules, npm
+packages, or Python modules directly:
 
 ```coo
 interface Clock {
