@@ -2,6 +2,9 @@ package dev.capylang.generator;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderBackendBinding;
+import dev.capylang.compiler.NativeProviderBinding;
+import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -187,6 +190,46 @@ class JavaScriptGeneratorTest {
                 """);
 
         assertThat(output).isEqualTo("hello Ada|[Ada]|hello Ada!|8|true|false|one|zero,one|4|boom|ArrayIndexOutOfBoundsException");
+    }
+
+    @Test
+    void shouldLowerObjectOrientedNativeProviderCallToJavaScriptBootstrap() {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def clock(): Clock = system_clock()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(javascriptProviderBinding("/Providers.Clock", "system")));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        var app = generated.modules().stream()
+                .filter(module -> module.relativePath().endsWith("App.js"))
+                .findFirst()
+                .orElseThrow();
+        var bootstrap = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("dev", "capylang", "native_providers.js")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(app.code())
+                .contains("const __capy_native = require('./dev/capylang/native_providers.js');")
+                .contains("return __capy_native.system_clock();")
+                .doesNotContain("host-clock")
+                .doesNotContain("SystemClock");
+        assertThat(bootstrap.code())
+                .contains("const __capy_provider_system_clock_module = require('host-clock');")
+                .contains("new __capy_provider_system_clock_module['SystemClock']()")
+                .contains("'now_millis'");
     }
 
     @Test
@@ -669,9 +712,14 @@ class JavaScriptGeneratorTest {
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
+        return compileProgram(modules, NativeProviderManifest.empty());
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
         var result = CapybaraCompiler.INSTANCE.compile(
                 modules,
-                new TreeSet<>()
+                new TreeSet<>(),
+                nativeProviders
         );
         if (result instanceof Result.Error<CompiledProgram> error) {
             throw new AssertionError(error.errors().stream()
@@ -679,6 +727,21 @@ class JavaScriptGeneratorTest {
                     .collect(joining(", ")));
         }
         return ((Result.Success<CompiledProgram>) result).value();
+    }
+
+    private static NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
+        return new NativeProviderManifest(List.of(bindings));
+    }
+
+    private static NativeProviderBinding javascriptProviderBinding(String interfaceId, String qualifier) {
+        return new NativeProviderBinding(
+                interfaceId,
+                qualifier,
+                "singleton",
+                null,
+                new NativeProviderBackendBinding(null, "host-clock", "SystemClock", "new"),
+                null
+        );
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {

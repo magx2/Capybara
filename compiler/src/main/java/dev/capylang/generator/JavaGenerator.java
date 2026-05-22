@@ -1,16 +1,25 @@
 package dev.capylang.generator;
 
 import dev.capylang.generator.java.*;
+import dev.capylang.compiler.CompiledNativeProviderBinding;
+import dev.capylang.compiler.CompiledNativeProviderDeclaration;
 import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.CompiledObjectKind;
+import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderBackendBinding;
+import dev.capylang.compiler.NativeProviderLifetime;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledVariable;
+import dev.capylang.compiler.parser.ObjectOriented;
+import dev.capylang.compiler.parser.ObjectOrientedModule;
 
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -26,6 +35,15 @@ public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
+    private static final Set<String> JAVA_KEYWORDS = Set.of(
+            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
+            "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
+            "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
+            "interface", "long", "native", "new", "package", "private", "protected", "public",
+            "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
+            "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
+            "null", "record", "sealed", "permits", "var", "yield"
+    );
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -35,6 +53,7 @@ public final class JavaGenerator implements Generator {
         var enumValueOwnerOverrides = buildEnumValueOwnerOverrides(program);
         var primitiveBackedTypeInfo = primitiveBackedTypeInfo(program);
         var singletonTypeInfo = singletonTypeInfo(program);
+        var nativeProviderInfos = nativeProviderInfos(program);
         var astBuilder = new JavaAstBuilder(functionNameOverrides, enumValueOwnerOverrides, program);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         JavaExpressionEvaluator.setStaticExtensionMethodOwners(staticExtensionMethodOwners);
@@ -43,8 +62,21 @@ public final class JavaGenerator implements Generator {
         for (var module : program.modules()) {
             modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides));
         }
-        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(primitiveBackedTypeInfo, singletonTypeInfo);
+        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(
+                primitiveBackedTypeInfo,
+                singletonTypeInfo,
+                nativeProviderInfos.stream()
+                        .map(info -> new ObjectOrientedJavaGenerator.NativeProviderInfo(
+                                info.providerSymbolName(),
+                                info.bootstrapMethodName(),
+                                info.targetBackendType(),
+                                info.sourceModulePath(),
+                                info.sourceModuleName()
+                        ))
+                        .toList()
+        );
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
+        modules.addAll(nativeProviderBootstrapModules(nativeProviderInfos));
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
                        + ", Java source rendering="
@@ -58,6 +90,179 @@ public final class JavaGenerator implements Generator {
         var result = new java.util.LinkedHashMap<String, PrimitiveLinkedType>();
         primitiveBackedTypes.forEach((alias, info) -> result.put(alias, info.backingType()));
         return java.util.Map.copyOf(result);
+    }
+
+    private List<NativeProviderInfo> nativeProviderInfos(CompiledProgram program) {
+        if (program.nativeProviderCatalog().declarations().isEmpty()) {
+            return List.of();
+        }
+        var bindings = nativeProviderBindings(program.nativeProviderCatalog().bindings());
+        var interfaces = nativeProviderInterfaceTypes(program);
+        var baseNames = new java.util.LinkedHashMap<String, Integer>();
+        for (var declaration : program.nativeProviderCatalog().declarations()) {
+            baseNames.merge(sanitizeJavaIdentifier(declaration.providerName()), 1, Integer::sum);
+        }
+
+        var usedNames = new java.util.LinkedHashSet<String>();
+        var infos = new ArrayList<NativeProviderInfo>();
+        for (var declaration : program.nativeProviderCatalog().declarations()) {
+            var binding = bindings.get(nativeProviderKey(declaration.interfaceId(), declaration.qualifier()));
+            var javaBinding = binding == null ? null : binding.javaBinding();
+            if (javaBinding == null) {
+                throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                                                   + "` for interface `" + declaration.interfaceId()
+                                                   + "` with qualifier `" + declaration.qualifier()
+                                                   + "` has no java binding");
+            }
+            var interfaceType = interfaces.get(declaration.interfaceId());
+            if (interfaceType == null) {
+                throw new IllegalArgumentException("Native provider `" + declaration.providerName()
+                                                   + "` targets unknown interface `" + declaration.interfaceId() + "`");
+            }
+            var baseName = sanitizeJavaIdentifier(declaration.providerName());
+            var bootstrapName = baseNames.getOrDefault(baseName, 0) == 1
+                    ? baseName
+                    : uniqueNativeProviderBootstrapName(baseName, declaration, usedNames);
+            usedNames.add(bootstrapName);
+            infos.add(new NativeProviderInfo(
+                    declaration.providerName(),
+                    bootstrapName,
+                    interfaceType.backendClassName(),
+                    declaration.sourceModulePath(),
+                    declaration.sourceModuleName(),
+                    binding.lifetime(),
+                    javaBinding
+            ));
+        }
+        return List.copyOf(infos);
+    }
+
+    private Map<String, CompiledNativeProviderBinding> nativeProviderBindings(List<CompiledNativeProviderBinding> bindings) {
+        var result = new java.util.LinkedHashMap<String, CompiledNativeProviderBinding>();
+        for (var binding : bindings) {
+            result.putIfAbsent(nativeProviderKey(binding.interfaceId(), binding.qualifier()), binding);
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, ProviderInterfaceInfo> nativeProviderInterfaceTypes(CompiledProgram program) {
+        var result = new java.util.LinkedHashMap<String, ProviderInterfaceInfo>();
+        for (var module : program.modules()) {
+            for (var type : module.types().values()) {
+                if (type instanceof CompiledObjectType objectType && objectType.kind() == CompiledObjectKind.INTERFACE) {
+                    var info = new ProviderInterfaceInfo(objectType.backendClassName());
+                    result.put(cfunTypeName(module, objectType.name()), info);
+                    if (module.name().equals(objectType.name())) {
+                        result.put(cfunModuleName(module), info);
+                    }
+                }
+            }
+        }
+        for (var module : program.objectOrientedModules()) {
+            for (var definition : module.objectOriented().definitions()) {
+                if (definition instanceof ObjectOriented.InterfaceDeclaration) {
+                    result.put(objectInterfaceId(module, definition.name()), new ProviderInterfaceInfo(objectBackendClassName(module, definition.name())));
+                }
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private String objectInterfaceId(ObjectOrientedModule module, String typeName) {
+        var moduleName = objectModuleName(module);
+        var qualified = module.name().equals(typeName)
+                ? moduleName
+                : moduleName + "." + typeName;
+        return qualified.startsWith("/") ? qualified : "/" + qualified;
+    }
+
+    private String objectModuleName(ObjectOrientedModule module) {
+        var path = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+        return path.isBlank() ? module.name() : path + "/" + module.name();
+    }
+
+    private String objectBackendClassName(ObjectOrientedModule module, String typeName) {
+        var packageName = module.path().replace('\\', '/')
+                .replaceFirst("^/+", "")
+                .replaceFirst("/+$", "")
+                .replace('/', '.');
+        return packageName.isBlank() || ".".equals(packageName)
+                ? typeName
+                : packageName + "." + typeName;
+    }
+
+    private String uniqueNativeProviderBootstrapName(
+            String baseName,
+            CompiledNativeProviderDeclaration declaration,
+            Set<String> usedNames
+    ) {
+        var suffix = sanitizeJavaIdentifier((declaration.sourceModulePath() + "_" + declaration.sourceModuleName())
+                .replaceAll("[^A-Za-z0-9_]+", "_"));
+        var candidate = baseName + "__" + suffix;
+        var index = 2;
+        while (usedNames.contains(candidate)) {
+            candidate = baseName + "__" + suffix + "_" + index;
+            index++;
+        }
+        return candidate;
+    }
+
+    private String nativeProviderKey(String interfaceId, String qualifier) {
+        return interfaceId + "\u0000" + qualifier;
+    }
+
+    private List<GeneratedModule> nativeProviderBootstrapModules(List<NativeProviderInfo> providers) {
+        if (providers.isEmpty()) {
+            return List.of();
+        }
+        return List.of(new GeneratedModule(Path.of("dev", "capylang", "NativeProviderBootstrap.java"), renderNativeProviderBootstrap(providers)));
+    }
+
+    private String renderNativeProviderBootstrap(List<NativeProviderInfo> providers) {
+        var code = new StringBuilder();
+        code.append("package dev.capylang;\n\n");
+        code.append("@javax.annotation.processing.Generated(\"Capybara Compiler\")\n");
+        code.append("public final class NativeProviderBootstrap {\n");
+        code.append("    private NativeProviderBootstrap() {\n");
+        code.append("    }\n\n");
+        for (var provider : providers) {
+            if (provider.lifetime() == NativeProviderLifetime.SINGLETON) {
+                code.append("    private static volatile ")
+                        .append(provider.targetBackendType())
+                        .append(" __capybara_")
+                        .append(provider.bootstrapMethodName())
+                        .append("_singleton;\n\n");
+            }
+            code.append(renderNativeProviderMethod(provider)).append("\n");
+        }
+        code.append("}\n");
+        return code.toString();
+    }
+
+    private String renderNativeProviderMethod(NativeProviderInfo provider) {
+        if (provider.lifetime() == NativeProviderLifetime.FACTORY) {
+            return "    public static " + provider.targetBackendType() + " " + provider.bootstrapMethodName() + "() {\n"
+                   + "        return " + renderNativeProviderFactory(provider) + ";\n"
+                   + "    }\n";
+        }
+        var fieldName = "__capybara_" + provider.bootstrapMethodName() + "_singleton";
+        return "    public static " + provider.targetBackendType() + " " + provider.bootstrapMethodName() + "() {\n"
+               + "        var existing = " + fieldName + ";\n"
+               + "        if (existing == null) {\n"
+               + "            synchronized (NativeProviderBootstrap.class) {\n"
+               + "                existing = " + fieldName + ";\n"
+               + "                if (existing == null) {\n"
+               + "                    existing = " + renderNativeProviderFactory(provider) + ";\n"
+               + "                    " + fieldName + " = existing;\n"
+               + "                }\n"
+               + "            }\n"
+               + "        }\n"
+               + "        return existing;\n"
+               + "    }\n";
+    }
+
+    private String renderNativeProviderFactory(NativeProviderInfo provider) {
+        return "new " + provider.binding().className() + "()";
     }
 
     private List<GeneratedModule> modules(
@@ -336,6 +541,11 @@ public final class JavaGenerator implements Generator {
         return owner + "." + typeName;
     }
 
+    private static String cfunModuleName(CompiledModule module) {
+        var path = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+        return path.isBlank() ? "/" + module.name() : "/" + path + "/" + module.name();
+    }
+
     private static String simpleTypeName(String name) {
         var normalized = name.replace('\\', '/');
         var slash = normalized.lastIndexOf('/');
@@ -344,6 +554,10 @@ public final class JavaGenerator implements Generator {
         }
         var dot = normalized.lastIndexOf('.');
         return dot >= 0 ? normalized.substring(dot + 1) : normalized;
+    }
+
+    private static String sanitizeJavaIdentifier(String value) {
+        return JAVA_KEYWORDS.contains(value) ? value + "_" : value;
     }
 
 
@@ -1065,6 +1279,20 @@ public final class JavaGenerator implements Generator {
     }
 
     private record TopLevelDeclaration(String name, String code) {
+    }
+
+    private record NativeProviderInfo(
+            String providerSymbolName,
+            String bootstrapMethodName,
+            String targetBackendType,
+            String sourceModulePath,
+            String sourceModuleName,
+            NativeProviderLifetime lifetime,
+            NativeProviderBackendBinding binding
+    ) {
+    }
+
+    private record ProviderInterfaceInfo(String backendClassName) {
     }
 
     private String mapJavaRecord(JavaRecord record, String helperCallOwnerName, boolean topLevel) {

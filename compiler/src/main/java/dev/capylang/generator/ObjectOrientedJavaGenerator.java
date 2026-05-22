@@ -25,22 +25,37 @@ public final class ObjectOrientedJavaGenerator {
     );
     private final Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes;
     private final Map<String, SingletonTypeInfo> singletonTypes;
+    private final Map<String, List<NativeProviderInfo>> nativeProvidersByModule;
     private int syntheticCounter = 0;
 
     public ObjectOrientedJavaGenerator() {
-        this(Map.of(), Map.of());
+        this(Map.of(), Map.of(), List.of());
     }
 
     public ObjectOrientedJavaGenerator(Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes) {
-        this(primitiveBackedTypes, Map.of());
+        this(primitiveBackedTypes, Map.of(), List.of());
     }
 
     public ObjectOrientedJavaGenerator(
             Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes,
             Map<String, SingletonTypeInfo> singletonTypes
     ) {
+        this(primitiveBackedTypes, singletonTypes, List.of());
+    }
+
+    public ObjectOrientedJavaGenerator(
+            Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes,
+            Map<String, SingletonTypeInfo> singletonTypes,
+            Collection<NativeProviderInfo> nativeProviders
+    ) {
         this.primitiveBackedTypes = Map.copyOf(primitiveBackedTypes);
         this.singletonTypes = Map.copyOf(singletonTypes);
+        this.nativeProvidersByModule = nativeProviders.stream()
+                .collect(Collectors.groupingBy(
+                        provider -> moduleKey(provider.sourceModulePath(), provider.sourceModuleName()),
+                        LinkedHashMap::new,
+                        Collectors.toUnmodifiableList()
+                ));
     }
 
     public List<GeneratedModule> generate(List<ObjectOrientedModule> modules) {
@@ -1326,8 +1341,72 @@ public final class ObjectOrientedJavaGenerator {
             trimmed = trimmed.replaceAll("(^|[^A-Za-z0-9_])" + Pattern.quote(parentName) + "\\s*\\.", "$1super.");
         }
         trimmed = rewriteLocalMethodCalls(trimmed, localMethodBindings);
+        trimmed = rewriteNativeProviderCalls(module, trimmed, localMethodBindings);
         trimmed = rewriteImportedFunctionCalls(module, trimmed);
         return trimmed;
+    }
+
+    private String rewriteNativeProviderCalls(
+            ObjectOrientedModule module,
+            String expression,
+            LocalMethodBindings localMethodBindings
+    ) {
+        var providers = visibleNativeProviders(module);
+        if (providers.isEmpty()) {
+            return expression;
+        }
+        var rewritten = expression;
+        for (var entry : providers.entrySet().stream()
+                .sorted((left, right) -> Integer.compare(right.getKey().length(), left.getKey().length()))
+                .toList()) {
+            if (localMethodBindings.replacements().containsKey(entry.getKey())) {
+                continue;
+            }
+            rejectNativeProviderCallsWithArguments(module, rewritten, entry.getKey());
+            rewritten = rewritten.replaceAll(
+                    "(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(\\s*\\)",
+                    "$1dev.capylang.NativeProviderBootstrap." + Matcher.quoteReplacement(entry.getValue().bootstrapMethodName()) + "()"
+            );
+        }
+        return rewritten;
+    }
+
+    private void rejectNativeProviderCallsWithArguments(ObjectOrientedModule module, String expression, String providerName) {
+        var matcher = Pattern.compile("(^|[^A-Za-z0-9_\\.])" + Pattern.quote(providerName) + "\\s*\\(").matcher(expression);
+        while (matcher.find()) {
+            var openParen = matcher.end() - 1;
+            var closeParen = findMatchingParen(expression, openParen);
+            if (closeParen < 0) {
+                continue;
+            }
+            if (!expression.substring(openParen + 1, closeParen).trim().isBlank()) {
+                throw unsupported(module, "Native provider `" + providerName + "` does not accept arguments; call it as `" + providerName + "()`");
+            }
+        }
+    }
+
+    private Map<String, NativeProviderInfo> visibleNativeProviders(ObjectOrientedModule module) {
+        if (nativeProvidersByModule.isEmpty()) {
+            return Map.of();
+        }
+        var providers = new LinkedHashMap<String, NativeProviderInfo>();
+        nativeProvidersByModule.getOrDefault(moduleKey(module.path(), module.name()), List.of())
+                .forEach(provider -> providers.putIfAbsent(provider.providerSymbolName(), provider));
+        for (var importDeclaration : module.imports()) {
+            var importedProviders = nativeProvidersByModule.getOrDefault(importedModuleKey(module, importDeclaration.moduleName()), List.of());
+            if (importedProviders.isEmpty()) {
+                continue;
+            }
+            for (var provider : importedProviders) {
+                if (importDeclaration.excludedSymbols().contains(provider.providerSymbolName())) {
+                    continue;
+                }
+                if (importDeclaration.isStarImport() || importDeclaration.symbols().contains(provider.providerSymbolName())) {
+                    providers.putIfAbsent(provider.providerSymbolName(), provider);
+                }
+            }
+        }
+        return Map.copyOf(providers);
     }
 
     private String rewriteImportedFunctionCalls(ObjectOrientedModule module, String expression) {
@@ -1753,6 +1832,39 @@ public final class ObjectOrientedJavaGenerator {
         return -1;
     }
 
+    private int findMatchingParen(String value, int openParen) {
+        var depth = 0;
+        char stringDelimiter = 0;
+        for (int index = openParen; index < value.length(); index++) {
+            var current = value.charAt(index);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    index++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            if (current == '(') {
+                depth++;
+                continue;
+            }
+            if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
     private List<String> splitTopLevel(String value) {
         if (value.isBlank()) {
             return List.of();
@@ -2027,6 +2139,31 @@ public final class ObjectOrientedJavaGenerator {
                 .collect(Collectors.joining("."));
     }
 
+    private static String moduleKey(String path, String name) {
+        var normalizedPath = path.replace('\\', '/')
+                .replaceFirst("^/+", "")
+                .replaceFirst("/+$", "");
+        if (normalizedPath.isBlank() || ".".equals(normalizedPath)) {
+            return name;
+        }
+        return normalizedPath + "/" + name;
+    }
+
+    private static String importedModuleKey(ObjectOrientedModule module, String moduleName) {
+        if (moduleName.startsWith("/")) {
+            return moduleName.replace('\\', '/')
+                    .replaceFirst("^/+", "")
+                    .replaceFirst("/+$", "");
+        }
+        var basePath = module.path().replace('\\', '/')
+                .replaceFirst("^/+", "")
+                .replaceFirst("/+$", "");
+        if (basePath.isBlank() || ".".equals(basePath)) {
+            return moduleName;
+        }
+        return basePath + "/" + moduleName;
+    }
+
     private String normalizePackageSegment(String rawSegment) {
         var sanitized = sanitizeIdentifier(rawSegment.replace('-', '_'));
         return sanitized.isBlank() ? "pkg" : sanitized;
@@ -2082,5 +2219,14 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     public record SingletonTypeInfo(String name, String cfunType) {
+    }
+
+    public record NativeProviderInfo(
+            String providerSymbolName,
+            String bootstrapMethodName,
+            String targetBackendType,
+            String sourceModulePath,
+            String sourceModuleName
+    ) {
     }
 }

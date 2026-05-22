@@ -2,6 +2,9 @@ package dev.capylang.generator;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderBackendBinding;
+import dev.capylang.compiler.NativeProviderBinding;
+import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -32,6 +35,138 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ObjectOrientedJavaGeneratorTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void shouldLowerObjectOrientedNativeProviderCallToJavaBootstrap() {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "/foo/boo",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def clock(): Clock = system_clock()
+                        }
+
+                        class Domain(clock: Clock) {
+                            field clock: Clock = clock
+
+                            def read(): long = this.clock.now_millis()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var appModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("App.java"))
+                .findFirst()
+                .orElseThrow();
+        var domainModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Domain.java"))
+                .findFirst()
+                .orElseThrow();
+        var bootstrapModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("dev", "capylang", "NativeProviderBootstrap.java")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(appModule.code())
+                .contains("return dev.capylang.NativeProviderBootstrap.system_clock();")
+                .doesNotContain("dev.capylang.test.SystemClock");
+        assertThat(domainModule.code())
+                .contains("public Domain(Clock clock)")
+                .doesNotContain("dev.capylang.test.SystemClock")
+                .doesNotContain("NativeProviderBootstrap");
+        assertThat(bootstrapModule.code())
+                .contains("public static foo.boo.Clock system_clock()")
+                .contains("existing = new dev.capylang.test.SystemClock();");
+    }
+
+    @Test
+    void shouldNotRewriteNativeProviderNameOutsideVisibilityRules() {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "Providers",
+                        "/foo",
+                        """
+                                interface Clock {
+                                    def now_millis(): long
+                                }
+
+                                native provider system_clock: Clock key "system"
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule(
+                        "Consumer",
+                        "/foo",
+                        """
+                                class Consumer {
+                                    def clock(): Clock = system_clock()
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule(
+                        "ImportedConsumer",
+                        "/foo",
+                        """
+                                from Providers import { system_clock }
+
+                                class ImportedConsumer {
+                                    def clock(): Clock = system_clock()
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), providerManifest(javaProviderBinding("/foo/Providers.Clock", "system")));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumer = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Consumer.java"))
+                .findFirst()
+                .orElseThrow();
+        var importedConsumer = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("ImportedConsumer.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumer.code())
+                .contains("return system_clock();")
+                .doesNotContain("NativeProviderBootstrap.system_clock()");
+        assertThat(importedConsumer.code())
+                .contains("return dev.capylang.NativeProviderBootstrap.system_clock();");
+    }
+
+    @Test
+    void shouldRejectNativeProviderCallsWithArguments() {
+        var program = compileProgram(List.of(new RawModule(
+                "Providers",
+                "/foo/boo",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        native provider system_clock: Clock key "system"
+
+                        class App {
+                            def clock(): Clock = system_clock(1)
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+
+        assertThatThrownBy(() -> new JavaGenerator().generate(program))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Native provider `system_clock` does not accept arguments")
+                .hasMessageContaining("system_clock()");
+    }
 
     @Test
     void shouldGenerateAndRunStdoutCallsInExpressionAndBlockMethods() throws Exception {
@@ -829,11 +964,30 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private CompiledProgram compileProgram(List<RawModule> modules) {
-        var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
+        return compileProgram(modules, NativeProviderManifest.empty());
+    }
+
+    private CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
+        var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>(), nativeProviders);
         if (result instanceof Result.Error<CompiledProgram> error) {
             throw new AssertionError(error.errors().toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
+    }
+
+    private NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
+        return new NativeProviderManifest(List.of(bindings));
+    }
+
+    private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier) {
+        return new NativeProviderBinding(
+                interfaceId,
+                qualifier,
+                "singleton",
+                new NativeProviderBackendBinding("dev.capylang.test.SystemClock", null, null, "constructor"),
+                null,
+                null
+        );
     }
 
     private Path compileGeneratedJava(GeneratedProgram generatedProgram) throws Exception {
