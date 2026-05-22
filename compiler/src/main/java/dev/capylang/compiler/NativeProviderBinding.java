@@ -11,6 +11,30 @@ public record NativeProviderBinding(
         @JsonProperty("javascript") NativeProviderBackendBinding javascriptBinding,
         @JsonProperty("python") NativeProviderBackendBinding pythonBinding
 ) {
+    @JsonCreator
+    public static NativeProviderBinding fromJson(
+            @JsonProperty("interface") String interfaceId,
+            @JsonProperty("qualifier") String qualifier,
+            @JsonProperty("lifetime") String lifetime,
+            @JsonProperty("java") NativeProviderBackendBinding javaBinding,
+            @JsonProperty("javascript") NativeProviderBackendBinding javascriptBinding,
+            @JsonProperty("python") NativeProviderBackendBinding pythonBinding
+    ) {
+        var binding = new NativeProviderBinding(
+                interfaceId,
+                qualifier,
+                lifetime,
+                javaBinding,
+                javascriptBinding,
+                pythonBinding
+        );
+        NativeProviderLifetime.fromJson(binding.lifetime());
+        validateBackendBinding(NativeProviderBackend.JAVA, binding.javaBinding());
+        validateBackendBinding(NativeProviderBackend.JAVASCRIPT, binding.javascriptBinding());
+        validateBackendBinding(NativeProviderBackend.PYTHON, binding.pythonBinding());
+        return binding;
+    }
+
     public NativeProviderBinding(
             String interfaceId,
             String qualifier,
@@ -29,7 +53,6 @@ public record NativeProviderBinding(
         );
     }
 
-    @JsonCreator
     public NativeProviderBinding {
         interfaceId = requireText(interfaceId, "Native provider `interface` is required.");
         qualifier = requireText(qualifier, "Native provider `qualifier` is required.");
@@ -41,5 +64,39 @@ public record NativeProviderBinding(
             throw new IllegalArgumentException(message);
         }
         return value;
+    }
+
+    private static void validateBackendBinding(NativeProviderBackend backend, NativeProviderBackendBinding binding) {
+        if (binding == null) {
+            return;
+        }
+        switch (backend) {
+            case JAVA -> {
+                requireText(binding.className(), "Native provider `java.className` is required.");
+                requireFactory(backend, binding.factory(), "constructor");
+            }
+            case JAVASCRIPT -> {
+                requireText(binding.moduleName(), "Native provider `javascript.module` is required.");
+                requireText(binding.exportName(), "Native provider `javascript.export` is required.");
+                requireFactory(backend, binding.factory(), "new", "call");
+            }
+            case PYTHON -> {
+                requireText(binding.moduleName(), "Native provider `python.module` is required.");
+                requireText(binding.className(), "Native provider `python.className` is required.");
+                requireFactory(backend, binding.factory(), "call");
+            }
+        }
+    }
+
+    private static void requireFactory(NativeProviderBackend backend, String actual, String... supported) {
+        for (var candidate : supported) {
+            if (candidate.equals(actual)) {
+                return;
+            }
+        }
+        throw new IllegalArgumentException(
+                "Native provider `" + backend.jsonValue() + ".factory` has unsupported value `" + actual
+                + "`. Supported values: " + String.join(", ", supported) + "."
+        );
     }
 }
