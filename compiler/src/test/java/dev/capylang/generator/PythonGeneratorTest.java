@@ -494,6 +494,34 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldFailPythonNativeProviderValidationWhenMethodIsNotCallable() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "factory",
+                        "nativeinterop.system_clock",
+                        "SystemClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class SystemClock:
+                    now_millis = 1
+                """);
+
+        var result = runPythonCommand("-c", "import dev.capylang.native_providers as providers; providers.system_clock()");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("method `now_millis` must be callable");
+    }
+
+    @Test
     void shouldFailPythonNativeProviderValidationWhenMethodArityIsTooSmall() throws Exception {
         var generated = new PythonGenerator().generate(nativeProviderProgram(
                 "def plus(value: long): long",
