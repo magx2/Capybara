@@ -323,6 +323,9 @@ class PythonGeneratorTest {
         )), providerManifest(pythonProviderBinding("/Providers.Clock", "system")));
 
         var generated = new PythonGenerator().generate(program);
+        assertThat(generated.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains(Path.of("dev", "capylang", "native_providers.py"));
         var app = generated.modules().stream()
                 .filter(module -> module.relativePath().endsWith("App.py"))
                 .findFirst()
@@ -347,6 +350,7 @@ class PythonGeneratorTest {
                 .contains("factory='call'")
                 .contains("create=lambda: __capy_provider_system_clock_class()")
                 .contains("{'name': 'now_millis', 'arity': 0}")
+                .contains("def system_clock():")
                 .contains("return _providers.resolve('/Providers.Clock', 'system')");
     }
 

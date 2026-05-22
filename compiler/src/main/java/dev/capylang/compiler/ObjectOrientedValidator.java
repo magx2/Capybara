@@ -26,6 +26,7 @@ public final class ObjectOrientedValidator {
 
     private void validateModule(ObjectOrientedModule module, TreeSet<Result.Error.SingleError> errors) {
         validateNativeProviders(module, errors);
+        validateNativeProviderCalls(module, errors);
         module.objectOriented().definitions().forEach(definition -> validateDefinition(module, definition, errors));
     }
 
@@ -67,6 +68,203 @@ public final class ObjectOrientedValidator {
                 sourceFile,
                 message + " in source `" + sourceFile + "`"
         );
+    }
+
+    private void validateNativeProviderCalls(ObjectOrientedModule module, TreeSet<Result.Error.SingleError> errors) {
+        if (module.objectOriented().nativeProviders().isEmpty()) {
+            return;
+        }
+        var providerNames = module.objectOriented().nativeProviders().stream()
+                .map(ObjectOriented.NativeProviderDeclaration::name)
+                .toList();
+        for (var definition : module.objectOriented().definitions()) {
+            for (var member : definition.members()) {
+                validateNativeProviderCalls(module, providerNames, member, errors);
+            }
+        }
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            List<String> providerNames,
+            ObjectOriented.MemberDeclaration member,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (member) {
+            case ObjectOriented.FieldDeclaration fieldDeclaration ->
+                    fieldDeclaration.initializer().ifPresent(expression -> validateNativeProviderCalls(module, providerNames, expression, errors));
+            case ObjectOriented.MethodDeclaration methodDeclaration ->
+                    methodDeclaration.body().ifPresent(body -> validateNativeProviderCalls(module, providerNames, body, errors));
+            case ObjectOriented.InitBlock initBlock ->
+                    validateNativeProviderCalls(module, providerNames, initBlock.body(), errors);
+        }
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            List<String> providerNames,
+            ObjectOriented.MethodBody body,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (body) {
+            case ObjectOriented.ExpressionBody expressionBody -> validateNativeProviderCalls(module, providerNames, expressionBody.expression(), errors);
+            case ObjectOriented.StatementBlock statementBlock -> validateNativeProviderCalls(module, providerNames, statementBlock, errors);
+        }
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            List<String> providerNames,
+            ObjectOriented.StatementBlock block,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var statement : block.statements()) {
+            validateNativeProviderCalls(module, providerNames, statement, errors);
+        }
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            List<String> providerNames,
+            ObjectOriented.Statement statement,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (statement) {
+            case ObjectOriented.LetStatement letStatement -> validateNativeProviderCalls(module, providerNames, letStatement.expression(), errors);
+            case ObjectOriented.LocalMethodStatement localMethodStatement -> validateNativeProviderCalls(module, providerNames, localMethodStatement.body(), errors);
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> validateNativeProviderCalls(module, providerNames, mutableVariableStatement.expression(), errors);
+            case ObjectOriented.AssignmentStatement assignmentStatement -> validateNativeProviderCalls(module, providerNames, assignmentStatement.expression(), errors);
+            case ObjectOriented.ExpressionStatement expressionStatement -> validateNativeProviderCalls(module, providerNames, expressionStatement.expression(), errors);
+            case ObjectOriented.ThrowStatement throwStatement -> validateNativeProviderCalls(module, providerNames, throwStatement.expression(), errors);
+            case ObjectOriented.ReturnStatement returnStatement -> validateNativeProviderCalls(module, providerNames, returnStatement.expression(), errors);
+            case ObjectOriented.IfStatement ifStatement -> {
+                validateNativeProviderCalls(module, providerNames, ifStatement.condition(), errors);
+                validateNativeProviderCalls(module, providerNames, ifStatement.thenBranch(), errors);
+                ifStatement.elseBranch().ifPresent(elseBranch -> validateNativeProviderCalls(module, providerNames, elseBranch, errors));
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                validateNativeProviderCalls(module, providerNames, tryCatchStatement.tryBlock(), errors);
+                tryCatchStatement.catches().forEach(catchClause -> validateNativeProviderCalls(module, providerNames, catchClause.body(), errors));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                validateNativeProviderCalls(module, providerNames, whileStatement.condition(), errors);
+                validateNativeProviderCalls(module, providerNames, whileStatement.body(), errors);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                validateNativeProviderCalls(module, providerNames, doWhileStatement.body(), errors);
+                validateNativeProviderCalls(module, providerNames, doWhileStatement.condition(), errors);
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                validateNativeProviderCalls(module, providerNames, forEachStatement.iterable(), errors);
+                validateNativeProviderCalls(module, providerNames, forEachStatement.body(), errors);
+            }
+            case ObjectOriented.StatementBlock nestedBlock -> validateNativeProviderCalls(module, providerNames, nestedBlock, errors);
+        }
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            List<String> providerNames,
+            String expression,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var providerName : providerNames) {
+            if (callsProviderWithArguments(expression, providerName)) {
+                errors.add(new Result.Error.SingleError(
+                        0,
+                        0,
+                        module.moduleFile(),
+                        "Native provider `" + providerName + "` does not accept arguments; call it as `" + providerName + "()` in source `" + module.moduleFile() + "`"
+                ));
+            }
+        }
+    }
+
+    private boolean callsProviderWithArguments(String expression, String providerName) {
+        var index = 0;
+        while (index < expression.length()) {
+            var current = expression.charAt(index);
+            if (current == '"' || current == '\'') {
+                index = skipStringLiteral(expression, index);
+                continue;
+            }
+            if (!matchesDirectIdentifier(expression, index, providerName)) {
+                index++;
+                continue;
+            }
+            var openParen = skipWhitespace(expression, index + providerName.length());
+            if (openParen < expression.length() && expression.charAt(openParen) == '(') {
+                var closeParen = matchingParen(expression, openParen);
+                if (closeParen > openParen && !expression.substring(openParen + 1, closeParen).trim().isEmpty()) {
+                    return true;
+                }
+            }
+            index += providerName.length();
+        }
+        return false;
+    }
+
+    private int skipStringLiteral(String expression, int start) {
+        var delimiter = expression.charAt(start);
+        var index = start + 1;
+        while (index < expression.length()) {
+            var current = expression.charAt(index);
+            if (current == '\\') {
+                index += 2;
+                continue;
+            }
+            index++;
+            if (current == delimiter) {
+                break;
+            }
+        }
+        return index;
+    }
+
+    private boolean matchesDirectIdentifier(String expression, int index, String identifier) {
+        if (!expression.startsWith(identifier, index)) {
+            return false;
+        }
+        if (index + identifier.length() < expression.length()
+            && isIdentifierPart(expression.charAt(index + identifier.length()))) {
+            return false;
+        }
+        var previous = index - 1;
+        while (previous >= 0 && Character.isWhitespace(expression.charAt(previous))) {
+            previous--;
+        }
+        return previous < 0 || (!isIdentifierPart(expression.charAt(previous)) && expression.charAt(previous) != '.');
+    }
+
+    private boolean isIdentifierPart(char value) {
+        return Character.isLetterOrDigit(value) || value == '_';
+    }
+
+    private int skipWhitespace(String expression, int index) {
+        while (index < expression.length() && Character.isWhitespace(expression.charAt(index))) {
+            index++;
+        }
+        return index;
+    }
+
+    private int matchingParen(String expression, int openParen) {
+        var depth = 0;
+        for (var index = openParen; index < expression.length(); index++) {
+            var current = expression.charAt(index);
+            if (current == '"' || current == '\'') {
+                index = skipStringLiteral(expression, index) - 1;
+                continue;
+            }
+            if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
     }
 
     private void validateDefinition(

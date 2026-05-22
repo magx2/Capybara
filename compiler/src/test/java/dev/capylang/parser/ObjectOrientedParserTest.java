@@ -315,6 +315,30 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should not parse native provider declarations as class members")
+    void rejectNativeProviderAsClassMember() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Broken",
+                "/parser",
+                """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+
+                        class App {
+                            native provider system_clock: Clock key "system"
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+                .singleElement()
+                .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
+    }
+
+    @Test
     @DisplayName("should parse primitive-backed functional type references")
     void parsePrimitiveBackedFunctionalTypeReferences() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
