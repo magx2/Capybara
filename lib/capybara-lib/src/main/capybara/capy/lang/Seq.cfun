@@ -2,6 +2,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 union Seq[T] = Cons[T] | End
 data Cons[T] { value: T, rest: () => Seq[T] }
@@ -46,7 +47,8 @@ fun powers_of_2_seq() = powers_seq(2)
 ///
 /// This method is safe to use with infinite sequences.
 fun Seq[T].take(n: size): List[T] =
-    fun rec take(seq: Seq[T], n: int, list: List[T]): List[T] =
+    @Recursive
+    fun take(seq: Seq[T], n: int, list: List[T]): List[T] =
         if n <=0
         then list
         else
@@ -60,7 +62,8 @@ fun Seq[T].take(n: size): List[T] =
 ///
 /// Important: calling this on an infinite sequence does not terminate.
 fun Seq[T].as_list(): List[T] =
-    fun rec as_list(seq: Seq[T], list: List[T]): List[T] =
+    @Recursive
+    fun as_list(seq: Seq[T], list: List[T]): List[T] =
         match seq with
         case End -> list
         case Cons { value, rest } -> as_list(rest(), list + value)
@@ -130,7 +133,8 @@ fun Seq[T].reject(pred: T => bool): Seq[T] =
 
 /// Skips the first `n` elements of the sequence.
 fun Seq[T].drop(n: size): Seq[T] =
-    fun rec drop(seq: Seq[T], n: int) =
+    @Recursive
+    fun drop(seq: Seq[T], n: int) =
         if n <= 0
         then seq
         else
@@ -148,7 +152,8 @@ fun Seq[T].drop(n: size): Seq[T] =
 ///
 /// The first element that satisfies `pred` is included in the result.
 fun Seq[T].drop_until(pred: T => bool): Seq[T] =
-    fun rec drop_until(seq: Seq[T], pred: T => bool) =
+    @Recursive
+    fun drop_until(seq: Seq[T], pred: T => bool) =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
@@ -219,7 +224,8 @@ fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
     flat_map(this, map)
 
 fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
-    fun rec reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
+    @Recursive
+    fun reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
         match seq with
         case End -> acc
         case Cons { value, rest } -> reduce(rest(), reducer(acc, value), reducer)

@@ -347,6 +347,169 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectMissingAnnotationArgument() {
+        var errors = compileProgram("""
+                        annotation Test on fun {
+                            name: String
+                        }
+
+                        @Test()
+                        fun should_run(): bool = true
+                        """,
+                "annotation_missing_argument");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Missing required annotation argument name for Test"));
+    }
+
+    @Test
+    void shouldRejectUnknownAnnotationArgumentAndWrongAnnotationValueType() {
+        var errors = compileProgram("""
+                        annotation Retry on fun {
+                            retries: int
+                        }
+
+                        @Retry(retries: "three", label: "bad")
+                        fun should_run(): bool = true
+                        """,
+                "annotation_bad_arguments");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Annotation argument retries for Retry expects int, got String"));
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Unknown annotation argument label for Retry"));
+    }
+
+    @Test
+    void shouldRejectDuplicateAnnotationArgument() {
+        var errors = compileProgram("""
+                        annotation Retry on fun {
+                            retries: int = 1
+                        }
+
+                        @Retry(retries: 1, retries: 2)
+                        fun should_run(): bool = true
+                        """,
+                "annotation_duplicate_argument");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Duplicate annotation argument retries for Retry"));
+    }
+
+    @Test
+    void shouldRejectUnknownFunctionalAnnotation() {
+        var errors = compileProgram("""
+                        @Missing()
+                        fun should_run(): bool = true
+                        """,
+                "annotation_unknown");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Unknown annotation Missing"));
+    }
+
+    @Test
+    void shouldRejectUnimportedAnnotation() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule("Annotations", "/foo/meta", "annotation Test on fun {}"),
+                new RawModule("Tests", "/foo/boo", """
+                        @Test()
+                        fun should_run(): bool = true
+                        """)
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .anySatisfy(error -> assertThat(error.message()).contains("Unknown annotation Test"));
+    }
+
+    @Test
+    void shouldRejectFunctionalAnnotationTargetMismatch() {
+        var errors = compileProgram("""
+                        annotation MethodOnly on method {}
+
+                        @MethodOnly()
+                        fun should_run(): bool = true
+                        """,
+                "annotation_invalid_function_target");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Annotation MethodOnly is not valid on function declarations"));
+    }
+
+    @Test
+    void shouldRejectUnimportedRecursiveAnnotation() {
+        var errors = compileProgram("""
+                        @Recursive
+                        fun should_run(): bool = true
+                        """,
+                "annotation_recursive_unimported");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Unknown annotation Recursive"));
+    }
+
+    @Test
+    void shouldRejectRecursiveAnnotationOnFunctionalMethod() {
+        var errors = compileProgram("""
+                        from /capy/meta_prog/Recursive import { Recursive }
+
+                        data Counter { value: int }
+
+                        @Recursive
+                        fun Counter.count_down(): int = this.count_down()
+                        """,
+                "annotation_recursive_functional_method");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("`@Recursive` is supported for functions, not method declarations"));
+    }
+
+    @Test
+    void shouldRejectUserDefinedAnnotationOnLocalFunction() {
+        var errors = compileProgram("""
+                        annotation LocalMarker on fun {}
+
+                        fun run(): int =
+                            @LocalMarker()
+                            fun __local(): int = 1
+                            ---
+                            __local()
+                        """,
+                "annotation_local_function");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Only `@Recursive` is supported on local function declarations"));
+    }
+
+    @Test
+    void shouldRejectOldRecFunctionKeywordSyntax() {
+        var errors = compileProgram("""
+                        fun rec sum(n: int): int = sum(n - 1)
+                        """,
+                "rec_keyword_removed");
+
+        assertThat(errors).isNotEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidFunctionalAnnotationSyntax")
+    void shouldRejectInvalidFunctionalAnnotationSyntax(String moduleName, String source) {
+        var errors = compileProgram(source, moduleName);
+
+        assertThat(errors).isNotEmpty();
+    }
+
+    @Test
     void shouldRejectUnknownDeriver() {
         var errors = compileProgram("""
                         data User { name: String } derive Missing
@@ -499,7 +662,10 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectRecFunctionWithNonTailRecursiveCall() {
         var errors = compileProgram("""
-                        fun rec sum(n: int): int = n + sum(n - 1)
+                        from /capy/meta_prog/Recursive import { Recursive }
+
+                        @Recursive
+                        fun sum(n: int): int = n + sum(n - 1)
                         """,
                 "rec_function_non_tail_call");
 
@@ -511,20 +677,26 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectRecFunctionWithoutSelfCall() {
         var errors = compileProgram("""
-                        fun rec sum(n: int): int = n - 1
+                        from /capy/meta_prog/Recursive import { Recursive }
+
+                        @Recursive
+                        fun sum(n: int): int = n - 1
                         """,
                 "rec_function_without_self_call");
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`fun rec` function `sum` must call itself in tail position");
+                .contains("`@Recursive` function `sum` must call itself in tail position");
     }
 
     @Test
     void shouldRejectRecLocalFunctionWithNonTailRecursiveCall() {
         var errors = compileProgram("""
+                        from /capy/meta_prog/Recursive import { Recursive }
+
                         fun sum(n: int): int =
-                            fun rec __sum(n: int): int = n + __sum(n - 1)
+                            @Recursive
+                            fun __sum(n: int): int = n + __sum(n - 1)
                             ---
                             __sum(n)
                         """,
@@ -539,8 +711,11 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectRecLocalFunctionWithoutSelfCall() {
         var errors = compileProgram("""
+                        from /capy/meta_prog/Recursive import { Recursive }
+
                         fun sum(n: int): int =
-                            fun rec __sum(n: int): int = n - 1
+                            @Recursive
+                            fun __sum(n: int): int = n - 1
                             ---
                             __sum(n)
                         """,
@@ -548,7 +723,7 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`fun rec` function `sum` must call itself in tail position")
+                .contains("`@Recursive` function `sum` must call itself in tail position")
                 .doesNotContain("__local_fun_");
     }
 
@@ -1820,6 +1995,44 @@ public class CompilationErrorTest {
         );
     }
 
+    private static Stream<Arguments> invalidFunctionalAnnotationSyntax() {
+        return Stream.of(
+                Arguments.of(
+                        "annotation_empty_call",
+                        """
+                                @()
+                                fun broken(): bool = true
+                                """
+                ),
+                Arguments.of(
+                        "annotation_comma_separated_prefix",
+                        """
+                                @A(), @B()
+                                fun broken(): bool = true
+                                """
+                ),
+                Arguments.of(
+                        "annotation_positional_argument",
+                        """
+                                annotation Label on fun {
+                                    value: String
+                                }
+
+                                @Label("bad")
+                                fun broken(): bool = true
+                                """
+                ),
+                Arguments.of(
+                        "annotation_after_declaration_start",
+                        """
+                                annotation Label on fun {}
+
+                                fun @Label() broken(): bool = true
+                                """
+                )
+        );
+    }
+
 
     private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName) {
         return compileProgram(fun, moduleName, List.of());
@@ -1847,6 +2060,9 @@ public class CompilationErrorTest {
                     union Name[T] = Foo[T] | Boo
                     data Foo[T] { value: T }
                     data Boo { message: String }
+                    """),
+            new RawModule("Recursive", "/capy/meta_prog", """
+                    annotation Recursive on fun {}
                     """)
     );
 

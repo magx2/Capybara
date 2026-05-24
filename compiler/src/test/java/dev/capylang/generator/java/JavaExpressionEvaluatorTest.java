@@ -783,12 +783,18 @@ class JavaExpressionEvaluatorTest {
 
     @Test
     void shouldRewriteQualifiedTailRecursiveCallWhenStaticMethodsUseModuleSuffix() {
-        var generatedProgram = new JavaGenerator().generate(compileProgram("Counter", "/foo/bar", """
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}"),
+                new RawModule("Counter", "/foo/bar", """
+                from /capy/meta_prog/Recursive import { Recursive }
+
                 data Counter { value: int }
 
-                fun rec sum(n: int, acc: int): int =
+                @Recursive
+                fun sum(n: int, acc: int): int =
                     if n <= 0 then acc else Counter.sum(n - 1, acc + n)
-                """));
+                """)
+        )));
 
         var generated = generatedProgram.modules().stream()
                 .filter(module -> module.relativePath().equals(Path.of("foo", "bar", "CounterModule.java")))
@@ -1488,18 +1494,41 @@ class JavaExpressionEvaluatorTest {
                     | InterfaceInfo
                     | ObjectInfo
                     | TraitInfo
+                    | MethodInfo
                     | ListInfo
                     | SetInfo
                     | DictInfo
                     | TupleInfo
                     | FunctionTypeInfo
 
-                data DataInfo { name: String, pkg: PackageInfo }
+                union AnnotationValue =
+                    AnnotationString
+                    | AnnotationInt
+                    | AnnotationLong
+                    | AnnotationDouble
+                    | AnnotationFloat
+                    | AnnotationBool
+                    | AnnotationTypeName
+                    | AnnotationNothing
 
-                data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
-                data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo] }
-                data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
-                data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo }
+                data AnnotationString { value: String }
+                data AnnotationInt { value: int }
+                data AnnotationLong { value: long }
+                data AnnotationDouble { value: double }
+                data AnnotationFloat { value: float }
+                data AnnotationBool { value: bool }
+                data AnnotationTypeName { value: String }
+                data AnnotationNothing {}
+
+                data AnnotationArgumentInfo { name: String, value: AnnotationValue }
+                data AnnotationInfo { name: String, pkg: PackageInfo, arguments: List[AnnotationArgumentInfo] }
+
+                data DataInfo { name: String, pkg: PackageInfo, annotations: List[AnnotationInfo] }
+
+                data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+                data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+                data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+                data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo, annotations: List[AnnotationInfo] }
 
                 data ListInfo { element_type: AnyInfo }
                 data SetInfo { element_type: AnyInfo }
@@ -1509,9 +1538,9 @@ class JavaExpressionEvaluatorTest {
                 data FunctionTypeInfo { params: List[AnyInfo], return_type: AnyInfo }
 
                 data PackageInfo { name: String, path: String }
-                data FieldInfo { name: String, type: AnyInfo }
-                data FieldValueInfo { name: String, type: AnyInfo, value: any }
-                data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo] }
+                data FieldInfo { name: String, type: AnyInfo, annotations: List[AnnotationInfo] }
+                data FieldValueInfo { name: String, type: AnyInfo, value: any, annotations: List[AnnotationInfo] }
+                data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo], annotations: List[AnnotationInfo] }
 
                 fun reflection(obj: data): DataValueInfo = <native>
                 """);

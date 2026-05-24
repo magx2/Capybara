@@ -1325,6 +1325,7 @@ public class CapybaraExpressionCompiler {
                     "",
                     "",
                     List.of(),
+                    List.of(),
                     dataValueInfo
             ));
         }
@@ -1334,7 +1335,7 @@ public class CapybaraExpressionCompiler {
                     functionCall.arguments().getFirst().position()
             );
         }
-        var packagePath = reflectionPackagePath(dataType.name());
+        var packagePath = reflectionValuePackagePath(dataType);
         var packageName = packagePath.isBlank() ? "" : simpleTypeNameStatic(packagePath);
         return Result.success(new CompiledReflectionValue(
                 target,
@@ -1342,10 +1343,40 @@ public class CapybaraExpressionCompiler {
                 packageName,
                 packagePath,
                 dataType.fields().stream()
-                        .map(field -> new CompiledReflectionValue.Field(field.name(), field.type()))
+                        .map(field -> new CompiledReflectionValue.Field(
+                                field.name(),
+                                field.type(),
+                                field.annotations()
+                        ))
                         .toList(),
+                reflectionValueAnnotations(dataType),
                 dataValueInfo
         ));
+    }
+
+    private String reflectionValuePackagePath(GenericDataType dataType) {
+        if (dataType instanceof CompiledDataType compiledDataType && compiledDataType.enumValue()) {
+            return enumParentForValue(compiledDataType)
+                    .map(parentType -> reflectionPackagePath(parentType.name()))
+                    .orElseGet(() -> reflectionPackagePath(compiledDataType.name()));
+        }
+        return reflectionPackagePath(dataType.name());
+    }
+
+    private List<CompiledAnnotation> reflectionValueAnnotations(GenericDataType dataType) {
+        if (dataType instanceof CompiledDataType compiledDataType && compiledDataType.enumValue()) {
+            return enumParentForValue(compiledDataType)
+                    .map(CompiledDataParentType::annotations)
+                    .orElseGet(compiledDataType::annotations);
+        }
+        return reflectionAnnotations(dataType);
+    }
+
+    private Optional<CompiledDataParentType> enumParentForValue(CompiledDataType dataType) {
+        return parentTypesForSubtype(dataType.name()).stream()
+                .filter(CompiledDataParentType::enumType)
+                .filter(parentType -> hasMatchingSubtype(parentType, dataType))
+                .findFirst();
     }
 
     private CompiledExpression reflectionTypeInfo(CompiledType type, CompiledDataParentType anyInfo) {
@@ -1372,7 +1403,8 @@ public class CapybaraExpressionCompiler {
         var dataInfo = reflectionDataType(anyInfo, "DataInfo");
         return newData(dataInfo,
                 "name", stringLiteral(simpleTypeNameStatic(parentType.name())),
-                "pkg", packageInfo(parentType.name(), anyInfo)
+                "pkg", packageInfo(parentType.name(), anyInfo),
+                "annotations", reflectionAnnotations(anyInfo, parentType.annotations())
         );
     }
 
@@ -1383,14 +1415,25 @@ public class CapybaraExpressionCompiler {
         var dataInfo = reflectionDataType(anyInfo, "DataInfo");
         return newData(dataInfo,
                 "name", stringLiteral(simpleTypeNameStatic(dataType.name())),
-                "pkg", packageInfo(dataType.name(), anyInfo)
+                "pkg", packageInfo(dataType.name(), anyInfo),
+                "annotations", reflectionAnnotations(anyInfo, reflectionAnnotations(dataType))
         );
+    }
+
+    private List<CompiledAnnotation> reflectionAnnotations(GenericDataType dataType) {
+        return switch (dataType) {
+            case CompiledDataType compiledDataType -> compiledDataType.annotations();
+            case CompiledDataParentType parentType -> parentType.annotations();
+            case CompiledObjectType objectType -> objectType.annotations();
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.annotations();
+        };
     }
 
     private CompiledExpression reflectionPrimitiveInfo(PrimitiveLinkedType primitive, CompiledDataParentType anyInfo) {
         return newData(reflectionDataType(anyInfo, "DataInfo"),
                 "name", stringLiteral(primitiveTypeName(primitive)),
-                "pkg", emptyPackageInfo(anyInfo)
+                "pkg", emptyPackageInfo(anyInfo),
+                "annotations", reflectionAnnotations(anyInfo, List.of())
         );
     }
 
@@ -1442,16 +1485,99 @@ public class CapybaraExpressionCompiler {
     ) {
         return newData(reflectionDataType(anyInfo, "DataInfo"),
                 "name", stringLiteral(genericTypeParameter.name()),
-                "pkg", emptyPackageInfo(anyInfo)
+                "pkg", emptyPackageInfo(anyInfo),
+                "annotations", reflectionAnnotations(anyInfo, List.of())
         );
+    }
+
+    private CompiledExpression reflectionAnnotations(
+            CompiledDataParentType anyInfo,
+            List<CompiledAnnotation> annotations
+    ) {
+        var annotationInfo = reflectionDataType(anyInfo, "AnnotationInfo");
+        return new CompiledNewList(
+                annotations.stream()
+                        .map(annotation -> reflectionAnnotationInfo(anyInfo, annotation))
+                        .toList(),
+                new CompiledList(annotationInfo)
+        );
+    }
+
+    private CompiledExpression reflectionAnnotationInfo(
+            CompiledDataParentType anyInfo,
+            CompiledAnnotation annotation
+    ) {
+        return newData(reflectionDataType(anyInfo, "AnnotationInfo"),
+                "name", stringLiteral(annotation.name()),
+                "pkg", packageInfo(annotation.packageName(), annotation.packagePath(), anyInfo),
+                "arguments", new CompiledNewList(
+                        annotation.arguments().stream()
+                                .map(argument -> reflectionAnnotationArgumentInfo(anyInfo, argument))
+                                .toList(),
+                        new CompiledList(reflectionDataType(anyInfo, "AnnotationArgumentInfo"))
+                )
+        );
+    }
+
+    private CompiledExpression reflectionAnnotationArgumentInfo(
+            CompiledDataParentType anyInfo,
+            CompiledAnnotationArgument argument
+    ) {
+        return newData(reflectionDataType(anyInfo, "AnnotationArgumentInfo"),
+                "name", stringLiteral(argument.name()),
+                "value", reflectionAnnotationValue(anyInfo, argument.value())
+        );
+    }
+
+    private CompiledExpression reflectionAnnotationValue(
+            CompiledDataParentType anyInfo,
+            CompiledAnnotationValue value
+    ) {
+        return switch (value) {
+            case CompiledAnnotationValue.StringValue stringValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationString"),
+                    "value", new CompiledStringValue(normalizeAnnotationStringLiteral(stringValue.value()))
+            );
+            case CompiledAnnotationValue.IntValue intValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationInt"),
+                    "value", new CompiledIntValue(intValue.value())
+            );
+            case CompiledAnnotationValue.LongValue longValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationLong"),
+                    "value", new CompiledLongValue(longValue.value())
+            );
+            case CompiledAnnotationValue.DoubleValue doubleValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationDouble"),
+                    "value", new CompiledDoubleValue(doubleValue.value())
+            );
+            case CompiledAnnotationValue.FloatValue floatValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationFloat"),
+                    "value", new CompiledFloatValue(floatValue.value())
+            );
+            case CompiledAnnotationValue.BoolValue boolValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationBool"),
+                    "value", boolValue.value() ? CompiledBooleanValue.TRUE : CompiledBooleanValue.FALSE
+            );
+            case CompiledAnnotationValue.TypeNameValue typeNameValue -> newData(
+                    reflectionDataType(anyInfo, "AnnotationTypeName"),
+                    "value", stringLiteral(typeNameValue.name())
+            );
+            case CompiledAnnotationValue.NothingValue ignored -> newData(
+                    reflectionDataType(anyInfo, "AnnotationNothing")
+            );
+        };
     }
 
     private CompiledExpression packageInfo(String symbolName, CompiledDataParentType anyInfo) {
         var path = reflectionPackagePath(symbolName);
         var name = path.isBlank() ? "" : simpleTypeNameStatic(path);
+        return packageInfo(name, path, anyInfo);
+    }
+
+    private CompiledExpression packageInfo(String name, String path, CompiledDataParentType anyInfo) {
         return newData(reflectionDataType(anyInfo, "PackageInfo"),
-                "name", stringLiteral(name),
-                "path", stringLiteral(path)
+                "name", stringLiteral(name == null ? "" : name),
+                "path", stringLiteral(path == null ? "" : path.replaceFirst("^/", ""))
         );
     }
 
@@ -1498,7 +1624,8 @@ public class CapybaraExpressionCompiler {
                 dataType.visibility(),
                 dataType.singleton(),
                 dataType.nativeType(),
-                dataType.enumValue()
+                dataType.enumValue(),
+                dataType.annotations()
         );
     }
 
@@ -1511,7 +1638,8 @@ public class CapybaraExpressionCompiler {
                 parentType.typeParameters(),
                 parentType.comments(),
                 parentType.visibility(),
-                parentType.enumType()
+                parentType.enumType(),
+                parentType.annotations()
         );
     }
 
@@ -1672,6 +1800,45 @@ public class CapybaraExpressionCompiler {
                 .replace("\r", "\\r")
                 .replace("\t", "\\t")
                 + "\"");
+    }
+
+    private static String normalizeAnnotationStringLiteral(String raw) {
+        if (raw.length() < 2) {
+            return "\"" + raw + "\"";
+        }
+        if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            var content = normalizeAnnotationDoubleQuotedContent(raw.substring(1, raw.length() - 1));
+            return "\"" + content
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    + "\"";
+        }
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
+            var content = raw.substring(1, raw.length() - 1)
+                    .replace("\"", "\\\"");
+            return "\"" + content + "\"";
+        }
+        return "\"" + raw
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                + "\"";
+    }
+
+    private static String normalizeAnnotationDoubleQuotedContent(String content) {
+        var normalized = new StringBuilder(content.length());
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '\\' && i + 1 < content.length()) {
+                var next = content.charAt(i + 1);
+                if (next == '"' || next == '\\') {
+                    normalized.append(next);
+                    i++;
+                    continue;
+                }
+            }
+            normalized.append(ch);
+        }
+        return normalized.toString();
     }
 
     private record SingletonDataType(CompiledDataType type, Optional<CompiledDataParentType> enumParent) {
@@ -3367,7 +3534,8 @@ public class CapybaraExpressionCompiler {
                 dataType.visibility(),
                 dataType.singleton(),
                 dataType.nativeType(),
-                dataType.enumValue()
+                dataType.enumValue(),
+                dataType.annotations()
         )));
     }
 
@@ -4120,7 +4288,8 @@ public class CapybaraExpressionCompiler {
                 expectedSubtype.visibility(),
                 expectedSubtype.singleton(),
                 expectedSubtype.nativeType(),
-                expectedSubtype.enumValue()
+                expectedSubtype.enumValue(),
+                expectedSubtype.annotations()
         );
     }
 
@@ -5769,7 +5938,10 @@ public class CapybaraExpressionCompiler {
                 parent.fields(),
                 parent.subTypes(),
                 parent.typeParameters(),
-                canonical.enumType()
+                canonical.comments(),
+                canonical.visibility(),
+                canonical.enumType(),
+                canonical.annotations()
         );
     }
 
@@ -5874,7 +6046,8 @@ public class CapybaraExpressionCompiler {
                     dataType.visibility(),
                     dataType.singleton(),
                     dataType.nativeType(),
-                    dataType.enumValue()
+                    dataType.enumValue(),
+                    dataType.annotations()
             );
         }
         var substitutions = typeParameterSubstitutions(rawDataType.typeParameters(), typeParameters);
@@ -5891,7 +6064,8 @@ public class CapybaraExpressionCompiler {
                 dataType.visibility(),
                 substituted.singleton(),
                 substituted.nativeType(),
-                substituted.enumValue()
+                substituted.enumValue(),
+                substituted.annotations()
         );
     }
 
@@ -5906,7 +6080,10 @@ public class CapybaraExpressionCompiler {
                     parentType.fields(),
                     parentType.subTypes(),
                     typeParameters,
-                    parentType.enumType()
+                    parentType.comments(),
+                    parentType.visibility(),
+                    parentType.enumType(),
+                    parentType.annotations()
             );
         }
         var substitutions = typeParameterSubstitutions(rawParentType.typeParameters(), typeParameters);
@@ -5919,7 +6096,10 @@ public class CapybaraExpressionCompiler {
                 substituted.fields(),
                 substituted.subTypes(),
                 typeParameters,
-                substituted.enumType()
+                substituted.comments(),
+                substituted.visibility(),
+                substituted.enumType(),
+                substituted.annotations()
         );
     }
 
@@ -6588,7 +6768,16 @@ public class CapybaraExpressionCompiler {
         var typeParameters = optionType.typeParameters().isEmpty()
                 ? List.<String>of()
                 : List.of(linkedTypeDescriptor(elementType));
-        return new CompiledDataParentType(optionType.name(), optionType.fields(), optionType.subTypes(), typeParameters);
+        return new CompiledDataParentType(
+                optionType.name(),
+                optionType.fields(),
+                optionType.subTypes(),
+                typeParameters,
+                optionType.comments(),
+                optionType.visibility(),
+                optionType.enumType(),
+                optionType.annotations()
+        );
     }
 
     private CompiledDataParentType findResultType() {
@@ -6603,7 +6792,16 @@ public class CapybaraExpressionCompiler {
         var typeParameters = resultType.typeParameters().isEmpty()
                 ? List.<String>of()
                 : List.of(linkedTypeDescriptor(elementType));
-        return new CompiledDataParentType(resultType.name(), resultType.fields(), resultType.subTypes(), typeParameters);
+        return new CompiledDataParentType(
+                resultType.name(),
+                resultType.fields(),
+                resultType.subTypes(),
+                typeParameters,
+                resultType.comments(),
+                resultType.visibility(),
+                resultType.enumType(),
+                resultType.annotations()
+        );
     }
 
     private boolean isResultOf(CompiledType type, CompiledType elementType) {
@@ -6630,7 +6828,16 @@ public class CapybaraExpressionCompiler {
         var typeParameters = effectType.typeParameters().isEmpty()
                 ? List.<String>of()
                 : List.of(linkedTypeDescriptor(elementType));
-        return new CompiledDataParentType(effectType.name(), effectType.fields(), effectType.subTypes(), typeParameters);
+        return new CompiledDataParentType(
+                effectType.name(),
+                effectType.fields(),
+                effectType.subTypes(),
+                typeParameters,
+                effectType.comments(),
+                effectType.visibility(),
+                effectType.enumType(),
+                effectType.annotations()
+        );
     }
 
     private boolean isResultType(CompiledType type) {
@@ -7050,7 +7257,10 @@ public class CapybaraExpressionCompiler {
                 parent.fields(),
                 parent.subTypes(),
                 specializedDescriptors,
-                parent.enumType()
+                parent.comments(),
+                parent.visibility(),
+                parent.enumType(),
+                parent.annotations()
         );
     }
 
@@ -7690,7 +7900,11 @@ public class CapybaraExpressionCompiler {
             return rawConstructorType.fields();
         }
         return rawConstructorType.fields().stream()
-                .map(field -> new CompiledDataType.CompiledField(field.name(), substituteTypeParameters(field.type(), substitutions)))
+                .map(field -> new CompiledDataType.CompiledField(
+                        field.name(),
+                        substituteTypeParameters(field.type(), substitutions),
+                        field.annotations()
+                ))
                 .toList();
     }
 
@@ -7818,7 +8032,8 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    substituteTypeParameters(field.type(), substitutions)
+                                    substituteTypeParameters(field.type(), substitutions),
+                                    field.annotations()
                             ))
                             .toList(),
                     linkedDataType.typeParameters().stream()
@@ -7831,14 +8046,16 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
                     linkedDataType.nativeType(),
-                    linkedDataType.enumValue()
+                    linkedDataType.enumValue(),
+                    linkedDataType.annotations()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    substituteTypeParameters(field.type(), substitutions)
+                                    substituteTypeParameters(field.type(), substitutions),
+                                    field.annotations()
                             ))
                             .toList(),
                     linkedDataParentType.subTypes().stream()
@@ -7847,7 +8064,10 @@ public class CapybaraExpressionCompiler {
                     linkedDataParentType.typeParameters().stream()
                             .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
                             .toList(),
-                    linkedDataParentType.enumType()
+                    linkedDataParentType.comments(),
+                    linkedDataParentType.visibility(),
+                    linkedDataParentType.enumType(),
+                    linkedDataParentType.annotations()
             );
             default -> type;
         };
@@ -8012,7 +8232,10 @@ public class CapybaraExpressionCompiler {
                                 parentType.fields(),
                                 parentType.subTypes(),
                                 typeArgumentDescriptors,
-                                parentType.enumType()
+                                parentType.comments(),
+                                parentType.visibility(),
+                                parentType.enumType(),
+                                parentType.annotations()
                         );
                     }
                     var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
@@ -8026,7 +8249,10 @@ public class CapybaraExpressionCompiler {
                             substituted.fields(),
                             substituted.subTypes(),
                             typeArgumentDescriptors,
-                            substituted.enumType()
+                            substituted.comments(),
+                            substituted.visibility(),
+                            substituted.enumType(),
+                            substituted.annotations()
                     );
                 }
                 case CompiledDataType dataType -> {
@@ -8040,7 +8266,8 @@ public class CapybaraExpressionCompiler {
                                 dataType.visibility(),
                                 dataType.singleton(),
                                 dataType.nativeType(),
-                                dataType.enumValue()
+                                dataType.enumValue(),
+                                dataType.annotations()
                         );
                     }
                     var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
@@ -8051,7 +8278,8 @@ public class CapybaraExpressionCompiler {
                     var substitutedFields = dataType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    substituteTypeParameters(field.type(), substitutions)
+                                    substituteTypeParameters(field.type(), substitutions),
+                                    field.annotations()
                             ))
                             .toList();
                     yield new CompiledDataType(
@@ -8063,7 +8291,8 @@ public class CapybaraExpressionCompiler {
                             dataType.visibility(),
                             dataType.singleton(),
                             dataType.nativeType(),
-                            dataType.enumValue()
+                            dataType.enumValue(),
+                            dataType.annotations()
                     );
                 }
                 case CompiledPrimitiveBackedType ignored -> throw new IllegalStateException(
@@ -10625,7 +10854,8 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    replaceScopeGenericPlaceholders(field.type(), genericTypeNames)
+                                    replaceScopeGenericPlaceholders(field.type(), genericTypeNames),
+                                    field.annotations()
                             ))
                             .toList(),
                     linkedDataType.typeParameters(),
@@ -10634,21 +10864,26 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
                     linkedDataType.nativeType(),
-                    linkedDataType.enumValue()
+                    linkedDataType.enumValue(),
+                    linkedDataType.annotations()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    replaceScopeGenericPlaceholders(field.type(), genericTypeNames)
+                                    replaceScopeGenericPlaceholders(field.type(), genericTypeNames),
+                                    field.annotations()
                             ))
                             .toList(),
                     linkedDataParentType.subTypes().stream()
                             .map(subType -> (CompiledDataType) replaceScopeGenericPlaceholders(subType, genericTypeNames))
                             .toList(),
                     linkedDataParentType.typeParameters(),
-                    linkedDataParentType.enumType()
+                    linkedDataParentType.comments(),
+                    linkedDataParentType.visibility(),
+                    linkedDataParentType.enumType(),
+                    linkedDataParentType.annotations()
             );
             default -> type;
         };

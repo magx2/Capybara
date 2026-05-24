@@ -1,6 +1,7 @@
 package dev.capylang.parser;
 
 import dev.capylang.compiler.Result;
+import dev.capylang.compiler.parser.AnnotationValue;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.compiler.parser.ObjectOrientedParser;
@@ -12,6 +13,101 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ObjectOrientedParserTest {
+    @Test
+    @DisplayName("should parse declaration annotations")
+    void parseDeclarationAnnotations() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "User",
+                "/parser",
+                """
+                        /// User model
+                        @Entity(table: "users")
+                        open class User(name: String) {
+                            @JsonName(value: "user_name")
+                            field name: String = name
+
+                            @Lifecycle
+                            init {}
+
+                            @Deprecated(since: "1.4")
+                            def print(): String = this.name
+                        }
+
+                        @Contract
+                        interface Printable {
+                            @Deprecated(message: "use display")
+                            def print(): String
+                        }
+
+                        @Mixin
+                        trait Named {
+                            @Internal()
+                            field label: String = "unknown"
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        assertThat(module.objectOriented().definitions())
+                .extracting(ObjectOriented.TypeDeclaration::name)
+                .containsExactly("User", "Printable", "Named");
+
+        var user = (ObjectOriented.ClassDeclaration) module.objectOriented().definitions().getFirst();
+        assertThat(user.comments()).containsExactly("User model");
+        assertThat(user.annotations()).singleElement().satisfies(annotation -> {
+            assertThat(annotation.name()).isEqualTo("Entity");
+            assertThat(annotation.arguments()).singleElement().satisfies(argument -> {
+                assertThat(argument.name()).isEqualTo("table");
+                assertThat(argument.value()).isInstanceOfSatisfying(
+                        AnnotationValue.StringValue.class,
+                        value -> assertThat(value.value()).isEqualTo("\"users\"")
+                );
+            });
+        });
+
+        var field = (ObjectOriented.FieldDeclaration) user.members().getFirst();
+        assertThat(field.annotations()).singleElement().satisfies(annotation -> {
+            assertThat(annotation.name()).isEqualTo("JsonName");
+            assertThat(annotation.arguments()).singleElement().satisfies(argument -> {
+                assertThat(argument.name()).isEqualTo("value");
+                assertThat(argument.value()).isInstanceOfSatisfying(
+                        AnnotationValue.StringValue.class,
+                        value -> assertThat(value.value()).isEqualTo("\"user_name\"")
+                );
+            });
+        });
+
+        var method = (ObjectOriented.MethodDeclaration) user.members().get(2);
+        assertThat(method.annotations()).singleElement().satisfies(annotation -> {
+            assertThat(annotation.name()).isEqualTo("Deprecated");
+            assertThat(annotation.arguments()).singleElement().satisfies(argument -> {
+                assertThat(argument.name()).isEqualTo("since");
+                assertThat(argument.value()).isInstanceOfSatisfying(
+                        AnnotationValue.StringValue.class,
+                        value -> assertThat(value.value()).isEqualTo("\"1.4\"")
+                );
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("should reject comma-separated declaration annotations")
+    void rejectCommaSeparatedDeclarationAnnotations() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Broken",
+                "/parser",
+                """
+                        @A, @B
+                        class Broken {}
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+    }
+
     @Test
     @DisplayName("should parse class trait and interface declarations from .coo source")
     void parseObjectOrientedModule() {

@@ -257,6 +257,129 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldExposeFunctionalAnnotationReflectionMetadataInCommonJs() throws Exception {
+        var program = compileProgram("""
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
+                annotation TypeMarker on data {
+                    label: String
+                    order: int = 1
+                }
+
+                annotation FieldMarker on field {
+                    value: String
+                }
+
+                @TypeMarker(label: "entity", order: 7)
+                data User {
+                    @FieldMarker(value: "identifier")
+                    id: String
+                }
+
+                fun reflected(user: User): DataValueInfo = reflection(user)
+                """);
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var main = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(main.code())
+                .contains("const capy = require(")
+                .contains("module.exports =")
+                .doesNotContain("import ")
+                .doesNotContain("export ");
+
+        var output = runNode("""
+                const m = require('./foo/Main.js');
+                const info = m.reflected(new m.User({ id: 'U-1' }));
+                console.log([
+                    typeof require,
+                    typeof module.exports,
+                    info.annotations[0].name,
+                    info.annotations[0].arguments[0].value.kind,
+                    info.annotations[0].arguments[1].value.value,
+                    info.fields[0].annotations[0].name,
+                    info.fields[0].annotations[0].arguments[0].value.value,
+                    info.fields[0].type.name
+                ].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("function|object|TypeMarker|string|7|FieldMarker|identifier|String");
+    }
+
+    @Test
+    void shouldExposeObjectOrientedAnnotationReflectionMetadataInCommonJs() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "Markers",
+                        "/foo",
+                        """
+                                annotation TypeMarker on class {
+                                    label: String
+                                }
+
+                                annotation FieldMarker on field {
+                                    value: String
+                                }
+
+                                annotation MethodMarker on method {
+                                    value: String
+                                }
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "Thing",
+                        "/foo",
+                        """
+                                from /foo/Markers import { TypeMarker, FieldMarker, MethodMarker }
+
+                                @TypeMarker(label: "entity")
+                                class Thing(name: String) {
+                                    @FieldMarker(value: "display_name")
+                                    field name: String = name
+
+                                    @MethodMarker(value: "greet")
+                                    def greet(): String = this.name
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var thing = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "Thing.js")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(thing.code())
+                .contains("const capy = require(")
+                .contains("module.exports =")
+                .doesNotContain("import ")
+                .doesNotContain("export ");
+
+        var output = runNode("""
+                const { Thing } = require('./foo/Thing.js');
+                const info = Thing.type();
+                console.log([
+                    info.annotations[0].name,
+                    info.annotations[0].arguments[0].value.value,
+                    info.fields[0].annotations[0].name,
+                    info.fields[0].annotations[0].arguments[0].value.value,
+                    info.methods[0].annotations[0].name,
+                    info.methods[0].annotations[0].arguments[0].value.value
+                ].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("TypeMarker|entity|FieldMarker|display_name|MethodMarker|greet");
+    }
+
+    @Test
     void shouldWrapIntArithmeticLikeJava() throws Exception {
         var program = compileProgram("""
                 const MAX_INT: int = 2147483647

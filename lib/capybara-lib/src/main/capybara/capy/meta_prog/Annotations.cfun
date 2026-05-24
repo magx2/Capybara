@@ -1,0 +1,5 @@
+/// Marks a declaration as deprecated while preserving it for compatibility.
+annotation Deprecated on fun, method, const, data, union, enum, type, deriver, class, interface, trait, field, init {
+    message: String
+    since: String = ""
+}

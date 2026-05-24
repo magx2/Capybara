@@ -4,6 +4,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 enum PathRoot { RELATIVE, ABSOLUTE, HOME }
 
@@ -14,7 +15,8 @@ data Path {
 }
 
 fun from_string(path_string: String): Path =
-    fun rec segments(value: String, current: String, acc: List[String]): List[String] =
+    @Recursive
+    fun segments(value: String, current: String, acc: List[String]): List[String] =
         match value[0] with
         case None ->
             if current == ""
@@ -90,7 +92,8 @@ fun Path.is_absolute(): bool =
 fun Path.is_root(): bool = this.segments.size() == EMPTY
 
 fun Path.normalize(): Path =
-    fun rec normalize_path(root: PathRoot, segments: List[String], acc: List[String]): List[String] =
+    @Recursive
+    fun normalize_path(root: PathRoot, segments: List[String], acc: List[String]): List[String] =
         match segments[0] with
         case None -> acc
         case Some { seg } ->

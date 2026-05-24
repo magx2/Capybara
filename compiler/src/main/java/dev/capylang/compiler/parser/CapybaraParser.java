@@ -391,7 +391,7 @@ public class CapybaraParser {
 
     private List<SourcePosition> findLocalFunctionLocations(String source, String localName) {
         var locations = new ArrayList<SourcePosition>();
-        var pattern = Pattern.compile("(^|\\R)([ \\t]*)fun\\s+(?:rec\\s+)?" + Pattern.quote(localName) + "\\s*\\(");
+        var pattern = Pattern.compile("(^|\\R)([ \\t]*)fun\\s+" + Pattern.quote(localName) + "\\s*\\(");
         var matcher = pattern.matcher(source);
         while (matcher.find()) {
             var prefix = source.substring(0, matcher.start(2));
@@ -428,6 +428,11 @@ public class CapybaraParser {
             return List.of(deriverDeclaration(deriverDeclaration));
         }
 
+        var annotationDeclaration = context.annotationDeclaration();
+        if (annotationDeclaration != null) {
+            return List.of(annotationDeclaration(annotationDeclaration));
+        }
+
         var primitiveBackedTypeDeclaration = context.primitiveBackedTypeDeclaration();
         if (primitiveBackedTypeDeclaration != null) {
             return List.of(primitiveBackedTypeDeclaration(primitiveBackedTypeDeclaration));
@@ -461,7 +466,8 @@ public class CapybaraParser {
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility(context.VISIBILITY()),
-                position(context)
+                position(context),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -485,7 +491,8 @@ public class CapybaraParser {
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility(context.VISIBILITY()),
-                position(context)
+                position(context),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -506,7 +513,8 @@ public class CapybaraParser {
                         .toList(),
                 visibility(context.VISIBILITY()),
                 nativeType,
-                position(context)
+                position(context),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -520,7 +528,8 @@ public class CapybaraParser {
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility(context.VISIBILITY()),
-                position(context)
+                position(context),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -535,8 +544,100 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
+                position(context),
+                annotations(context.annotationBlock())
+        );
+    }
+
+    private AnnotationDeclaration annotationDeclaration(FunctionalParser.AnnotationDeclarationContext context) {
+        return new AnnotationDeclaration(
+                context.TYPE().getText(),
+                context.annotationTargetClause().annotationTarget().stream()
+                        .map(this::annotationTarget)
+                        .toList(),
+                context.annotationBody().annotationFieldDeclaration().stream()
+                        .map(this::annotationFieldDeclaration)
+                        .toList(),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
+                visibility(context.VISIBILITY()),
+                position(context),
+                annotations(context.annotationBlock())
+        );
+    }
+
+    private AnnotationTarget annotationTarget(FunctionalParser.AnnotationTargetContext context) {
+        return new AnnotationTarget(context.getText(), position(context));
+    }
+
+    private AnnotationFieldDeclaration annotationFieldDeclaration(FunctionalParser.AnnotationFieldDeclarationContext context) {
+        return new AnnotationFieldDeclaration(
+                identifier(context.identifier()),
+                context.annotationFieldType().getText(),
+                Optional.ofNullable(context.annotationValue()).map(this::annotationValue),
                 position(context)
         );
+    }
+
+    private List<AnnotationUsage> annotations(List<FunctionalParser.AnnotationBlockContext> contexts) {
+        return contexts.stream()
+                .map(this::annotationBlock)
+                .toList();
+    }
+
+    private AnnotationUsage annotationBlock(FunctionalParser.AnnotationBlockContext context) {
+        return new AnnotationUsage(
+                annotationName(context.annotationName()),
+                annotationArguments(context.annotationArgumentList()),
+                position(context)
+        );
+    }
+
+    private String annotationName(FunctionalParser.AnnotationNameContext context) {
+        return context.getText();
+    }
+
+    private List<AnnotationArgument> annotationArguments(FunctionalParser.AnnotationArgumentListContext context) {
+        if (context == null) {
+            return List.of();
+        }
+        return context.annotationArgument().stream()
+                .map(this::annotationArgument)
+                .toList();
+    }
+
+    private AnnotationArgument annotationArgument(FunctionalParser.AnnotationArgumentContext context) {
+        return new AnnotationArgument(
+                identifier(context.identifier()),
+                annotationValue(context.annotationValue()),
+                position(context)
+        );
+    }
+
+    private AnnotationValue annotationValue(FunctionalParser.AnnotationValueContext context) {
+        if (context.STRING_LITERAL() != null) {
+            return new AnnotationValue.StringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
+        }
+        if (context.INT_LITERAL() != null) {
+            return new AnnotationValue.IntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
+        }
+        if (context.LONG_LITERAL() != null) {
+            return new AnnotationValue.LongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
+        }
+        if (context.FLOAT_LITERAL() != null) {
+            return new AnnotationValue.FloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
+        }
+        if (context.DOUBLE_LITERAL() != null) {
+            return new AnnotationValue.DoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
+        }
+        if (context.BOOL_LITERAL() != null) {
+            return new AnnotationValue.BoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
+        }
+        if (context.NOTHING_LITERAL() != null) {
+            return new AnnotationValue.NothingValue(position(context.NOTHING_LITERAL()));
+        }
+        return new AnnotationValue.TypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
     }
 
     private List<DeriveDirective> deriveClause(FunctionalParser.DeriveClauseContext context) {
@@ -564,7 +665,8 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                position(context)
+                position(context),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -582,7 +684,9 @@ public class CapybaraParser {
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility,
-                position(context)
+                position(context),
+                false,
+                annotations(context.annotationBlock())
         );
     }
 
@@ -597,7 +701,11 @@ public class CapybaraParser {
         if (context.SPREAD() != null) {
             throw new IllegalStateException("Spread field declaration is not allowed in this context: " + context.getText());
         }
-        return new DataDeclaration.DataField(fieldName(context.identifier(), context.STRING_LITERAL()), type(context.type()));
+        return new DataDeclaration.DataField(
+                fieldName(context.identifier(), context.STRING_LITERAL()),
+                type(context.type()),
+                annotations(context.annotationBlock())
+        );
     }
 
     private List<Definition> functionDeclaration(dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
@@ -768,7 +876,8 @@ public class CapybaraParser {
                         .toList(),
                 visibility,
                 position(functionDeclarationContext),
-                functionDeclarationContext.recFunctionMarker() != null
+                false,
+                annotations(functionDeclarationContext.annotationBlock())
         );
         var allDefinitions = new java.util.ArrayList<Definition>(1 + extractedLocalDefinitions.size());
         allDefinitions.add(topLevelFunction);
@@ -809,7 +918,8 @@ public class CapybaraParser {
                         .toList(),
                 null,
                 position(context),
-                context.recFunctionMarker() != null
+                false,
+                annotations(context.annotationBlock())
         );
     }
 
@@ -859,7 +969,8 @@ public class CapybaraParser {
                 .flatMap(Collection::stream)
                 .map(field -> new DataDeclaration.DataField(
                         field.name(),
-                        rewriteLocalTypeNames(field.type(), localTypeNameMap)))
+                        rewriteLocalTypeNames(field.type(), localTypeNameMap),
+                        field.annotations()))
                 .toList();
         var subTypes = context.genericTypeDeclaration().stream()
                 .skip(1)
@@ -899,7 +1010,8 @@ public class CapybaraParser {
                 dataFields.fields().stream()
                         .map(field -> new DataDeclaration.DataField(
                                 field.name(),
-                                rewriteLocalTypeNames(field.type(), localTypeNameMap)
+                                rewriteLocalTypeNames(field.type(), localTypeNameMap),
+                                field.annotations()
                         ))
                         .toList(),
                 dataFields.extendsTypes().stream()
@@ -2467,9 +2579,7 @@ public class CapybaraParser {
                 ? identifier(context.identifier())
                 : context.NAME() != null
                         ? context.NAME().getText()
-                        : context.REC() != null
-                                ? context.REC().getText()
-                                : context.getChild(0).getText();
+                        : context.getChild(0).getText();
         return new FunctionCall(moduleName, functionName, arguments, position(context));
     }
 

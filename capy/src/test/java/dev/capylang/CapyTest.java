@@ -118,6 +118,45 @@ class CapyTest {
     }
 
     @Test
+    void shouldWriteAnnotationMetadataToLinkedJsonDeterministically() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("annotation-linked-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), """
+                annotation Label on fun, data {
+                    value: String
+                    order: int = 1
+                }
+
+                @Label(value: "user")
+                data User { name: String }
+
+                @Label(order: 2, value: "main")
+                fun main(): int = 1
+                """);
+        var linkedDir = Files.createDirectories(tempDir.resolve("annotation-linked-output"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var moduleJson = linkedDir.resolve("foo").resolve("Main.json");
+        var first = Files.readString(moduleJson);
+        assertTrue(first.contains("\"annotations\""));
+        assertTrue(first.contains("\"name\" : \"Label\""));
+        assertTrue(first.contains("\"packageName\" : \"Main\""));
+        assertTrue(first.contains("\"packagePath\" : \"foo\""));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+        assertEquals(first, Files.readString(moduleJson));
+    }
+
+    @Test
     void shouldCompileGenerateObjectOrientedFilesToJava() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("oo-source-input"));
         Files.createDirectories(sourceDir.resolve("foo"));

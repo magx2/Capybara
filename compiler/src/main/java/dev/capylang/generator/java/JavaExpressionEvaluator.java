@@ -3356,14 +3356,20 @@ public class JavaExpressionEvaluator {
                     current
             ).popExpression();
             current = fieldValue.scope();
-            fields.add(new JavaDataValueInfo.Field(field.name(), field.type(), fieldValue.expression()));
+            fields.add(new JavaDataValueInfo.Field(
+                    field.name(),
+                    field.type(),
+                    fieldValue.expression(),
+                    field.annotations()
+            ));
         }
 
         var expression = ReflectionValueInfoJava.dataValueInfoExpression(new JavaDataValueInfo(
                 reflectionValue.name(),
                 reflectionValue.packageName(),
                 reflectionValue.packagePath(),
-                fields
+                fields,
+                reflectionValue.annotations()
         ));
         return current.addExpression(expression);
     }

@@ -1012,6 +1012,8 @@ final class ObjectOrientedJavaScriptGenerator {
                    + renderReflectionMethods(context, declaration.members(), full)
                    + ", parents: "
                    + renderReflectionParents(context, declaration.parents(), full)
+                   + ", annotations: "
+                   + JavaScriptGenerator.renderAnnotations(declaration.linkedAnnotations())
                    + " }";
         }
         if (declaration instanceof ObjectOriented.TraitDeclaration) {
@@ -1023,6 +1025,8 @@ final class ObjectOrientedJavaScriptGenerator {
                    + renderReflectionMethods(context, declaration.members(), full)
                    + ", parents: "
                    + renderReflectionParents(context, declaration.parents(), full)
+                   + ", annotations: "
+                   + JavaScriptGenerator.renderAnnotations(declaration.linkedAnnotations())
                    + " }";
         }
         var classDeclaration = (ObjectOriented.ClassDeclaration) declaration;
@@ -1042,6 +1046,8 @@ final class ObjectOrientedJavaScriptGenerator {
                + renderReflectionMethods(context, declaration.members(), full)
                + ", parents: "
                + renderReflectionParents(context, declaration.parents(), full)
+               + ", annotations: "
+               + JavaScriptGenerator.renderAnnotations(declaration.linkedAnnotations())
                + " }";
     }
 
@@ -1069,6 +1075,8 @@ final class ObjectOrientedJavaScriptGenerator {
                               + JavaScriptGenerator.jsString(field.name())
                               + ", type: "
                               + renderReflectionTypeInfo(context, field.type())
+                              + ", annotations: "
+                              + JavaScriptGenerator.renderAnnotations(field.linkedAnnotations())
                               + " }")
                 .collect(joining(", ", "[", "]"));
     }
@@ -1093,6 +1101,8 @@ final class ObjectOrientedJavaScriptGenerator {
                                + renderReflectionParams(context, method.parameters())
                                + ", return_type: "
                                + renderReflectionTypeInfo(context, method.returnType())
+                               + ", annotations: "
+                               + JavaScriptGenerator.renderAnnotations(method.linkedAnnotations())
                                + " }")
                 .collect(joining(", ", "[", "]"));
     }
@@ -1106,6 +1116,7 @@ final class ObjectOrientedJavaScriptGenerator {
                                   + JavaScriptGenerator.jsString(parameter.name())
                                   + ", type: "
                                   + renderReflectionTypeInfo(context, parameter.type())
+                                  + ", annotations: []"
                                   + " }")
                 .collect(joining(", ", "[", "]"));
     }
@@ -1113,19 +1124,19 @@ final class ObjectOrientedJavaScriptGenerator {
     private String renderReflectionTypeInfo(RenderContext context, String rawType) {
         var trimmed = rawType.trim();
         if (trimmed.endsWith("[]")) {
-            return "{ kind: 'list', name: 'array', pkg: " + renderEmptyReflectionPackage()
+            return "{ kind: 'list', name: 'array', pkg: " + JavaScriptGenerator.renderEmptyReflectionPackage()
                    + ", element_type: " + renderReflectionTypeInfo(context, trimmed.substring(0, trimmed.length() - 2)) + " }";
         }
         if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
-            return "{ kind: 'list', name: 'List', pkg: " + renderEmptyReflectionPackage()
+            return "{ kind: 'list', name: 'List', pkg: " + JavaScriptGenerator.renderEmptyReflectionPackage()
                    + ", element_type: " + renderReflectionTypeInfo(context, trimmed.substring(5, trimmed.length() - 1)) + " }";
         }
         if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
-            return "{ kind: 'set', name: 'Set', pkg: " + renderEmptyReflectionPackage()
+            return "{ kind: 'set', name: 'Set', pkg: " + JavaScriptGenerator.renderEmptyReflectionPackage()
                    + ", element_type: " + renderReflectionTypeInfo(context, trimmed.substring(4, trimmed.length() - 1)) + " }";
         }
         if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
-            return "{ kind: 'dict', name: 'Dict', pkg: " + renderEmptyReflectionPackage()
+            return "{ kind: 'dict', name: 'Dict', pkg: " + JavaScriptGenerator.renderEmptyReflectionPackage()
                    + ", value_type: " + renderReflectionTypeInfo(context, trimmed.substring(5, trimmed.length() - 1)) + " }";
         }
         if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
@@ -1133,12 +1144,20 @@ final class ObjectOrientedJavaScriptGenerator {
             var elements = splitTopLevel(inner).stream()
                     .map(type -> renderReflectionTypeInfo(context, type))
                     .collect(joining(", ", "[", "]"));
-            return "{ kind: 'tuple', name: 'Tuple', pkg: " + renderEmptyReflectionPackage() + ", elements: " + elements + " }";
+            return "{ kind: 'tuple', name: 'Tuple', pkg: " + JavaScriptGenerator.renderEmptyReflectionPackage() + ", elements: " + elements + " }";
+        }
+        if (isPrimitiveReflectionType(trimmed)) {
+            return "{ kind: 'data', name: "
+                   + JavaScriptGenerator.jsString(trimmed)
+                   + ", pkg: "
+                   + JavaScriptGenerator.renderEmptyReflectionPackage()
+                   + ", annotations: [] }";
         }
         return "{ kind: 'data', name: "
                + JavaScriptGenerator.jsString(JavaScriptGenerator.simpleTypeName(trimmed))
                + ", pkg: "
                + renderReflectionPackageForType(context.module(), trimmed)
+               + ", annotations: []"
                + " }";
     }
 
@@ -1147,7 +1166,7 @@ final class ObjectOrientedJavaScriptGenerator {
                + JavaScriptGenerator.jsString(name)
                + ", pkg: "
                + renderReflectionPackageForType(context.module(), name)
-               + ", open: false, fields: [], methods: [], parents: [] }";
+               + ", open: false, fields: [], methods: [], parents: [], annotations: [] }";
     }
 
     private String renderReflectionPackage(ObjectOrientedModule module) {
@@ -1167,8 +1186,11 @@ final class ObjectOrientedJavaScriptGenerator {
         return renderReflectionPackage(module);
     }
 
-    private String renderEmptyReflectionPackage() {
-        return "{ name: '', path: '' }";
+    private boolean isPrimitiveReflectionType(String type) {
+        return switch (type) {
+            case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void", "nothing" -> true;
+            default -> false;
+        };
     }
 
     private boolean isNumericLiteral(String value) {

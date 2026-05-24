@@ -1,0 +1,19 @@
+annotation ImportedAnnotationMarker on data, field, fun, method {}
+
+annotation ImportedDataLabel on data {
+    label: String
+    order: int = 1
+    active: bool = true
+}
+
+annotation ImportedFieldName on field {
+    value: String
+}
+
+annotation ImportedFunctionLabel on fun {
+    value: String
+}
+
+annotation ImportedMethodLabel on method {
+    value: String
+}

@@ -1,26 +1,32 @@
 from /capy/lang/Result import { Result, Success, Error }
 from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
-fun rec sum(n: int, acc: int): int =
+@Recursive
+fun sum(n: int, acc: int): int =
     if n <= 0 then acc else sum(n - 1, acc + n)
 
 fun sum_inner(n: int): int =
-    fun rec sum(n: int, acc: int): int =
+    @Recursive
+    fun sum(n: int, acc: int): int =
         if n <= 0 then acc else sum(n - 1, acc + n)
     ---
     sum(n, 0)
 
-fun rec sum_with_let(n: int, acc: int): int =
+@Recursive
+fun sum_with_let(n: int, acc: int): int =
     let next_n = n - 1
     let next_acc = acc + n
     if n <= 0 then acc else sum_with_let(next_n, next_acc)
 
-fun rec sum_with_match(n: int, acc: int): int =
+@Recursive
+fun sum_with_match(n: int, acc: int): int =
     match n <= 0 with
     case true -> acc
     case false -> sum_with_match(n - 1, acc + n)
 
-fun rec factorial_large(n: int, acc: int): int =
+@Recursive
+fun factorial_large(n: int, acc: int): int =
     if n <= 1 then acc else factorial_large(n - 1, acc * n)
 
 fun unmarked_tail_sum(n: int, acc: int): int =
@@ -44,7 +50,8 @@ fun unmarked_local_tail_factorial_large(n: int): int =
 fun unmarked_non_tail_sum(n: int): int =
     if n <= 0 then 0 else n + unmarked_non_tail_sum(n - 1)
 
-fun rec sum_present_values(values: List[int], acc: int): int =
+@Recursive
+fun sum_present_values(values: List[int], acc: int): int =
     match values[0] with
     case Some { value } -> sum_present_values(values[1:], acc + value)
     case None -> acc
@@ -54,7 +61,8 @@ private fun parse_length(value: String): Result[int] =
     then Error { message: "bad length" }
     else Success { value: value.size() }
 
-fun rec sum_lengths_until_error(values: List[String], acc: int): String =
+@Recursive
+fun sum_lengths_until_error(values: List[String], acc: int): String =
     match values[0] with
     case Some { value } ->
         {

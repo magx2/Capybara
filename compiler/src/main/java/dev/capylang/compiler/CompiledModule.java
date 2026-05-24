@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.AnnotationDeclaration;
 import dev.capylang.compiler.parser.DeriverDeclaration;
 
 import java.util.Collection;
@@ -18,6 +19,7 @@ public record CompiledModule(
         SortedMap<String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes,
         SortedSet<CompiledFunction> functions,
         SortedMap<String, DeriverDeclaration> derivers,
+        SortedMap<String, AnnotationDeclaration> annotations,
         SortedSet<StaticImport> staticImports) implements Comparable<CompiledModule> {
 
     public static final String EXTENSION = ".json";
@@ -29,7 +31,7 @@ public record CompiledModule(
             Collection<CompiledFunction> functions,
             Collection<StaticImport> staticImports
     ) {
-        this(name, path, types, functions, Map.of(), Map.of(), staticImports);
+        this(name, path, types, functions, Map.of(), Map.of(), Map.of(), staticImports);
     }
 
     public CompiledModule(
@@ -40,7 +42,7 @@ public record CompiledModule(
             Map<String, DeriverDeclaration> derivers,
             Collection<StaticImport> staticImports
     ) {
-        this(name, path, types, functions, derivers, Map.of(), staticImports);
+        this(name, path, types, functions, derivers, Map.of(), Map.of(), staticImports);
     }
 
     public CompiledModule(
@@ -52,6 +54,19 @@ public record CompiledModule(
             Map<String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes,
             Collection<StaticImport> staticImports
     ) {
+        this(name, path, types, functions, derivers, visiblePrimitiveBackedTypes, Map.of(), staticImports);
+    }
+
+    public CompiledModule(
+            String name,
+            String path,
+            Map<String, GenericDataType> types,
+            Collection<CompiledFunction> functions,
+            Map<String, DeriverDeclaration> derivers,
+            Map<String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes,
+            Map<String, AnnotationDeclaration> annotations,
+            Collection<StaticImport> staticImports
+    ) {
         this(
                 name,
                 path,
@@ -59,6 +74,7 @@ public record CompiledModule(
                 new TreeMap<>(visiblePrimitiveBackedTypes),
                 new TreeSet<>(functions),
                 new TreeMap<>(derivers),
+                new TreeMap<>(annotations),
                 new TreeSet<>(staticImports)
         );
     }
@@ -68,6 +84,7 @@ public record CompiledModule(
         visiblePrimitiveBackedTypes = visiblePrimitiveBackedTypes == null ? new TreeMap<>() : new TreeMap<>(visiblePrimitiveBackedTypes);
         functions = new TreeSet<>(functions);
         derivers = derivers == null ? new TreeMap<>() : new TreeMap<>(derivers);
+        annotations = annotations == null ? new TreeMap<>() : new TreeMap<>(annotations);
         staticImports = new TreeSet<>(staticImports);
     }
 

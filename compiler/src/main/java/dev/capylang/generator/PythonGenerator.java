@@ -1,9 +1,15 @@
 package dev.capylang.generator;
 
 import dev.capylang.compiler.CollectionLinkedType;
+import dev.capylang.compiler.CompiledAnnotation;
+import dev.capylang.compiler.CompiledAnnotationValue;
+import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunction;
+import dev.capylang.compiler.CompiledFunctionType;
+import dev.capylang.compiler.CompiledGenericTypeParameter;
 import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledTupleType;
@@ -15,6 +21,7 @@ import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.generator.java.JavaAstBuilder;
 import dev.capylang.generator.java.JavaClass;
 import dev.capylang.generator.java.JavaConst;
+import dev.capylang.generator.java.JavaDataValueInfo;
 import dev.capylang.generator.java.JavaEnum;
 import dev.capylang.generator.java.JavaMethod;
 import dev.capylang.generator.java.JavaRecord;
@@ -232,14 +239,17 @@ public final class PythonGenerator implements Generator {
             code.append("    def __str__(self):\n");
             code.append("        return self.toString()\n\n");
             code.append("    def capybaraDataValueInfo(self):\n");
+            var dataValueInfo = record.dataValueInfo();
             code.append("        return capy.data_value_info(self, ")
-                    .append(pyString(capybaraName))
+                    .append(pyString(dataValueInfo.name()))
                     .append(", ")
-                    .append(pyString(moduleInfo.packageName()))
+                    .append(pyString(dataValueInfo.packageName()))
                     .append(", ")
-                    .append(pyString(moduleInfo.packagePath()))
+                    .append(pyString(dataValueInfo.packagePath()))
                     .append(", ")
-                    .append(pyArray(record.fields().stream().map(JavaRecord.JavaRecordField::name).toList()))
+                    .append(renderDataValueFieldDescriptors(dataValueInfo.fields(), dataValueInfo.packagePath()))
+                    .append(", ")
+                    .append(renderAnnotations(dataValueInfo.annotations()))
                     .append(")\n\n");
             for (var method : record.methods()) {
                 code.append(renderFunction(method, false));
@@ -281,14 +291,16 @@ public final class PythonGenerator implements Generator {
             var values = javaEnum.values().isEmpty() ? List.of("INSTANCE") : javaEnum.values();
             var code = new StringBuilder();
             if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
+                var dataValueInfo = javaEnum.dataValueInfos().getFirst();
                 code.append(enumName)
                         .append(" = capy.enum_value(")
                         .append(pyString(capybaraName)).append(", ")
                         .append(pyString(capybaraName)).append(", ")
                         .append(pyArray(programContext.parentTypes(enumName))).append(", ")
                         .append("0, [], ")
-                        .append(pyString(moduleInfo.packageName())).append(", ")
-                        .append(pyString(moduleInfo.packagePath()))
+                        .append(pyString(dataValueInfo.packageName())).append(", ")
+                        .append(pyString(dataValueInfo.packagePath())).append(", ")
+                        .append(renderDataValueMetadata(dataValueInfo))
                         .append(")\n");
                 exportNames.add(enumName);
                 return code.toString();
@@ -303,14 +315,16 @@ public final class PythonGenerator implements Generator {
                 if (!valueName.equals(capybaraValueName)) {
                     aliases.add(valueName);
                 }
+                var dataValueInfo = javaEnum.dataValueInfos().get(i);
                 code.append("    capy.enum_value(")
                         .append(pyString(capybaraValueName)).append(", ")
                         .append(pyString(capybaraName)).append(", ")
                         .append(pyArray(programContext.parentTypes(valueName))).append(", ")
                         .append(i).append(", ")
                         .append(pyArray(aliases)).append(", ")
-                        .append(pyString(moduleInfo.packageName())).append(", ")
-                        .append(pyString(moduleInfo.packagePath())).append("),\n");
+                        .append(pyString(dataValueInfo.packageName())).append(", ")
+                        .append(pyString(dataValueInfo.packagePath())).append(", ")
+                        .append(renderDataValueMetadata(dataValueInfo)).append("),\n");
             }
             code.append("]\n");
             code.append("class ").append(enumName).append(":\n");
@@ -1120,7 +1134,8 @@ public final class PythonGenerator implements Generator {
                    + pyString(reflectionValue.name()) + ", "
                    + pyString(reflectionValue.packageName()) + ", "
                    + pyString(reflectionValue.packagePath()) + ", "
-                   + pyArray(reflectionValue.fields().stream().map(CompiledReflectionValue.Field::name).toList())
+                   + renderReflectionFieldDescriptors(reflectionValue.fields(), reflectionValue.packagePath()) + ", "
+                   + renderAnnotations(reflectionValue.annotations())
                    + ")";
         }
 
@@ -1432,6 +1447,252 @@ public final class PythonGenerator implements Generator {
             }
             return base + "_p" + idx;
         }
+    }
+
+    private static String renderDataValueMetadata(JavaDataValueInfo dataValueInfo) {
+        return "{'fields': "
+               + renderDataValueFieldDescriptors(dataValueInfo.fields(), dataValueInfo.packagePath())
+               + ", 'annotations': "
+               + renderAnnotations(dataValueInfo.annotations())
+               + "}";
+    }
+
+    private static String renderDataValueFieldDescriptors(List<JavaDataValueInfo.Field> fields, String fallbackPackagePath) {
+        if (fields.isEmpty()) {
+            return "[]";
+        }
+        return fields.stream()
+                .map(field -> "capy.field_info("
+                              + pyString(field.name())
+                              + ", "
+                              + renderReflectionTypeInfo(field.type(), fallbackPackagePath)
+                              + ", annotations="
+                              + renderAnnotations(field.annotations())
+                              + ")")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private static String renderReflectionFieldDescriptors(List<CompiledReflectionValue.Field> fields, String fallbackPackagePath) {
+        if (fields.isEmpty()) {
+            return "[]";
+        }
+        return fields.stream()
+                .map(field -> "capy.field_info("
+                              + pyString(field.name())
+                              + ", "
+                              + renderReflectionTypeInfo(field.type(), fallbackPackagePath)
+                              + ", annotations="
+                              + renderAnnotations(field.annotations())
+                              + ")")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    static String renderReflectionTypeInfo(CompiledType type, String fallbackPackagePath) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive ->
+                    renderDataInfo(primitiveReflectionTypeName(primitive), renderEmptyReflectionPackage(), List.of());
+            case CollectionLinkedType.CompiledList listType ->
+                    "capy.type_info('list', 'List', pkg=" + renderEmptyReflectionPackage()
+                    + ", element_type=" + renderReflectionTypeInfo(listType.elementType(), fallbackPackagePath) + ")";
+            case CollectionLinkedType.CompiledSet setType ->
+                    "capy.type_info('set', 'Set', pkg=" + renderEmptyReflectionPackage()
+                    + ", element_type=" + renderReflectionTypeInfo(setType.elementType(), fallbackPackagePath) + ")";
+            case CollectionLinkedType.CompiledDict dictType ->
+                    "capy.type_info('dict', 'Dict', pkg=" + renderEmptyReflectionPackage()
+                    + ", value_type=" + renderReflectionTypeInfo(dictType.valueType(), fallbackPackagePath) + ")";
+            case CompiledTupleType tupleType -> {
+                var elements = tupleType.elementTypes().stream()
+                        .map(elementType -> renderReflectionTypeInfo(elementType, fallbackPackagePath))
+                        .collect(joining(", ", "[", "]"));
+                yield "capy.type_info('tuple', 'Tuple', pkg=" + renderEmptyReflectionPackage()
+                      + ", elements=" + elements + ")";
+            }
+            case CompiledFunctionType functionType -> {
+                var shape = flattenReflectionFunctionType(functionType);
+                var params = shape.parameterTypes().stream()
+                        .map(parameterType -> renderReflectionTypeInfo(parameterType, fallbackPackagePath))
+                        .collect(joining(", ", "[", "]"));
+                yield "capy.type_info('function', 'function', pkg=" + renderEmptyReflectionPackage()
+                      + ", params=" + params
+                      + ", return_type=" + renderReflectionTypeInfo(shape.returnType(), fallbackPackagePath)
+                      + ")";
+            }
+            case CompiledGenericTypeParameter genericTypeParameter ->
+                    renderDataInfo(genericTypeParameter.name(), renderEmptyReflectionPackage(), List.of());
+            case CompiledPrimitiveBackedType primitiveBackedType ->
+                    renderReflectionTypeInfo(primitiveBackedType.backingType(), fallbackPackagePath);
+            case CompiledDataParentType parentType ->
+                    renderDataInfo(
+                            simpleReflectionTypeName(parentType.name()),
+                            renderReflectionPackageForType(parentType.name(), fallbackPackagePath),
+                            parentType.annotations()
+                    );
+            case CompiledDataType dataType ->
+                    renderDataInfo(
+                            simpleReflectionTypeName(dataType.name()),
+                            renderReflectionPackageForType(dataType.name(), fallbackPackagePath),
+                            dataType.annotations()
+                    );
+            case CompiledObjectType objectType ->
+                    renderDataInfo(
+                            simpleReflectionTypeName(objectType.name()),
+                            renderReflectionPackageForType(objectType.name(), fallbackPackagePath),
+                            objectType.annotations()
+                    );
+        };
+    }
+
+    private static ReflectionFunctionShape flattenReflectionFunctionType(CompiledFunctionType functionType) {
+        var parameterTypes = new ArrayList<CompiledType>();
+        CompiledType current = functionType;
+        while (current instanceof CompiledFunctionType currentFunctionType) {
+            parameterTypes.add(currentFunctionType.argumentType());
+            current = currentFunctionType.returnType();
+        }
+        return new ReflectionFunctionShape(List.copyOf(parameterTypes), current);
+    }
+
+    private static String renderDataInfo(String name, String pkg, List<CompiledAnnotation> annotations) {
+        return "capy.type_info('data', "
+               + pyString(name)
+               + ", pkg="
+               + pkg
+               + ", annotations="
+               + renderAnnotations(annotations)
+               + ")";
+    }
+
+    private static String primitiveReflectionTypeName(PrimitiveLinkedType type) {
+        return type == PrimitiveLinkedType.STRING
+                ? "String"
+                : type.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    static String renderAnnotations(List<CompiledAnnotation> annotations) {
+        if (annotations == null || annotations.isEmpty()) {
+            return "[]";
+        }
+        return annotations.stream()
+                .map(PythonGenerator::renderAnnotation)
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private static String renderAnnotation(CompiledAnnotation annotation) {
+        var arguments = annotation.arguments().stream()
+                .map(argument -> "capy.annotation_argument_info("
+                                 + pyString(argument.name())
+                                 + ", "
+                                 + renderAnnotationValue(argument.value())
+                                 + ")")
+                .collect(joining(", ", "[", "]"));
+        return "capy.annotation_info("
+               + pyString(annotation.name())
+               + ", pkg="
+               + renderReflectionPackage(annotation.packageName(), annotation.packagePath())
+               + ", arguments="
+               + arguments
+               + ")";
+    }
+
+    private static String renderAnnotationValue(CompiledAnnotationValue value) {
+        return switch (value) {
+            case CompiledAnnotationValue.StringValue stringValue ->
+                    "capy.annotation_value('string', " + pyString(normalizeAnnotationStringValue(stringValue.value())) + ")";
+            case CompiledAnnotationValue.IntValue intValue ->
+                    "capy.annotation_value('int', " + JavaScriptGenerator.stripNumericSuffix(intValue.value()) + ")";
+            case CompiledAnnotationValue.LongValue longValue ->
+                    "capy.annotation_value('long', " + renderLongLiteral(longValue.value()) + ")";
+            case CompiledAnnotationValue.DoubleValue doubleValue ->
+                    "capy.annotation_value('double', " + JavaScriptGenerator.stripNumericSuffix(doubleValue.value()) + ")";
+            case CompiledAnnotationValue.FloatValue floatValue ->
+                    "capy.annotation_value('float', " + JavaScriptGenerator.stripNumericSuffix(floatValue.value()) + ")";
+            case CompiledAnnotationValue.BoolValue boolValue ->
+                    "capy.annotation_value('bool', " + pyBool(boolValue.value()) + ")";
+            case CompiledAnnotationValue.TypeNameValue typeNameValue ->
+                    "capy.annotation_value('type_name', " + pyString(typeNameValue.name()) + ")";
+            case CompiledAnnotationValue.NothingValue ignored ->
+                    "capy.annotation_value('nothing')";
+        };
+    }
+
+    private static String normalizeAnnotationStringValue(String raw) {
+        if (raw.length() < 2) {
+            return raw;
+        }
+        if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            return normalizeAnnotationDoubleQuotedContent(raw.substring(1, raw.length() - 1));
+        }
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
+            return raw.substring(1, raw.length() - 1);
+        }
+        return raw;
+    }
+
+    private static String normalizeAnnotationDoubleQuotedContent(String content) {
+        var normalized = new StringBuilder(content.length());
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '\\' && i + 1 < content.length()) {
+                var next = content.charAt(i + 1);
+                if (next == '"' || next == '\\') {
+                    normalized.append(next);
+                    i++;
+                    continue;
+                }
+            }
+            normalized.append(ch);
+        }
+        return normalized.toString();
+    }
+
+    private static String renderReflectionPackageForType(String symbolName, String fallbackPackagePath) {
+        var path = reflectionPackagePath(symbolName, fallbackPackagePath);
+        var name = path.isBlank() ? "" : simpleReflectionTypeName(path);
+        return renderReflectionPackage(name, path);
+    }
+
+    private static String renderReflectionPackage(String packageName, String packagePath) {
+        return "capy.package_info("
+               + pyString(packageName == null ? "" : packageName)
+               + ", "
+               + pyString(packagePath == null ? "" : packagePath.replaceFirst("^/", ""))
+               + ")";
+    }
+
+    static String renderEmptyReflectionPackage() {
+        return "capy.package_info('', '')";
+    }
+
+    private static String reflectionPackagePath(String symbolName, String fallbackPackagePath) {
+        var normalized = symbolName.replace('\\', '/');
+        var dot = normalized.lastIndexOf('.');
+        var slash = normalized.lastIndexOf('/');
+        if (slash >= 0) {
+            if (dot > slash) {
+                return normalized.substring(0, dot).replaceFirst("^/", "");
+            }
+            return normalized.substring(0, slash).replaceFirst("^/", "");
+        }
+        if (dot > 0) {
+            return normalized.substring(0, dot);
+        }
+        return fallbackPackagePath == null ? "" : fallbackPackagePath;
+    }
+
+    private static String simpleReflectionTypeName(String typeName) {
+        var normalized = stripGenericSuffix(typeName);
+        var slash = normalized.lastIndexOf('/');
+        var dot = normalized.lastIndexOf('.');
+        var index = Math.max(slash, dot);
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
+    }
+
+    private static String stripGenericSuffix(String typeName) {
+        var idx = typeName.indexOf('[');
+        return idx >= 0 ? typeName.substring(0, idx) : typeName;
+    }
+
+    private record ReflectionFunctionShape(List<CompiledType> parameterTypes, CompiledType returnType) {
     }
 
     record ModuleInfo(CompiledModule module, JavaClass javaClass, String className, Path relativePath, String packageName, String packagePath) {
@@ -2874,10 +3135,12 @@ public final class PythonGenerator implements Generator {
                     def dict_(entries=None): return CapyDict(entries)
                     def seq(values, mapper=None): return list(values or []) if mapper is None else [mapper(v) for v in values or []]
 
-                    def enum_value(name, owner, parents=None, ordinal=0, aliases=None, package_name='', package_path=None):
+                    def enum_value(name, owner, parents=None, ordinal=0, aliases=None, package_name='', package_path=None, metadata=None):
                         parents = parents or []
                         aliases = aliases or []
                         package_path = package_path or owner
+                        reflection_fields = metadata.get('fields', []) if isinstance(metadata, dict) else []
+                        reflection_annotations = metadata.get('annotations', []) if isinstance(metadata, dict) else []
                         value = SimpleNamespace(
                             __capybaraType=name,
                             __capybaraTypes=[name] + aliases + [owner] + parents,
@@ -2887,7 +3150,7 @@ public final class PythonGenerator implements Generator {
                             order=ordinal,
                         )
                         value.toString = lambda: name
-                        value.capybaraDataValueInfo = lambda: data_value_info(value, name, package_name, package_path, [])
+                        value.capybaraDataValueInfo = lambda: data_value_info(value, name, package_name, package_path, reflection_fields, reflection_annotations)
                         if owner == 'End' and 'Seq' in parents:
                             value.plus = lambda other: other
                             value.any = lambda pred: False
@@ -3178,13 +3441,34 @@ public final class PythonGenerator implements Generator {
                         if callable(getattr(value, 'toString', None)): return value.toString()
                         return str(value)
 
-                    def data_value_info(target, name, package_name, package_path, fields=None):
+                    def package_info(name='', path=''):
+                        return SimpleNamespace(name=name or '', path=str(path or '').lstrip('/'))
+
+                    def reflection_field_descriptor(field):
+                        if isinstance(field, str):
+                            return SimpleNamespace(name=field, type=None, annotations=[])
+                        return SimpleNamespace(
+                            name=field.name,
+                            type=getattr(field, 'type', None),
+                            annotations=getattr(field, 'annotations', []) if isinstance(getattr(field, 'annotations', []), list) else [],
+                        )
+
+                    def data_value_info(target, name, package_name, package_path, fields=None, annotations=None):
                         fields = fields or []
+                        descriptors = [reflection_field_descriptor(field) for field in fields]
+                        pkg = package_info(package_name, package_path)
                         return SimpleNamespace(
                             name=name,
-                            packageName=package_name,
-                            packagePath=package_path,
-                            fields=[SimpleNamespace(name=field, value=getattr(target, field if hasattr(target, field) else field + '_', None)) for field in fields],
+                            pkg=pkg,
+                            packageName=pkg.name,
+                            packagePath=pkg.path,
+                            fields=[SimpleNamespace(
+                                name=descriptor.name,
+                                type=descriptor.type,
+                                value=getattr(target, descriptor.name if hasattr(target, descriptor.name) else descriptor.name + '_', None),
+                                annotations=descriptor.annotations,
+                            ) for descriptor in descriptors],
+                            annotations=annotations if isinstance(annotations, list) else [],
                         )
 
                     def data_to_string(value):
@@ -3193,12 +3477,12 @@ public final class PythonGenerator implements Generator {
                         body = ', '.join(f'{field.name}: {to_string_value(field.value)}' for field in fields)
                         return f'{info.name} {{ {body} }}' if body else f'{info.name} {{ }}'
 
-                    def reflection(target, name=None, package_name='', package_path='', field_names=None):
+                    def reflection(target, name=None, package_name='', package_path='', field_names=None, annotations=None):
                         if name:
-                            return data_value_info(target, name, package_name, package_path, field_names or [])
+                            return data_value_info(target, name, package_name, package_path, field_names or [], annotations or [])
                         if callable(getattr(target, 'capybaraDataValueInfo', None)):
                             return target.capybaraDataValueInfo()
-                        return data_value_info(target, name, package_name, package_path, field_names or [])
+                        return data_value_info(target, name, package_name, package_path, field_names or [], annotations or [])
 
                     def is_success_like(value):
                         return hasattr(value, 'value') and 'success' in str(capy_type(value) or '').lower()
@@ -3288,15 +3572,19 @@ public final class PythonGenerator implements Generator {
                         return value[normalized]
                     def new_array(length, default_value=None): return [default_value for _ in range(length)]
 
-                    def object_info(kind, name, pkg=None, open=False, fields=None, methods=None, parents=None, **kwargs):
-                        data = dict(kind=kind, name=name, pkg=pkg or SimpleNamespace(name='', path=''), open=open, fields=fields or [], methods=methods or [], parents=parents or [])
+                    def annotation_value(kind, value=None):
+                        return SimpleNamespace(kind=kind, value=value) if value is not None else SimpleNamespace(kind=kind)
+                    def annotation_argument_info(name, value): return SimpleNamespace(name=name, value=value)
+                    def annotation_info(name, pkg=None, arguments=None): return SimpleNamespace(name=name, pkg=pkg or package_info(), arguments=arguments or [])
+                    def object_info(kind, name, pkg=None, open=False, fields=None, methods=None, parents=None, annotations=None, **kwargs):
+                        data = dict(kind=kind, name=name, pkg=pkg or package_info(), open=open, fields=fields or [], methods=methods or [], parents=parents or [], annotations=annotations or [])
                         data.update(kwargs)
                         return SimpleNamespace(**data)
-                    def field_info(name, type): return SimpleNamespace(name=name, type=type)
-                    def method_info(name, pkg=None, params=None, return_type=None): return SimpleNamespace(name=name, pkg=pkg or SimpleNamespace(name='', path=''), params=params or [], return_type=return_type)
-                    def param_info(name, type): return SimpleNamespace(name=name, type=type)
-                    def type_info(kind, name, pkg=None, **kwargs):
-                        data = dict(kind=kind, name=name, pkg=pkg or SimpleNamespace(name='', path=''))
+                    def field_info(name, type, annotations=None): return SimpleNamespace(name=name, type=type, annotations=annotations or [])
+                    def method_info(name, pkg=None, params=None, return_type=None, annotations=None): return SimpleNamespace(name=name, pkg=pkg or package_info(), params=params or [], return_type=return_type, annotations=annotations or [])
+                    def param_info(name, type, annotations=None): return SimpleNamespace(name=name, type=type, annotations=annotations or [])
+                    def type_info(kind, name, pkg=None, annotations=None, **kwargs):
+                        data = dict(kind=kind, name=name, pkg=pkg or package_info(), annotations=annotations or [])
                         data.update(kwargs)
                         return SimpleNamespace(**data)
 

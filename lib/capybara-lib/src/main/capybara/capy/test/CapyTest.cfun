@@ -16,6 +16,7 @@ from /capy/lang/Math import { floor_div, HALF_EVEN, round }
 from /capy/lang/System import { nano_time }
 from /capy/lang/TimeUnit import { * }
 from /capy/serialization/Json import { JsonString, stringify }
+from /capy/meta_prog/Recursive import { Recursive }
 
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Assert }
@@ -364,7 +365,8 @@ private fun team_city_messages_case(test_case: TestCase): List[String] =
     ]
 
 fun team_city_escape(value: String): String =
-    fun rec team_city_escape(value: String, acc: String): String =
+    @Recursive
+    fun team_city_escape(value: String, acc: String): String =
         match value[0] with
         case None -> acc
         case Some { '\'' } -> team_city_escape(value[1, value.size()], acc + "|'")
@@ -412,7 +414,8 @@ private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_f
     )
 
 private fun stale_files(files: List[Path], expected_files: List[Path]): List[Path] =
-    fun rec stale_files(files: List[Path], expected_files: List[Path], acc: List[Path]): List[Path] =
+    @Recursive
+    fun stale_files(files: List[Path], expected_files: List[Path], acc: List[Path]): List[Path] =
         match files[0] with
         case None -> acc
         case Some { file } ->
@@ -466,7 +469,8 @@ private fun manifest_content(paths: List[Path]): String =
     paths |> '', (acc, path) => acc + path_to_manifest_line(path.normalize()) + '\n'
 
 private fun manifest_paths(content: String): List[Path] =
-    fun rec lines(value: String, current: String, acc: List[String]): List[String] =
+    @Recursive
+    fun lines(value: String, current: String, acc: List[String]): List[String] =
         match value[0] with
         case None ->
             if current.is_empty()
@@ -518,7 +522,8 @@ private fun list_regular_files_from_entries(entries: List[Path]): Effect[Result[
 private fun relative_to(base: Path, path: Path): Path =
     from_string(path_segments_to_string(drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
 
-private fun rec drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
+@Recursive
+private fun drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
     match prefix[0] with
     case None -> segments
     case Some { expected } ->
@@ -536,7 +541,8 @@ private fun path_to_manifest_line(path: Path): String =
     path_segments_to_string(path.normalize().segments)
 
 private fun path_segments_to_string(segments: List[String]): String =
-    fun rec path_segments_to_string(segments: List[String], acc: String): String =
+    @Recursive
+    fun path_segments_to_string(segments: List[String], acc: String): String =
         match segments[0] with
         case None -> acc
         case Some { segment } ->

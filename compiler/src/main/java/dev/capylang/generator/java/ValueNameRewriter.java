@@ -332,6 +332,7 @@ public class ValueNameRewriter {
                 linkedReflectionValue.packageName(),
                 linkedReflectionValue.packagePath(),
                 linkedReflectionValue.fields(),
+                linkedReflectionValue.annotations(),
                 linkedReflectionValue.type()
         );
     }

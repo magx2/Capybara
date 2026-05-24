@@ -60,7 +60,7 @@
         <dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict>
       </array>
     </dict>
-    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|rec|def|type|union|enum|data|const|derive|deriver|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\b</string></dict>
+    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|def|type|union|enum|data|const|derive|deriver|annotation|on|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\b</string></dict>
     <dict><key>name</key><string>keyword.operator.constructor.capybara</string><key>match</key><string>(?&lt;=\bconstructor\s*\{[^\n]*)\*(?=\s*\{)</string></dict>
     <dict><key>name</key><string>keyword.other.capybara</string><key>match</key><string>\\b(is_empty|size|to_int|to_long|to_double|to_float|to_bool|reflection)\\b</string></dict>
     <dict><key>name</key><string>support.type.primitive.capybara</string><key>match</key><string>\b(byte|int|long|float|double|bool|string|any|data|void|list|set|dict|tuple)(?:\[\])*(?=\b|[^A-Za-z0-9_])</string></dict>
@@ -70,8 +70,61 @@
     <dict><key>name</key><string>constant.language.native.capybara</string><key>match</key><string>&lt;native&gt;</string></dict>
     <dict><key>name</key><string>punctuation.separator.local-definitions.capybara</string><key>match</key><string>---</string></dict>
     <dict>
+      <key>name</key><string>meta.annotation.usage.capybara</string>
+      <key>begin</key><string>(^\s*)(@)(\s*)((?:/?[A-Za-z_][A-Za-z0-9_]*(?:[/.][A-Za-z_][A-Za-z0-9_]*)*))(\s*)(\()</string>
+      <key>beginCaptures</key>
+      <dict>
+        <key>2</key><dict><key>name</key><string>punctuation.definition.annotation.begin.capybara</string></dict>
+        <key>4</key><dict><key>name</key><string>entity.name.type.annotation.capybara</string></dict>
+        <key>6</key><dict><key>name</key><string>punctuation.section.annotation.arguments.begin.capybara</string></dict>
+      </dict>
+      <key>end</key><string>\)</string>
+      <key>endCaptures</key>
+      <dict>
+        <key>0</key><dict><key>name</key><string>punctuation.section.annotation.arguments.end.capybara</string></dict>
+      </dict>
+      <key>patterns</key>
+      <array>
+        <dict>
+          <key>name</key><string>meta.annotation.argument.capybara</string>
+          <key>match</key><string>\b([A-Za-z_][A-Za-z0-9_]*)(\s*:)</string>
+          <key>captures</key>
+          <dict>
+            <key>1</key><dict><key>name</key><string>variable.parameter.annotation.capybara</string></dict>
+            <key>2</key><dict><key>name</key><string>punctuation.separator.key-value.annotation.capybara</string></dict>
+          </dict>
+        </dict>
+        <dict><key>name</key><string>string.quoted.double.capybara</string><key>begin</key><string>"</string><key>end</key><string>"</string><key>patterns</key><array><dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict></array></dict>
+        <dict><key>name</key><string>string.quoted.single.capybara</string><key>begin</key><string>'</string><key>end</key><string>'</string><key>patterns</key><array><dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict></array></dict>
+        <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
+        <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
+        <dict><key>name</key><string>constant.language.unimplemented.capybara</string><key>match</key><string>\?\?\?</string></dict>
+        <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*(?:\[\])*(?=\b|[^A-Za-z0-9_])</string></dict>
+      </array>
+    </dict>
+    <dict>
+      <key>name</key><string>meta.annotation.usage.marker.capybara</string>
+      <key>match</key><string>(^\s*)(@)(\s*)((?:/?[A-Za-z_][A-Za-z0-9_]*(?:[/.][A-Za-z_][A-Za-z0-9_]*)*))(?!\s*\()</string>
+      <key>captures</key>
+      <dict>
+        <key>2</key><dict><key>name</key><string>punctuation.definition.annotation.begin.capybara</string></dict>
+        <key>4</key><dict><key>name</key><string>entity.name.type.annotation.capybara</string></dict>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key><string>meta.annotation.definition.capybara</string>
+      <key>match</key><string>\b(annotation)(\s+)(_*[A-Z][A-Za-z0-9_]*)(\s+)(on)\b</string>
+      <key>captures</key>
+      <dict>
+        <key>1</key><dict><key>name</key><string>keyword.control.capybara</string></dict>
+        <key>3</key><dict><key>name</key><string>entity.name.type.annotation.capybara</string></dict>
+        <key>5</key><dict><key>name</key><string>keyword.control.capybara</string></dict>
+      </dict>
+    </dict>
+    <dict><key>name</key><string>support.type.annotation-target.capybara</string><key>match</key><string>\b(fun|method|const|data|union|enum|type|deriver|class|interface|trait|field|init)\b(?=\s*(?:,|\{))</string></dict>
+    <dict>
       <key>name</key><string>meta.function.documented.private.capybara</string>
-      <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)((?:fun(?:\s+rec)?|def))(\s+)(__[A-Za-z0-9_]+)</string>
+      <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)((?:fun|def))(\s+)(__[A-Za-z0-9_]+)</string>
       <key>captures</key>
       <dict>
         <key>1</key><dict><key>name</key><string>comment.block.documentation.capybara</string></dict>
@@ -81,7 +134,7 @@
     </dict>
     <dict>
       <key>name</key><string>meta.function.documented.capybara</string>
-      <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)((?:fun(?:\s+rec)?|def))(\s+)([A-Za-z_][A-Za-z0-9_]*)</string>
+      <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)((?:fun|def))(\s+)([A-Za-z_][A-Za-z0-9_]*)</string>
       <key>captures</key>
       <dict>
         <key>1</key><dict><key>name</key><string>comment.block.documentation.capybara</string></dict>
@@ -111,12 +164,12 @@
       </dict>
     </dict>
     <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*(?:\[\])*(?=\b|[^A-Za-z0-9_])</string></dict>
-    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(union|enum|data|deriver|class|trait|interface)\s+(__[A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(union|enum|data|deriver|annotation|class|trait|interface)\s+(__[A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b(class|trait|interface)\s+(_*[A-Z][A-Za-z0-9_]*)</string></dict>
-    <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun(?:\s+rec)?\s+(__[A-Za-z0-9_]+)</string></dict>
-    <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun(?:\s+rec)?\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
-    <dict><key>name</key><string>meta.function.owner-generic.capybara</string><key>match</key><string>\b(fun(?:\s+rec)?)\s+(_*[A-Z][A-Za-z0-9_]*\[[^\]]+\])\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)</string></dict>
-    <dict><key>name</key><string>meta.function.owner-infix.capybara</string><key>match</key><string>\b(fun(?:\s+rec)?)\s+(_*[A-Z][A-Za-z0-9_]*)\.([^]+)</string></dict>
+    <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun\s+(__[A-Za-z0-9_]+)</string></dict>
+    <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>meta.function.owner-generic.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*\[[^\]]+\])\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>meta.function.owner-infix.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*)\.([^]+)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>:(__[A-Za-z0-9_]+)\b</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>:([A-Za-z_][A-Za-z0-9_]*)\b</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\b(__[A-Za-z0-9_]+)\s*(?=\()</string></dict>

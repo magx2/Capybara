@@ -31,8 +31,12 @@ public class CapybaraCompiler {
     private static final String TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__type__";
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final String CONSTRUCTOR_STATE_TYPE_PREFIX = "__constructor_state__";
+    private static final String RECURSIVE_ANNOTATION_NAME = "Recursive";
+    private static final String RECURSIVE_ANNOTATION_MODULE_NAME = "Recursive";
+    private static final String RECURSIVE_ANNOTATION_MODULE_PATH = "capy/meta_prog";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final java.util.regex.Pattern PRIMITIVE_BACKED_TYPE_NAME_PATTERN = java.util.regex.Pattern.compile("[a-z][a-z_]*");
+    private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
     private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
@@ -60,20 +64,22 @@ public class CapybaraCompiler {
             var functionalModules = rawModules.stream()
                     .filter(rawModule -> rawModule.sourceKind() == SourceKind.FUNCTIONAL)
                     .toList();
-            if (functionalModules.isEmpty()) {
-                return Result.success(new CompiledProgram(new TreeSet<>(), parsedObjectOrientedModules));
+            var parsedProgram = new Program(List.of());
+            if (!functionalModules.isEmpty()) {
+                var program = CapybaraParser.INSTANCE.parseModule(functionalModules);
+                if (program instanceof Result.Error<Program> error) {
+                    return new Result.Error<>(error.errors());
+                }
+                parsedProgram = ((Result.Success<Program>) program).value();
             }
-            var program = CapybaraParser.INSTANCE.parseModule(functionalModules);
-            if (program instanceof Result.Error<Program> error) {
-                return new Result.Error<>(error.errors());
-            }
-            var mergedLibraries = mergeLibraries(functionalModules, libraries);
-            var compiledProgram = compile(((Result.Success<Program>) program).value(), mergedLibraries, parsedObjectOrientedModules);
+            var modulesForBundledLibraryCheck = functionalModules.isEmpty() ? rawModules : functionalModules;
+            var mergedLibraries = mergeLibraries(modulesForBundledLibraryCheck, libraries);
+            var compiledProgram = compile(parsedProgram, mergedLibraries, parsedObjectOrientedModules);
             if (compiledProgram instanceof Result.Error<CompiledProgram> error) {
                 return error;
             }
             var functionalProgram = ((Result.Success<CompiledProgram>) compiledProgram).value();
-            return Result.success(new CompiledProgram(functionalProgram.modules(), parsedObjectOrientedModules));
+            return Result.success(functionalProgram);
         } catch (RuntimeException e) {
             // Public boundary: source/compiler errors should not escape as exceptions.
             return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
@@ -263,7 +269,6 @@ public class CapybaraCompiler {
         }
 
         var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule, moduleHelperClassRequiredByModule);
-        var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
         var staticImportsByModule = new HashMap<String, SortedSet<CompiledModule.StaticImport>>();
         for (var library : libraries) {
             putImportedModuleEntry(
@@ -292,6 +297,44 @@ public class CapybaraCompiler {
                     ((Result.Success<Map<String, DeriverDeclaration>>) derivers).value()
             );
         }
+        var annotationsByModule = new HashMap<String, Map<String, AnnotationDeclaration>>();
+        for (var library : libraries) {
+            putImportedModuleEntry(
+                    annotationsByModule,
+                    new ModuleRef(library.name(), library.path()),
+                    library.annotations()
+            );
+        }
+        for (var module : program.modules()) {
+            var sourceFile = moduleSourceFile(module);
+            var annotations = withFile(annotationDefinitions(module.functional().definitions(), sourceFile), sourceFile);
+            if (annotations instanceof Result.Error<Map<String, AnnotationDeclaration>> error) {
+                return new Result.Error<>(error.errors());
+            }
+            putOwnedModuleEntry(
+                    annotationsByModule,
+                    new ModuleRef(module.name(), module.path()),
+                    ((Result.Success<Map<String, AnnotationDeclaration>>) annotations).value()
+            );
+        }
+        for (var module : objectOrientedModules) {
+            putOwnedModuleEntry(
+                    annotationsByModule,
+                    new ModuleRef(module.name(), module.path()),
+                    Map.of()
+            );
+        }
+        var annotationValidation = validateAnnotationUsages(program, objectOrientedModules, annotationsByModule, moduleLinkIndex);
+        if (annotationValidation instanceof Result.Error<Void> error) {
+            return new Result.Error<>(error.errors());
+        }
+        linkFunctionalAnnotationMetadata(program, linkedTypesByModule, annotationsByModule, moduleLinkIndex);
+        objectOrientedModules = linkObjectOrientedAnnotationMetadata(objectOrientedModules, annotationsByModule, moduleLinkIndex);
+        objectTypeCatalog = objectTypeCatalog(objectOrientedModules);
+        objectTypeCatalog.linkedTypesByModule().forEach((moduleName, objectTypes) ->
+                mergeModuleTypes(linkedTypesByModule, moduleName, objectTypes));
+        moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule, moduleHelperClassRequiredByModule);
+        var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
         var constructorCatalog = constructorCatalog(program.modules(), libraries);
         var visibleConstructorsByModule = new HashMap<String, CapybaraExpressionCompiler.ConstructorRegistry>();
         for (var module : program.modules()) {
@@ -365,7 +408,7 @@ public class CapybaraCompiler {
                 continue;
             }
             var sourceFile = moduleSourceFile(module);
-            var availableConstructorSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache);
+            var availableConstructorSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, annotationsByModule, staticImportsByModule, compileCache);
             if (availableConstructorSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
                 return new Result.Error<>(error.errors());
             }
@@ -378,6 +421,7 @@ public class CapybaraCompiler {
                     moduleClassNameByModuleName,
                     qualifiedImportAliases(module, moduleLinkIndex),
                     getModuleEntry(visibleConstructorsByModule, moduleRef),
+                    availableAnnotations(module.name(), module.path(), module.imports(), annotationsByModule, moduleLinkIndex),
                     sourceFile,
                     compileCache
             ), sourceFile);
@@ -415,6 +459,7 @@ public class CapybaraCompiler {
                     visibleTypesByModule,
                     signaturesByModule,
                     deriversByModule,
+                    annotationsByModule,
                     staticImportsByModule,
                     moduleClassNameByModuleName,
                     getModuleEntry(visibleConstructorsByModule, moduleRef),
@@ -433,16 +478,19 @@ public class CapybaraCompiler {
         log.info("Completed first-pass linking for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - firstPassStartedAt));
 
         var finalLinkStartedAt = System.nanoTime();
+        var linkedObjectOrientedModules = objectOrientedModules;
+        var finalModuleLinkIndex = moduleLinkIndex;
         var result = program.modules().stream()
                 .map(module -> {
                     var moduleRef = new ModuleRef(module.name(), module.path());
                     return linkModule(
                             module,
-                            moduleLinkIndex,
+                            finalModuleLinkIndex,
                             linkedTypesByModule,
                             visibleTypesByModule,
                             refinedSignaturesByModule,
                             deriversByModule,
+                            annotationsByModule,
                             staticImportsByModule,
                             moduleClassNameByModuleName,
                             getModuleEntry(visibleConstructorsByModule, moduleRef),
@@ -450,7 +498,7 @@ public class CapybaraCompiler {
                     );
                 })
                 .collect(new ResultCollectionCollector<>())
-                .map(CompiledProgram::new);
+                .map(modules -> new CompiledProgram(modules, linkedObjectOrientedModules));
         if (result instanceof Result.Success<CompiledProgram> success) {
             var postValidation = validateResultReturningTypeConstructors(program, success.value());
             if (postValidation instanceof Result.Error<Void> error) {
@@ -483,6 +531,37 @@ public class CapybaraCompiler {
         DATA,
         TYPE,
         PRIMITIVE_BACKED
+    }
+
+    private enum AnnotationSemanticTarget {
+        FUNCTION("fun", "function"),
+        METHOD("method", "method"),
+        CONST("const", "const"),
+        DATA("data", "data"),
+        UNION("union", "union"),
+        ENUM("enum", "enum"),
+        PRIMITIVE_TYPE("type", "type"),
+        DERIVER("deriver", "deriver"),
+        CLASS("class", "class"),
+        INTERFACE("interface", "interface"),
+        TRAIT("trait", "trait"),
+        FIELD("field", "field"),
+        INIT("init", "init"),
+        ANNOTATION(null, "annotation");
+
+        private final String sourceName;
+        private final String displayName;
+
+        AnnotationSemanticTarget(String sourceName, String displayName) {
+            this.sourceName = sourceName;
+            this.displayName = displayName;
+        }
+
+        static Optional<AnnotationSemanticTarget> fromSourceName(String sourceName) {
+            return Arrays.stream(values())
+                    .filter(target -> target.sourceName != null && target.sourceName.equals(sourceName))
+                    .findFirst();
+        }
     }
 
     private record ConstructorDescriptor(ConstructorKind kind, String targetTypeName) {
@@ -715,6 +794,7 @@ public class CapybaraCompiler {
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
             Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
             Map<String, String> moduleClassNameByModuleName,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
@@ -729,12 +809,13 @@ public class CapybaraCompiler {
             return new Result.Error<>(error.errors());
         }
         var moduleSourceFile = moduleSourceFile(module);
-        var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache);
+        var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, annotationsByModule, staticImportsByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, moduleSourceFile, compileCache), moduleSourceFile);
+        var availableAnnotations = availableAnnotations(module.name(), module.path(), module.imports(), annotationsByModule, moduleLinkIndex);
+        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache), moduleSourceFile);
     }
 
     private Result<CompiledModule> linkModule(
@@ -744,6 +825,7 @@ public class CapybaraCompiler {
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
             Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
             Map<String, String> moduleClassNameByModuleName,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
@@ -757,12 +839,13 @@ public class CapybaraCompiler {
             return new Result.Error<>(error.errors());
         }
         var moduleSourceFile = moduleSourceFile(module);
-        var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache);
+        var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, annotationsByModule, staticImportsByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, moduleSourceFile, compileCache)
+        var availableAnnotations = availableAnnotations(module.name(), module.path(), module.imports(), annotationsByModule, moduleLinkIndex);
+        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache)
                 .flatMap(firstPassFunctions -> {
                     var moduleSignatures = getModuleEntry(signaturesByModule, moduleRef);
                     var refinedSignatures = mergeSignatures(
@@ -777,11 +860,12 @@ public class CapybaraCompiler {
                                 deduplicateFunctions(firstPassFunctions),
                                 getModuleEntry(deriversByModule, new ModuleRef(module.name(), module.path())),
                                 visiblePrimitiveBackedTypes(visibleTypes),
+                                getModuleEntry(annotationsByModule, new ModuleRef(module.name(), module.path())),
                                 staticImports(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache)
                         ));
                     }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, moduleSourceFile, compileCache)
+                    return linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache)
                             .map(linkedFunctions -> new CompiledModule(
                                     module.name(),
                                     module.path(),
@@ -789,6 +873,7 @@ public class CapybaraCompiler {
                                     deduplicateFunctions(linkedFunctions),
                                     getModuleEntry(deriversByModule, new ModuleRef(module.name(), module.path())),
                                     visiblePrimitiveBackedTypes(visibleTypes),
+                                    getModuleEntry(annotationsByModule, new ModuleRef(module.name(), module.path())),
                                     staticImports(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache)
                             ));
                 }), moduleSourceFile);
@@ -811,6 +896,7 @@ public class CapybaraCompiler {
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
             Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
             CompileCache compileCache
     ) {
@@ -847,9 +933,15 @@ public class CapybaraCompiler {
                     importedModule,
                     getModuleEntry(deriversByModule, importedModule)
             ).keySet();
+            var availableAnnotationMembers = visibleAnnotations(
+                    module.path(),
+                    importedModule,
+                    getModuleEntry(annotationsByModule, importedModule)
+            ).keySet();
             var availableMembers = new HashSet<String>(availableFunctionMembers);
             availableMembers.addAll(availableTypeMembers);
             availableMembers.addAll(availableDeriverMembers);
+            availableMembers.addAll(availableAnnotationMembers);
             for (var excludedSymbol : importDeclaration.excludedSymbols()) {
                 if (!availableMembers.contains(excludedSymbol)) {
                     return Result.error(
@@ -1026,7 +1118,11 @@ public class CapybaraCompiler {
             case CompiledDataType linkedDataType -> new CompiledDataType(
                     linkedDataType.name(),
                     linkedDataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(field.name(), resolveLinkedType(field.type(), all, nextResolvingTypeNames)))
+                            .map(field -> new CompiledDataType.CompiledField(
+                                    field.name(),
+                                    resolveLinkedType(field.type(), all, nextResolvingTypeNames),
+                                    field.annotations()
+                            ))
                             .toList(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
@@ -1034,12 +1130,17 @@ public class CapybaraCompiler {
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
                     linkedDataType.nativeType(),
-                    linkedDataType.enumValue()
+                    linkedDataType.enumValue(),
+                    linkedDataType.annotations()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(field.name(), resolveLinkedType(field.type(), all, nextResolvingTypeNames)))
+                            .map(field -> new CompiledDataType.CompiledField(
+                                    field.name(),
+                                    resolveLinkedType(field.type(), all, nextResolvingTypeNames),
+                                    field.annotations()
+                            ))
                             .toList(),
                     linkedDataParentType.subTypes().stream()
                             .map(subType -> (CompiledDataType) resolveGenericDataType(subType, all, nextResolvingTypeNames))
@@ -1047,7 +1148,8 @@ public class CapybaraCompiler {
                     linkedDataParentType.typeParameters(),
                     linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
-                    linkedDataParentType.enumType()
+                    linkedDataParentType.enumType(),
+                    linkedDataParentType.annotations()
             );
             case CompiledObjectType objectType -> objectType;
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType;
@@ -1323,7 +1425,8 @@ public class CapybaraCompiler {
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
                     linkedDataType.nativeType(),
-                    linkedDataType.enumValue()
+                    linkedDataType.enumValue(),
+                    linkedDataType.annotations()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     requestedName,
@@ -1332,20 +1435,23 @@ public class CapybaraCompiler {
                     linkedDataParentType.typeParameters(),
                     linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
-                    linkedDataParentType.enumType()
+                    linkedDataParentType.enumType(),
+                    linkedDataParentType.annotations()
             );
             case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
                     requestedName,
                     primitiveBackedType.backingType(),
                     primitiveBackedType.cfunType(),
                     primitiveBackedType.comments(),
-                    primitiveBackedType.visibility()
+                    primitiveBackedType.visibility(),
+                    primitiveBackedType.annotations()
             );
             case CompiledObjectType objectType -> new CompiledObjectType(
                     requestedName,
                     objectType.backendClassName(),
                     objectType.parents(),
-                    objectType.visibility()
+                    objectType.visibility(),
+                    objectType.annotations()
             );
         };
     }
@@ -1824,6 +1930,9 @@ public class CapybaraCompiler {
     private record AvailableDeriver(ModuleRef ownerModule, DeriverDeclaration deriver) {
     }
 
+    private record AvailableAnnotation(ModuleRef ownerModule, AnnotationDeclaration annotation) {
+    }
+
     private Map<String, DeriverDeclaration> visibleDerivers(
             String currentModulePath,
             ModuleRef ownerModule,
@@ -1839,6 +1948,894 @@ public class CapybaraCompiler {
             }
         }
         return Map.copyOf(visible);
+    }
+
+    private Result<Map<String, AnnotationDeclaration>> annotationDefinitions(Set<Definition> definitions, String moduleSourceFile) {
+        var normalizedFile = normalizeFile(moduleSourceFile);
+        var annotations = new LinkedHashMap<String, AnnotationDeclaration>();
+        var errors = new TreeSet<Result.Error.SingleError>();
+        for (var definition : definitions) {
+            if (!(definition instanceof AnnotationDeclaration annotation)) {
+                continue;
+            }
+            var existing = annotations.putIfAbsent(annotation.name(), annotation);
+            if (existing != null) {
+                errors.add(errorAt(
+                        "Duplicate annotation `" + annotation.name() + "`",
+                        annotation.position(),
+                        normalizedFile
+                ));
+            }
+            validateAnnotationDefinition(annotation, normalizedFile, errors);
+        }
+        return errors.isEmpty() ? Result.success(Map.copyOf(annotations)) : new Result.Error<>(errors);
+    }
+
+    private void validateAnnotationDefinition(
+            AnnotationDeclaration annotation,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var target : annotation.targets()) {
+            if (AnnotationSemanticTarget.fromSourceName(target.name()).isEmpty()) {
+                errors.add(errorAt(
+                        "Unknown annotation target " + target.name() + " for " + annotation.name(),
+                        target.position(),
+                        normalizedFile
+                ));
+            }
+        }
+        var fieldNames = new HashSet<String>();
+        for (var field : annotation.fields()) {
+            if (!fieldNames.add(field.name())) {
+                errors.add(errorAt(
+                        "Duplicate annotation field " + field.name() + " for " + annotation.name(),
+                        field.position(),
+                        normalizedFile
+                ));
+                continue;
+            }
+            field.defaultValue().ifPresent(value -> validateAnnotationValueType(
+                    annotation.name(),
+                    field.name(),
+                    field.type(),
+                    value,
+                    value.position().or(field::position),
+                    normalizedFile,
+                    errors
+            ));
+        }
+    }
+
+    private Result<Void> validateAnnotationUsages(
+            Program program,
+            List<ObjectOrientedModule> objectOrientedModules,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
+            ModuleLinkIndex moduleLinkIndex
+    ) {
+        var errors = new TreeSet<Result.Error.SingleError>();
+        for (var module : program.modules()) {
+            var availableAnnotations = availableAnnotations(
+                    module.name(),
+                    module.path(),
+                    module.imports(),
+                    annotationsByModule,
+                    moduleLinkIndex
+            );
+            validateFunctionalAnnotationUsages(module, availableAnnotations, errors);
+        }
+        for (var module : objectOrientedModules) {
+            var availableAnnotations = availableAnnotations(
+                    module.name(),
+                    module.path(),
+                    module.imports(),
+                    annotationsByModule,
+                    moduleLinkIndex
+            );
+            validateObjectOrientedAnnotationUsages(module, availableAnnotations, errors);
+        }
+        return errors.isEmpty() ? Result.success(null) : new Result.Error<>(errors);
+    }
+
+    private void validateFunctionalAnnotationUsages(
+            Module module,
+            Map<String, AvailableAnnotation> availableAnnotations,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var normalizedFile = normalizeFile(moduleSourceFile(module));
+        for (var definition : module.functional().definitions()) {
+            switch (definition) {
+                case AnnotationDeclaration annotationDeclaration -> validateAnnotationUsageList(
+                        annotationDeclaration.annotations(),
+                        Optional.of(AnnotationSemanticTarget.ANNOTATION),
+                        AnnotationSemanticTarget.ANNOTATION.displayName,
+                        availableAnnotations,
+                        normalizedFile,
+                        errors
+                );
+                case DataDeclaration dataDeclaration -> {
+                    validateAnnotationUsageList(
+                            dataDeclaration.annotations(),
+                            Optional.of(AnnotationSemanticTarget.DATA),
+                            AnnotationSemanticTarget.DATA.displayName,
+                            availableAnnotations,
+                            normalizedFile,
+                            errors
+                    );
+                    for (var field : dataDeclaration.fields()) {
+                        validateAnnotationUsageList(
+                                field.annotations(),
+                                Optional.of(AnnotationSemanticTarget.FIELD),
+                                AnnotationSemanticTarget.FIELD.displayName,
+                                availableAnnotations,
+                                normalizedFile,
+                                errors
+                        );
+                    }
+                }
+                case DeriverDeclaration deriverDeclaration -> {
+                    validateAnnotationUsageList(
+                            deriverDeclaration.annotations(),
+                            Optional.of(AnnotationSemanticTarget.DERIVER),
+                            AnnotationSemanticTarget.DERIVER.displayName,
+                            availableAnnotations,
+                            normalizedFile,
+                            errors
+                    );
+                    for (var method : deriverDeclaration.methods()) {
+                        validateAnnotationUsageList(
+                                method.annotations(),
+                                Optional.of(AnnotationSemanticTarget.METHOD),
+                                AnnotationSemanticTarget.METHOD.displayName,
+                                availableAnnotations,
+                                normalizedFile,
+                                errors
+                        );
+                    }
+                }
+                case EnumDeclaration enumDeclaration -> validateAnnotationUsageList(
+                        enumDeclaration.annotations(),
+                        Optional.of(AnnotationSemanticTarget.ENUM),
+                        AnnotationSemanticTarget.ENUM.displayName,
+                        availableAnnotations,
+                        normalizedFile,
+                        errors
+                );
+                case Function function -> {
+                    if (isLocalFunction(function)) {
+                        validateLocalFunctionAnnotationUsages(
+                                function.annotations(),
+                                availableAnnotations,
+                                normalizedFile,
+                                errors
+                        );
+                    } else {
+                        validateAnnotationUsageList(
+                                function.annotations(),
+                                Optional.of(annotationTargetForFunction(function)),
+                                annotationTargetForFunction(function).displayName,
+                                availableAnnotations,
+                                normalizedFile,
+                                errors
+                        );
+                    }
+                }
+                case PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration -> validateAnnotationUsageList(
+                        primitiveBackedTypeDeclaration.annotations(),
+                        Optional.of(AnnotationSemanticTarget.PRIMITIVE_TYPE),
+                        AnnotationSemanticTarget.PRIMITIVE_TYPE.displayName,
+                        availableAnnotations,
+                        normalizedFile,
+                        errors
+                );
+                case TypeDeclaration typeDeclaration -> {
+                    validateAnnotationUsageList(
+                            typeDeclaration.annotations(),
+                            Optional.of(AnnotationSemanticTarget.UNION),
+                            AnnotationSemanticTarget.UNION.displayName,
+                            availableAnnotations,
+                            normalizedFile,
+                            errors
+                    );
+                    for (var field : typeDeclaration.fields()) {
+                        validateAnnotationUsageList(
+                                field.annotations(),
+                                Optional.of(AnnotationSemanticTarget.FIELD),
+                                AnnotationSemanticTarget.FIELD.displayName,
+                                availableAnnotations,
+                                normalizedFile,
+                                errors
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    private AnnotationSemanticTarget annotationTargetForFunction(Function function) {
+        if (function.name().startsWith(METHOD_DECL_PREFIX)) {
+            return AnnotationSemanticTarget.METHOD;
+        }
+        if (CONST_NAME_PATTERN.matcher(function.name()).matches()) {
+            return AnnotationSemanticTarget.CONST;
+        }
+        return AnnotationSemanticTarget.FUNCTION;
+    }
+
+    private boolean isLocalFunction(Function function) {
+        return function.name().contains("__local_fun_");
+    }
+
+    private void validateLocalFunctionAnnotationUsages(
+            List<AnnotationUsage> usages,
+            Map<String, AvailableAnnotation> availableAnnotations,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var usage : usages) {
+            var availableAnnotation = availableAnnotations.get(usage.name());
+            if (availableAnnotation == null) {
+                errors.add(errorAt(unknownAnnotationMessage(usage.name()), usage.position(), normalizedFile));
+                continue;
+            }
+            if (!isRecursiveAnnotation(availableAnnotation)) {
+                errors.add(errorAt(
+                        "Only `@Recursive` is supported on local function declarations; import it from /capy/meta_prog/Recursive",
+                        usage.position(),
+                        normalizedFile
+                ));
+                continue;
+            }
+            validateAnnotationUsageList(
+                    List.of(usage),
+                    Optional.of(AnnotationSemanticTarget.FUNCTION),
+                    AnnotationSemanticTarget.FUNCTION.displayName,
+                    availableAnnotations,
+                    normalizedFile,
+                    errors
+            );
+        }
+    }
+
+    private void validateObjectOrientedAnnotationUsages(
+            ObjectOrientedModule module,
+            Map<String, AvailableAnnotation> availableAnnotations,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var normalizedFile = normalizeFile(moduleSourceFile(module));
+        for (var definition : module.objectOriented().definitions()) {
+            switch (definition) {
+                case ObjectOriented.ClassDeclaration classDeclaration -> validateAnnotationUsageList(
+                        classDeclaration.annotations(),
+                        Optional.of(AnnotationSemanticTarget.CLASS),
+                        AnnotationSemanticTarget.CLASS.displayName,
+                        availableAnnotations,
+                        normalizedFile,
+                        errors
+                );
+                case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> validateAnnotationUsageList(
+                        interfaceDeclaration.annotations(),
+                        Optional.of(AnnotationSemanticTarget.INTERFACE),
+                        AnnotationSemanticTarget.INTERFACE.displayName,
+                        availableAnnotations,
+                        normalizedFile,
+                        errors
+                );
+                case ObjectOriented.TraitDeclaration traitDeclaration -> validateAnnotationUsageList(
+                        traitDeclaration.annotations(),
+                        Optional.of(AnnotationSemanticTarget.TRAIT),
+                        AnnotationSemanticTarget.TRAIT.displayName,
+                        availableAnnotations,
+                        normalizedFile,
+                        errors
+                );
+            }
+            for (var member : definition.members()) {
+                switch (member) {
+                    case ObjectOriented.FieldDeclaration fieldDeclaration -> validateAnnotationUsageList(
+                            fieldDeclaration.annotations(),
+                            Optional.of(AnnotationSemanticTarget.FIELD),
+                            AnnotationSemanticTarget.FIELD.displayName,
+                            availableAnnotations,
+                            normalizedFile,
+                            errors
+                    );
+                    case ObjectOriented.MethodDeclaration methodDeclaration -> validateAnnotationUsageList(
+                            methodDeclaration.annotations(),
+                            Optional.of(AnnotationSemanticTarget.METHOD),
+                            AnnotationSemanticTarget.METHOD.displayName,
+                            availableAnnotations,
+                            normalizedFile,
+                            errors
+                    );
+                    case ObjectOriented.InitBlock initBlock -> validateAnnotationUsageList(
+                            initBlock.annotations(),
+                            Optional.of(AnnotationSemanticTarget.INIT),
+                            AnnotationSemanticTarget.INIT.displayName,
+                            availableAnnotations,
+                            normalizedFile,
+                            errors
+                    );
+                }
+            }
+        }
+    }
+
+    private void validateAnnotationUsageList(
+            List<AnnotationUsage> usages,
+            Optional<AnnotationSemanticTarget> target,
+            String targetDisplayName,
+            Map<String, AvailableAnnotation> availableAnnotations,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var usage : usages) {
+            var availableAnnotation = availableAnnotations.get(usage.name());
+            if (availableAnnotation == null) {
+                errors.add(errorAt(unknownAnnotationMessage(usage.name()), usage.position(), normalizedFile));
+                continue;
+            }
+            if (isRecursiveAnnotation(availableAnnotation)
+                && target.filter(AnnotationSemanticTarget.FUNCTION::equals).isEmpty()) {
+                errors.add(errorAt(
+                        "`@Recursive` is supported for functions, not " + targetDisplayName + " declarations",
+                        usage.position(),
+                        normalizedFile
+                ));
+                continue;
+            }
+            var annotation = availableAnnotation.annotation();
+            var allowedTargets = annotation.targets().stream()
+                    .map(AnnotationTarget::name)
+                    .map(AnnotationSemanticTarget::fromSourceName)
+                    .flatMap(Optional::stream)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (target.isEmpty() || !allowedTargets.contains(target.orElseThrow())) {
+                errors.add(errorAt(
+                        "Annotation " + usage.name() + " is not valid on " + targetDisplayName + " declarations",
+                        usage.position(),
+                        normalizedFile
+                ));
+                continue;
+            }
+            validateAnnotationArguments(usage, annotation, normalizedFile, errors);
+        }
+    }
+
+    private String unknownAnnotationMessage(String name) {
+        if (RECURSIVE_ANNOTATION_NAME.equals(name)) {
+            return "Unknown annotation Recursive. Import it from /capy/meta_prog/Recursive to use the tail-recursion contract";
+        }
+        return "Unknown annotation " + name;
+    }
+
+    private void validateAnnotationArguments(
+            AnnotationUsage usage,
+            AnnotationDeclaration annotation,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var fieldsByName = annotation.fields().stream()
+                .collect(toMap(
+                        AnnotationFieldDeclaration::name,
+                        identity(),
+                        (first, second) -> first,
+                        LinkedHashMap::new
+                ));
+        var provided = new HashSet<String>();
+        for (var argument : usage.arguments()) {
+            if (!provided.add(argument.name())) {
+                errors.add(errorAt(
+                        "Duplicate annotation argument " + argument.name() + " for " + usage.name(),
+                        argument.position(),
+                        normalizedFile
+                ));
+                continue;
+            }
+            var field = fieldsByName.get(argument.name());
+            if (field == null) {
+                errors.add(errorAt(
+                        "Unknown annotation argument " + argument.name() + " for " + usage.name(),
+                        argument.position(),
+                        normalizedFile
+                ));
+                continue;
+            }
+            validateAnnotationValueType(
+                    usage.name(),
+                    argument.name(),
+                    field.type(),
+                    argument.value(),
+                    argument.value().position().or(argument::position),
+                    normalizedFile,
+                    errors
+            );
+        }
+        for (var field : annotation.fields()) {
+            if (field.defaultValue().isEmpty() && !provided.contains(field.name())) {
+                errors.add(errorAt(
+                        "Missing required annotation argument " + field.name() + " for " + usage.name(),
+                        usage.position(),
+                        normalizedFile
+                ));
+            }
+        }
+    }
+
+    private void validateAnnotationValueType(
+            String annotationName,
+            String argumentName,
+            String expectedType,
+            AnnotationValue value,
+            Optional<SourcePosition> position,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        if (annotationValueMatchesFieldType(expectedType, value)) {
+            return;
+        }
+        errors.add(errorAt(
+                "Annotation argument " + argumentName + " for " + annotationName
+                + " expects " + expectedType + ", got " + annotationValueTypeName(value),
+                position,
+                normalizedFile
+        ));
+    }
+
+    private boolean annotationValueMatchesFieldType(String expectedType, AnnotationValue value) {
+        var normalizedExpectedType = expectedType.replace(" ", "");
+        return switch (normalizedExpectedType) {
+            case "String" -> value instanceof AnnotationValue.StringValue;
+            case "byte", "int" -> value instanceof AnnotationValue.IntValue;
+            case "long" -> value instanceof AnnotationValue.IntValue
+                           || value instanceof AnnotationValue.LongValue;
+            case "float" -> value instanceof AnnotationValue.IntValue
+                            || value instanceof AnnotationValue.LongValue
+                            || value instanceof AnnotationValue.FloatValue;
+            case "double" -> value instanceof AnnotationValue.IntValue
+                             || value instanceof AnnotationValue.LongValue
+                             || value instanceof AnnotationValue.FloatValue
+                             || value instanceof AnnotationValue.DoubleValue;
+            case "bool" -> value instanceof AnnotationValue.BoolValue;
+            case "nothing" -> value instanceof AnnotationValue.NothingValue;
+            default -> value instanceof AnnotationValue.TypeNameValue;
+        };
+    }
+
+    private String annotationValueTypeName(AnnotationValue value) {
+        return switch (value) {
+            case AnnotationValue.StringValue ignored -> "String";
+            case AnnotationValue.IntValue ignored -> "int";
+            case AnnotationValue.LongValue ignored -> "long";
+            case AnnotationValue.FloatValue ignored -> "float";
+            case AnnotationValue.DoubleValue ignored -> "double";
+            case AnnotationValue.BoolValue ignored -> "bool";
+            case AnnotationValue.NothingValue ignored -> "nothing";
+            case AnnotationValue.TypeNameValue ignored -> "type";
+        };
+    }
+
+    private Map<String, AvailableAnnotation> availableAnnotations(
+            String moduleName,
+            String modulePath,
+            List<ImportDeclaration> imports,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
+            ModuleLinkIndex moduleLinkIndex
+    ) {
+        var currentModule = new ModuleRef(moduleName, modulePath);
+        var localAnnotations = Optional.ofNullable(getModuleEntry(annotationsByModule, currentModule)).orElse(Map.of());
+        var all = new LinkedHashMap<String, AvailableAnnotation>();
+        localAnnotations.forEach((name, annotation) -> all.put(name, new AvailableAnnotation(currentModule, annotation)));
+        addQualifiedAnnotationAliases(all, currentModule, localAnnotations);
+        for (var importDeclaration : imports) {
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
+            if (importedModule == null) {
+                continue;
+            }
+            var importedAnnotations = visibleAnnotations(
+                    modulePath,
+                    importedModule,
+                    getModuleEntry(annotationsByModule, importedModule)
+            );
+            addQualifiedAnnotationAliases(all, importedModule, importedAnnotations);
+            if (importDeclaration.qualifiedOnly()) {
+                continue;
+            }
+            for (var symbol : importDeclaration.selectedSymbols(importedAnnotations.keySet())) {
+                var annotation = importedAnnotations.get(symbol);
+                if (annotation != null) {
+                    all.put(symbol, new AvailableAnnotation(importedModule, annotation));
+                }
+            }
+        }
+        return Map.copyOf(all);
+    }
+
+    private boolean isRecursiveAnnotation(AvailableAnnotation annotation) {
+        return annotation != null
+               && RECURSIVE_ANNOTATION_NAME.equals(annotation.annotation().name())
+               && RECURSIVE_ANNOTATION_MODULE_NAME.equals(annotation.ownerModule().name())
+               && RECURSIVE_ANNOTATION_MODULE_PATH.equals(normalizedAnnotationModulePath(annotation.ownerModule().path()));
+    }
+
+    private String normalizedAnnotationModulePath(String path) {
+        var normalized = path == null ? "" : path.replace('\\', '/');
+        return normalized.startsWith("/") ? normalized.substring(1) : normalized;
+    }
+
+    private Map<String, AnnotationDeclaration> visibleAnnotations(
+            String currentModulePath,
+            ModuleRef ownerModule,
+            Map<String, AnnotationDeclaration> annotations
+    ) {
+        if (annotations == null || annotations.isEmpty()) {
+            return Map.of();
+        }
+        var visible = new LinkedHashMap<String, AnnotationDeclaration>();
+        for (var entry : annotations.entrySet()) {
+            if (isVisibleFromModule(currentModulePath, ownerModule.path(), entry.getValue().visibility())) {
+                visible.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return Map.copyOf(visible);
+    }
+
+    private void addQualifiedAnnotationAliases(
+            Map<String, AvailableAnnotation> all,
+            ModuleRef module,
+            Map<String, AnnotationDeclaration> annotations
+    ) {
+        annotations.forEach((name, annotation) -> all.put(module.name() + "." + name, new AvailableAnnotation(module, annotation)));
+        var modulePath = module.path().replace('\\', '/') + "/" + module.name();
+        annotations.forEach((name, annotation) -> {
+            all.put(modulePath + "." + name, new AvailableAnnotation(module, annotation));
+            all.put("/" + modulePath + "." + name, new AvailableAnnotation(module, annotation));
+            if (module.name().equals(name)) {
+                all.put(modulePath, new AvailableAnnotation(module, annotation));
+                all.put("/" + modulePath, new AvailableAnnotation(module, annotation));
+            }
+        });
+    }
+
+    private void linkFunctionalAnnotationMetadata(
+            Program program,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
+            ModuleLinkIndex moduleLinkIndex
+    ) {
+        for (var module : program.modules()) {
+            var moduleRef = new ModuleRef(module.name(), module.path());
+            var availableAnnotations = availableAnnotations(
+                    module.name(),
+                    module.path(),
+                    module.imports(),
+                    annotationsByModule,
+                    moduleLinkIndex
+            );
+            var annotationsByTypeName = new LinkedHashMap<String, List<CompiledAnnotation>>();
+            var definitionsByTypeName = new LinkedHashMap<String, Definition>();
+            for (var definition : module.functional().definitions()) {
+                if (definition instanceof DataDeclaration dataDeclaration) {
+                    definitionsByTypeName.put(dataDeclaration.name(), dataDeclaration);
+                    annotationsByTypeName.put(dataDeclaration.name(), linkAnnotations(dataDeclaration.annotations(), availableAnnotations));
+                } else if (definition instanceof TypeDeclaration typeDeclaration) {
+                    definitionsByTypeName.put(typeDeclaration.name(), typeDeclaration);
+                    annotationsByTypeName.put(typeDeclaration.name(), linkAnnotations(typeDeclaration.annotations(), availableAnnotations));
+                } else if (definition instanceof PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration) {
+                    annotationsByTypeName.put(primitiveBackedTypeDeclaration.name(), linkAnnotations(primitiveBackedTypeDeclaration.annotations(), availableAnnotations));
+                } else if (definition instanceof EnumDeclaration enumDeclaration) {
+                    annotationsByTypeName.put(enumDeclaration.name(), linkAnnotations(enumDeclaration.annotations(), availableAnnotations));
+                }
+            }
+
+            var linkedTypes = getModuleEntry(linkedTypesByModule, moduleRef);
+            var annotatedTypes = new TreeMap<String, GenericDataType>();
+            linkedTypes.forEach((name, type) -> annotatedTypes.put(
+                    name,
+                    withCompiledTypeAnnotations(type, annotationsByTypeName, definitionsByTypeName, availableAnnotations)
+            ));
+            putOwnedModuleEntry(linkedTypesByModule, moduleRef, unmodifiableSortedMap(annotatedTypes));
+        }
+    }
+
+    private GenericDataType withCompiledTypeAnnotations(
+            GenericDataType type,
+            Map<String, List<CompiledAnnotation>> annotationsByTypeName,
+            Map<String, Definition> definitionsByTypeName,
+            Map<String, AvailableAnnotation> availableAnnotations
+    ) {
+        return switch (type) {
+            case CompiledDataType dataType -> withCompiledDataTypeAnnotations(
+                    dataType,
+                    annotationsByTypeName,
+                    definitionsByTypeName,
+                    availableAnnotations
+            );
+            case CompiledDataParentType parentType -> new CompiledDataParentType(
+                    parentType.name(),
+                    withCompiledFieldAnnotations(
+                            parentType.name(),
+                            parentType.fields(),
+                            definitionsByTypeName,
+                            availableAnnotations
+                    ),
+                    parentType.subTypes().stream()
+                            .map(subType -> withCompiledDataTypeAnnotations(
+                                    subType,
+                                    annotationsByTypeName,
+                                    definitionsByTypeName,
+                                    availableAnnotations
+                            ))
+                            .toList(),
+                    parentType.typeParameters(),
+                    parentType.comments(),
+                    parentType.visibility(),
+                    parentType.enumType(),
+                    annotationsByTypeName.getOrDefault(parentType.name(), parentType.annotations())
+            );
+            case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
+                    primitiveBackedType.name(),
+                    primitiveBackedType.backingType(),
+                    primitiveBackedType.cfunType(),
+                    primitiveBackedType.comments(),
+                    primitiveBackedType.visibility(),
+                    annotationsByTypeName.getOrDefault(primitiveBackedType.name(), primitiveBackedType.annotations())
+            );
+            case CompiledObjectType objectType -> new CompiledObjectType(
+                    objectType.name(),
+                    objectType.backendClassName(),
+                    objectType.parents(),
+                    objectType.visibility(),
+                    annotationsByTypeName.getOrDefault(objectType.name(), objectType.annotations())
+            );
+        };
+    }
+
+    private CompiledDataType withCompiledDataTypeAnnotations(
+            CompiledDataType dataType,
+            Map<String, List<CompiledAnnotation>> annotationsByTypeName,
+            Map<String, Definition> definitionsByTypeName,
+            Map<String, AvailableAnnotation> availableAnnotations
+    ) {
+        return new CompiledDataType(
+                dataType.name(),
+                withCompiledFieldAnnotations(
+                        dataType.name(),
+                        dataType.fields(),
+                        definitionsByTypeName,
+                        availableAnnotations
+                ),
+                dataType.typeParameters(),
+                dataType.extendedTypes(),
+                dataType.comments(),
+                dataType.visibility(),
+                dataType.singleton(),
+                dataType.nativeType(),
+                dataType.enumValue(),
+                annotationsByTypeName.getOrDefault(dataType.name(), dataType.annotations())
+        );
+    }
+
+    private List<CompiledDataType.CompiledField> withCompiledFieldAnnotations(
+            String typeName,
+            List<CompiledDataType.CompiledField> fields,
+            Map<String, Definition> definitionsByTypeName,
+            Map<String, AvailableAnnotation> availableAnnotations
+    ) {
+        return fields.stream()
+                .map(field -> new CompiledDataType.CompiledField(
+                        field.name(),
+                        field.type(),
+                        findFunctionalFieldAnnotationUsages(typeName, field.name(), definitionsByTypeName, new HashSet<>())
+                                .map(usages -> linkAnnotations(usages, availableAnnotations))
+                                .orElse(field.annotations())
+                ))
+                .toList();
+    }
+
+    private Optional<List<AnnotationUsage>> findFunctionalFieldAnnotationUsages(
+            String typeName,
+            String fieldName,
+            Map<String, Definition> definitionsByTypeName,
+            Set<String> visiting
+    ) {
+        if (!visiting.add(typeName)) {
+            return Optional.empty();
+        }
+        var definition = definitionsByTypeName.get(typeName);
+        if (definition instanceof DataDeclaration dataDeclaration) {
+            var ownField = dataDeclaration.fields().stream()
+                    .filter(field -> field.name().equals(fieldName))
+                    .findFirst();
+            if (ownField.isPresent()) {
+                return Optional.of(ownField.orElseThrow().annotations());
+            }
+            for (var parentName : dataDeclaration.extendsTypes()) {
+                var parent = findFunctionalFieldAnnotationUsages(parentName, fieldName, definitionsByTypeName, visiting);
+                if (parent.isPresent()) {
+                    return parent;
+                }
+            }
+        } else if (definition instanceof TypeDeclaration typeDeclaration) {
+            var ownField = typeDeclaration.fields().stream()
+                    .filter(field -> field.name().equals(fieldName))
+                    .findFirst();
+            if (ownField.isPresent()) {
+                return Optional.of(ownField.orElseThrow().annotations());
+            }
+        }
+        for (var enclosingDefinition : definitionsByTypeName.values()) {
+            if (enclosingDefinition instanceof TypeDeclaration typeDeclaration
+                && typeDeclaration.subTypes().contains(typeName)) {
+                var parentField = typeDeclaration.fields().stream()
+                        .filter(field -> field.name().equals(fieldName))
+                        .findFirst();
+                if (parentField.isPresent()) {
+                    return Optional.of(parentField.orElseThrow().annotations());
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private List<ObjectOrientedModule> linkObjectOrientedAnnotationMetadata(
+            List<ObjectOrientedModule> modules,
+            Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
+            ModuleLinkIndex moduleLinkIndex
+    ) {
+        return modules.stream()
+                .map(module -> {
+                    var availableAnnotations = availableAnnotations(
+                            module.name(),
+                            module.path(),
+                            module.imports(),
+                            annotationsByModule,
+                            moduleLinkIndex
+                    );
+                    var definitions = module.objectOriented().definitions().stream()
+                            .map(definition -> linkObjectOrientedAnnotationMetadata(definition, availableAnnotations))
+                            .toList();
+                    return new ObjectOrientedModule(
+                            module.name(),
+                            module.path(),
+                            new ObjectOriented(definitions),
+                            module.imports(),
+                            module.sourceKind()
+                    );
+                })
+                .toList();
+    }
+
+    private ObjectOriented.TypeDeclaration linkObjectOrientedAnnotationMetadata(
+            ObjectOriented.TypeDeclaration definition,
+            Map<String, AvailableAnnotation> availableAnnotations
+    ) {
+        var linkedMembers = definition.members().stream()
+                .map(member -> linkObjectOrientedAnnotationMetadata(member, availableAnnotations))
+                .toList();
+        return switch (definition) {
+            case ObjectOriented.ClassDeclaration classDeclaration -> new ObjectOriented.ClassDeclaration(
+                    classDeclaration.name(),
+                    classDeclaration.constructorParameters(),
+                    classDeclaration.parents(),
+                    linkedMembers,
+                    classDeclaration.modifiers(),
+                    classDeclaration.comments(),
+                    classDeclaration.annotations(),
+                    linkAnnotations(classDeclaration.annotations(), availableAnnotations)
+            );
+            case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> new ObjectOriented.InterfaceDeclaration(
+                    interfaceDeclaration.name(),
+                    interfaceDeclaration.parents(),
+                    linkedMembers,
+                    interfaceDeclaration.comments(),
+                    interfaceDeclaration.annotations(),
+                    linkAnnotations(interfaceDeclaration.annotations(), availableAnnotations)
+            );
+            case ObjectOriented.TraitDeclaration traitDeclaration -> new ObjectOriented.TraitDeclaration(
+                    traitDeclaration.name(),
+                    traitDeclaration.parents(),
+                    linkedMembers,
+                    traitDeclaration.comments(),
+                    traitDeclaration.annotations(),
+                    linkAnnotations(traitDeclaration.annotations(), availableAnnotations)
+            );
+        };
+    }
+
+    private ObjectOriented.MemberDeclaration linkObjectOrientedAnnotationMetadata(
+            ObjectOriented.MemberDeclaration member,
+            Map<String, AvailableAnnotation> availableAnnotations
+    ) {
+        return switch (member) {
+            case ObjectOriented.FieldDeclaration fieldDeclaration -> new ObjectOriented.FieldDeclaration(
+                    fieldDeclaration.name(),
+                    fieldDeclaration.type(),
+                    fieldDeclaration.visibility(),
+                    fieldDeclaration.initializer(),
+                    fieldDeclaration.comments(),
+                    fieldDeclaration.annotations(),
+                    linkAnnotations(fieldDeclaration.annotations(), availableAnnotations)
+            );
+            case ObjectOriented.MethodDeclaration methodDeclaration -> new ObjectOriented.MethodDeclaration(
+                    methodDeclaration.name(),
+                    methodDeclaration.parameters(),
+                    methodDeclaration.returnType(),
+                    methodDeclaration.visibility(),
+                    methodDeclaration.modifiers(),
+                    methodDeclaration.body(),
+                    methodDeclaration.comments(),
+                    methodDeclaration.annotations(),
+                    linkAnnotations(methodDeclaration.annotations(), availableAnnotations)
+            );
+            case ObjectOriented.InitBlock initBlock -> new ObjectOriented.InitBlock(
+                    initBlock.body(),
+                    initBlock.comments(),
+                    initBlock.annotations(),
+                    linkAnnotations(initBlock.annotations(), availableAnnotations)
+            );
+        };
+    }
+
+    private List<CompiledAnnotation> linkAnnotations(
+            List<AnnotationUsage> usages,
+            Map<String, AvailableAnnotation> availableAnnotations
+    ) {
+        return usages.stream()
+                .map(usage -> linkAnnotation(usage, availableAnnotations.get(usage.name())))
+                .toList();
+    }
+
+    private CompiledAnnotation linkAnnotation(AnnotationUsage usage, AvailableAnnotation availableAnnotation) {
+        if (availableAnnotation == null) {
+            return new CompiledAnnotation(usage.name(), "", "", List.of());
+        }
+        var annotation = availableAnnotation.annotation();
+        var providedArguments = usage.arguments().stream()
+                .collect(toMap(
+                        AnnotationArgument::name,
+                        identity(),
+                        (first, second) -> first,
+                        LinkedHashMap::new
+                ));
+        var arguments = annotation.fields().stream()
+                .map(field -> {
+                    var provided = providedArguments.get(field.name());
+                    var value = provided == null
+                            ? field.defaultValue().orElseThrow()
+                            : provided.value();
+                    return new CompiledAnnotationArgument(field.name(), compiledAnnotationValue(value));
+                })
+                .toList();
+        return new CompiledAnnotation(
+                annotation.name(),
+                availableAnnotation.ownerModule().name(),
+                availableAnnotation.ownerModule().path(),
+                arguments
+        );
+    }
+
+    private CompiledAnnotationValue compiledAnnotationValue(AnnotationValue value) {
+        return switch (value) {
+            case AnnotationValue.StringValue stringValue -> new CompiledAnnotationValue.StringValue(stringValue.value());
+            case AnnotationValue.IntValue intValue -> new CompiledAnnotationValue.IntValue(intValue.value());
+            case AnnotationValue.LongValue longValue -> new CompiledAnnotationValue.LongValue(longValue.value());
+            case AnnotationValue.FloatValue floatValue -> new CompiledAnnotationValue.FloatValue(floatValue.value());
+            case AnnotationValue.DoubleValue doubleValue -> new CompiledAnnotationValue.DoubleValue(doubleValue.value());
+            case AnnotationValue.BoolValue boolValue -> new CompiledAnnotationValue.BoolValue(boolValue.value());
+            case AnnotationValue.NothingValue ignored -> new CompiledAnnotationValue.NothingValue();
+            case AnnotationValue.TypeNameValue typeNameValue -> new CompiledAnnotationValue.TypeNameValue(typeNameValue.name());
+        };
+    }
+
+    private Result.Error.SingleError errorAt(String message, Optional<SourcePosition> position, String file) {
+        var sourcePosition = position.orElse(SourcePosition.EMPTY);
+        return new Result.Error.SingleError(
+                sourcePosition.line(),
+                sourcePosition.column(),
+                file,
+                message
+        );
     }
 
     private List<ModuleRef> usedImportedDeriverOwnerModules(
@@ -2376,7 +3373,8 @@ public class CapybaraCompiler {
                     definition.name(),
                     objectBackendClassName(module, definition.name()),
                     objectParentNames(definition, definitionsByName, new LinkedHashSet<>()),
-                    null
+                    null,
+                    definition.linkedAnnotations()
             );
             types.put(definition.name(), type);
         }
@@ -3278,6 +4276,7 @@ public class CapybaraCompiler {
             Map<String, String> moduleClassNameByModuleName,
             Map<String, String> qualifiedModuleAliases,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
+            Map<String, AvailableAnnotation> availableAnnotations,
             String moduleSourceFile,
             CompileCache compileCache
     ) {
@@ -3286,7 +4285,7 @@ public class CapybaraCompiler {
                 CapybaraExpressionCompiler.LinkCache::new
         );
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, qualifiedModuleAliases, protectedConstructorsByType, moduleSourceFile, linkCache, compileCache))
+                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, qualifiedModuleAliases, protectedConstructorsByType, availableAnnotations, moduleSourceFile, linkCache, compileCache))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -3299,6 +4298,7 @@ public class CapybaraCompiler {
             Map<String, String> moduleClassNameByModuleName,
             Map<String, String> qualifiedModuleAliases,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
+            Map<String, AvailableAnnotation> availableAnnotations,
             String moduleSourceFile,
             CapybaraExpressionCompiler.LinkCache linkCache,
             CompileCache compileCache
@@ -3312,6 +4312,10 @@ public class CapybaraCompiler {
             return localMethodValidationError.get();
         }
         var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes, compileCache);
+        var linkedAnnotations = linkAnnotations(function.annotations(), availableAnnotations);
+        var tailRecursiveContract = function.annotations().stream()
+                .map(usage -> availableAnnotations.get(usage.name()))
+                .anyMatch(this::isRecursiveAnnotation);
         var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
                 .flatMap(parameters -> linkExpressionWithRecursiveInference(
                         function,
@@ -3334,6 +4338,7 @@ public class CapybaraCompiler {
                                                 parameters,
                                                 finalExpression,
                                                 tailRecursiveSelfCallNames(function.name(), moduleSourceFile, moduleClassNameByModuleName),
+                                                tailRecursiveContract,
                                                 moduleSourceFile
                                         ).map(recursion -> new CompiledFunction(
                                                 function.name(),
@@ -3344,7 +4349,8 @@ public class CapybaraCompiler {
                                                 function.visibility(),
                                                 isProgramMain(function.name(), rtype, parameters),
                                                 recursion.recursive(),
-                                                recursion.tailRecursive()
+                                                recursion.tailRecursive(),
+                                                linkedAnnotations
                                         )))))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
@@ -3361,23 +4367,24 @@ public class CapybaraCompiler {
             List<CompiledFunctionParameter> parameters,
             CompiledExpression expression,
             Set<String> selfCallNames,
+            boolean tailRecursiveContract,
             String moduleSourceFile
     ) {
         var analysis = analyzeTailRecursion(selfCallNames, parameters, expression, true);
         if (methodOwnerType(function.name()).isPresent()) {
-            if (function.tailRecursive()) {
+            if (tailRecursiveContract) {
                 return tailRecursiveFunctionError(
                         function,
                         function.position(),
                         moduleSourceFile,
-                        "`fun rec` is supported for functions, not type methods"
+                        "`@Recursive` is supported for functions, not type methods"
                 );
             }
             return Result.success(new RecursionClassification(analysis.hasSelfCall(), false));
         }
 
         if (analysis.firstNonTailCall().isPresent()) {
-            if (function.tailRecursive()) {
+            if (tailRecursiveContract) {
                 return tailRecursiveFunctionError(
                         function,
                         function.position(),
@@ -3388,12 +4395,12 @@ public class CapybaraCompiler {
             return Result.success(new RecursionClassification(true, false));
         }
         if (!analysis.hasSelfCall()) {
-            if (function.tailRecursive()) {
+            if (tailRecursiveContract) {
                 return tailRecursiveFunctionError(
                         function,
                         function.position(),
                         moduleSourceFile,
-                        "`fun rec` function `" + displayFunctionName(function.name()) + "` must call itself in tail position"
+                        "`@Recursive` function `" + displayFunctionName(function.name()) + "` must call itself in tail position"
                 );
             }
             return Result.success(new RecursionClassification(false, false));
@@ -4105,7 +5112,7 @@ public class CapybaraCompiler {
     }
 
     private String functionKeyword(Function function) {
-        return function.tailRecursive() ? "fun rec" : "fun";
+        return "fun";
     }
 
     private int methodDeclarationErrorLine(Function function) {
@@ -5099,6 +6106,10 @@ public class CapybaraCompiler {
         return module.sourceKind().moduleFile(module.path(), module.name());
     }
 
+    private String moduleSourceFile(ObjectOrientedModule module) {
+        return module.sourceKind().moduleFile(module.path(), module.name());
+    }
+
     private dev.capylang.compiler.expression.CompiledExpression enrichNothing(
             dev.capylang.compiler.expression.CompiledExpression expression,
             String functionName,
@@ -5274,6 +6285,7 @@ public class CapybaraCompiler {
                             value.packageName(),
                             value.packagePath(),
                             value.fields(),
+                            value.annotations(),
                             value.type()
                     );
             case dev.capylang.compiler.expression.CompiledSliceExpression value ->
@@ -6110,14 +7122,18 @@ public class CapybaraCompiler {
                         parentType.fields().stream()
                                 .map(field -> new CompiledDataType.CompiledField(
                                         field.name(),
-                                        substituteTypeParameters(field.type(), substitutions)
+                                        substituteTypeParameters(field.type(), substitutions),
+                                        field.annotations()
                                 ))
                                 .toList(),
                         parentType.subTypes().stream()
                                 .map(subType -> (CompiledDataType) substituteTypeParameters(subType, substitutions))
                                 .toList(),
                         mappedTypeArguments,
-                        parentType.enumType()
+                        parentType.comments(),
+                        parentType.visibility(),
+                        parentType.enumType(),
+                        parentType.annotations()
                 );
             }
             case CompiledDataType dataType -> {
@@ -6131,7 +7147,8 @@ public class CapybaraCompiler {
                             dataType.visibility(),
                             dataType.singleton(),
                             dataType.nativeType(),
-                            dataType.enumValue()
+                            dataType.enumValue(),
+                            dataType.annotations()
                     );
                 }
                 var substitutions = new LinkedHashMap<String, CompiledType>();
@@ -6140,7 +7157,11 @@ public class CapybaraCompiler {
                     substitutions.put(dataType.typeParameters().get(i), typeArguments.get(i));
                 }
                 var substitutedFields = dataType.fields().stream()
-                        .map(field -> new CompiledDataType.CompiledField(field.name(), substituteTypeParameters(field.type(), substitutions)))
+                        .map(field -> new CompiledDataType.CompiledField(
+                                field.name(),
+                                substituteTypeParameters(field.type(), substitutions),
+                                field.annotations()
+                        ))
                         .toList();
                 yield new CompiledDataType(
                         dataType.name(),
@@ -6151,7 +7172,8 @@ public class CapybaraCompiler {
                         dataType.visibility(),
                         dataType.singleton(),
                         dataType.nativeType(),
-                        dataType.enumValue()
+                        dataType.enumValue(),
+                        dataType.annotations()
                 );
             }
             default -> linkedType;
@@ -6450,7 +7472,8 @@ public class CapybaraCompiler {
                 List.of(dataType.name(), PrimitiveLinkedType.STRING.name()),
                 resultParent.comments(),
                 resultParent.visibility(),
-                resultParent.enumType()
+                resultParent.enumType(),
+                resultParent.annotations()
         );
     }
 
@@ -6905,7 +7928,8 @@ public class CapybaraCompiler {
                     parentType.typeParameters(),
                     parentType.comments(),
                     parentType.visibility(),
-                    parentType.enumType()
+                    parentType.enumType(),
+                    parentType.annotations()
             );
             case CompiledDataType dataType -> new CompiledDataType(
                     alias,
@@ -6916,7 +7940,8 @@ public class CapybaraCompiler {
                     dataType.visibility(),
                     dataType.singleton(),
                     dataType.nativeType(),
-                    dataType.enumValue()
+                    dataType.enumValue(),
+                    dataType.annotations()
             );
             default -> placeholder;
         };
@@ -7134,7 +8159,8 @@ public class CapybaraCompiler {
                 childType.visibility(),
                 childType.singleton(),
                 childType.nativeType(),
-                childType.enumValue()
+                childType.enumValue(),
+                childType.annotations()
         ));
     }
 

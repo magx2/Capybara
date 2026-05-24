@@ -23,24 +23,22 @@ program : definition+ EOF;
 definition:
     functionDeclaration
     | deriverDeclaration
+    | annotationDeclaration
     | primitiveBackedTypeDeclaration
     | typeDeclaration
     | enumDeclaration
     | dataDeclaration
     | constDeclaration;
 
-functionDeclaration: docComment* VISIBILITY? 'fun' recFunctionMarker functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody
-                   | docComment* VISIBILITY? 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
-recFunctionMarker: REC;
+functionDeclaration: docComment* annotationBlock* VISIBILITY? 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
 functionBody: expression
             | localDefinition+ '---' expression;
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
                | localDataDeclaration
                | localConstDeclaration;
-localFunctionDeclaration: docComment* 'fun' recFunctionMarker localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression
-                        | docComment* 'fun' localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression;
-localFunctionNameDeclaration: NAME | REC;
+localFunctionDeclaration: docComment* annotationBlock* 'fun' localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression;
+localFunctionNameDeclaration: NAME;
 localTypeDeclaration: 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause?
@@ -53,23 +51,100 @@ methodIdentifier: identifier | 'with' | infixMethodLiteral | infixOperator;
 infixMethodLiteral: BACKTICKED_INFIX_METHOD_LITERAL | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
-primitiveBackedTypeDeclaration: docComment* VISIBILITY? 'type' primitiveBackedTypeName MATCH_ARROW primitiveBackingType constructorClause?;
+annotationBlock
+    : annotationOpen annotationName (LPAREN annotationArgumentList? RPAREN)?
+    ;
+annotationOpen
+    : AT
+    ;
+annotationName
+    : qualifiedType
+    | lowerQualifiedType
+    ;
+annotationArgumentList
+    : annotationArgument (COMMA annotationArgument)* COMMA?
+    ;
+annotationArgument
+    : identifier COLON annotationValue
+    ;
+annotationValue
+    : STRING_LITERAL
+    | INT_LITERAL
+    | LONG_LITERAL
+    | FLOAT_LITERAL
+    | DOUBLE_LITERAL
+    | BOOL_LITERAL
+    | NOTHING_LITERAL
+    | annotationTypeReference
+    ;
+annotationTypeReference
+    : 'byte'
+    | 'int'
+    | 'long'
+    | 'double'
+    | 'bool'
+    | 'float'
+    | 'any'
+    | 'data'
+    | 'enum'
+    | 'nothing'
+    | qualifiedType (typeLbrack annotationTypeReference (COMMA annotationTypeReference)* RBRACK)?
+    | lowerQualifiedType
+    ;
+annotationDeclaration
+    : docComment* annotationBlock* VISIBILITY? annotationKeyword TYPE annotationTargetClause annotationBody
+    ;
+annotationKeyword
+    : { "annotation".equals(_input.LT(1).getText()) }? NAME
+    ;
+annotationTargetClause
+    : onKeyword annotationTarget (COMMA annotationTarget)* COMMA?
+    ;
+onKeyword
+    : { "on".equals(_input.LT(1).getText()) }? NAME
+    ;
+annotationTarget
+    : 'fun'
+    | { "method".equals(_input.LT(1).getText()) }? NAME
+    | 'const'
+    | 'data'
+    | 'union'
+    | 'enum'
+    | 'type'
+    | 'deriver'
+    | { "class".equals(_input.LT(1).getText()) }? NAME
+    | { "interface".equals(_input.LT(1).getText()) }? NAME
+    | { "trait".equals(_input.LT(1).getText()) }? NAME
+    | { "field".equals(_input.LT(1).getText()) }? NAME
+    | { "init".equals(_input.LT(1).getText()) }? NAME
+    ;
+annotationBody
+    : LBRACE annotationFieldDeclaration* RBRACE
+    ;
+annotationFieldDeclaration
+    : identifier COLON annotationFieldType (ASSIGN annotationValue)?
+    ;
+annotationFieldType
+    : annotationTypeReference
+    ;
+
+primitiveBackedTypeDeclaration: docComment* annotationBlock* VISIBILITY? 'type' primitiveBackedTypeName MATCH_ARROW primitiveBackingType constructorClause?;
 primitiveBackedTypeName: NAME | TYPE;
 primitiveBackingType: 'byte' | 'int' | 'long' | 'float' | 'double' | stringBackingType;
 stringBackingType: { "String".equals(_input.LT(1).getText()) }? TYPE;
-typeDeclaration: docComment* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
-               | docComment* VISIBILITY? 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
-enumDeclaration: docComment* 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
-dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause? deriveClause?
-               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause? deriveClause?;
+typeDeclaration: docComment* annotationBlock* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
+               | docComment* annotationBlock* VISIBILITY? 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
+enumDeclaration: docComment* annotationBlock* 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
+dataDeclaration: docComment* annotationBlock* VISIBILITY? 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause? deriveClause?
+               | docComment* annotationBlock* VISIBILITY? 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause? deriveClause?;
 constructorClause: 'with' 'constructor' '{' expression '}';
 deriveClause: 'derive' TYPE (COMMA TYPE)* COMMA?;
-deriverDeclaration: docComment* VISIBILITY? 'deriver' TYPE '{' deriverMethodDeclaration+ '}';
-deriverMethodDeclaration: docComment* 'fun' identifier '(' parameters? ')' functionType '=' expression;
-constDeclaration: docComment* VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
+deriverDeclaration: docComment* annotationBlock* VISIBILITY? 'deriver' TYPE '{' deriverMethodDeclaration+ '}';
+deriverMethodDeclaration: docComment* annotationBlock* 'fun' identifier '(' parameters? ')' functionType '=' expression;
+constDeclaration: docComment* annotationBlock* VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
-fieldDeclaration: identifier ':' type
-                | STRING_LITERAL ':' type
+fieldDeclaration: annotationBlock* identifier ':' type
+                | annotationBlock* STRING_LITERAL ':' type
                 | SPREAD TYPE;
 dataBody: NATIVE_LITERAL | fieldDeclarationList;
 methodOwnerDeclaration: genericTypeDeclaration | lowerQualifiedType;
@@ -78,9 +153,8 @@ typeLbrack: LBRACK | LINE_START_LBRACK;
 
 VISIBILITY: 'local' | 'private';
 BOOL_LITERAL: 'true' | 'false';
-REC: 'rec';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | REC | 'derive' | 'deriver' | 'fun' | 'type' | 'union' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'nothing' | 'any';
+identifier: NAME | 'derive' | 'deriver' | 'fun' | 'type' | 'union' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -172,7 +246,6 @@ ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 placeholder: UNDERSCORE;
 functionCall: NAME '(' argumentList? ')'
-            | REC '(' argumentList? ')'
             | 'derive' '(' argumentList? ')'
             | 'deriver' '(' argumentList? ')'
             | 'fun' '(' argumentList? ')'
@@ -368,6 +441,7 @@ MOD_ASSIGN : '%=';
 LSHIFT_ASSIGN : '<<=';
 RSHIFT_ASSIGN : '>>=';
 URSHIFT_ASSIGN : '>>>=';
+AT : '@';
 
 DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;

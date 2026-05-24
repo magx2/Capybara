@@ -1,6 +1,9 @@
 package dev.capylang.generator.java;
 
 import dev.capylang.compiler.CollectionLinkedType;
+import dev.capylang.compiler.CompiledAnnotation;
+import dev.capylang.compiler.CompiledAnnotationArgument;
+import dev.capylang.compiler.CompiledAnnotationValue;
 import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunctionType;
@@ -22,13 +25,23 @@ public final class ReflectionValueInfoJava {
             String fallbackPackagePath,
             List<JavaDataValueInfo.Field> fields
     ) {
+        return dataValueInfo(typeName, fallbackPackagePath, fields, List.of());
+    }
+
+    public static JavaDataValueInfo dataValueInfo(
+            String typeName,
+            String fallbackPackagePath,
+            List<JavaDataValueInfo.Field> fields,
+            List<CompiledAnnotation> annotations
+    ) {
         var path = reflectionPackagePath(typeName, fallbackPackagePath);
         var packageName = path.isBlank() ? "" : simpleReflectionTypeName(path);
         return new JavaDataValueInfo(
                 simpleReflectionTypeName(typeName),
                 packageName,
                 path,
-                fields
+                fields,
+                annotations
         );
     }
 
@@ -39,7 +52,8 @@ public final class ReflectionValueInfoJava {
             fieldValueInfos.add("new capy.metaProg.Reflection.FieldValueInfo("
                                 + javaString(field.name()) + ", "
                                 + typeInfo + ", "
-                                + field.valueExpression() + ")");
+                                + field.valueExpression() + ", "
+                                + reflectionAnnotations(field.annotations()) + ")");
         }
 
         return "new capy.metaProg.Reflection.DataValueInfo("
@@ -48,6 +62,8 @@ public final class ReflectionValueInfoJava {
                + javaString(dataValueInfo.packageName()) + ", "
                + javaString(dataValueInfo.packagePath()) + "), "
                + reflectionList("capy.metaProg.Reflection.FieldValueInfo", fieldValueInfos)
+               + ", "
+               + reflectionAnnotations(dataValueInfo.annotations())
                + ")";
     }
 
@@ -58,7 +74,8 @@ public final class ReflectionValueInfoJava {
                     + javaString(primitive == PrimitiveLinkedType.STRING
                             ? "String"
                             : primitive.name().toLowerCase(java.util.Locale.ROOT)) + ", "
-                    + reflectionEmptyPackageInfo() + ")";
+                    + reflectionEmptyPackageInfo() + ", "
+                    + reflectionAnnotations(List.of()) + ")";
             case CollectionLinkedType.CompiledList listType ->
                     "new capy.metaProg.Reflection.ListInfo("
                     + javaString("List") + ", "
@@ -100,21 +117,75 @@ public final class ReflectionValueInfoJava {
             case CompiledGenericTypeParameter genericTypeParameter ->
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(genericTypeParameter.name()) + ", "
-                    + reflectionEmptyPackageInfo() + ")";
+                    + reflectionEmptyPackageInfo() + ", "
+                    + reflectionAnnotations(List.of()) + ")";
             case CompiledPrimitiveBackedType primitiveBackedType ->
                     reflectionTypeInfo(primitiveBackedType.backingType(), fallbackPackagePath);
             case CompiledDataParentType parentType ->
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(parentType.name())) + ", "
-                    + reflectionPackageInfo(parentType.name(), fallbackPackagePath) + ")";
+                    + reflectionPackageInfo(parentType.name(), fallbackPackagePath) + ", "
+                    + reflectionAnnotations(parentType.annotations()) + ")";
             case CompiledDataType dataType ->
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(dataType.name())) + ", "
-                    + reflectionPackageInfo(dataType.name(), fallbackPackagePath) + ")";
+                    + reflectionPackageInfo(dataType.name(), fallbackPackagePath) + ", "
+                    + reflectionAnnotations(dataType.annotations()) + ")";
             case CompiledObjectType objectType ->
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(objectType.name())) + ", "
-                    + reflectionPackageInfo(objectType.name(), fallbackPackagePath) + ")";
+                    + reflectionPackageInfo(objectType.name(), fallbackPackagePath) + ", "
+                    + reflectionAnnotations(objectType.annotations()) + ")";
+        };
+    }
+
+    public static String reflectionAnnotations(List<CompiledAnnotation> annotations) {
+        return reflectionList(
+                "capy.metaProg.Reflection.AnnotationInfo",
+                annotations.stream()
+                        .map(ReflectionValueInfoJava::reflectionAnnotation)
+                        .toList()
+        );
+    }
+
+    private static String reflectionAnnotation(CompiledAnnotation annotation) {
+        return "new capy.metaProg.Reflection.AnnotationInfo("
+               + javaString(annotation.name()) + ", "
+               + reflectionPackageInfoValues(annotation.packageName(), annotation.packagePath()) + ", "
+               + reflectionList(
+                       "capy.metaProg.Reflection.AnnotationArgumentInfo",
+                       annotation.arguments().stream()
+                               .map(ReflectionValueInfoJava::reflectionAnnotationArgument)
+                               .toList()
+               )
+               + ")";
+    }
+
+    private static String reflectionAnnotationArgument(CompiledAnnotationArgument argument) {
+        return "new capy.metaProg.Reflection.AnnotationArgumentInfo("
+               + javaString(argument.name()) + ", "
+               + reflectionAnnotationValue(argument.value())
+               + ")";
+    }
+
+    private static String reflectionAnnotationValue(CompiledAnnotationValue value) {
+        return switch (value) {
+            case CompiledAnnotationValue.StringValue stringValue ->
+                    "new capy.metaProg.Reflection.AnnotationString(" + normalizeStringLiteral(stringValue.value()) + ")";
+            case CompiledAnnotationValue.IntValue intValue ->
+                    "new capy.metaProg.Reflection.AnnotationInt(" + intValue.value() + ")";
+            case CompiledAnnotationValue.LongValue longValue ->
+                    "new capy.metaProg.Reflection.AnnotationLong(" + longValue.value() + ")";
+            case CompiledAnnotationValue.DoubleValue doubleValue ->
+                    "new capy.metaProg.Reflection.AnnotationDouble(" + doubleValue.value() + ")";
+            case CompiledAnnotationValue.FloatValue floatValue ->
+                    "new capy.metaProg.Reflection.AnnotationFloat(" + floatValue.value() + ")";
+            case CompiledAnnotationValue.BoolValue boolValue ->
+                    "new capy.metaProg.Reflection.AnnotationBool(" + boolValue.value() + ")";
+            case CompiledAnnotationValue.TypeNameValue typeNameValue ->
+                    "new capy.metaProg.Reflection.AnnotationTypeName(" + javaString(typeNameValue.name()) + ")";
+            case CompiledAnnotationValue.NothingValue ignored ->
+                    "new capy.metaProg.Reflection.AnnotationNothing()";
         };
     }
 
@@ -157,6 +228,14 @@ public final class ReflectionValueInfoJava {
         return "new capy.metaProg.Reflection.PackageInfo(" + javaString(name) + ", " + javaString(path) + ")";
     }
 
+    private static String reflectionPackageInfoValues(String packageName, String packagePath) {
+        return "new capy.metaProg.Reflection.PackageInfo("
+               + javaString(packageName == null ? "" : packageName)
+               + ", "
+               + javaString(packagePath == null ? "" : packagePath.replaceFirst("^/", ""))
+               + ")";
+    }
+
     private static String reflectionEmptyPackageInfo() {
         return "new capy.metaProg.Reflection.PackageInfo(\"\", \"\")";
     }
@@ -185,6 +264,37 @@ public final class ReflectionValueInfoJava {
 
     private static String javaString(String value) {
         return "\"" + escapeJavaString(value) + "\"";
+    }
+
+    private static String normalizeStringLiteral(String raw) {
+        if (raw.length() < 2) {
+            return javaString(raw);
+        }
+        if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            var content = normalizeDoubleQuotedContent(raw.substring(1, raw.length() - 1));
+            return javaString(content);
+        }
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
+            return javaString(raw.substring(1, raw.length() - 1));
+        }
+        return javaString(raw);
+    }
+
+    private static String normalizeDoubleQuotedContent(String content) {
+        var normalized = new StringBuilder(content.length());
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '\\' && i + 1 < content.length()) {
+                var next = content.charAt(i + 1);
+                if (next == '"' || next == '\\') {
+                    normalized.append(next);
+                    i++;
+                    continue;
+                }
+            }
+            normalized.append(ch);
+        }
+        return normalized.toString();
     }
 
     private record ReflectionFunctionShape(

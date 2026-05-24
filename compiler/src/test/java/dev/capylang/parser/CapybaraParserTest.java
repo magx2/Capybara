@@ -47,6 +47,7 @@ class CapybaraParserTest {
                     case EnumDeclaration enumDeclaration -> enumDeclaration.name().equals(name);
                     case PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration ->
                             primitiveBackedTypeDeclaration.name().equals(name);
+                    case AnnotationDeclaration annotationDeclaration -> annotationDeclaration.name().equals(name);
                     default -> false;
                 })
                 .findAny()
@@ -63,6 +64,83 @@ class CapybaraParserTest {
 
         assertThat(module.imports())
                 .containsExactly(new dev.capylang.compiler.ImportDeclaration("/foo/A", List.of(), List.of(), true));
+    }
+
+    @Test
+    @DisplayName("should parse annotation declarations and declaration annotations")
+    void parseAnnotationDeclarationsAndDeclarationAnnotations() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                @Meta
+                annotation Deprecated on fun, method, data, class {
+                    message: String
+                    since: String = ""
+                    replacement: Result[User] = User
+                    order: int = 1
+                    enabled: bool = true
+                    ratio: double = 1.0
+                    scale: float = 1.0f
+                    count: long = 1L
+                    unknown: String = ???
+                }
+
+                @Benchmark
+                fun ping(): int = 1
+
+                /// Parser entrypoint
+                @Deprecated(message: "use parse_v2", since: "1.4")
+                fun parse(raw: String): String = raw
+
+                @Internal()
+                data User { name: String }
+
+                data Box[T] { value: T }
+
+                @A
+                fun Box[T].map(value: T): T = value
+                """));
+
+        var annotation = findDefinition(AnnotationDeclaration.class, "Deprecated", module.functional());
+        assertThat(annotation.annotations()).extracting(AnnotationUsage::name).containsExactly("Meta");
+        assertThat(annotation.targets()).extracting(AnnotationTarget::name)
+                .containsExactly("fun", "method", "data", "class");
+        assertThat(annotation.fields()).extracting(AnnotationFieldDeclaration::name)
+                .containsExactly("message", "since", "replacement", "order", "enabled", "ratio", "scale", "count", "unknown");
+        assertThat(annotation.fields().getFirst().defaultValue()).isEmpty();
+        assertThat(annotation.fields().get(1).defaultValue())
+                .hasValueSatisfying(value -> assertThat(((AnnotationValue.StringValue) value).value()).isEqualTo("\"\""));
+        assertThat(annotation.fields().get(2).defaultValue())
+                .hasValueSatisfying(value -> assertThat(((AnnotationValue.TypeNameValue) value).name()).isEqualTo("User"));
+
+        var markerFunction = findFunction("ping", module.functional());
+        assertThat(markerFunction.annotations()).extracting(AnnotationUsage::name).containsExactly("Benchmark");
+
+        var parse = findFunction("parse", module.functional());
+        assertThat(parse.comments()).containsExactly("Parser entrypoint");
+        assertThat(parse.annotations()).singleElement().satisfies(usage -> {
+            assertThat(usage.name()).isEqualTo("Deprecated");
+            assertThat(usage.arguments()).extracting(AnnotationArgument::name).containsExactly("message", "since");
+            assertThat(usage.arguments().get(0).value())
+                    .isInstanceOfSatisfying(AnnotationValue.StringValue.class, value -> assertThat(value.value()).isEqualTo("\"use parse_v2\""));
+            assertThat(usage.arguments().get(1).value())
+                    .isInstanceOfSatisfying(AnnotationValue.StringValue.class, value -> assertThat(value.value()).isEqualTo("\"1.4\""));
+        });
+
+        var data = findDefinition(DataDeclaration.class, "User", module.functional());
+        assertThat(data.annotations()).extracting(AnnotationUsage::name).containsExactly("Internal");
+
+        var method = findFunction("__method__Box__map", module.functional());
+        assertThat(method.annotations()).extracting(AnnotationUsage::name).containsExactly("A");
+    }
+
+    @Test
+    @DisplayName("should reject comma-separated declaration annotations")
+    void rejectCommaSeparatedDeclarationAnnotations() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                @A, @B
+                fun broken(): int = 1
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
     }
 
     private static dev.capylang.compiler.parser.Module parseSuccess(RawModule module) {
@@ -690,6 +768,11 @@ class CapybaraParserTest {
                     case List
                     [String] _ -> 1
                     case _ -> 0
+
+                @LineStartAnnotation()
+                fun annotated_identity(xs: List
+                [String]): List
+                [String] = xs
                 """));
 
         findDefinition(DataDeclaration.class, "Box", module.functional());
@@ -697,6 +780,9 @@ class CapybaraParserTest {
                 .hasValue(new CollectionType.ListType(PrimitiveType.STRING));
         findFunction("box_identity", module.functional());
         findFunction("match_list", module.functional());
+        var annotated = findFunction("annotated_identity", module.functional());
+        assertThat(annotated.returnType()).hasValue(new CollectionType.ListType(PrimitiveType.STRING));
+        assertThat(annotated.annotations()).extracting(AnnotationUsage::name).containsExactly("LineStartAnnotation");
     }
 
     @Test
@@ -764,9 +850,9 @@ class CapybaraParserTest {
         var parser = new CapybaraParser();
         Method method = CapybaraParser.class.getDeclaredMethod("formatParserError", RawModule.class, String.class, String.class);
         method.setAccessible(true);
-                var module = new RawModule("SemVer", "/capy/util", """
+        var module = new RawModule("SemVer", "/capy/util", """
                 fun parse(): int =
-                    fun rec parse_positive_digit(value: int): int = parse_positive_digit(value)
+                    fun parse_positive_digit(value: int): int = parse_positive_digit(value)
                     fun parse_positive_digit(value: int): int = value + 1
                     ---
                     0
@@ -801,30 +887,48 @@ class CapybaraParserTest {
     }
 
     @Test
-    @DisplayName("should parse tail recursive function marker")
+    @DisplayName("should parse recursive annotation usage")
     void parseTailRecursiveFunctionMarker() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                fun rec sum(n: int, acc: int): int =
+                @Recursive
+                fun sum(n: int, acc: int): int =
                     if n <= 0 then acc else sum(n - 1, acc + n)
                 """));
 
         var function = findFunction("sum", module.functional());
-        assertThat(function.tailRecursive()).isTrue();
+        assertThat(function.annotations()).extracting(AnnotationUsage::name).containsExactly("Recursive");
+        assertThat(function.tailRecursive()).isFalse();
     }
 
     @Test
-    @DisplayName("should parse tail recursive local function marker")
+    @DisplayName("should parse parenthesized recursive annotation usage")
+    void parseParenthesizedTailRecursiveFunctionMarker() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                @Recursive()
+                fun sum(n: int, acc: int): int =
+                    if n <= 0 then acc else sum(n - 1, acc + n)
+                """));
+
+        var function = findFunction("sum", module.functional());
+        assertThat(function.annotations()).extracting(AnnotationUsage::name).containsExactly("Recursive");
+        assertThat(function.tailRecursive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should parse recursive local function annotation usage")
     void parseTailRecursiveLocalFunctionMarker() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun sum(n: int): int =
-                    fun rec __sum(n: int, acc: int): int =
+                    @Recursive
+                    fun __sum(n: int, acc: int): int =
                         if n <= 0 then acc else __sum(n - 1, acc + n)
                     ---
                     __sum(n, 0)
                 """));
 
         var localFunction = findFunction("__sum__scope_1_0__local_fun_0_sum", module.functional());
-        assertThat(localFunction.tailRecursive()).isTrue();
+        assertThat(localFunction.annotations()).extracting(AnnotationUsage::name).containsExactly("Recursive");
+        assertThat(localFunction.tailRecursive()).isFalse();
     }
 
     @Test

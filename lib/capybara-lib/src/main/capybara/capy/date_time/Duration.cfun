@@ -1,6 +1,7 @@
 from /capy/lang/Result import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 /// [ISO 8601 - Durations](https://en.wikipedia.org/wiki/ISO_860101)
 ///
@@ -133,7 +134,8 @@ fun from_iso_8601(iso: String): Result[Duration] =
         case None -> Error { invalid("unexpected end of string while parsing digits") }
         case Some { '0' } -> Success { Parse { buffer: tail(value), value: 0 } }
         case Some -> parse_positive_digit(value)
-    fun rec parse_rest_digits(value: String, parsed: int): Result[Parse[int]] =
+    @Recursive
+    fun parse_rest_digits(value: String, parsed: int): Result[Parse[int]] =
         match value[0] with
         case Some { char } ->
             if match char with
@@ -303,7 +305,8 @@ fun from_iso_8601(iso: String): Result[Duration] =
             has_component: true,
             has_time_component: parse.has_time_component | parse.in_time
         }}
-    fun rec parse_designator_duration(parse: DurationParse): Result[Duration] =
+    @Recursive
+    fun parse_designator_duration(parse: DurationParse): Result[Duration] =
         match parse.buffer[0] with
         case None ->
             if !parse.has_component

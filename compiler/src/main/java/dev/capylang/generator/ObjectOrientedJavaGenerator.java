@@ -3,6 +3,7 @@ package dev.capylang.generator;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
+import dev.capylang.generator.java.ReflectionValueInfoJava;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -172,6 +173,8 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private void appendImports(StringBuilder code, ObjectOrientedModule module) {
+        var referencedTypeTokens = referencedTypeTokens(module);
+        var referencedAnnotationNames = referencedAnnotationNames(module);
         var imports = Stream.concat(
                         module.imports().stream()
                 .flatMap(importDeclaration -> importDeclaration.symbols().stream()
@@ -179,6 +182,7 @@ public final class ObjectOrientedJavaGenerator {
                         .filter(symbol -> !importDeclaration.excludedSymbols().contains(symbol))
                         .filter(symbol -> !symbol.isBlank())
                         .filter(symbol -> Character.isUpperCase(symbol.charAt(0)))
+                        .filter(symbol -> !referencedAnnotationNames.contains(symbol) || referencedTypeTokens.contains(symbol))
                         .map(symbol -> renderImportedSymbolReference(module, importDeclaration.moduleName(), symbol))),
                         inferSameModuleImports(module).stream()
                 )
@@ -232,6 +236,29 @@ public final class ObjectOrientedJavaGenerator {
                         method.body().ifPresent(body -> collectTypeTokens(body, references));
                     }
                     case ObjectOriented.InitBlock initBlock -> collectTypeTokens(initBlock.body(), references);
+                }
+            }
+        }
+        return Set.copyOf(references);
+    }
+
+    private Set<String> referencedAnnotationNames(ObjectOrientedModule module) {
+        var references = new HashSet<String>();
+        for (var definition : module.objectOriented().definitions()) {
+            definition.linkedAnnotations().stream()
+                    .map(annotation -> simpleTypeName(annotation.name()))
+                    .forEach(references::add);
+            for (var member : definition.members()) {
+                switch (member) {
+                    case ObjectOriented.FieldDeclaration field -> field.linkedAnnotations().stream()
+                            .map(annotation -> simpleTypeName(annotation.name()))
+                            .forEach(references::add);
+                    case ObjectOriented.MethodDeclaration method -> method.linkedAnnotations().stream()
+                            .map(annotation -> simpleTypeName(annotation.name()))
+                            .forEach(references::add);
+                    case ObjectOriented.InitBlock initBlock -> initBlock.linkedAnnotations().stream()
+                            .map(annotation -> simpleTypeName(annotation.name()))
+                            .forEach(references::add);
                 }
             }
         }
@@ -535,7 +562,8 @@ public final class ObjectOrientedJavaGenerator {
                    + javaString(declaration.name()) + ", "
                    + renderReflectionPackage(module) + ", "
                    + renderReflectionMethods(module, declaration.members(), definitionsByName, full) + ", "
-                   + renderReflectionParents(module, declaration.parents(), definitionsByName, full)
+                   + renderReflectionParents(module, declaration.parents(), definitionsByName, full) + ", "
+                   + ReflectionValueInfoJava.reflectionAnnotations(declaration.linkedAnnotations())
                    + ")";
         }
         if (declaration instanceof ObjectOriented.TraitDeclaration) {
@@ -543,7 +571,8 @@ public final class ObjectOrientedJavaGenerator {
                    + javaString(declaration.name()) + ", "
                    + renderReflectionPackage(module) + ", "
                    + renderReflectionMethods(module, declaration.members(), definitionsByName, full) + ", "
-                   + renderReflectionParents(module, declaration.parents(), definitionsByName, full)
+                   + renderReflectionParents(module, declaration.parents(), definitionsByName, full) + ", "
+                   + ReflectionValueInfoJava.reflectionAnnotations(declaration.linkedAnnotations())
                    + ")";
         }
         var classDeclaration = (ObjectOriented.ClassDeclaration) declaration;
@@ -557,7 +586,8 @@ public final class ObjectOrientedJavaGenerator {
                + classDeclaration.modifiers().contains("open") + ", "
                + renderReflectionFields(module, fields, definitionsByName, full) + ", "
                + renderReflectionMethods(module, declaration.members(), definitionsByName, full) + ", "
-               + renderReflectionParents(module, declaration.parents(), definitionsByName, full)
+               + renderReflectionParents(module, declaration.parents(), definitionsByName, full) + ", "
+               + ReflectionValueInfoJava.reflectionAnnotations(declaration.linkedAnnotations())
                + ")";
     }
 
@@ -594,6 +624,8 @@ public final class ObjectOrientedJavaGenerator {
                 .map(field -> "new capy.metaProg.Reflection.FieldInfo("
                               + javaString(field.name()) + ", "
                               + renderReflectionTypeInfo(module, field.type(), definitionsByName)
+                              + ", "
+                              + ReflectionValueInfoJava.reflectionAnnotations(field.linkedAnnotations())
                               + ")")
                 .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.FieldInfo>of(", ")"));
     }
@@ -629,6 +661,8 @@ public final class ObjectOrientedJavaGenerator {
                + renderReflectionPackage(module) + ", "
                + renderReflectionParams(module, method.parameters(), definitionsByName) + ", "
                + renderReflectionTypeInfo(module, method.returnType(), definitionsByName)
+               + ", "
+               + ReflectionValueInfoJava.reflectionAnnotations(method.linkedAnnotations())
                + ")";
     }
 
@@ -644,6 +678,8 @@ public final class ObjectOrientedJavaGenerator {
                 .map(parameter -> "new capy.metaProg.Reflection.FieldInfo("
                                   + javaString(parameter.name()) + ", "
                                   + renderReflectionTypeInfo(module, parameter.type(), definitionsByName)
+                                  + ", "
+                                  + ReflectionValueInfoJava.reflectionAnnotations(List.of())
                                   + ")")
                 .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.FieldInfo>of(", ")"));
     }
@@ -697,6 +733,8 @@ public final class ObjectOrientedJavaGenerator {
             return "new capy.metaProg.Reflection.DataInfo("
                    + javaString(trimmed) + ", "
                    + renderEmptyReflectionPackage()
+                   + ", "
+                   + ReflectionValueInfoJava.reflectionAnnotations(List.of())
                    + ")";
         }
         var primitiveBackedType = primitiveBackedType(module, trimmed);
@@ -710,6 +748,8 @@ public final class ObjectOrientedJavaGenerator {
         return "new capy.metaProg.Reflection.DataInfo("
                + javaString(simpleTypeName(trimmed)) + ", "
                + renderReflectionPackageForType(module, trimmed)
+               + ", "
+               + ReflectionValueInfoJava.reflectionAnnotations(List.of())
                + ")";
     }
 
@@ -727,7 +767,8 @@ public final class ObjectOrientedJavaGenerator {
                + "false, "
                + "java.util.List.<capy.metaProg.Reflection.FieldInfo>of(), "
                + "java.util.List.<capy.metaProg.Reflection.MethodInfo>of(), "
-               + "java.util.Set.<capy.metaProg.Reflection.AnyInfo>of()"
+               + "java.util.Set.<capy.metaProg.Reflection.AnyInfo>of(), "
+               + ReflectionValueInfoJava.reflectionAnnotations(List.of())
                + ")";
     }
 

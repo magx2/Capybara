@@ -5,12 +5,15 @@ import dev.capylang.compiler.Result;
 import dev.capylang.parser.antlr.ObjectOrientedLexer;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -135,7 +138,8 @@ public final class ObjectOrientedParser {
                 typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 members(context.typeBody().memberDeclaration()),
                 context.classModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
-                comments(context.docComment())
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -144,7 +148,8 @@ public final class ObjectOrientedParser {
                 context.TYPE().getText(),
                 typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 members(context.typeBody().memberDeclaration()),
-                comments(context.docComment())
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -156,7 +161,8 @@ public final class ObjectOrientedParser {
                 context.TYPE().getText(),
                 typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 members,
-                comments(context.docComment())
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -180,7 +186,8 @@ public final class ObjectOrientedParser {
                 context.type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.expression() == null ? java.util.Optional.empty() : java.util.Optional.of(context.expression().getText()),
-                comments(context.docComment())
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -192,7 +199,8 @@ public final class ObjectOrientedParser {
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 context.methodBody() == null ? java.util.Optional.empty() : java.util.Optional.of(methodBody(context.methodBody())),
-                comments(context.docComment())
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
         );
     }
 
@@ -204,12 +212,77 @@ public final class ObjectOrientedParser {
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 java.util.Optional.empty(),
-                comments(context.docComment())
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
         );
     }
 
     private ObjectOriented.InitBlock initBlock(dev.capylang.parser.antlr.ObjectOrientedParser.InitBlockContext context) {
-        return new ObjectOriented.InitBlock(statementBlock(context.statementBlock()), comments(context.docComment()));
+        return new ObjectOriented.InitBlock(
+                statementBlock(context.statementBlock()),
+                comments(context.docComment()),
+                annotations(context.annotationBlock())
+        );
+    }
+
+    private List<AnnotationUsage> annotations(List<dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext> contexts) {
+        return contexts.stream()
+                .map(this::annotationBlock)
+                .toList();
+    }
+
+    private AnnotationUsage annotationBlock(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext context) {
+        return new AnnotationUsage(
+                annotationName(context.annotationName()),
+                annotationArguments(context.annotationArgumentList()),
+                position(context)
+        );
+    }
+
+    private String annotationName(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationNameContext context) {
+        return context.getText();
+    }
+
+    private List<AnnotationArgument> annotationArguments(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentListContext context) {
+        if (context == null) {
+            return List.of();
+        }
+        return context.annotationArgument().stream()
+                .map(this::annotationArgument)
+                .toList();
+    }
+
+    private AnnotationArgument annotationArgument(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentContext context) {
+        return new AnnotationArgument(
+                context.identifier().getText(),
+                annotationValue(context.annotationValue()),
+                position(context)
+        );
+    }
+
+    private AnnotationValue annotationValue(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationValueContext context) {
+        if (context.STRING_LITERAL() != null) {
+            return new AnnotationValue.StringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
+        }
+        if (context.INT_LITERAL() != null) {
+            return new AnnotationValue.IntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
+        }
+        if (context.LONG_LITERAL() != null) {
+            return new AnnotationValue.LongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
+        }
+        if (context.FLOAT_LITERAL() != null) {
+            return new AnnotationValue.FloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
+        }
+        if (context.DOUBLE_LITERAL() != null) {
+            return new AnnotationValue.DoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
+        }
+        if (context.BOOL_LITERAL() != null) {
+            return new AnnotationValue.BoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
+        }
+        if (context.NOTHING_LITERAL() != null) {
+            return new AnnotationValue.NothingValue(position(context.NOTHING_LITERAL()));
+        }
+        return new AnnotationValue.TypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
     }
 
     private ObjectOriented.MethodBody methodBody(dev.capylang.parser.antlr.ObjectOrientedParser.MethodBodyContext context) {
@@ -392,6 +465,14 @@ public final class ObjectOrientedParser {
         return contexts.stream()
                 .map(context -> new ObjectOriented.TypeReference(context.getText()))
                 .toList();
+    }
+
+    private static Optional<SourcePosition> position(ParserRuleContext context) {
+        return SourcePosition.of(context);
+    }
+
+    private static Optional<SourcePosition> position(TerminalNode node) {
+        return Optional.of(SourcePosition.of(node));
     }
 
     private record ParsedSource(String source, List<ImportDeclaration> imports) {

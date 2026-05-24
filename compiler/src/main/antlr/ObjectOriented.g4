@@ -11,9 +11,9 @@ definition:
     | traitDeclaration
     | interfaceDeclaration;
 
-classDeclaration: docComment* classModifier* 'class' TYPE constructorParameters? inheritanceClause? typeBody;
-traitDeclaration: docComment* 'trait' TYPE inheritanceClause? typeBody;
-interfaceDeclaration: docComment* 'interface' TYPE inheritanceClause? interfaceBody;
+classDeclaration: docComment* annotationBlock* classModifier* 'class' TYPE constructorParameters? inheritanceClause? typeBody;
+traitDeclaration: docComment* annotationBlock* 'trait' TYPE inheritanceClause? typeBody;
+interfaceDeclaration: docComment* annotationBlock* 'interface' TYPE inheritanceClause? interfaceBody;
 
 classModifier
     : 'open'
@@ -27,12 +27,12 @@ memberDeclaration: fieldDeclaration
                  | methodDeclaration
                  | initBlock;
 interfaceMemberDeclaration: interfaceMethodDeclaration;
-fieldDeclaration: docComment* visibility? 'field' identifier ':' type ('=' expression)?;
-methodDeclaration: docComment* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType methodBody?;
+fieldDeclaration: docComment* annotationBlock* visibility? 'field' identifier ':' type ('=' expression)?;
+methodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType methodBody?;
 methodBody: '=' expression
           | statementBlock;
-interfaceMethodDeclaration: docComment* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType;
-initBlock: docComment* 'init' statementBlock;
+interfaceMethodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType;
+initBlock: docComment* annotationBlock* 'init' statementBlock;
 statementBlock: '{' statement* '}';
 statement: letStatement
          | defStatement
@@ -353,8 +353,48 @@ infixOperatorNoPipe
     | AND
     ;
 
-methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
+methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL | AT;
 docComment: DOC_COMMENT;
+
+annotationBlock
+    : annotationOpen annotationName (LPAREN annotationArgumentList? RPAREN)?
+    ;
+annotationOpen
+    : AT
+    ;
+annotationName
+    : qualifiedType
+    | lowerQualifiedType
+    ;
+annotationArgumentList
+    : annotationArgument (COMMA annotationArgument)* COMMA?
+    ;
+annotationArgument
+    : identifier COLON annotationValue
+    ;
+annotationValue
+    : STRING_LITERAL
+    | INT_LITERAL
+    | LONG_LITERAL
+    | FLOAT_LITERAL
+    | DOUBLE_LITERAL
+    | BOOL_LITERAL
+    | NOTHING_LITERAL
+    | annotationTypeReference
+    ;
+annotationTypeReference
+    : 'byte'
+    | 'int'
+    | 'long'
+    | 'double'
+    | 'bool'
+    | 'float'
+    | 'any'
+    | 'data'
+    | 'void'
+    | qualifiedType ('[' annotationTypeReference (COMMA annotationTypeReference)* ']')?
+    | lowerQualifiedType
+    ;
 
 UNDERSCORE: '_';
 LPAREN : '(';
@@ -395,6 +435,7 @@ POWER: '^';
 MOD : '%';
 FAT_ARROW : '=>';
 MATCH_ARROW : '->';
+AT : '@';
 DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;

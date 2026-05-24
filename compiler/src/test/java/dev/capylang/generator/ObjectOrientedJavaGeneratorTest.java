@@ -830,17 +830,28 @@ class ObjectOrientedJavaGeneratorTest {
                 package capy.metaProg;
 
                 public final class Reflection {
-                    public sealed interface AnyInfo permits DataInfo, InterfaceInfo, ObjectInfo, TraitInfo, ListInfo, SetInfo, DictInfo, TupleInfo, FunctionTypeInfo {}
+                    public sealed interface AnyInfo permits DataInfo, InterfaceInfo, ObjectInfo, TraitInfo, MethodInfo, ListInfo, SetInfo, DictInfo, TupleInfo, FunctionTypeInfo {}
+                    public sealed interface AnnotationValue permits AnnotationString, AnnotationInt, AnnotationLong, AnnotationDouble, AnnotationFloat, AnnotationBool, AnnotationTypeName, AnnotationNothing {}
 
                     public record PackageInfo(String name, String path) {}
-                    public record FieldInfo(String name, AnyInfo type) {}
-                    public record FieldValueInfo(String name, AnyInfo type, Object value) {}
-                    public record DataValueInfo(String name, PackageInfo pkg, java.util.List<FieldValueInfo> fields) {}
-                    public record DataInfo(String name, PackageInfo pkg) implements AnyInfo {}
-                    public record MethodInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> params, AnyInfo return_type) {}
-                    public record InterfaceInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents) implements AnyInfo {}
-                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<FieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents) implements AnyInfo {}
-                    public record TraitInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents) implements AnyInfo {}
+                    public record AnnotationString(String value) implements AnnotationValue {}
+                    public record AnnotationInt(int value) implements AnnotationValue {}
+                    public record AnnotationLong(long value) implements AnnotationValue {}
+                    public record AnnotationDouble(double value) implements AnnotationValue {}
+                    public record AnnotationFloat(float value) implements AnnotationValue {}
+                    public record AnnotationBool(boolean value) implements AnnotationValue {}
+                    public record AnnotationTypeName(String value) implements AnnotationValue {}
+                    public record AnnotationNothing() implements AnnotationValue {}
+                    public record AnnotationArgumentInfo(String name, AnnotationValue value) {}
+                    public record AnnotationInfo(String name, PackageInfo pkg, java.util.List<AnnotationArgumentInfo> arguments) {}
+                    public record FieldInfo(String name, AnyInfo type, java.util.List<AnnotationInfo> annotations) {}
+                    public record FieldValueInfo(String name, AnyInfo type, Object value, java.util.List<AnnotationInfo> annotations) {}
+                    public record DataValueInfo(String name, PackageInfo pkg, java.util.List<FieldValueInfo> fields, java.util.List<AnnotationInfo> annotations) {}
+                    public record DataInfo(String name, PackageInfo pkg, java.util.List<AnnotationInfo> annotations) implements AnyInfo {}
+                    public record MethodInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> params, AnyInfo return_type, java.util.List<AnnotationInfo> annotations) implements AnyInfo {}
+                    public record InterfaceInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents, java.util.List<AnnotationInfo> annotations) implements AnyInfo {}
+                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<FieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents, java.util.List<AnnotationInfo> annotations) implements AnyInfo {}
+                    public record TraitInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents, java.util.List<AnnotationInfo> annotations) implements AnyInfo {}
                     public record ListInfo(String name, PackageInfo pkg, AnyInfo element_type) implements AnyInfo {}
                     public record SetInfo(String name, PackageInfo pkg, AnyInfo element_type) implements AnyInfo {}
                     public record DictInfo(String name, PackageInfo pkg, AnyInfo value_type) implements AnyInfo {}

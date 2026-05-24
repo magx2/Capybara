@@ -286,17 +286,20 @@ receiver types.
 
 ### Recursion
 
-Recursive functions are allowed. `fun rec` is a compiler-checked direct
-tail-recursion contract:
+Recursive functions are allowed. The standard `Recursive` annotation is a
+compiler-checked direct tail-recursion contract:
 
 ```cfun
-fun rec sum_to(n: int, acc: int): int =
+from /capy/meta_prog/Recursive import { Recursive }
+
+@Recursive
+fun sum_to(n: int, acc: int): int =
     if n <= 0 then acc else sum_to(n - 1, acc + n)
 ```
 
-If a `fun rec` self-call is not in tail position, compilation fails. Unmarked
-recursive functions remain valid, but `fun rec` documents and verifies the
-tail-recursive shape.
+If a `@Recursive` self-call is not in tail position, compilation fails.
+Unmarked recursive functions remain valid, but `@Recursive` documents and
+verifies the tail-recursive shape.
 
 ### Derive And Reflection
 
@@ -322,6 +325,71 @@ fun show_account(): String =
 The generated receiver is named `receiver` inside a deriver method. Reflection
 v1 is intentionally small: it supports `.cfun` data value metadata, derive use
 cases, shallow runtime type patterns, and static `.coo` type metadata.
+
+### Declaration Annotations
+
+Annotations are source-level metadata prefixes for declarations. Annotation
+definitions are top-level `.cfun` declarations; `.coo` sources can import and
+use those definitions.
+
+```cfun
+annotation JsonName on field {
+    value: String
+}
+
+annotation Internal on data, class, method {}
+```
+
+Use one annotation prefix before the declaration it describes.
+Multiple prefixes preserve source order. Arguments are named with `key: value`;
+annotations with no explicit arguments may omit empty parentheses.
+
+```cfun
+@Internal
+data User {
+    @JsonName(value: "user_id")
+    id: String
+}
+```
+
+The standard library provides `Deprecated` from
+`/capy/meta_prog/Annotations`. It requires `message: String` and defaults
+`since: String` to `""`:
+
+```cfun
+from /capy/meta_prog/Annotations import { Deprecated }
+
+@Deprecated(message: "use parse_v2", since: "1.4")
+fun parse(raw: String): Result[User] = ...
+```
+
+Supported targets are `fun`, `method`, `const`, `data`, `union`, `enum`,
+`type`, `deriver`, `class`, `interface`, `trait`, `field`, and `init`.
+Validation checks that annotation definitions are visible through normal import
+rules, the target is allowed, required arguments are provided, argument keys are
+unique and known, and argument values match the declared field types.
+Comma-separated prefixes such as `@A, @B` or `@A(), @B()` and positional arguments are not
+valid.
+
+Reflection exposes annotation metadata for supported reflected declarations:
+
+```cfun
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
+annotation Label on data {
+    value: String
+}
+
+@Label(value: "account")
+data Account { id: String }
+
+fun account_info(account: Account): DataValueInfo =
+    reflection(account)
+```
+
+Annotations are metadata only. They are not macros, decorators, retention
+policies, runtime execution hooks, or a way to replace explicit language
+features such as `derive`, `override`, visibility, or constructors.
 
 ### Effects And Programs
 
@@ -513,7 +581,8 @@ Keep these boundaries in mind when changing code or examples:
   pipe-prefixed match branch examples.
 - Match branches use `case Pattern -> expression`.
 - `.cfun` methods are declared on the receiver type with dotted method syntax.
-- `fun rec` is a tail-recursion assertion, not a general recursion keyword.
+- `@Recursive` is the compiler-recognized standard tail-recursion annotation,
+  not a general recursion keyword.
 - `* { ... }` is constructor-local raw construction.
 - `DataName! { ... }` is an unsafe same-module constructor bypass for
   `Result`-returning constructors.
