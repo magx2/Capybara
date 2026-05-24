@@ -1,0 +1,6 @@
+from /capy/collection/List import { * }
+from /capy/lang/Effect import { * }
+from /capy/test/CapyTest import { * }
+
+fun e2e_object_test_file(source_file: String, test_cases: List[TestCase]): Effect[TestFile] =
+    test_file("/dev/capylang/test/" + source_file, test_cases)
