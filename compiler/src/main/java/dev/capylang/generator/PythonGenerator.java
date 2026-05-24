@@ -3573,7 +3573,24 @@ public final class PythonGenerator implements Generator {
                     def new_array(length, default_value=None): return [default_value for _ in range(length)]
 
                     def annotation_value(kind, value=None):
-                        return SimpleNamespace(kind=kind, value=value) if value is not None else SimpleNamespace(kind=kind)
+                        annotation_type = {
+                            'string': 'AnnotationString',
+                            'int': 'AnnotationInt',
+                            'long': 'AnnotationLong',
+                            'double': 'AnnotationDouble',
+                            'float': 'AnnotationFloat',
+                            'bool': 'AnnotationBool',
+                            'type_name': 'AnnotationTypeName',
+                            'nothing': 'AnnotationNothing',
+                        }.get(kind, 'AnnotationValue')
+                        fields = {
+                            '__capybaraType': annotation_type,
+                            '__capybaraTypes': [annotation_type, 'AnnotationValue', 'CapybaraDataValue'],
+                            'kind': kind,
+                        }
+                        if value is not None:
+                            fields['value'] = value
+                        return SimpleNamespace(**fields)
                     def annotation_argument_info(name, value): return SimpleNamespace(name=name, value=value)
                     def annotation_info(name, pkg=None, arguments=None): return SimpleNamespace(name=name, pkg=pkg or package_info(), arguments=arguments or [])
                     def object_info(kind, name, pkg=None, open=False, fields=None, methods=None, parents=None, annotations=None, **kwargs):
