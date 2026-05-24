@@ -6,7 +6,7 @@
 
 ## Status
 
-Accepted. The v1 slice is implemented for compile-time provider declarations,
+Accepted. The v1 slice is implemented for compile-time provider annotations,
 manifest wiring, and Java, JavaScript CommonJS, and Python provider bootstrap
 generation.
 
@@ -43,18 +43,21 @@ Host implementations are wired through compile-time metadata, such as a
 provider manifest consumed by the compiler or generator. v1 must not use mutable
 runtime registration as the provider selection mechanism.
 
-The first implementation slice uses the following concrete `.coo` syntax for a
-typed provider symbol. The syntax names a Capybara interface and qualifier
-only; it does not name the host implementation. `.coo` code may declare a typed
-provider symbol, but it must not import Java packages, CommonJS modules, npm
-packages, or Python modules directly:
+After `ADR-2026-05-24: Declaration Annotations v1`, the implementation slice
+uses a standard `.cfun` annotation from `/capy/meta_prog/NativeProvider` to
+declare a typed provider symbol on the Capybara OO interface. The annotation
+names the generated provider symbol and qualifier only; it does not name the
+host implementation. `.coo` code may mark an interface as a native provider
+contract, but it must not import Java packages, CommonJS modules, npm packages,
+or Python modules directly:
 
 ```coo
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+@NativeProvider(name: "system_clock", qualifier: "system")
 interface Clock {
     def now_millis(): long
 }
-
-native provider system_clock: Clock key "system"
 ```
 
 The corresponding provider manifest shape for v1 is:
@@ -112,7 +115,7 @@ boundary; this issue must not expose pure `.cfun` host calls.
 The named first implementation slice is "native provider wiring v1". Its scope
 is:
 
-- parse and link typed `native provider` declarations for `.coo` interfaces;
+- parse and link typed `@NativeProvider` annotations for `.coo` interfaces;
 - read a structured provider manifest for the selected backend;
 - validate provider key uniqueness and target interface existence;
 - generate immutable provider tables or typed provider methods;
@@ -135,16 +138,18 @@ Non-goals for this slice are:
 Supported `.coo` syntax:
 
 ```coo
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+@NativeProvider(name: "system_clock", qualifier: "system")
 interface Clock {
     def now_millis(): long
 }
-
-native provider system_clock: Clock key "system"
 ```
 
-The provider symbol is callable as `system_clock()` and returns the declared
-Capybara interface type. `.coo` still contains only Capybara type names and
-qualifiers; host class or module names live in the manifest.
+The provider symbol is callable as `system_clock()` and returns the annotated
+Capybara interface type. `.coo` still contains only Capybara type names,
+provider names, and qualifiers; host class or module names live in the
+manifest.
 
 Implemented manifest format:
 

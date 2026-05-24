@@ -151,16 +151,17 @@ public final class ObjectOrientedJavaGenerator {
         var constructorParameterNames = declaration.constructorParameters().stream()
                 .map(ObjectOriented.Parameter::name)
                 .collect(Collectors.toCollection(HashSet::new));
+        var memberBindingNames = memberBindingNames(declaration);
 
         for (var field : fields) {
-            code.append(renderFieldDeclaration(module, field, constructorParameterNames)).append("\n");
+            code.append(renderFieldDeclaration(module, field, constructorParameterNames, memberBindingNames)).append("\n");
         }
         if (!fields.isEmpty()) {
             code.append("\n");
         }
 
         if (requiresConstructor) {
-            code.append(renderConstructor(module, declaration, fields, initBlocks)).append("\n");
+            code.append(renderConstructor(module, declaration, fields, initBlocks, memberBindingNames)).append("\n");
         }
 
         if (usesThrowSupport(declaration)) {
@@ -178,7 +179,7 @@ public final class ObjectOrientedJavaGenerator {
                 .map(this::simpleTypeName)
                 .collect(Collectors.toUnmodifiableSet());
         for (int i = 0; i < methods.size(); i++) {
-            code.append(renderClassMethod(module, declaration, methods.get(i), parentNames));
+            code.append(renderClassMethod(module, declaration, methods.get(i), parentNames, memberBindingNames));
             if (i < methods.size() - 1) {
                 code.append("\n");
             }
@@ -387,7 +388,8 @@ public final class ObjectOrientedJavaGenerator {
             ObjectOrientedModule module,
             ObjectOriented.ClassDeclaration declaration,
             List<ObjectOriented.FieldDeclaration> fields,
-            List<ObjectOriented.InitBlock> initBlocks
+            List<ObjectOriented.InitBlock> initBlocks,
+            List<String> memberBindingNames
     ) {
         var code = new StringBuilder();
         code.append("    public ").append(declaration.name()).append("(");
@@ -398,13 +400,24 @@ public final class ObjectOrientedJavaGenerator {
         var constructorParameterNames = declaration.constructorParameters().stream()
                 .map(ObjectOriented.Parameter::name)
                 .collect(Collectors.toCollection(HashSet::new));
+        var constructorBindingNames = declaration.constructorParameters().stream()
+                .map(ObjectOriented.Parameter::name)
+                .toList();
+        var constructorBindings = LocalMethodBindings.empty()
+                .withLocals(memberBindingNames)
+                .withParameters(constructorBindingNames);
 
         for (var field : fields) {
             if (field.initializer().isPresent() && referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
                 code.append("        this.")
                         .append(sanitizeIdentifier(field.name()))
                         .append(" = ")
-                        .append(renderExpression(module, field.initializer().orElseThrow(), Set.of(), LocalMethodBindings.empty()))
+                        .append(renderExpression(
+                                module,
+                                field.initializer().orElseThrow(),
+                                Set.of(),
+                                constructorBindings
+                        ))
                         .append(";\n");
                 continue;
             }
@@ -418,13 +431,25 @@ public final class ObjectOrientedJavaGenerator {
         }
 
         for (var initBlock : initBlocks) {
-            appendStatementBlockContents(code, module, initBlock.body(), 2, Set.of(), LocalMethodBindings.empty());
+            appendStatementBlockContents(
+                    code,
+                    module,
+                    initBlock.body(),
+                    2,
+                    Set.of(),
+                    constructorBindings
+            );
         }
         code.append("    }\n");
         return code.toString();
     }
 
-    private String renderFieldDeclaration(ObjectOrientedModule module, ObjectOriented.FieldDeclaration field, Set<String> constructorParameterNames) {
+    private String renderFieldDeclaration(
+            ObjectOrientedModule module,
+            ObjectOriented.FieldDeclaration field,
+            Set<String> constructorParameterNames,
+            List<String> memberBindingNames
+    ) {
         var code = new StringBuilder();
         appendDocComments(code, field.comments(), 1);
         var visibility = renderClassVisibility(field.visibility());
@@ -433,7 +458,12 @@ public final class ObjectOrientedJavaGenerator {
         }
         code.append(renderType(module, field.type(), false)).append(' ').append(sanitizeIdentifier(field.name()));
         if (field.initializer().isPresent() && !referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
-            code.append(" = ").append(renderExpression(module, field.initializer().orElseThrow(), Set.of(), LocalMethodBindings.empty()));
+            code.append(" = ").append(renderExpression(
+                    module,
+                    field.initializer().orElseThrow(),
+                    Set.of(),
+                    LocalMethodBindings.empty().withLocals(memberBindingNames)
+            ));
         }
         code.append(";");
         return code.toString();
@@ -443,7 +473,8 @@ public final class ObjectOrientedJavaGenerator {
             ObjectOrientedModule module,
             ObjectOriented.ClassDeclaration owner,
             ObjectOriented.MethodDeclaration method,
-            Set<String> parentNames
+            Set<String> parentNames,
+            List<String> memberBindingNames
     ) {
         var code = new StringBuilder();
         appendDocComments(code, method.comments(), 1);
@@ -482,7 +513,7 @@ public final class ObjectOrientedJavaGenerator {
             return code.toString();
         }
         code.append(" {\n");
-        appendMethodBody(code, module, method, 2, parentNames);
+        appendMethodBody(code, module, method, 2, parentNames, LocalMethodBindings.empty().withLocals(memberBindingNames));
         code.append("    }\n");
         return code.toString();
     }
@@ -539,11 +570,23 @@ public final class ObjectOrientedJavaGenerator {
             code.append(renderMatchHelper()).append("\n");
         }
         code.append(renderReflectionMethod(module, declaration, definitionsByName)).append("\n");
+        var memberBindingNames = memberBindingNames(declaration);
         for (var member : declaration.members()) {
-            code.append(renderTraitMethod(module, declaration.name(), (ObjectOriented.MethodDeclaration) member));
+            code.append(renderTraitMethod(module, declaration.name(), (ObjectOriented.MethodDeclaration) member, memberBindingNames));
         }
         code.append("}\n");
         return code.toString();
+    }
+
+    private List<String> memberBindingNames(ObjectOriented.TypeDeclaration declaration) {
+        return declaration.members().stream()
+                .map(member -> switch (member) {
+                    case ObjectOriented.FieldDeclaration fieldDeclaration -> Optional.of(fieldDeclaration.name());
+                    case ObjectOriented.MethodDeclaration methodDeclaration -> Optional.of(methodDeclaration.name());
+                    case ObjectOriented.InitBlock ignored -> Optional.<String>empty();
+                })
+                .flatMap(Optional::stream)
+                .toList();
     }
 
     private String renderReflectionMethod(
@@ -827,7 +870,12 @@ public final class ObjectOrientedJavaGenerator {
         return code.toString();
     }
 
-    private String renderTraitMethod(ObjectOrientedModule module, String ownerName, ObjectOriented.MethodDeclaration method) {
+    private String renderTraitMethod(
+            ObjectOrientedModule module,
+            String ownerName,
+            ObjectOriented.MethodDeclaration method,
+            List<String> memberBindingNames
+    ) {
         var code = new StringBuilder();
         appendDocComments(code, method.comments(), 1);
         code.append("    ");
@@ -860,7 +908,7 @@ public final class ObjectOrientedJavaGenerator {
             return code.toString();
         }
         code.append(" {\n");
-        appendMethodBody(code, module, method, 2, Set.of());
+        appendMethodBody(code, module, method, 2, Set.of(), LocalMethodBindings.empty().withLocals(memberBindingNames));
         code.append("    }\n");
         return code.toString();
     }
@@ -870,23 +918,26 @@ public final class ObjectOrientedJavaGenerator {
             ObjectOrientedModule module,
             ObjectOriented.MethodDeclaration method,
             int indentLevel,
-            Set<String> parentNames
+            Set<String> parentNames,
+            LocalMethodBindings ownerBindings
     ) {
+        var methodBindings = ownerBindings
+                .withParameters(method.parameters().stream().map(ObjectOriented.Parameter::name).toList());
         method.body().ifPresent(body -> {
             if (body instanceof ObjectOriented.ExpressionBody expressionBody) {
                 if ("void".equals(renderType(module, method.returnType(), false))) {
                     code.append(indent(indentLevel))
-                            .append(renderExpression(module, expressionBody.expression(), parentNames, LocalMethodBindings.empty()))
+                            .append(renderExpression(module, expressionBody.expression(), parentNames, methodBindings))
                             .append(";\n");
                     return;
                 }
                 code.append(indent(indentLevel))
                         .append("return ")
-                        .append(renderExpression(module, expressionBody.expression(), parentNames, LocalMethodBindings.empty()))
+                        .append(renderExpression(module, expressionBody.expression(), parentNames, methodBindings))
                         .append(";\n");
                 return;
             }
-            appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) body, indentLevel, parentNames, LocalMethodBindings.empty());
+            appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) body, indentLevel, parentNames, methodBindings);
         });
     }
 
@@ -898,6 +949,7 @@ public final class ObjectOrientedJavaGenerator {
             Set<String> parentNames,
             LocalMethodBindings localMethodBindings
     ) {
+        var scope = localMethodBindings;
         for (int index = 0; index < block.statements().size(); index++) {
             var statement = block.statements().get(index);
             if (statement instanceof ObjectOriented.LocalMethodStatement) {
@@ -907,10 +959,10 @@ public final class ObjectOrientedJavaGenerator {
                     index++;
                 }
                 index--;
-                localMethodBindings = appendLocalMethodGroup(code, module, groupedLocalMethods, indentLevel, parentNames, localMethodBindings);
+                scope = appendLocalMethodGroup(code, module, groupedLocalMethods, indentLevel, parentNames, scope);
                 continue;
             }
-            appendStatement(code, module, statement, indentLevel, parentNames, localMethodBindings);
+            scope = appendStatement(code, module, statement, indentLevel, parentNames, scope);
         }
     }
 
@@ -925,8 +977,9 @@ public final class ObjectOrientedJavaGenerator {
         var helperType = "__CapybaraLocalMethods" + syntheticCounter++;
         var helperVariable = "__capybaraLocalMethods" + syntheticCounter++;
         code.append(indent(indentLevel)).append("final class ").append(helperType).append(" {\n");
+        var methodBodyBindings = outerBindings.withLocalMethodNames(localMethods.stream().map(ObjectOriented.LocalMethodStatement::name).toList());
         for (int index = 0; index < localMethods.size(); index++) {
-            appendLocalMethod(code, module, localMethods.get(index), indentLevel + 1, parentNames, outerBindings);
+            appendLocalMethod(code, module, localMethods.get(index), indentLevel + 1, parentNames, methodBodyBindings);
             if (index < localMethods.size() - 1) {
                 code.append("\n");
             }
@@ -958,21 +1011,38 @@ public final class ObjectOrientedJavaGenerator {
             code.append(" {\n")
                     .append(indent(indentLevel + 1));
             if ("void".equals(renderType(module, method.returnType(), false))) {
-                code.append(renderExpression(module, expressionBody.expression(), parentNames, localMethodBindings)).append(";\n");
+                code.append(renderExpression(
+                        module,
+                        expressionBody.expression(),
+                        parentNames,
+                        localMethodBindings.withParameters(method.parameters().stream().map(ObjectOriented.Parameter::name).toList())
+                )).append(";\n");
             } else {
                 code.append("return ")
-                        .append(renderExpression(module, expressionBody.expression(), parentNames, localMethodBindings))
+                        .append(renderExpression(
+                                module,
+                                expressionBody.expression(),
+                                parentNames,
+                                localMethodBindings.withParameters(method.parameters().stream().map(ObjectOriented.Parameter::name).toList())
+                        ))
                         .append(";\n");
             }
             code.append(indent(indentLevel)).append("}\n");
             return;
         }
         code.append(" {\n");
-        appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) method.body(), indentLevel + 1, parentNames, localMethodBindings);
+        appendStatementBlockContents(
+                code,
+                module,
+                (ObjectOriented.StatementBlock) method.body(),
+                indentLevel + 1,
+                parentNames,
+                localMethodBindings.withParameters(method.parameters().stream().map(ObjectOriented.Parameter::name).toList())
+        );
         code.append(indent(indentLevel)).append("}\n");
     }
 
-    private void appendStatement(
+    private LocalMethodBindings appendStatement(
             StringBuilder code,
             ObjectOrientedModule module,
             ObjectOriented.Statement statement,
@@ -981,39 +1051,46 @@ public final class ObjectOrientedJavaGenerator {
             LocalMethodBindings localMethodBindings
     ) {
         switch (statement) {
-            case ObjectOriented.LetStatement letStatement -> code.append(indent(indentLevel))
-                    .append("final ")
-                    .append(letStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
-                    .append(' ')
-                    .append(sanitizeIdentifier(letStatement.name()))
-                    .append(" = ")
-                    .append(renderExpression(module, letStatement.expression(), parentNames, localMethodBindings))
-                    .append(";\n");
-            case ObjectOriented.LocalMethodStatement ignored -> {
+            case ObjectOriented.LetStatement letStatement -> {
+                code.append(indent(indentLevel))
+                        .append("final ")
+                        .append(letStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
+                        .append(' ')
+                        .append(sanitizeIdentifier(letStatement.name()))
+                        .append(" = ")
+                        .append(renderExpression(module, letStatement.expression(), parentNames, localMethodBindings))
+                        .append(";\n");
+                return localMethodBindings.withLocal(letStatement.name());
             }
-            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> code.append(indent(indentLevel))
-                    .append(mutableVariableStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
-                    .append(' ')
-                    .append(sanitizeIdentifier(mutableVariableStatement.name()))
-                    .append(" = ")
-                    .append(renderExpression(module, mutableVariableStatement.expression(), parentNames, localMethodBindings))
-                    .append(";\n");
+            case ObjectOriented.LocalMethodStatement ignored -> {
+                return localMethodBindings;
+            }
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
+                code.append(indent(indentLevel))
+                        .append(mutableVariableStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
+                        .append(' ')
+                        .append(sanitizeIdentifier(mutableVariableStatement.name()))
+                        .append(" = ")
+                        .append(renderExpression(module, mutableVariableStatement.expression(), parentNames, localMethodBindings))
+                        .append(";\n");
+                return localMethodBindings.withLocal(mutableVariableStatement.name());
+            }
             case ObjectOriented.AssignmentStatement assignmentStatement -> code.append(indent(indentLevel))
-                    .append(sanitizeIdentifier(assignmentStatement.name()))
-                    .append(" = ")
-                    .append(renderExpression(module, assignmentStatement.expression(), parentNames, localMethodBindings))
-                    .append(";\n");
+                            .append(sanitizeIdentifier(assignmentStatement.name()))
+                            .append(" = ")
+                            .append(renderExpression(module, assignmentStatement.expression(), parentNames, localMethodBindings))
+                            .append(";\n");
             case ObjectOriented.ExpressionStatement expressionStatement -> code.append(indent(indentLevel))
-                    .append(renderExpression(module, expressionStatement.expression(), parentNames, localMethodBindings))
-                    .append(";\n");
+                            .append(renderExpression(module, expressionStatement.expression(), parentNames, localMethodBindings))
+                            .append(";\n");
             case ObjectOriented.ThrowStatement throwStatement -> code.append(indent(indentLevel))
-                    .append("throw capybara$toException(")
-                    .append(renderExpression(module, throwStatement.expression(), parentNames, localMethodBindings))
-                    .append(");\n");
+                            .append("throw capybara$toException(")
+                            .append(renderExpression(module, throwStatement.expression(), parentNames, localMethodBindings))
+                            .append(");\n");
             case ObjectOriented.ReturnStatement returnStatement -> code.append(indent(indentLevel))
-                    .append("return ")
-                    .append(renderExpression(module, returnStatement.expression(), parentNames, localMethodBindings))
-                    .append(";\n");
+                            .append("return ")
+                            .append(renderExpression(module, returnStatement.expression(), parentNames, localMethodBindings))
+                            .append(";\n");
             case ObjectOriented.IfStatement ifStatement -> {
                 code.append(indent(indentLevel))
                         .append("if (")
@@ -1041,7 +1118,7 @@ public final class ObjectOrientedJavaGenerator {
                     code.append(" catch (java.lang.RuntimeException ")
                             .append(sanitizeIdentifier(catchClause.name()))
                             .append(") {\n");
-                    appendStatementBlockContents(code, module, catchClause.body(), indentLevel + 1, parentNames, localMethodBindings);
+                    appendStatementBlockContents(code, module, catchClause.body(), indentLevel + 1, parentNames, localMethodBindings.withLocal(catchClause.name()));
                     code.append(indent(indentLevel)).append("}");
                 }
                 code.append("\n");
@@ -1071,7 +1148,7 @@ public final class ObjectOrientedJavaGenerator {
                         .append(" : ")
                         .append(renderExpression(module, forEachStatement.iterable(), parentNames, localMethodBindings))
                         .append(") {\n");
-                appendStatementBlockContents(code, module, forEachStatement.body(), indentLevel + 1, parentNames, localMethodBindings);
+                appendStatementBlockContents(code, module, forEachStatement.body(), indentLevel + 1, parentNames, localMethodBindings.withLocal(forEachStatement.name()));
                 code.append(indent(indentLevel)).append("}\n");
             }
             case ObjectOriented.StatementBlock nestedBlock -> {
@@ -1080,6 +1157,7 @@ public final class ObjectOrientedJavaGenerator {
                 code.append(indent(indentLevel)).append("}\n");
             }
         }
+        return localMethodBindings;
     }
 
     private void appendInlineIf(
@@ -1378,7 +1456,7 @@ public final class ObjectOrientedJavaGenerator {
         for (var entry : providers.entrySet().stream()
                 .sorted((left, right) -> Integer.compare(right.getKey().length(), left.getKey().length()))
                 .toList()) {
-            if (localMethodBindings.replacements().containsKey(entry.getKey())) {
+            if (localMethodBindings.hasBinding(entry.getKey())) {
                 continue;
             }
             rejectNativeProviderCallsWithArguments(module, rewritten, entry.getKey(), entry.getValue());
@@ -1458,6 +1536,7 @@ public final class ObjectOrientedJavaGenerator {
 
     private Map<String, String> importedFunctionOwners(ObjectOrientedModule module) {
         var owners = new LinkedHashMap<String, String>();
+        var nativeProviderNames = visibleNativeProviders(module).keySet();
         for (var importDeclaration : module.imports()) {
             var ownerReference = renderImportedOwnerReference(module, importDeclaration.moduleName());
             if (importDeclaration.isStarImport() && "/capy/io/Stdout".equals(importDeclaration.moduleName())) {
@@ -1469,6 +1548,9 @@ public final class ObjectOrientedJavaGenerator {
                     continue;
                 }
                 if (importDeclaration.excludedSymbols().contains(symbol)) {
+                    continue;
+                }
+                if (nativeProviderNames.contains(symbol)) {
                     continue;
                 }
                 owners.put(symbol, ownerReference);
@@ -1775,15 +1857,43 @@ public final class ObjectOrientedJavaGenerator {
         return rewritten;
     }
 
-    private record LocalMethodBindings(Map<String, String> replacements) {
+    private record LocalMethodBindings(Map<String, String> replacements, Set<String> bindings) {
         static LocalMethodBindings empty() {
-            return new LocalMethodBindings(Map.of());
+            return new LocalMethodBindings(Map.of(), Set.of());
+        }
+
+        LocalMethodBindings withParameters(List<String> names) {
+            return withLocals(names);
+        }
+
+        LocalMethodBindings withLocal(String name) {
+            var updatedBindings = new LinkedHashSet<>(bindings);
+            updatedBindings.add(name);
+            return new LocalMethodBindings(replacements, Set.copyOf(updatedBindings));
+        }
+
+        LocalMethodBindings withLocals(List<String> names) {
+            var updatedBindings = new LinkedHashSet<>(bindings);
+            updatedBindings.addAll(names);
+            return new LocalMethodBindings(replacements, Set.copyOf(updatedBindings));
+        }
+
+        LocalMethodBindings withLocalMethodNames(List<String> names) {
+            return withLocals(names);
         }
 
         LocalMethodBindings withGroup(List<ObjectOriented.LocalMethodStatement> localMethods, String helperVariable) {
-            var updated = new LinkedHashMap<>(replacements);
-            localMethods.forEach(localMethod -> updated.put(localMethod.name(), helperVariable));
-            return new LocalMethodBindings(Map.copyOf(updated));
+            var updatedReplacements = new LinkedHashMap<>(replacements);
+            var updatedBindings = new LinkedHashSet<>(bindings);
+            localMethods.forEach(localMethod -> {
+                updatedReplacements.put(localMethod.name(), helperVariable);
+                updatedBindings.add(localMethod.name());
+            });
+            return new LocalMethodBindings(Map.copyOf(updatedReplacements), Set.copyOf(updatedBindings));
+        }
+
+        boolean hasBinding(String name) {
+            return bindings.contains(name);
         }
     }
 

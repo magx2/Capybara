@@ -120,7 +120,12 @@ class ObjectOrientedCompilerTest {
                     assertThat(binding.javaBinding().className()).isEqualTo("dev.capylang.test.SystemClock");
                 });
 
-        var objectType = (CompiledObjectType) program.modules().first().types().get("Clock");
+        var objectType = (CompiledObjectType) program.modules().stream()
+                .filter(module -> module.name().equals("Clock") && module.path().equals("/dev/capylang/test"))
+                .findFirst()
+                .orElseThrow()
+                .types()
+                .get("Clock");
         assertThat(objectType.kind()).isEqualTo(CompiledObjectKind.INTERFACE);
         assertThat(objectType.methods())
                 .singleElement()
@@ -138,14 +143,16 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldCompileNativeProviderDeclarationTargetingImportedInterface() {
+    void shouldCompileNativeProviderAnnotationOnImportedInterfaceModule() {
         var program = compileProviderSuccess(
                 List.of(
                         clockInterfaceModule(),
                         new RawModule("Providers", "/dev/capylang/app", """
-                                from /dev/capylang/time/Clock import { Clock }
+                                from /dev/capylang/time/Clock import { Clock, system_clock }
 
-                                native provider system_clock: Clock key "system"
+                                class App {
+                                    def clock(): Clock = system_clock()
+                                }
                                 """, SourceKind.OBJECT_ORIENTED)
                 ),
                 providerManifest(providerBinding("/dev/capylang/time/Clock", "system"))
@@ -157,77 +164,58 @@ class ObjectOrientedCompilerTest {
                     assertThat(declaration.providerName()).isEqualTo("system_clock");
                     assertThat(declaration.targetTypeName()).isEqualTo("Clock");
                     assertThat(declaration.interfaceId()).isEqualTo("/dev/capylang/time/Clock");
-                    assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/app/Providers.coo");
+                    assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/time/Clock.coo");
                 });
     }
 
     @Test
-    void shouldRejectNativeProviderUnknownTargetType() {
+    void shouldRejectUnknownNativeProviderAnnotation() {
         var result = compileProviders("""
-                native provider system_clock: Missing key "system"
-                """, NativeProviderManifest.empty());
-
-        assertThat(errorMessages(result))
-                .anySatisfy(message -> assertThat(message)
-                        .contains("Native provider `system_clock`")
-                        .contains("unknown type `Missing`")
-                        .contains("qualifier `system`")
-                        .contains("/dev/capylang/test/Clock.coo"));
-    }
-
-    @Test
-    void shouldRejectNativeProviderTargetsThatAreNotInterfaces() {
-        var result = compileProviders("""
+                @NativeProvider(name: "system_clock", qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
-
-                class ClockClass {
-                }
-
-                trait ClockTrait {
-                    def now(zone: String): String = zone
-                }
-
-                native provider class_clock: ClockClass key "system"
-                native provider trait_clock: ClockTrait key "system"
-                native provider primitive_clock: int key "system"
-                native provider array_clock: Clock[] key "system"
                 """, NativeProviderManifest.empty());
 
         assertThat(errorMessages(result))
-                .anySatisfy(message -> assertThat(message).contains("Native provider `class_clock`").contains("class").contains("not an interface"))
-                .anySatisfy(message -> assertThat(message).contains("Native provider `trait_clock`").contains("trait").contains("not an interface"))
-                .anySatisfy(message -> assertThat(message).contains("Native provider `primitive_clock`").contains("target type `int`").contains("not an interface"))
-                .anySatisfy(message -> assertThat(message).contains("Native provider `array_clock`").contains("target type `Clock[]`").contains("not an interface"));
-
-        var cfunDataResult = CapybaraCompiler.INSTANCE.compile(List.of(
-                new RawModule("Models", "/dev/capylang/test", """
-                        data Clock { value: String }
-                        """),
-                new RawModule("Clock", "/dev/capylang/test", """
-                        from /dev/capylang/test/Models import { Clock }
-
-                        native provider data_clock: Clock key "system"
-                        """, SourceKind.OBJECT_ORIENTED)
-        ), new TreeSet<>(), NativeProviderManifest.empty());
-
-        assertThat(errorMessages(cfunDataResult))
                 .anySatisfy(message -> assertThat(message)
-                        .contains("Native provider `data_clock`")
-                        .contains(".cfun data type")
-                        .contains("not an interface"));
+                        .contains("Unknown annotation NativeProvider"));
+    }
+
+    @Test
+    void shouldRejectNativeProviderAnnotationOnNonInterfaceTargets() {
+        var result = compileProviders("""
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "class_clock", qualifier: "system")
+                class ClockClass {
+                }
+
+                @NativeProvider(name: "trait_clock", qualifier: "system")
+                trait ClockTrait {
+                    def now(zone: String): String = zone
+                }
+                """, NativeProviderManifest.empty());
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message).contains("Annotation NativeProvider").contains("is not valid on class declarations"))
+                .anySatisfy(message -> assertThat(message).contains("Annotation NativeProvider").contains("is not valid on trait declarations"));
     }
 
     @Test
     void shouldRejectDuplicateNativeProviderNames() {
         var result = compileProviders("""
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
 
-                native provider system_clock: Clock key "system"
-                native provider system_clock: Clock key "backup"
+                @NativeProvider(name: "system_clock", qualifier: "backup")
+                interface BackupClock {
+                    def now(zone: String): String
+                }
                 """, NativeProviderManifest.empty());
 
         assertThat(errorMessages(result))
@@ -240,12 +228,13 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldRejectDuplicateNativeProviderDeclarationsForSameInterfaceAndQualifier() {
         var result = compileProviders("""
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(name: "backup_clock", qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
-
-                native provider system_clock: Clock key "system"
-                native provider backup_clock: Clock key "system"
                 """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
         assertThat(errorMessages(result))
@@ -299,11 +288,12 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldRejectNativeProviderCallWithArgumentsDuringValidation() {
         var result = compileProviders("""
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
-
-                native provider system_clock: Clock key "system"
 
                 class App {
                     def clock(): Clock = system_clock(1)
@@ -318,6 +308,45 @@ class ObjectOrientedCompilerTest {
                         .contains("does not accept arguments")
                         .contains("system_clock()")
                         .contains("/dev/capylang/test/Clock.coo"));
+    }
+
+    @Test
+    void shouldNotRejectNativeProviderArgumentCallWhenProviderNameIsShadowedByLocalBinding() {
+        var result = compileProviders("""
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
+                interface Clock {
+                    def now(zone: String): String
+                }
+
+                class App {
+                    def call_parameter(system_clock: any): any =
+                        system_clock(1)
+
+                    def call_local(): any {
+                        let system_clock: any = "local"
+                        return system_clock(1)
+                    }
+                }
+
+                class FieldApp {
+                    field system_clock: any = "local"
+
+                    def call_field(): any =
+                        system_clock(1)
+                }
+
+                class MethodApp {
+                    def system_clock(value: any): any =
+                        value
+
+                    def call_method(): any =
+                        system_clock(1)
+                }
+                """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
     }
 
     @Test
@@ -561,12 +590,16 @@ class ObjectOrientedCompilerTest {
 
     private Result<CompiledProgram> compileProviders(String source, NativeProviderManifest manifest) {
         return CapybaraCompiler.INSTANCE.compile(List.of(
+                nativeProviderAnnotationModule(),
                 new RawModule("Clock", "/dev/capylang/test", source, SourceKind.OBJECT_ORIENTED)
         ), new TreeSet<>(), manifest);
     }
 
     private CompiledProgram compileProviderSuccess(List<RawModule> modules, NativeProviderManifest manifest) {
-        var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>(), manifest);
+        var allModules = new java.util.ArrayList<RawModule>();
+        allModules.add(nativeProviderAnnotationModule());
+        allModules.addAll(modules);
+        var result = CapybaraCompiler.INSTANCE.compile(allModules, new TreeSet<>(), manifest);
         if (result instanceof Result.Error<CompiledProgram> error) {
             throw new AssertionError("Expected success, got " + error.errors());
         }
@@ -598,20 +631,33 @@ class ObjectOrientedCompilerTest {
 
     private String clockProviderSource() {
         return """
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
-
-                native provider system_clock: Clock key "system"
                 """;
     }
 
     private RawModule clockInterfaceModule() {
         return new RawModule("Clock", "/dev/capylang/time", """
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
                 """, SourceKind.OBJECT_ORIENTED);
+    }
+
+    private RawModule nativeProviderAnnotationModule() {
+        return new RawModule("NativeProvider", "/capy/meta_prog", """
+                annotation NativeProvider on interface {
+                    name: String
+                    qualifier: String = ""
+                }
+                """);
     }
 
     private ObjectMapper objectMapper() {

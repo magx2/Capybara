@@ -57,19 +57,13 @@ public final class ObjectOrientedParser {
                 return new Result.Error<>(formatSyntaxError(module, syntaxErrors.getFirst()));
             }
 
-            var definitions = new ArrayList<ObjectOriented.TypeDeclaration>();
-            var nativeProviders = new ArrayList<ObjectOriented.NativeProviderDeclaration>();
-            for (var definition : program.definition()) {
-                if (definition.nativeProviderDeclaration() != null) {
-                    nativeProviders.add(nativeProviderDeclaration(definition.nativeProviderDeclaration()));
-                } else {
-                    definitions.add(typeDeclaration(definition));
-                }
-            }
+            var definitions = program.definition().stream()
+                    .map(this::typeDeclaration)
+                    .toList();
             return Result.success(new ObjectOrientedModule(
                     module.name(),
                     module.path(),
-                    new ObjectOriented(List.copyOf(definitions), List.copyOf(nativeProviders)),
+                    new ObjectOriented(definitions),
                     parsedSource.imports(),
                     module.sourceKind()
             ));
@@ -134,19 +128,7 @@ public final class ObjectOrientedParser {
         if (context.traitDeclaration() != null) {
             return traitDeclaration(context.traitDeclaration());
         }
-        if (context.interfaceDeclaration() != null) {
-            return interfaceDeclaration(context.interfaceDeclaration());
-        }
-        throw new IllegalStateException("Missing type declaration: " + context.getText());
-    }
-
-    private ObjectOriented.NativeProviderDeclaration nativeProviderDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.NativeProviderDeclarationContext context) {
-        return new ObjectOriented.NativeProviderDeclaration(
-                context.identifier().getText(),
-                context.type().getText(),
-                unquoteStringLiteral(context.STRING_LITERAL().getText()),
-                comments(context.docComment())
-        );
+        return interfaceDeclaration(context.interfaceDeclaration());
     }
 
     private ObjectOriented.ClassDeclaration classDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.ClassDeclarationContext context) {

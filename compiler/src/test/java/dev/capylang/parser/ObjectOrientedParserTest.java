@@ -183,17 +183,18 @@ class ObjectOrientedParserTest {
     }
 
     @Test
-    @DisplayName("should parse native provider declarations before classes")
-    void parseNativeProviderBeforeClass() {
+    @DisplayName("should parse native provider annotations on interfaces")
+    void parseNativeProviderAnnotationOnInterface() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
                 "App",
                 "/parser",
                 """
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                        @NativeProvider(name: "system_clock", qualifier: "system")
                         interface Clock {
                             def now_millis(): long
                         }
-
-                        native provider system_clock: Clock key "system"
 
                         class App {
                         }
@@ -206,86 +207,33 @@ class ObjectOrientedParserTest {
         assertThat(module.objectOriented().definitions())
                 .extracting(ObjectOriented.TypeDeclaration::name)
                 .containsExactly("Clock", "App");
-        assertThat(module.objectOriented().nativeProviders())
+        var clock = (ObjectOriented.InterfaceDeclaration) module.objectOriented().definitions().getFirst();
+        assertThat(clock.annotations())
                 .singleElement()
-                .satisfies(provider -> {
-                    assertThat(provider.name()).isEqualTo("system_clock");
-                    assertThat(provider.targetType()).isEqualTo("Clock");
-                    assertThat(provider.qualifier()).isEqualTo("system");
-                    assertThat(provider.comments()).isEmpty();
+                .satisfies(annotation -> {
+                    assertThat(annotation.name()).isEqualTo("NativeProvider");
+                    assertThat(annotation.arguments()).extracting(argument -> argument.name())
+                            .containsExactly("name", "qualifier");
                 });
+        assertThat(module.objectOriented().nativeProviders()).isEmpty();
     }
 
     @Test
-    @DisplayName("should parse doc comments on native provider declarations")
-    void parseNativeProviderDocComments() {
+    @DisplayName("should reject legacy native provider declarations")
+    void rejectLegacyNativeProviderDeclaration() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
-                "App",
+                "Broken",
                 "/parser",
                 """
                         interface Clock {
                             def now_millis(): long
                         }
 
-                        /// System clock provider
                         native provider system_clock: Clock key "system"
                         """,
                 SourceKind.OBJECT_ORIENTED
         ));
 
-        assertThat(result).isInstanceOf(Result.Success.class);
-        var module = ((Result.Success<ObjectOrientedModule>) result).value();
-        assertThat(module.objectOriented().nativeProviders())
-                .singleElement()
-                .satisfies(provider -> assertThat(provider.comments()).containsExactly("System clock provider"));
-    }
-
-    @Test
-    @DisplayName("should parse native provider targets from imported interface names")
-    void parseNativeProviderWithImportedInterfaceTarget() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
-                "App",
-                "/parser",
-                """
-                        from /capy/time/Clock import { Clock }
-
-                        native provider system_clock: Clock key "system"
-
-                        class App {
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        ));
-
-        assertThat(result).isInstanceOf(Result.Success.class);
-        var module = ((Result.Success<ObjectOrientedModule>) result).value();
-        assertThat(module.imports())
-                .singleElement()
-                .satisfies(importDeclaration -> {
-                    assertThat(importDeclaration.moduleName()).isEqualTo("/capy/time/Clock");
-                    assertThat(importDeclaration.symbols()).containsExactly("Clock");
-                });
-        assertThat(module.objectOriented().nativeProviders())
-                .singleElement()
-                .satisfies(provider -> assertThat(provider.targetType()).isEqualTo("Clock"));
-    }
-
-    @Test
-    @DisplayName("should reject native provider declarations without key")
-    void rejectNativeProviderWithoutKey() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
-                "Broken",
-                "/parser",
-                """
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        native provider system_clock: Clock "system"
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        ));
-
         assertThat(result).isInstanceOf(Result.Error.class);
         assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
                 .singleElement()
@@ -293,49 +241,27 @@ class ObjectOrientedParserTest {
     }
 
     @Test
-    @DisplayName("should reject native provider declarations with non-string keys")
-    void rejectNativeProviderNonStringKey() {
+    @DisplayName("should parse native provider annotation syntax on class members for semantic validation")
+    void parseNativeProviderAnnotationAsClassMember() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
-                        interface Clock {
-                            def now_millis(): long
-                        }
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                        native provider system_clock: Clock key system
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        ));
-
-        assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
-                .singleElement()
-                .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
-    }
-
-    @Test
-    @DisplayName("should not parse native provider declarations as class members")
-    void rejectNativeProviderAsClassMember() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
-                "Broken",
-                "/parser",
-                """
                         interface Clock {
                             def now_millis(): long
                         }
 
                         class App {
-                            native provider system_clock: Clock key "system"
+                            @NativeProvider(name: "system_clock", qualifier: "system")
+                            field clock: Clock
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
         ));
 
-        assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
-                .singleElement()
-                .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
+        assertThat(result).isInstanceOf(Result.Success.class);
     }
 
     @Test
