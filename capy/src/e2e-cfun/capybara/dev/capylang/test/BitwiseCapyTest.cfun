@@ -1,0 +1,13 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Bitwise import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Bitwise.cfun", [
+        test("bit_and should return bitwise conjunction", () => assert_that(bit_and(12, 10)).is_equal_to(8)),
+        test("bit_nand should return inverted bitwise conjunction", () => assert_that(bit_nand(12, 10)).is_equal_to(-9)),
+        test("bit_or should return bitwise disjunction", () => assert_that(bit_or(12, 10)).is_equal_to(14)),
+        test("bit_xor should return exclusive bitwise disjunction", () => assert_that(bit_xor(12, 10)).is_equal_to(6)),
+        test("bit_not should return bitwise complement", () => assert_that(bit_not(12)).is_equal_to(-13)),
+    ])
