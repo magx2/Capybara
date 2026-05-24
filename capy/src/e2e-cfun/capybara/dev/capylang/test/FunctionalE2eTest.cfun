@@ -1,0 +1,12 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /dev/capylang/test/SimpleFunction import { add }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/FunctionalE2eTest.cfun", [
+        test("runs generated functional Capybara test", () => should_add_numbers())
+    ])
+
+fun should_add_numbers(): Assert =
+    assert_that(add(19, 23)).is_equal_to(42)
