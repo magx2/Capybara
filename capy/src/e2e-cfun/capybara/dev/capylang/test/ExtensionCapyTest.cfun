@@ -1,0 +1,70 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Extension import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Extension.cfun", [
+        test("new_point3d from scalars assigns all fields", () => new_point3d_from_scalars_assigns_all_fields()),
+        test("new_point3d from point spread keeps point fields", () => new_point3d_from_point_spread_keeps_point_fields()),
+        test("new_point3d_ver2 assigns named fields", () => new_point3d_ver2_assigns_named_fields()),
+        test("length functions use point dimensions and concrete overloads", () => length_functions_use_point_dimensions_and_concrete_overloads()),
+        test("Point3D can be used where Point is required", () => point3d_can_be_used_where_point_is_required()),
+        test("multiple data extensions expose all inherited fields", () => multiple_data_extensions_expose_all_inherited_fields()),
+        test("overload resolution prefers parent over any", () => overload_resolution_prefers_parent_over_any()),
+        test("new_labeled_point assigns extended fields", () => new_labeled_point_assigns_extended_fields()),
+    ])
+
+fun new_point3d_from_scalars_assigns_all_fields(): Assert =
+    let result = new_point3d(1.0f, 2.0f, 3.0f)
+    assert_all([
+        assert_that(result.x).is_equal_to(1.0f),
+        assert_that(result.y).is_equal_to(2.0f),
+        assert_that(result.z).is_equal_to(3.0f),
+    ])
+
+fun new_point3d_from_point_spread_keeps_point_fields(): Assert =
+    let point = Point { x: 1.0f, y: 2.0f }
+    let result = new_point3d(point, 3.0f)
+    assert_that(result).is_equal_to(Point3D { x: 1.0f, y: 2.0f, z: 3.0f })
+
+fun new_point3d_ver2_assigns_named_fields(): Assert =
+    assert_that(new_point3d_ver2(4.0f, 5.0f, 6.0f)).is_equal_to(Point3D { x: 4.0f, y: 5.0f, z: 6.0f })
+
+fun length_functions_use_point_dimensions_and_concrete_overloads(): Assert =
+    assert_all([
+        assert_that(length2d(Point { x: 3.0f, y: 4.0f })).is_equal_to(5.0f),
+        assert_that(length(Point { x: 3.0f, y: 4.0f })).is_equal_to(5.0f),
+        assert_that(length(Point3D { x: 1.0f, y: 2.0f, z: 2.0f })).is_equal_to(3.0f),
+    ])
+
+fun point3d_can_be_used_where_point_is_required(): Assert =
+    assert_all([
+        assert_that(only_point2d()).is_equal_to(3.0f),
+        assert_that(test_substitution(Point3D { x: 3.0f, y: 4.0f, z: 100.0f })).is_equal_to(5.0f),
+    ])
+
+fun multiple_data_extensions_expose_all_inherited_fields(): Assert =
+    let point = WeightedLabeledPoint3D {
+        x: 1.0f,
+        y: 2.0f,
+        z: 3.0f,
+        label: "capy",
+        weight: 4.0f,
+        tag: "v1"
+    }
+    assert_all([
+        assert_that(weighted_labeled_point_score(point)).is_equal_to(10.0f),
+        assert_that(weighted_labeled_point_label(point)).is_equal_to("capy:v1"),
+        assert_that(overload_prefers_most_concrete(point)).is_equal_to(3.7416575f, 0.000001f),
+    ])
+
+fun overload_resolution_prefers_parent_over_any(): Assert =
+    assert_that(overload_any_prefers_parent(Point3D { x: 3.0f, y: 4.0f, z: 5.0f })).is_equal_to("point")
+
+fun new_labeled_point_assigns_extended_fields(): Assert =
+    let result = new_labeled_point(1.0f, 2.0f, "origin")
+    assert_all([
+        assert_that(result).is_equal_to(LabeledPoint { x: 1.0f, y: 2.0f, label: "origin" }),
+        assert_that(result.label).is_equal_to("origin"),
+    ])
