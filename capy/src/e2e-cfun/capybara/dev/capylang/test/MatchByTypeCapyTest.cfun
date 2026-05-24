@@ -1,0 +1,114 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from MatchByType import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/MatchByType.cfun", [
+        test("string and int values match by runtime type", () => string_and_int_values_match_by_runtime_type()),
+        test("int pattern returns incremented int and defaults otherwise", () => int_pattern_returns_incremented_int_and_defaults_otherwise()),
+        test("typed pattern can use underscore binding", () => typed_pattern_can_use_underscore_binding()),
+        test("data type pattern matches data and enum values only", () => data_type_pattern_matches_data_and_enum_values_only()),
+        test("enum type pattern matches enums before data and any", () => enum_type_pattern_matches_enums_before_data_and_any()),
+        test("enum values expose generic name method", () => enum_values_expose_generic_name_method()),
+        test("merged enum values preserve enum type", () => merged_enum_values_preserve_enum_type()),
+        test("match case can use multiple patterns", () => match_case_can_use_multiple_patterns()),
+        test("wildcard case can bind matched value", () => wildcard_case_can_bind_matched_value()),
+        test("bool match can be exhaustive without wildcard", () => bool_match_can_be_exhaustive_without_wildcard()),
+        test("bare generic type patterns default to any", () => bare_generic_type_patterns_default_to_any()),
+    ])
+
+fun string_and_int_values_match_by_runtime_type(): Assert =
+    assert_all([
+        assert_that(match_string("abc")).is_equal_to("s:abc"),
+        assert_that(match_string(12)).is_equal_to("i:12"),
+    ])
+
+fun int_pattern_returns_incremented_int_and_defaults_otherwise(): Assert =
+    assert_all([
+        assert_that(match_int(9)).is_equal_to(10),
+        assert_that(match_int("x")).is_equal_to(0),
+    ])
+
+fun typed_pattern_can_use_underscore_binding(): Assert =
+    assert_all([
+        assert_that(match_int_ignore_binding(9)).is_equal_to(1),
+        assert_that(match_int_ignore_binding("x")).is_equal_to(0),
+    ])
+
+fun data_type_pattern_matches_data_and_enum_values_only(): Assert =
+    let list_value: List[int] = [1, 2]
+    let set_value: Set[int] = {1, 2}
+    let dict_value: Dict[int] = {"a": 1}
+    assert_all([
+        assert_that(is_data(1)).is_false(),
+        assert_that(is_data(1L)).is_false(),
+        assert_that(is_data(true)).is_false(),
+        assert_that(is_data(1.5)).is_false(),
+        assert_that(is_data(1.5f)).is_false(),
+        assert_that(is_data(list_value)).is_false(),
+        assert_that(is_data(set_value)).is_false(),
+        assert_that(is_data(dict_value)).is_false(),
+        assert_that(is_data(Person { name: "Tom" })).is_true(),
+        assert_that(is_data_from_entity(Person { name: "Jerry" })).is_true(),
+        assert_that(is_data(READY)).is_true(),
+    ])
+
+fun enum_type_pattern_matches_enums_before_data_and_any(): Assert =
+    assert_all([
+        assert_that(classify_enum(READY)).is_equal_to("READY"),
+        assert_that(classify_enum(Person { name: "Tom" })).is_equal_to("data"),
+        assert_that(classify_enum("x")).is_equal_to("any"),
+    ])
+
+fun enum_values_expose_generic_name_method(): Assert =
+    assert_all([
+        assert_that(generic_enum_name(DONE)).is_equal_to("DONE"),
+        assert_that(exhaustive_enum_type_match(READY)).is_equal_to("READY"),
+    ])
+
+fun merged_enum_values_preserve_enum_type(): Assert =
+    assert_all([
+        assert_that(merged_enum_name(true, DONE)).is_equal_to("DONE"),
+        assert_that(merged_enum_name(false, DONE)).is_equal_to("READY"),
+        assert_that(merged_enum_list_names(DONE)).is_equal_to(["DONE", "READY"]),
+    ])
+
+fun match_case_can_use_multiple_patterns(): Assert =
+    assert_all([
+        assert_that(classify_json_char("{")).is_equal_to("object"),
+        assert_that(classify_json_char('"')).is_equal_to("string"),
+        assert_that(classify_json_char("-")).is_equal_to("number"),
+        assert_that(classify_json_char("7")).is_equal_to("number"),
+        assert_that(classify_json_char("x")).is_equal_to("other"),
+    ])
+
+fun wildcard_case_can_bind_matched_value(): Assert =
+    assert_all([
+        assert_that(classify_json_char_with_named_wildcard("-")).is_equal_to("minus"),
+        assert_that(classify_json_char_with_named_wildcard("7")).is_equal_to("number"),
+        assert_that(classify_json_char_with_named_wildcard("x")).is_equal_to("unknown: x"),
+    ])
+
+fun bool_match_can_be_exhaustive_without_wildcard(): Assert =
+    assert_all([
+        assert_that(mood(true)).is_equal_to("I'm happy"),
+        assert_that(mood(false)).is_equal_to("I'm sad"),
+    ])
+
+fun bare_generic_type_patterns_default_to_any(): Assert =
+    let list_value: List[String] = ["a"]
+    let set_value: Set[String] = {"a", "b"} - "b"
+    let dict_value: Dict[int] = {"a": 1}
+    let option_value: Option[String] = Some { "a" }
+    assert_all([
+        assert_that(bare_generic_type_pattern(list_value)).is_equal_to(1),
+        assert_that(bare_generic_type_pattern(set_value)).is_equal_to(2),
+        assert_that(bare_generic_type_pattern(dict_value)).is_equal_to(3),
+        assert_that(bare_generic_type_pattern(option_value)).is_equal_to(4),
+        assert_that(bare_generic_type_pattern("a")).is_equal_to(0),
+    ])
