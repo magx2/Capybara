@@ -406,6 +406,43 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRunPythonSystemAndClockEffects() throws Exception {
+        var program = compileProgram("""
+                from /capy/date_time/Clock import { now }
+                from /capy/date_time/DateTime import { * }
+                from /capy/lang/Effect import { * }
+                from /capy/lang/System import { current_millis, nano_time }
+
+                fun clock_now_iso(): Effect[String] =
+                    let current <- now()
+                    current.to_iso_8601()
+
+                fun current_millis_value(): Effect[long] =
+                    current_millis()
+
+                fun nano_time_value(): Effect[long] =
+                    nano_time()
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                millis = m.currentMillisValue().unsafe_run()
+                nanos = m.nanoTimeValue().unsafe_run()
+                iso = m.clockNowIso().unsafe_run()
+                print('|'.join([
+                    str(isinstance(millis, int)).lower(),
+                    str(isinstance(nanos, int)).lower(),
+                    str('T' in iso).lower()
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("true|true|true");
+    }
+
+    @Test
     void shouldRunPythonConsoleEffects() throws Exception {
         var program = compileProgram("""
                 from /capy/io/Console import { * }
