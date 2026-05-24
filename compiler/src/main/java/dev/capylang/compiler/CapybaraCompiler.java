@@ -34,6 +34,9 @@ public class CapybaraCompiler {
     private static final String RECURSIVE_ANNOTATION_NAME = "Recursive";
     private static final String RECURSIVE_ANNOTATION_MODULE_NAME = "Recursive";
     private static final String RECURSIVE_ANNOTATION_MODULE_PATH = "capy/meta_prog";
+    private static final String NATIVE_PROVIDER_ANNOTATION_NAME = "NativeProvider";
+    private static final String NATIVE_PROVIDER_ANNOTATION_MODULE_NAME = "NativeProvider";
+    private static final String NATIVE_PROVIDER_ANNOTATION_MODULE_PATH = "capy/meta_prog";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
@@ -92,25 +95,25 @@ public class CapybaraCompiler {
             }
             var modulesForBundledLibraryCheck = functionalModules.isEmpty() ? rawModules : functionalModules;
             var mergedLibraries = mergeLibraries(modulesForBundledLibraryCheck, libraries);
+            var compiledProgram = compile(parsedProgram, mergedLibraries, parsedObjectOrientedModules);
+            if (compiledProgram instanceof Result.Error<CompiledProgram> error) {
+                return error;
+            }
+            var functionalProgram = ((Result.Success<CompiledProgram>) compiledProgram).value();
+            var modulesForNativeProviders = new TreeSet<>(mergedLibraries);
+            modulesForNativeProviders.addAll(functionalProgram.modules());
             var nativeProviderCatalog = nativeProviderCatalog(
-                    parsedObjectOrientedModules,
-                    parsedProgram.modules(),
-                    mergedLibraries,
+                    functionalProgram.objectOrientedModules(),
+                    modulesForNativeProviders,
                     providerManifest
             );
             if (nativeProviderCatalog instanceof Result.Error<NativeProviderCatalog> error) {
                 return new Result.Error<>(error.errors());
             }
             var compiledNativeProviderCatalog = ((Result.Success<NativeProviderCatalog>) nativeProviderCatalog).value();
-
-            var compiledProgram = compile(parsedProgram, mergedLibraries, parsedObjectOrientedModules);
-            if (compiledProgram instanceof Result.Error<CompiledProgram> error) {
-                return error;
-            }
-            var functionalProgram = ((Result.Success<CompiledProgram>) compiledProgram).value();
             return Result.success(new CompiledProgram(
                     functionalProgram.modules(),
-                    parsedObjectOrientedModules,
+                    functionalProgram.objectOrientedModules(),
                     providerManifest,
                     compiledNativeProviderCatalog
             ));
@@ -3530,8 +3533,7 @@ public class CapybaraCompiler {
 
     private Result<NativeProviderCatalog> nativeProviderCatalog(
             List<ObjectOrientedModule> objectOrientedModules,
-            List<Module> functionalModules,
-            SortedSet<CompiledModule> libraries,
+            SortedSet<CompiledModule> compiledModules,
             NativeProviderManifest manifest
     ) {
         var errors = new TreeSet<Result.Error.SingleError>();
@@ -3539,32 +3541,18 @@ public class CapybaraCompiler {
         var objectTypeCatalog = objectTypeCatalog(objectOrientedModules);
         objectTypeCatalog.linkedTypesByModule().forEach((moduleName, objectTypes) ->
                 mergeModuleTypes(linkedTypesByModule, moduleName, objectTypes));
-        for (var library : libraries) {
-            mergeModuleTypes(
-                    linkedTypesByModule,
-                    new ModuleRef(library.name(), library.path()),
-                    library.types(),
-                    false
-            );
-        }
-        for (var module : functionalModules) {
-            var sourceFile = moduleSourceFile(module);
-            var linkedTypes = withFile(types(module), sourceFile);
-            if (linkedTypes instanceof Result.Error<SortedMap<String, GenericDataType>> error) {
-                return new Result.Error<>(error.errors());
-            }
+        for (var module : compiledModules) {
             mergeModuleTypes(
                     linkedTypesByModule,
                     new ModuleRef(module.name(), module.path()),
-                    ((Result.Success<SortedMap<String, GenericDataType>>) linkedTypes).value(),
-                    true
+                    module.types(),
+                    false
             );
         }
 
         var allModuleRefs = Stream.of(
                         objectOrientedModules.stream().map(module -> new ModuleRef(module.name(), module.path())),
-                        functionalModules.stream().map(module -> new ModuleRef(module.name(), module.path())),
-                        libraries.stream().map(module -> new ModuleRef(module.name(), module.path()))
+                        compiledModules.stream().map(module -> new ModuleRef(module.name(), module.path()))
                 )
                 .flatMap(identity())
                 .distinct()
@@ -3581,16 +3569,18 @@ public class CapybaraCompiler {
         var usedManifestKeys = new LinkedHashSet<NativeProviderKey>();
 
         for (var module : objectOrientedModules) {
-            if (module.objectOriented().nativeProviders().isEmpty()) {
+            var nativeProviders = nativeProviderDeclarations(module, errors);
+            if (nativeProviders.isEmpty()) {
                 continue;
             }
+            validateNativeProviderCalls(module, nativeProviders, errors);
             var availableTypes = availableNativeProviderTypes(module, moduleLinkIndex, linkedTypesByModule, allModuleRefs, compileCache);
             if (availableTypes instanceof Result.Error<Map<String, NativeProviderTarget>> error) {
                 errors.addAll(error.errors());
                 continue;
             }
             var visibleTypes = ((Result.Success<Map<String, NativeProviderTarget>>) availableTypes).value();
-            for (var provider : module.objectOriented().nativeProviders()) {
+            for (var provider : nativeProviders) {
                 if (isBuiltinOrCompositeNativeProviderTarget(provider.targetType())) {
                     errors.add(nativeProviderError(
                             module,
@@ -3676,6 +3666,390 @@ public class CapybaraCompiler {
             return new Result.Error<>(errors);
         }
         return Result.success(new NativeProviderCatalog(declarations, bindings));
+    }
+
+    private List<ObjectOriented.NativeProviderDeclaration> nativeProviderDeclarations(
+            ObjectOrientedModule module,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var typeNames = module.objectOriented().definitions().stream()
+                .map(ObjectOriented.TypeDeclaration::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var providerNames = new LinkedHashSet<String>();
+        var providers = new ArrayList<ObjectOriented.NativeProviderDeclaration>();
+        for (var definition : module.objectOriented().definitions()) {
+            if (!(definition instanceof ObjectOriented.InterfaceDeclaration interfaceDeclaration)) {
+                continue;
+            }
+            for (var annotation : interfaceDeclaration.linkedAnnotations()) {
+                if (!isNativeProviderAnnotation(annotation)) {
+                    continue;
+                }
+                var providerName = nativeProviderAnnotationStringArgument(annotation, "name").orElse("");
+                var qualifier = nativeProviderAnnotationStringArgument(annotation, "qualifier").orElse("");
+                var provider = new ObjectOriented.NativeProviderDeclaration(
+                        providerName,
+                        interfaceDeclaration.name(),
+                        qualifier,
+                        interfaceDeclaration.comments()
+                );
+                if (!IDENTIFIER_PATTERN.matcher(providerName).matches()) {
+                    errors.add(nativeProviderError(
+                            module,
+                            provider,
+                            "TypeMismatch: Native provider annotation on interface `" + interfaceDeclaration.name()
+                            + "` declares invalid provider name `" + providerName
+                            + "`; expected an identifier"
+                    ));
+                    continue;
+                }
+                if (!providerNames.add(providerName)) {
+                    errors.add(nativeProviderError(
+                            module,
+                            provider,
+                            "DuplicateProvider: Native provider `" + providerName + "` duplicates another provider in module `" + module.name()
+                            + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
+                    ));
+                    continue;
+                }
+                if (typeNames.contains(providerName)) {
+                    errors.add(nativeProviderError(
+                            module,
+                            provider,
+                            "TypeMismatch: Native provider `" + providerName + "` collides with type name `" + providerName
+                            + "` in module `" + module.name() + "` for target `" + provider.targetType()
+                            + "` with qualifier `" + provider.qualifier() + "`"
+                    ));
+                    continue;
+                }
+                providers.add(provider);
+            }
+        }
+        return List.copyOf(providers);
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            List<ObjectOriented.NativeProviderDeclaration> nativeProviders,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var providersByName = nativeProviders.stream()
+                .collect(toMap(
+                        ObjectOriented.NativeProviderDeclaration::name,
+                        identity(),
+                        (first, ignored) -> first,
+                        LinkedHashMap::new
+                ));
+        for (var definition : module.objectOriented().definitions()) {
+            var constructorBindings = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
+                    ? classDeclaration.constructorParameters().stream().map(ObjectOriented.Parameter::name).toList()
+                    : List.<String>of();
+            var rootScope = NativeProviderCallScope.root()
+                    .withLocals(memberBindingNames(definition))
+                    .withLocals(constructorBindings);
+            for (var member : definition.members()) {
+                validateNativeProviderCalls(module, providersByName, member, rootScope, errors);
+            }
+        }
+    }
+
+    private List<String> memberBindingNames(ObjectOriented.TypeDeclaration definition) {
+        return definition.members().stream()
+                .map(member -> switch (member) {
+                    case ObjectOriented.FieldDeclaration fieldDeclaration -> Optional.of(fieldDeclaration.name());
+                    case ObjectOriented.MethodDeclaration methodDeclaration -> Optional.of(methodDeclaration.name());
+                    case ObjectOriented.InitBlock ignored -> Optional.<String>empty();
+                })
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            ObjectOriented.MemberDeclaration member,
+            NativeProviderCallScope scope,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (member) {
+            case ObjectOriented.FieldDeclaration fieldDeclaration ->
+                    fieldDeclaration.initializer().ifPresent(expression -> validateNativeProviderCalls(module, providersByName, expression, scope, errors));
+            case ObjectOriented.MethodDeclaration methodDeclaration ->
+                    methodDeclaration.body().ifPresent(body -> validateNativeProviderCalls(
+                            module,
+                            providersByName,
+                            body,
+                            scope.withLocals(methodDeclaration.parameters().stream().map(ObjectOriented.Parameter::name).toList()),
+                            errors
+                    ));
+            case ObjectOriented.InitBlock initBlock ->
+                    validateNativeProviderCalls(module, providersByName, initBlock.body(), scope, errors);
+        }
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            ObjectOriented.MethodBody body,
+            NativeProviderCallScope scope,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (body) {
+            case ObjectOriented.ExpressionBody expressionBody -> validateNativeProviderCalls(module, providersByName, expressionBody.expression(), scope, errors);
+            case ObjectOriented.StatementBlock statementBlock -> validateNativeProviderCalls(module, providersByName, statementBlock, scope, errors);
+        }
+    }
+
+    private NativeProviderCallScope validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            ObjectOriented.StatementBlock block,
+            NativeProviderCallScope parentScope,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var scope = parentScope;
+        for (int index = 0; index < block.statements().size(); index++) {
+            var statement = block.statements().get(index);
+            if (statement instanceof ObjectOriented.LocalMethodStatement) {
+                var localMethods = new ArrayList<ObjectOriented.LocalMethodStatement>();
+                while (index < block.statements().size()
+                       && block.statements().get(index) instanceof ObjectOriented.LocalMethodStatement localMethodStatement) {
+                    localMethods.add(localMethodStatement);
+                    index++;
+                }
+                index--;
+                var methodNames = localMethods.stream().map(ObjectOriented.LocalMethodStatement::name).toList();
+                var groupScope = scope.withLocals(methodNames);
+                for (var localMethod : localMethods) {
+                    var methodScope = groupScope.withLocals(localMethod.parameters().stream().map(ObjectOriented.Parameter::name).toList());
+                    validateNativeProviderCalls(module, providersByName, localMethod.body(), methodScope, errors);
+                }
+                scope = groupScope;
+                continue;
+            }
+            scope = validateNativeProviderCalls(module, providersByName, statement, scope, errors);
+        }
+        return scope;
+    }
+
+    private NativeProviderCallScope validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            ObjectOriented.Statement statement,
+            NativeProviderCallScope scope,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (statement) {
+            case ObjectOriented.LetStatement letStatement -> {
+                validateNativeProviderCalls(module, providersByName, letStatement.expression(), scope, errors);
+                return scope.withLocal(letStatement.name());
+            }
+            case ObjectOriented.LocalMethodStatement localMethodStatement -> {
+                validateNativeProviderCalls(module, providersByName, localMethodStatement.body(), scope.withLocal(localMethodStatement.name()), errors);
+                return scope.withLocal(localMethodStatement.name());
+            }
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
+                validateNativeProviderCalls(module, providersByName, mutableVariableStatement.expression(), scope, errors);
+                return scope.withLocal(mutableVariableStatement.name());
+            }
+            case ObjectOriented.AssignmentStatement assignmentStatement -> validateNativeProviderCalls(module, providersByName, assignmentStatement.expression(), scope, errors);
+            case ObjectOriented.ExpressionStatement expressionStatement -> validateNativeProviderCalls(module, providersByName, expressionStatement.expression(), scope, errors);
+            case ObjectOriented.ThrowStatement throwStatement -> validateNativeProviderCalls(module, providersByName, throwStatement.expression(), scope, errors);
+            case ObjectOriented.ReturnStatement returnStatement -> validateNativeProviderCalls(module, providersByName, returnStatement.expression(), scope, errors);
+            case ObjectOriented.IfStatement ifStatement -> {
+                validateNativeProviderCalls(module, providersByName, ifStatement.condition(), scope, errors);
+                validateNativeProviderCalls(module, providersByName, ifStatement.thenBranch(), scope, errors);
+                ifStatement.elseBranch().ifPresent(elseBranch -> validateNativeProviderCalls(module, providersByName, elseBranch, scope, errors));
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                validateNativeProviderCalls(module, providersByName, tryCatchStatement.tryBlock(), scope, errors);
+                tryCatchStatement.catches().forEach(catchClause -> validateNativeProviderCalls(
+                        module,
+                        providersByName,
+                        catchClause.body(),
+                        scope.withLocal(catchClause.name()),
+                        errors
+                ));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                validateNativeProviderCalls(module, providersByName, whileStatement.condition(), scope, errors);
+                validateNativeProviderCalls(module, providersByName, whileStatement.body(), scope, errors);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                validateNativeProviderCalls(module, providersByName, doWhileStatement.body(), scope, errors);
+                validateNativeProviderCalls(module, providersByName, doWhileStatement.condition(), scope, errors);
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                validateNativeProviderCalls(module, providersByName, forEachStatement.iterable(), scope, errors);
+                validateNativeProviderCalls(module, providersByName, forEachStatement.body(), scope.withLocal(forEachStatement.name()), errors);
+            }
+            case ObjectOriented.StatementBlock nestedBlock -> validateNativeProviderCalls(module, providersByName, nestedBlock, scope, errors);
+        }
+        return scope;
+    }
+
+    private void validateNativeProviderCalls(
+            ObjectOrientedModule module,
+            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            String expression,
+            NativeProviderCallScope scope,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var provider : providersByName.values()) {
+            if (scope.hasBinding(provider.name())) {
+                continue;
+            }
+            if (callsProviderWithArguments(expression, provider.name())) {
+                errors.add(new Result.Error.SingleError(
+                        0,
+                        0,
+                        module.moduleFile(),
+                        "TypeMismatch: Native provider `" + provider.name() + "` for target `" + provider.targetType()
+                        + "` with qualifier `" + provider.qualifier() + "` does not accept arguments; call it as `"
+                        + provider.name() + "()` in source `" + module.moduleFile() + "`"
+                ));
+            }
+        }
+    }
+
+    private boolean callsProviderWithArguments(String expression, String providerName) {
+        var index = 0;
+        while (index < expression.length()) {
+            var current = expression.charAt(index);
+            if (current == '"' || current == '\'') {
+                index = skipStringLiteral(expression, index);
+                continue;
+            }
+            if (!matchesDirectIdentifier(expression, index, providerName)) {
+                index++;
+                continue;
+            }
+            var openParen = skipWhitespace(expression, index + providerName.length());
+            if (openParen < expression.length() && expression.charAt(openParen) == '(') {
+                var closeParen = matchingParen(expression, openParen);
+                if (closeParen > openParen && !expression.substring(openParen + 1, closeParen).trim().isEmpty()) {
+                    return true;
+                }
+            }
+            index += providerName.length();
+        }
+        return false;
+    }
+
+    private int skipStringLiteral(String expression, int start) {
+        var delimiter = expression.charAt(start);
+        var index = start + 1;
+        while (index < expression.length()) {
+            var current = expression.charAt(index);
+            if (current == '\\') {
+                index += 2;
+                continue;
+            }
+            index++;
+            if (current == delimiter) {
+                break;
+            }
+        }
+        return index;
+    }
+
+    private boolean matchesDirectIdentifier(String expression, int index, String identifier) {
+        if (!expression.startsWith(identifier, index)) {
+            return false;
+        }
+        if (index + identifier.length() < expression.length()
+            && isIdentifierPart(expression.charAt(index + identifier.length()))) {
+            return false;
+        }
+        var previous = index - 1;
+        while (previous >= 0 && Character.isWhitespace(expression.charAt(previous))) {
+            previous--;
+        }
+        return previous < 0 || (!isIdentifierPart(expression.charAt(previous)) && expression.charAt(previous) != '.');
+    }
+
+    private boolean isIdentifierPart(char value) {
+        return Character.isLetterOrDigit(value) || value == '_';
+    }
+
+    private int skipWhitespace(String expression, int index) {
+        while (index < expression.length() && Character.isWhitespace(expression.charAt(index))) {
+            index++;
+        }
+        return index;
+    }
+
+    private int matchingParen(String expression, int openParen) {
+        var depth = 0;
+        for (var index = openParen; index < expression.length(); index++) {
+            var current = expression.charAt(index);
+            if (current == '"' || current == '\'') {
+                index = skipStringLiteral(expression, index) - 1;
+                continue;
+            }
+            if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private record NativeProviderCallScope(Set<String> bindings) {
+        static NativeProviderCallScope root() {
+            return new NativeProviderCallScope(Set.of());
+        }
+
+        NativeProviderCallScope withLocal(String name) {
+            var updated = new LinkedHashSet<>(bindings);
+            updated.add(name);
+            return new NativeProviderCallScope(Set.copyOf(updated));
+        }
+
+        NativeProviderCallScope withLocals(List<String> names) {
+            var scope = this;
+            for (var name : names) {
+                scope = scope.withLocal(name);
+            }
+            return scope;
+        }
+
+        boolean hasBinding(String name) {
+            return bindings.contains(name);
+        }
+    }
+
+    private boolean isNativeProviderAnnotation(CompiledAnnotation annotation) {
+        return NATIVE_PROVIDER_ANNOTATION_NAME.equals(annotation.name())
+               && NATIVE_PROVIDER_ANNOTATION_MODULE_NAME.equals(annotation.packageName())
+               && NATIVE_PROVIDER_ANNOTATION_MODULE_PATH.equals(normalizedAnnotationModulePath(annotation.packagePath()));
+    }
+
+    private Optional<String> nativeProviderAnnotationStringArgument(CompiledAnnotation annotation, String name) {
+        return annotation.arguments().stream()
+                .filter(argument -> argument.name().equals(name))
+                .map(CompiledAnnotationArgument::value)
+                .filter(CompiledAnnotationValue.StringValue.class::isInstance)
+                .map(CompiledAnnotationValue.StringValue.class::cast)
+                .map(CompiledAnnotationValue.StringValue::value)
+                .map(CapybaraCompiler::annotationStringLiteralValue)
+                .findFirst();
+    }
+
+    private static String annotationStringLiteralValue(String value) {
+        if (value.length() < 2) {
+            return value;
+        }
+        var first = value.charAt(0);
+        var last = value.charAt(value.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     private Map<NativeProviderKey, NativeProviderBinding> nativeProviderManifestBindings(

@@ -198,11 +198,12 @@ class JavaScriptGeneratorTest {
                 "Providers",
                 "",
                 """
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                        @NativeProvider(name: "system_clock", qualifier: "system")
                         interface Clock {
                             def now_millis(): long
                         }
-
-                        native provider system_clock: Clock key "system"
 
                         class App {
                             def clock(): Clock = system_clock()
@@ -249,11 +250,12 @@ class JavaScriptGeneratorTest {
                 "Providers",
                 "",
                 """
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                        @NativeProvider(name: "system_clock", qualifier: "system")
                         interface Clock {
                             def now_millis(): long
                         }
-
-                        native provider system_clock: Clock key "system"
 
                         class App {
                             def read(): long = system_clock().now_millis()
@@ -965,7 +967,7 @@ class JavaScriptGeneratorTest {
 
     private static CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
         var result = CapybaraCompiler.INSTANCE.compile(
-                modules,
+                modulesWithNativeProviderAnnotation(modules),
                 new TreeSet<>(),
                 nativeProviders
         );
@@ -1008,14 +1010,34 @@ class JavaScriptGeneratorTest {
                 "Providers",
                 "",
                 """
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                        @NativeProvider(name: "system_clock", qualifier: "system")
                         interface Clock {
                             %s
                         }
-
-                        native provider system_clock: Clock key "system"
                         """.formatted(methodDeclaration),
                 SourceKind.OBJECT_ORIENTED
         )), providerManifest(binding));
+    }
+
+    private static List<RawModule> modulesWithNativeProviderAnnotation(List<RawModule> modules) {
+        if (modules.stream().noneMatch(module -> module.input().contains("NativeProvider"))) {
+            return modules;
+        }
+        var allModules = new java.util.ArrayList<RawModule>();
+        allModules.add(nativeProviderAnnotationModule());
+        allModules.addAll(modules);
+        return allModules;
+    }
+
+    private static RawModule nativeProviderAnnotationModule() {
+        return new RawModule("NativeProvider", "/capy/meta_prog", """
+                annotation NativeProvider on interface {
+                    name: String
+                    qualifier: String = ""
+                }
+                """);
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {

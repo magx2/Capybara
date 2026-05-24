@@ -105,11 +105,12 @@ class CapyPythonCliTest(unittest.TestCase):
         (source_dir / "dev" / "capylang" / "test").mkdir(parents=True)
         (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
         (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
+            from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+            @NativeProvider(name: "system_clock", qualifier: "system")
             interface Clock {
                 def now(): String
             }
-
-            native provider system_clock: Clock key "system"
         """))
         native_wiring_file.write_text(textwrap.dedent("""
             {
