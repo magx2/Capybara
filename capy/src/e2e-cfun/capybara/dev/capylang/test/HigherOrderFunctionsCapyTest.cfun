@@ -1,0 +1,48 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from HigherOrderFunctions import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/HigherOrderFunctions.cfun", [
+        test("map applies a referenced function", () => map_applies_a_referenced_function()),
+        test("hof invokes its function argument", () => hof_invokes_its_function_argument()),
+        test("invoke_hof captures its string argument", () => invoke_hof_captures_its_string_argument()),
+        test("run_lambda invokes a multi-argument lambda", () => run_lambda_invokes_a_multi_argument_lambda()),
+        test("run_lambda2 invokes a function reference", () => run_lambda2_invokes_a_function_reference()),
+        test("invoke_hof_unused ignores its lambda argument", () => invoke_hof_unused_ignores_its_lambda_argument()),
+        test("run_lambda_unused_middle ignores unused middle arguments", () => run_lambda_unused_middle_ignores_unused_middle_arguments()),
+        test("run_lambda_no_args invokes a no-arg lambda", () => run_lambda_no_args_invokes_a_no_arg_lambda()),
+    ])
+
+private fun map_applies_a_referenced_function(): Assert =
+    assert_that(map([1, 2, 3]).as_list()).is_equal_to([1, 4, 9])
+
+private fun hof_invokes_its_function_argument(): Assert =
+    let value: String = hof(x => "n=" + x)
+    assert_that(value).is_equal_to("n=5")
+
+private fun invoke_hof_captures_its_string_argument(): Assert =
+    let value: String = invoke_hof("Hello")
+    assert_that(value).is_equal_to("Hello 5")
+
+private fun run_lambda_invokes_a_multi_argument_lambda(): Assert =
+    let value: int = run_lambda()
+    assert_that(value).is_equal_to(-45)
+
+private fun run_lambda2_invokes_a_function_reference(): Assert =
+    let value: int = run_lambda2()
+    assert_that(value).is_equal_to(-45)
+
+private fun invoke_hof_unused_ignores_its_lambda_argument(): Assert =
+    let value: String = invoke_hof_unused("Hello")
+    assert_that(value).is_equal_to("Hello")
+
+private fun run_lambda_unused_middle_ignores_unused_middle_arguments(): Assert =
+    let value: int = run_lambda_unused_middle()
+    assert_that(value).is_equal_to(12)
+
+private fun run_lambda_no_args_invokes_a_no_arg_lambda(): Assert =
+    let value: String = run_lambda_no_args()
+    assert_that(value).is_equal_to("Hello, Wrold")
