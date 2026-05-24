@@ -1,0 +1,12 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /dev/capylang/test/ObjectConstructionInterop import { sequence_two }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectOrientedE2eTest.cfun", [
+        test("runs generated object-oriented Capybara test", () => should_construct_objects())
+    ])
+
+fun should_construct_objects(): Assert =
+    assert_that(sequence_two("Capy", "Bara").unsafe_run()).is_equal_to("Capy:Bara")
