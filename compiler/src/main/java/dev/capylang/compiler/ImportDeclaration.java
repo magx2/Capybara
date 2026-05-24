@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,6 +16,7 @@ public record ImportDeclaration(String moduleName, List<String> symbols, List<St
         return new ImportDeclaration(moduleName, List.of(), List.of(), true);
     }
 
+    @JsonIgnore
     public boolean isStarImport() {
         return symbols.contains("*");
     }

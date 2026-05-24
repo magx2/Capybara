@@ -9,13 +9,11 @@ program : definition+ EOF;
 definition:
     classDeclaration
     | traitDeclaration
-    | interfaceDeclaration
-    | nativeProviderDeclaration;
+    | interfaceDeclaration;
 
 classDeclaration: docComment* annotationBlock* classModifier* 'class' TYPE constructorParameters? inheritanceClause? typeBody;
 traitDeclaration: docComment* annotationBlock* 'trait' TYPE inheritanceClause? typeBody;
 interfaceDeclaration: docComment* annotationBlock* 'interface' TYPE inheritanceClause? interfaceBody;
-nativeProviderDeclaration: docComment* 'native' 'provider' identifier COLON type 'key' STRING_LITERAL SEMI?;
 
 classModifier
     : 'open'
@@ -95,7 +93,7 @@ VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 SUPER: 'super';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'void' | 'any' | 'return' | 'catch' | 'native' | 'provider' | 'key';
+identifier: NAME | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'void' | 'any' | 'return' | 'catch';
 type: functionTypeLiteral | arrayOrSimpleType;
 functionTypeLiteral
     : LPAREN RPAREN FAT_ARROW type

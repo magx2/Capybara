@@ -381,11 +381,12 @@ class CapyTest {
         Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
                 interface Clock {
                     def now(): String
                 }
-
-                native provider system_clock: Clock key "system"
                 """);
         var generatedDir = tempDir.resolve("compile-generate-native-output");
         var linkedDir = tempDir.resolve("compile-generate-native-linked");

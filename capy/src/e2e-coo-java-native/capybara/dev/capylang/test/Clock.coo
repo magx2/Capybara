@@ -1,8 +1,9 @@
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+@NativeProvider(name: "system_clock", qualifier: "system")
 interface Clock {
     def now_millis(): long
 }
-
-native provider system_clock: Clock key "system"
 
 class NativeProviderApp {
     def read_system_clock(): long = system_clock().now_millis()

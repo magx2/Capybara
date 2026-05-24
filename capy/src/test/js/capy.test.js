@@ -118,11 +118,12 @@ test('compile-generate JS accepts native wiring manifest', async () => {
     await mkdir(join(sourceDir, 'dev', 'capylang', 'test'), { recursive: true });
     await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+@NativeProvider(name: "system_clock", qualifier: "system")
 interface Clock {
     def now(): String
 }
-
-native provider system_clock: Clock key "system"
 `);
     await writeFile(nativeWiringFile, JSON.stringify({
         providers: [{
