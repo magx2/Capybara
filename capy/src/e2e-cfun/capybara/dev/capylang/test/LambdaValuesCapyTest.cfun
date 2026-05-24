@@ -1,0 +1,70 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/collection/List import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from LambdaValues import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/LambdaValues.cfun", [
+        test("make_supplier returns a callable supplier", () => make_supplier_returns_a_callable_supplier()),
+        test("invoke_supplier invokes a local supplier", () => invoke_supplier_invokes_a_local_supplier()),
+        test("Holder stores callable supplier fields", () => holder_stores_callable_supplier_fields()),
+        test("partial add functions invoke with fixed arguments", () => partial_add_functions_invoke_with_fixed_arguments()),
+        test("partial applications support multiple placeholders", () => partial_applications_support_multiple_placeholders()),
+        test("each placeholder becomes a separate parameter", () => each_placeholder_becomes_a_separate_parameter()),
+        test("partial application keeps fixed outer arguments", () => partial_application_keeps_fixed_outer_arguments()),
+        test("partial applications invoke builtin methods", () => partial_applications_invoke_builtin_methods()),
+    ])
+
+// The legacy Java host tests also reflected generated Supplier generic signatures for make_supplier
+// and Holder fields. Host type names are backend-specific, so the portable coverage asserts the
+// observable callable return and stored function behavior instead.
+
+private fun make_supplier_returns_a_callable_supplier(): Assert =
+    let supplier = make_supplier()
+    assert_that(supplier()).is_equal_to("hello")
+
+private fun invoke_supplier_invokes_a_local_supplier(): Assert =
+    assert_that(invoke_supplier()).is_equal_to("hello")
+
+private fun holder_stores_callable_supplier_fields(): Assert =
+    let holder = Holder { supplier: () => "hello", suppliers: [() => "x", () => "y"] }
+    let supplier = holder.supplier
+    let supplied_values = (holder.suppliers | fn => fn()).as_list()
+    assert_all([
+        assert_that(invoke_field_supplier()).is_equal_to("hello"),
+        assert_that(supplier()).is_equal_to("hello"),
+        assert_that(supplied_values).is_equal_to(["x", "y"]),
+    ])
+
+private fun partial_add_functions_invoke_with_fixed_arguments(): Assert =
+    let add_10_fn = add_10()
+    assert_all([
+        assert_that(add_10_fn(5)).is_equal_to(15),
+        assert_that(invoke_partial_add()).is_equal_to(15),
+        assert_that(invoke_partial_add_with_generated_name_collision()).is_equal_to(15),
+    ])
+
+private fun partial_applications_support_multiple_placeholders(): Assert =
+    assert_all([
+        assert_that(invoke_partial_concat()).is_equal_to("A-B"),
+        assert_that(invoke_partial_combine()).is_equal_to(159),
+    ])
+
+private fun each_placeholder_becomes_a_separate_parameter(): Assert =
+    assert_that(invoke_partial_pair()).is_equal_to("1:2")
+
+private fun partial_application_keeps_fixed_outer_arguments(): Assert =
+    let is_age_valid_fn = is_age_valid()
+    assert_all([
+        assert_that(is_age_valid_fn(42)).is_true(),
+        assert_that(is_age_valid_fn(-1)).is_false(),
+        assert_that(is_age_valid_fn(200)).is_false(),
+    ])
+
+private fun partial_applications_invoke_builtin_methods(): Assert =
+    assert_all([
+        assert_that(invoke_partial_contains_method()).is_true(),
+        assert_that(invoke_partial_replace_method()).is_equal_to("bonono"),
+    ])
