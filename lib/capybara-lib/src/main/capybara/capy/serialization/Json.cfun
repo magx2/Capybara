@@ -7,6 +7,7 @@ from /capy/lang/Result import { * }
 from /capy/lang/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+from /capy/meta_prog/Recursive import { Recursive }
 
 union Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: Dict[Json] }
@@ -178,7 +179,8 @@ fun deserialize(json: String): Result[JsonObject] =
 private data Parse[T] { value: T, parsing_string: String }
 private fun Parse[T].pop(): Tuple[Option[String], Parse[T]] = (this.parsing_string[0], Parse { this.value, this.parsing_string[1, this.parsing_string.size()] })
 
-private fun rec deserialize_json(json: String): Result[Parse[Json]] =
+@Recursive
+private fun deserialize_json(json: String): Result[Parse[Json]] =
     match json[0] with
     case None -> Error { "Expected JSON, but got end of string" }
     case Some { first_char } when is_white_space(first_char) -> deserialize_json(drop_white_space(json[1, json.size()]))
@@ -193,7 +195,8 @@ private fun rec deserialize_json(json: String): Result[Parse[Json]] =
         case _ -> Error { "Do not know what to do with char `" + first_char + "`!" }
 
 private fun deserialize_json_array(json: String): Result[Parse[JsonArray]] =
-    fun rec deserialize_json_array(parse: Parse[JsonArray]): Result[Parse[JsonArray]] =
+    @Recursive
+    fun deserialize_json_array(parse: Parse[JsonArray]): Result[Parse[JsonArray]] =
         match parse.parsing_string[0] with
         case None -> Error { "Expected `,` or `]`, but got end of string!" }
         case Some { ']' } -> Success { parse.pop()[1] }
@@ -254,7 +257,8 @@ private fun deserialize_json_bool(json: String): Result[Parse[JsonBool]] =
     }
 
 private fun deserialize_json_number(json: String): Result[Parse[JsonNumber]] =
-    fun rec parse_number(parse: Parse[String]): Result[Parse[String]] =
+    @Recursive
+    fun parse_number(parse: Parse[String]): Result[Parse[String]] =
         match parse.parsing_string[0] with
         case None -> Error { 'Expected `-[0-9]`, but got empty string!' }
         case Some { first_char } ->
@@ -308,7 +312,8 @@ private fun deserialize_json_object(json: String): Result[Parse[JsonObject]] =
     case Some { v } -> Error { message: "Expected `{`, but got `" + v + "`."}
 
 private fun deserialize_key_values(json: String): Result[Parse[Dict[Json]]] =
-    fun rec deserialize_key_values(json: String, acc: Dict[Json]): Result[Parse[Dict[Json]]] =
+    @Recursive
+    fun deserialize_key_values(json: String, acc: Dict[Json]): Result[Parse[Dict[Json]]] =
         match json[0] with
         case None -> Error { "Expected `,` or `}`, but got empty string!" }
         case Some { "}" } -> Success { Parse { acc, json[1, json.size()] } }
@@ -363,7 +368,8 @@ private fun parse_string(json: String): Result[Parse[String]] =
     /// - `\r` - carriage return
     /// - `\t` - horizontal tab
     /// - `\\uXXXX` - 4 HEX digits
-    fun rec parse_string_until_quotation(parse: Parse[String], escape: bool): Result[Parse[String]] =
+    @Recursive
+    fun parse_string_until_quotation(parse: Parse[String], escape: bool): Result[Parse[String]] =
         if escape
         then
             match parse.parsing_string[0] with
@@ -393,14 +399,16 @@ private fun parse_string(json: String): Result[Parse[String]] =
     case Some { v } -> Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
     case None -> Error { message: "parse_string: Expected JSON string, got end of string." }
 
-private fun rec drop_white_space(s: String): String =
+@Recursive
+private fun drop_white_space(s: String): String =
     match s[0] with
     case Some { c } when is_white_space(c) -> drop_white_space(s[1, s.size()])
     case _ -> s
 
 private fun is_white_space(s: String): bool =
     const white_spaces = { " ", "\r", "\n", "\t" }
-    fun rec is_white_space(s: String, white_spaces: Set[String]): bool =
+    @Recursive
+    fun is_white_space(s: String, white_spaces: Set[String]): bool =
         match s[0] with
         case None -> true
         case Some { c } ->

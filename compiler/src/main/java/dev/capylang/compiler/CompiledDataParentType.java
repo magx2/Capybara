@@ -9,7 +9,21 @@ public record CompiledDataParentType(String name, List<CompiledField> fields,
                                    List<String> typeParameters,
                                    List<String> comments,
                                    Visibility visibility,
-                                   boolean enumType) implements GenericDataType, Comparable<CompiledDataParentType> {
+                                   boolean enumType,
+                                   List<CompiledAnnotation> annotations) implements GenericDataType, Comparable<CompiledDataParentType> {
+
+    public CompiledDataParentType {
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
+    }
+
+    public CompiledDataParentType(String name, List<CompiledField> fields,
+                                  List<CompiledDataType> subTypes,
+                                  List<String> typeParameters,
+                                  List<String> comments,
+                                  Visibility visibility,
+                                  boolean enumType) {
+        this(name, fields, subTypes, typeParameters, comments, visibility, enumType, List.of());
+    }
 
     public CompiledDataParentType(String name, List<CompiledField> fields, List<CompiledDataType> subTypes, List<String> typeParameters) {
         this(name, fields, subTypes, typeParameters, List.of(), null, false);

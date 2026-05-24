@@ -1,3 +1,5 @@
+from /capy/meta_prog/Recursive import { Recursive }
+
 union InteropPet = InteropDog | InteropCat
 data InteropDog { name: String }
 data InteropCat { age: int }
@@ -27,5 +29,6 @@ fun maybe_text(value: InteropMaybe): String =
 
 fun RecInteropValue.step(delta: int): int = this.value + delta
 
-fun rec step(n: int, value: RecInteropValue, acc: int): int =
+@Recursive
+fun step(n: int, value: RecInteropValue, acc: int): int =
     if n <= 0 then acc else step(n - 1, value, acc + value.step(n))

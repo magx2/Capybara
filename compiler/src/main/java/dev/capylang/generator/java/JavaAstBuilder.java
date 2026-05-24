@@ -1491,7 +1491,12 @@ public class JavaAstBuilder {
                 implementInterfaces,
                 fields,
                 recordTypeParameters,
-                ReflectionValueInfoJava.dataValueInfo(type.name(), reflectionFallbackPackagePath, buildDataValueFields(type)),
+                ReflectionValueInfoJava.dataValueInfo(
+                        type.name(),
+                        reflectionFallbackPackagePath,
+                        buildDataValueFields(type),
+                        type.annotations()
+                ),
                 new TreeSet<JavaMethod>(),
                 buildRecordMethods(type, functionsByOwnerPrefix));
     }
@@ -1501,7 +1506,8 @@ public class JavaAstBuilder {
                 .map(field -> new JavaDataValueInfo.Field(
                         field.name(),
                         field.type(),
-                        dataValueFieldExpression(type, field)))
+                        dataValueFieldExpression(type, field),
+                        field.annotations()))
                 .toList();
     }
 
@@ -1643,7 +1649,12 @@ public class JavaAstBuilder {
                 type.comments(),
                 implementInterfaces,
                 List.of("INSTANCE"),
-                List.of(ReflectionValueInfoJava.dataValueInfo(type.name(), reflectionFallbackPackagePath, List.of()))
+                List.of(ReflectionValueInfoJava.dataValueInfo(
+                        type.name(),
+                        reflectionFallbackPackagePath,
+                        List.of(),
+                        type.annotations()
+                ))
         );
     }
 
@@ -1659,7 +1670,8 @@ public class JavaAstBuilder {
                         .map(subType -> ReflectionValueInfoJava.dataValueInfo(
                                 subType.name(),
                                 ReflectionValueInfoJava.reflectionPackagePath(enumType.name(), reflectionFallbackPackagePath),
-                                List.of()))
+                                List.of(),
+                                enumType.annotations()))
                         .toList()
         );
     }

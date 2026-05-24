@@ -1,6 +1,7 @@
 from /capy/lang/Result import {*}
 from /capy/lang/Math import { * }
 from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 /// Calendar month number in the range 1..12.
 type month -> int with constructor {
@@ -129,7 +130,8 @@ fun Date.add_years_months(years: int, months: int): Date =
 
 /// Formats this date as an ISO 8601 calendar date.
 fun Date.to_iso_8601(): String =
-    fun rec pad_left(value: String, size: int): String =
+    @Recursive
+    fun pad_left(value: String, size: int): String =
         if value.size() >= size
         then value
         else pad_left("0" + value, size)
@@ -157,7 +159,8 @@ fun from_iso_8601(iso: String): Result[Date] =
             match ("" + char).to_int() with
             case Success { digit } -> Success { Parse { buffer: value[1, value.size()], value: digit } }
             case Error -> Error { invalid("expected digit, got `" + char + "`") }
-    fun rec parse_rest_digits(value: String, parsed: int): Result[Parse[int]] =
+    @Recursive
+    fun parse_rest_digits(value: String, parsed: int): Result[Parse[int]] =
         if value.is_empty()
         then Success { Parse { buffer: value, value: parsed } }
         else
@@ -172,14 +175,16 @@ fun from_iso_8601(iso: String): Result[Date] =
         if parse.buffer.is_empty()
         then Success { parse.value }
         else Error { invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun rec drop_prefix(value: String, size: int): String =
+    @Recursive
+    fun drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
             case Some { _ } -> drop_prefix(value[1, value.size()], size - 1)
-    fun rec take_prefix(value: String, size: int, acc: String): String =
+    @Recursive
+    fun take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else

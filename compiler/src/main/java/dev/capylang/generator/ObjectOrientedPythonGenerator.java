@@ -1043,6 +1043,8 @@ final class ObjectOrientedPythonGenerator {
                    + renderReflectionMethods(context, declaration.members(), full)
                    + ", parents="
                    + renderReflectionParents(context, declaration.parents(), full)
+                   + ", annotations="
+                   + PythonGenerator.renderAnnotations(declaration.linkedAnnotations())
                    + ")";
         }
         if (declaration instanceof ObjectOriented.TraitDeclaration) {
@@ -1054,6 +1056,8 @@ final class ObjectOrientedPythonGenerator {
                    + renderReflectionMethods(context, declaration.members(), full)
                    + ", parents="
                    + renderReflectionParents(context, declaration.parents(), full)
+                   + ", annotations="
+                   + PythonGenerator.renderAnnotations(declaration.linkedAnnotations())
                    + ")";
         }
         var classDeclaration = (ObjectOriented.ClassDeclaration) declaration;
@@ -1073,6 +1077,8 @@ final class ObjectOrientedPythonGenerator {
                + renderReflectionMethods(context, declaration.members(), full)
                + ", parents="
                + renderReflectionParents(context, declaration.parents(), full)
+               + ", annotations="
+               + PythonGenerator.renderAnnotations(declaration.linkedAnnotations())
                + ")";
     }
 
@@ -1100,6 +1106,8 @@ final class ObjectOrientedPythonGenerator {
                               + PythonGenerator.pyString(field.name())
                               + ", "
                               + renderReflectionTypeInfo(context, field.type())
+                              + ", annotations="
+                              + PythonGenerator.renderAnnotations(field.linkedAnnotations())
                               + ")")
                 .collect(joining(", ", "[", "]"));
     }
@@ -1124,6 +1132,8 @@ final class ObjectOrientedPythonGenerator {
                                + renderReflectionParams(context, method.parameters())
                                + ", return_type="
                                + renderReflectionTypeInfo(context, method.returnType())
+                               + ", annotations="
+                               + PythonGenerator.renderAnnotations(method.linkedAnnotations())
                                + ")")
                 .collect(joining(", ", "[", "]"));
     }
@@ -1137,6 +1147,7 @@ final class ObjectOrientedPythonGenerator {
                                   + PythonGenerator.pyString(parameter.name())
                                   + ", "
                                   + renderReflectionTypeInfo(context, parameter.type())
+                                  + ", annotations=[]"
                                   + ")")
                 .collect(joining(", ", "[", "]"));
     }
@@ -1162,10 +1173,18 @@ final class ObjectOrientedPythonGenerator {
                     .collect(joining(", ", "[", "]"));
             return "capy.type_info('tuple', 'Tuple', elements=" + elements + ")";
         }
+        if (isPrimitiveReflectionType(trimmed)) {
+            return "capy.type_info('data', "
+                   + PythonGenerator.pyString(trimmed)
+                   + ", pkg="
+                   + PythonGenerator.renderEmptyReflectionPackage()
+                   + ", annotations=[])";
+        }
         return "capy.type_info('data', "
                + PythonGenerator.pyString(PythonGenerator.simpleTypeName(trimmed))
                + ", pkg="
                + renderReflectionPackageForType(context.module(), trimmed)
+               + ", annotations=[]"
                + ")";
     }
 
@@ -1174,13 +1193,13 @@ final class ObjectOrientedPythonGenerator {
                + PythonGenerator.pyString(name)
                + ", pkg="
                + renderReflectionPackageForType(context.module(), name)
-               + ", open=False, fields=[], methods=[], parents=[])";
+               + ", open=False, fields=[], methods=[], parents=[], annotations=[])";
     }
 
     private String renderReflectionPackage(ObjectOrientedModule module) {
         var path = module.path().replaceFirst("^/", "");
         var name = path.isBlank() ? "" : PythonGenerator.simpleTypeName(path);
-        return "capy.object_info('package', " + PythonGenerator.pyString(name) + ", path=" + PythonGenerator.pyString(path) + ")";
+        return "capy.package_info(" + PythonGenerator.pyString(name) + ", " + PythonGenerator.pyString(path) + ")";
     }
 
     private String renderReflectionPackageForType(ObjectOrientedModule module, String rawType) {
@@ -1189,9 +1208,16 @@ final class ObjectOrientedPythonGenerator {
             var slash = normalized.lastIndexOf('/');
             var path = slash > 0 ? normalized.substring(1, slash) : "";
             var name = path.isBlank() ? "" : PythonGenerator.simpleTypeName(path);
-            return "capy.object_info('package', " + PythonGenerator.pyString(name) + ", path=" + PythonGenerator.pyString(path) + ")";
+            return "capy.package_info(" + PythonGenerator.pyString(name) + ", " + PythonGenerator.pyString(path) + ")";
         }
         return renderReflectionPackage(module);
+    }
+
+    private boolean isPrimitiveReflectionType(String type) {
+        return switch (type) {
+            case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void", "nothing" -> true;
+            default -> false;
+        };
     }
 
     private boolean isNumericLiteral(String value) {

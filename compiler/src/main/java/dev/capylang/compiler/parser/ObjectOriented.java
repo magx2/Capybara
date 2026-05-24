@@ -1,5 +1,7 @@
 package dev.capylang.compiler.parser;
 
+import dev.capylang.compiler.CompiledAnnotation;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -10,9 +12,12 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
         List<TypeReference> parents();
 
         List<MemberDeclaration> members();
+
+        List<CompiledAnnotation> linkedAnnotations();
     }
 
     public sealed interface MemberDeclaration permits FieldDeclaration, MethodDeclaration, InitBlock {
+        List<CompiledAnnotation> linkedAnnotations();
     }
 
     public sealed interface MethodBody permits ExpressionBody, StatementBlock {
@@ -27,24 +32,103 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             List<TypeReference> parents,
             List<MemberDeclaration> members,
             List<String> modifiers,
-            List<String> comments
+            List<String> comments,
+            List<AnnotationUsage> annotations,
+            List<CompiledAnnotation> linkedAnnotations
     ) implements TypeDeclaration {
+        public ClassDeclaration {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+            linkedAnnotations = linkedAnnotations == null ? List.of() : List.copyOf(linkedAnnotations);
+        }
+
+        public ClassDeclaration(
+                String name,
+                List<Parameter> constructorParameters,
+                List<TypeReference> parents,
+                List<MemberDeclaration> members,
+                List<String> modifiers,
+                List<String> comments,
+                List<AnnotationUsage> annotations
+        ) {
+            this(name, constructorParameters, parents, members, modifiers, comments, annotations, List.of());
+        }
+
+        public ClassDeclaration(
+                String name,
+                List<Parameter> constructorParameters,
+                List<TypeReference> parents,
+                List<MemberDeclaration> members,
+                List<String> modifiers,
+                List<String> comments
+        ) {
+            this(name, constructorParameters, parents, members, modifiers, comments, List.of(), List.of());
+        }
     }
 
     public record TraitDeclaration(
             String name,
             List<TypeReference> parents,
             List<MemberDeclaration> members,
-            List<String> comments
+            List<String> comments,
+            List<AnnotationUsage> annotations,
+            List<CompiledAnnotation> linkedAnnotations
     ) implements TypeDeclaration {
+        public TraitDeclaration {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+            linkedAnnotations = linkedAnnotations == null ? List.of() : List.copyOf(linkedAnnotations);
+        }
+
+        public TraitDeclaration(
+                String name,
+                List<TypeReference> parents,
+                List<MemberDeclaration> members,
+                List<String> comments,
+                List<AnnotationUsage> annotations
+        ) {
+            this(name, parents, members, comments, annotations, List.of());
+        }
+
+        public TraitDeclaration(
+                String name,
+                List<TypeReference> parents,
+                List<MemberDeclaration> members,
+                List<String> comments
+        ) {
+            this(name, parents, members, comments, List.of(), List.of());
+        }
     }
 
     public record InterfaceDeclaration(
             String name,
             List<TypeReference> parents,
             List<MemberDeclaration> members,
-            List<String> comments
+            List<String> comments,
+            List<AnnotationUsage> annotations,
+            List<CompiledAnnotation> linkedAnnotations
     ) implements TypeDeclaration {
+        public InterfaceDeclaration {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+            linkedAnnotations = linkedAnnotations == null ? List.of() : List.copyOf(linkedAnnotations);
+        }
+
+        public InterfaceDeclaration(
+                String name,
+                List<TypeReference> parents,
+                List<MemberDeclaration> members,
+                List<String> comments,
+                List<AnnotationUsage> annotations
+        ) {
+            this(name, parents, members, comments, annotations, List.of());
+        }
+
+        public InterfaceDeclaration(
+                String name,
+                List<TypeReference> parents,
+                List<MemberDeclaration> members,
+                List<String> comments
+        ) {
+            this(name, parents, members, comments, List.of(), List.of());
+        }
     }
 
     public record FieldDeclaration(
@@ -52,8 +136,35 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String type,
             String visibility,
             Optional<String> initializer,
-            List<String> comments
+            List<String> comments,
+            List<AnnotationUsage> annotations,
+            List<CompiledAnnotation> linkedAnnotations
     ) implements MemberDeclaration {
+        public FieldDeclaration {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+            linkedAnnotations = linkedAnnotations == null ? List.of() : List.copyOf(linkedAnnotations);
+        }
+
+        public FieldDeclaration(
+                String name,
+                String type,
+                String visibility,
+                Optional<String> initializer,
+                List<String> comments,
+                List<AnnotationUsage> annotations
+        ) {
+            this(name, type, visibility, initializer, comments, annotations, List.of());
+        }
+
+        public FieldDeclaration(
+                String name,
+                String type,
+                String visibility,
+                Optional<String> initializer,
+                List<String> comments
+        ) {
+            this(name, type, visibility, initializer, comments, List.of(), List.of());
+        }
     }
 
     public record MethodDeclaration(
@@ -63,11 +174,59 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String visibility,
             List<String> modifiers,
             Optional<MethodBody> body,
-            List<String> comments
+            List<String> comments,
+            List<AnnotationUsage> annotations,
+            List<CompiledAnnotation> linkedAnnotations
     ) implements MemberDeclaration {
+        public MethodDeclaration {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+            linkedAnnotations = linkedAnnotations == null ? List.of() : List.copyOf(linkedAnnotations);
+        }
+
+        public MethodDeclaration(
+                String name,
+                List<Parameter> parameters,
+                String returnType,
+                String visibility,
+                List<String> modifiers,
+                Optional<MethodBody> body,
+                List<String> comments,
+                List<AnnotationUsage> annotations
+        ) {
+            this(name, parameters, returnType, visibility, modifiers, body, comments, annotations, List.of());
+        }
+
+        public MethodDeclaration(
+                String name,
+                List<Parameter> parameters,
+                String returnType,
+                String visibility,
+                List<String> modifiers,
+                Optional<MethodBody> body,
+                List<String> comments
+        ) {
+            this(name, parameters, returnType, visibility, modifiers, body, comments, List.of(), List.of());
+        }
     }
 
-    public record InitBlock(StatementBlock body, List<String> comments) implements MemberDeclaration {
+    public record InitBlock(
+            StatementBlock body,
+            List<String> comments,
+            List<AnnotationUsage> annotations,
+            List<CompiledAnnotation> linkedAnnotations
+    ) implements MemberDeclaration {
+        public InitBlock {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+            linkedAnnotations = linkedAnnotations == null ? List.of() : List.copyOf(linkedAnnotations);
+        }
+
+        public InitBlock(StatementBlock body, List<String> comments, List<AnnotationUsage> annotations) {
+            this(body, comments, annotations, List.of());
+        }
+
+        public InitBlock(StatementBlock body, List<String> comments) {
+            this(body, comments, List.of(), List.of());
+        }
     }
 
     public record ExpressionBody(String expression) implements MethodBody {

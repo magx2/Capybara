@@ -12,7 +12,7 @@ Accepted.
 
 Capybara has parser AST declarations, linked type metadata, compiler intrinsics for reflection, and backend-independent functional IR, but it has no source-level way to ask the compiler to generate declarations from type metadata.
 
-General procedural macros, compiler plugins, or arbitrary compile-time execution would require a larger evaluator, hygiene model, sandboxing story, incremental-compilation contract, and linked-artifact format. Existing ADRs cover explicit compile-time contracts such as `fun rec` and unsafe constructor bypass, but none covers metaprogramming or derive expansion.
+General procedural macros, compiler plugins, or arbitrary compile-time execution would require a larger evaluator, hygiene model, sandboxing story, incremental-compilation contract, and linked-artifact format. Existing ADRs cover explicit compile-time contracts such as `@Recursive` and unsafe constructor bypass, but none covers metaprogramming or derive expansion.
 
 ## Decision
 

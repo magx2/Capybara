@@ -1,0 +1,32 @@
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+from AnnotationReflectionDefinitions import { ImportedAnnotationMarker, ImportedDataLabel, ImportedFieldName, ImportedFunctionLabel, ImportedMethodLabel }
+
+annotation LocalDataLabel on data {
+    label: String
+}
+
+annotation LocalFieldMarker on field {}
+
+@ImportedAnnotationMarker
+@LocalDataLabel(label: "local")
+@ImportedDataLabel(label: "imported", order: 5)
+data AnnotatedCustomer {
+    @ImportedAnnotationMarker
+    @ImportedFieldName(value: "customer_id")
+    id: String,
+    @LocalFieldMarker
+    display: String
+}
+
+@ImportedFunctionLabel(value: "factory")
+fun make_annotated_customer(id: String, display: String): AnnotatedCustomer =
+    AnnotatedCustomer { id, display }
+
+@ImportedMethodLabel(value: "display")
+fun AnnotatedCustomer.display_name(): String = this.display
+
+fun annotation_reflection_sample(): DataValueInfo =
+    reflection(AnnotatedCustomer { id: "C-1", display: "Ada" })
+
+fun annotation_reflection_data(customer: AnnotatedCustomer): DataValueInfo =
+    reflection(customer)

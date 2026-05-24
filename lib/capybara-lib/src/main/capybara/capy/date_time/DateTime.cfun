@@ -6,6 +6,7 @@ from /capy/lang/Result import { * }
 from /capy/lang/Primitives import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 /// Combination of a UTC calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -134,7 +135,8 @@ fun from_iso_8601(iso: String): Result[DateTime] =
     data Split { left: String, right: String }
     data SplitScan { left: String, right: String, seen_separator: bool }
     fun invalid(message: String): String = "Invalid ISO 8601 date-time format: " + message
-    fun rec scan_split(value: String, scan: SplitScan): Result[Split] =
+    @Recursive
+    fun scan_split(value: String, scan: SplitScan): Result[Split] =
         if value.is_empty()
         then if !scan.seen_separator
             then Error { invalid("expected `T` separator between date and time") }

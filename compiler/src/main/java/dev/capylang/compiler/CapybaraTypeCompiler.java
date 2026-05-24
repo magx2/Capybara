@@ -228,7 +228,8 @@ public class CapybaraTypeCompiler {
                         parentType.fields().stream()
                                 .map(field -> new CompiledDataType.CompiledField(
                                         field.name(),
-                                        substituteTypeParameters(field.type(), substitutions)
+                                        substituteTypeParameters(field.type(), substitutions),
+                                        field.annotations()
                                 ))
                                 .toList(),
                         parentType.subTypes().stream()
@@ -237,7 +238,8 @@ public class CapybaraTypeCompiler {
                         mappedTypeArguments,
                         parentType.comments(),
                         parentType.visibility(),
-                        parentType.enumType()
+                        parentType.enumType(),
+                        parentType.annotations()
                 );
             }
             case CompiledDataType dataType -> {
@@ -251,12 +253,17 @@ public class CapybaraTypeCompiler {
                             dataType.visibility(),
                             dataType.singleton(),
                             dataType.nativeType(),
-                            dataType.enumValue()
+                            dataType.enumValue(),
+                            dataType.annotations()
                     );
                 }
                 var substitutions = substitutionsFor(dataType.typeParameters(), typeArguments);
                 var substitutedFields = dataType.fields().stream()
-                        .map(field -> new CompiledDataType.CompiledField(field.name(), substituteTypeParameters(field.type(), substitutions)))
+                        .map(field -> new CompiledDataType.CompiledField(
+                                field.name(),
+                                substituteTypeParameters(field.type(), substitutions),
+                                field.annotations()
+                        ))
                         .toList();
                 yield new CompiledDataType(
                         dataType.name(),
@@ -271,7 +278,8 @@ public class CapybaraTypeCompiler {
                         dataType.visibility(),
                         dataType.singleton(),
                         dataType.nativeType(),
-                        dataType.enumValue()
+                        dataType.enumValue(),
+                        dataType.annotations()
                 );
             }
             case CompiledObjectType objectType -> objectType;
@@ -337,7 +345,8 @@ public class CapybaraTypeCompiler {
                     linkedDataType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    substituteTypeParameters(field.type(), substitutions)
+                                    substituteTypeParameters(field.type(), substitutions),
+                                    field.annotations()
                             ))
                             .toList(),
                     linkedDataType.typeParameters().stream()
@@ -350,14 +359,16 @@ public class CapybaraTypeCompiler {
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
                     linkedDataType.nativeType(),
-                    linkedDataType.enumValue()
+                    linkedDataType.enumValue(),
+                    linkedDataType.annotations()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
                             .map(field -> new CompiledDataType.CompiledField(
                                     field.name(),
-                                    substituteTypeParameters(field.type(), substitutions)
+                                    substituteTypeParameters(field.type(), substitutions),
+                                    field.annotations()
                             ))
                             .toList(),
                     linkedDataParentType.subTypes().stream()
@@ -368,7 +379,8 @@ public class CapybaraTypeCompiler {
                             .toList(),
                     linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
-                    linkedDataParentType.enumType()
+                    linkedDataParentType.enumType(),
+                    linkedDataParentType.annotations()
             );
             default -> type;
         };
@@ -546,7 +558,8 @@ public class CapybaraTypeCompiler {
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
                     linkedDataType.nativeType(),
-                    linkedDataType.enumValue()
+                    linkedDataType.enumValue(),
+                    linkedDataType.annotations()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     requestedName,
@@ -555,14 +568,16 @@ public class CapybaraTypeCompiler {
                     linkedDataParentType.typeParameters(),
                     linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
-                    linkedDataParentType.enumType()
+                    linkedDataParentType.enumType(),
+                    linkedDataParentType.annotations()
             );
             case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
                     requestedName,
                     primitiveBackedType.backingType(),
                     primitiveBackedType.cfunType(),
                     primitiveBackedType.comments(),
-                    primitiveBackedType.visibility()
+                    primitiveBackedType.visibility(),
+                    primitiveBackedType.annotations()
             );
             case CompiledObjectType objectType -> objectType;
         };

@@ -10,7 +10,24 @@ public record CompiledDataType(String name,
                              Visibility visibility,
                              boolean singleton,
                              boolean nativeType,
-                             boolean enumValue) implements GenericDataType, Comparable<CompiledDataType> {
+                             boolean enumValue,
+                             List<CompiledAnnotation> annotations) implements GenericDataType, Comparable<CompiledDataType> {
+    public CompiledDataType {
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
+    }
+
+    public CompiledDataType(String name,
+                            List<CompiledField> fields,
+                            List<String> typeParameters,
+                            List<String> extendedTypes,
+                            List<String> comments,
+                            Visibility visibility,
+                            boolean singleton,
+                            boolean nativeType,
+                            boolean enumValue) {
+        this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, List.of());
+    }
+
     public CompiledDataType(String name,
                             List<CompiledField> fields,
                             List<String> typeParameters,
@@ -66,6 +83,13 @@ public record CompiledDataType(String name,
         return name.compareTo(o.name);
     }
 
-    public record CompiledField(String name, CompiledType type) {
+    public record CompiledField(String name, CompiledType type, List<CompiledAnnotation> annotations) {
+        public CompiledField {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+        }
+
+        public CompiledField(String name, CompiledType type) {
+            this(name, type, List.of());
+        }
     }
 }

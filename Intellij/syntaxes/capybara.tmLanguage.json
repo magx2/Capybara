@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|rec|def|type|union|enum|data|const|derive|deriver|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
+          "match": "\\b(fun|def|type|union|enum|data|const|derive|deriver|annotation|on|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -165,8 +165,87 @@
     "typesAndFunctions": {
       "patterns": [
         {
+          "name": "meta.annotation.usage.capybara",
+          "begin": "(^\\s*)(@)(\\s*)((?:/?[A-Za-z_][A-Za-z0-9_]*(?:[/.][A-Za-z_][A-Za-z0-9_]*)*))(\\s*)(\\()",
+          "beginCaptures": {
+            "2": {
+              "name": "punctuation.definition.annotation.begin.capybara"
+            },
+            "4": {
+              "name": "entity.name.type.annotation.capybara"
+            },
+            "6": {
+              "name": "punctuation.section.annotation.arguments.begin.capybara"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.annotation.arguments.end.capybara"
+            }
+          },
+          "patterns": [
+            {
+              "name": "meta.annotation.argument.capybara",
+              "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(\\s*:)",
+              "captures": {
+                "1": {
+                  "name": "variable.parameter.annotation.capybara"
+                },
+                "2": {
+                  "name": "punctuation.separator.key-value.annotation.capybara"
+                }
+              }
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#keywords"
+            },
+            {
+              "name": "entity.name.type.capybara",
+              "match": "\\b_*[A-Z][A-Za-z0-9_]*(?:\\[\\])*(?=\\b|[^A-Za-z0-9_])"
+            }
+          ]
+        },
+        {
+          "name": "meta.annotation.usage.marker.capybara",
+          "match": "(^\\s*)(@)(\\s*)((?:/?[A-Za-z_][A-Za-z0-9_]*(?:[/.][A-Za-z_][A-Za-z0-9_]*)*))(?!\\s*\\()",
+          "captures": {
+            "2": {
+              "name": "punctuation.definition.annotation.begin.capybara"
+            },
+            "4": {
+              "name": "entity.name.type.annotation.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.annotation.definition.capybara",
+          "match": "\\b(annotation)(\\s+)(_*[A-Z][A-Za-z0-9_]*)(\\s+)(on)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "3": {
+              "name": "entity.name.type.annotation.capybara"
+            },
+            "5": {
+              "name": "keyword.control.capybara"
+            }
+          }
+        },
+        {
+          "name": "support.type.annotation-target.capybara",
+          "match": "\\b(fun|method|const|data|union|enum|type|deriver|class|interface|trait|field|init)\\b(?=\\s*(?:,|\\{))"
+        },
+        {
           "name": "meta.function.documented.private.capybara",
-          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun(?:\\s+rec)?|def))(\\s+)(__[A-Za-z0-9_]+)",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun|def))(\\s+)(__[A-Za-z0-9_]+)",
           "captures": {
             "1": {
               "name": "comment.block.documentation.capybara"
@@ -181,7 +260,7 @@
         },
         {
           "name": "meta.function.documented.capybara",
-          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun(?:\\s+rec)?|def))(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun|def))(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "comment.block.documentation.capybara"
@@ -234,7 +313,7 @@
         },
         {
           "name": "entity.name.type.private.capybara",
-          "match": "\\b(union|enum|data|deriver|class|trait|interface)\\s+(__[A-Za-z0-9_]*)"
+          "match": "\\b(union|enum|data|deriver|annotation|class|trait|interface)\\s+(__[A-Za-z0-9_]*)"
         },
         {
           "name": "entity.name.type.capybara",
@@ -242,19 +321,19 @@
         },
         {
           "name": "entity.name.function.private.capybara",
-          "match": "\\bfun(?:\\s+rec)?\\s+(__[A-Za-z0-9_]+)"
+          "match": "\\bfun\\s+(__[A-Za-z0-9_]+)"
         },
         {
           "name": "entity.name.function.capybara",
-          "match": "\\bfun(?:\\s+rec)?\\s+([A-Za-z_][A-Za-z0-9_]*)"
+          "match": "\\bfun\\s+([A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.function.owner-generic.capybara",
-          "match": "\\b(fun(?:\\s+rec)?)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.function.owner-infix.capybara",
-          "match": "\\b(fun(?:\\s+rec)?)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.([^]+)"
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.([^]+)"
         },
         {
           "name": "entity.name.function.private.capybara",

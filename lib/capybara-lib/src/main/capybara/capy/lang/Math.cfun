@@ -1,7 +1,9 @@
 from /capy/lang/Option import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 fun digits(number: int): int =
-    fun rec digits(number: int, acc: int): int =
+    @Recursive
+    fun digits(number: int, acc: int): int =
         if number < 10
         then acc
         else digits(number / 10, acc + 1)
@@ -60,7 +62,8 @@ fun min(a: int, b: int): int = if a < b then a else b
 ///
 /// Returns `None` when the List is empty.
 fun min(values: List[int]): Option[int] =
-    fun rec min(min: int, values: List[int]): int =
+    @Recursive
+    fun min(min: int, values: List[int]): int =
         match values[0] with
         case None -> min
         case Some { v } -> if min < v then min(min, values[1:]) else min(v, values[1:])
@@ -76,7 +79,8 @@ fun max(a: int, b: int): int = if a > b then a else b
 ///
 /// Returns `None` when the List is empty.
 fun max(values: List[int]): Option[int] =
-    fun rec max(max: int, values: List[int]): int =
+    @Recursive
+    fun max(max: int, values: List[int]): int =
         match values[0] with
         case None -> max
         case Some { v } -> if max < v then max(v, values[1:]) else max(max, values[1:])
@@ -92,7 +96,8 @@ fun min(a: long, b: long): long = if a < b then a else b
 ///
 /// Returns `None` when the List is empty.
 fun min(values: List[long]): Option[long] =
-    fun rec min(min: long, values: List[long]): long =
+    @Recursive
+    fun min(min: long, values: List[long]): long =
         match values[0] with
         case None -> min
         case Some { v } -> if min < v then min(min, values[1:]) else min(v, values[1:])
@@ -108,7 +113,8 @@ fun max(a: long, b: long): long = if a > b then a else b
 ///
 /// Returns `None` when the List is empty.
 fun max(values: List[long]): Option[long] =
-    fun rec max(max: long, values: List[long]): long =
+    @Recursive
+    fun max(max: long, values: List[long]): long =
         match values[0] with
         case None -> max
         case Some { v } -> if max < v then max(v, values[1:]) else max(max, values[1:])

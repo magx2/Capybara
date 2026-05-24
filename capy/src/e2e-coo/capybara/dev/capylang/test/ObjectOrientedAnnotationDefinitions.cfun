@@ -1,0 +1,13 @@
+annotation OoAnnotationMarker on class, interface, trait, field, method {}
+
+annotation OoTypeLabel on class, interface, trait {
+    label: String
+}
+
+annotation OoFieldName on field {
+    value: String
+}
+
+annotation OoMethodName on method {
+    value: String
+}

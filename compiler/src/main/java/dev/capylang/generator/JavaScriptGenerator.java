@@ -1,9 +1,15 @@
 package dev.capylang.generator;
 
 import dev.capylang.compiler.CollectionLinkedType;
+import dev.capylang.compiler.CompiledAnnotation;
+import dev.capylang.compiler.CompiledAnnotationValue;
+import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunction;
+import dev.capylang.compiler.CompiledFunctionType;
+import dev.capylang.compiler.CompiledGenericTypeParameter;
 import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledTupleType;
@@ -16,6 +22,7 @@ import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.generator.java.JavaAstBuilder;
 import dev.capylang.generator.java.JavaClass;
 import dev.capylang.generator.java.JavaConst;
+import dev.capylang.generator.java.JavaDataValueInfo;
 import dev.capylang.generator.java.JavaEnum;
 import dev.capylang.generator.java.JavaMethod;
 import dev.capylang.generator.java.JavaRecord;
@@ -218,14 +225,17 @@ public final class JavaScriptGenerator implements Generator {
             code.append("        return capy.dataToString(this);\n");
             code.append("    }\n");
             code.append("    capybaraDataValueInfo() {\n");
+            var dataValueInfo = record.dataValueInfo();
             code.append("        return capy.dataValueInfo(this, ")
-                    .append(jsString(name))
+                    .append(jsString(dataValueInfo.name()))
                     .append(", ")
-                    .append(jsString(moduleInfo.packageName()))
+                    .append(jsString(dataValueInfo.packageName()))
                     .append(", ")
-                    .append(jsString(moduleInfo.packagePath()))
+                    .append(jsString(dataValueInfo.packagePath()))
                     .append(", ")
-                    .append(jsArray(record.fields().stream().map(JavaRecord.JavaRecordField::name).toList()))
+                    .append(renderDataValueFieldDescriptors(dataValueInfo.fields(), dataValueInfo.packagePath()))
+                    .append(", ")
+                    .append(renderAnnotations(dataValueInfo.annotations()))
                     .append(");\n");
             code.append("    }\n");
             for (var method : record.methods()) {
@@ -270,14 +280,16 @@ public final class JavaScriptGenerator implements Generator {
             var values = javaEnum.values().isEmpty() ? List.of("INSTANCE") : javaEnum.values();
             var code = new StringBuilder();
             if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
+                var dataValueInfo = javaEnum.dataValueInfos().getFirst();
                 code.append("const ").append(enumName)
                         .append(" = capy.enumValue(")
                         .append(jsString(enumName)).append(", ")
                         .append(jsString(enumName)).append(", ")
                         .append(jsArray(programContext.parentTypes(enumName))).append(", ")
                         .append("0, [], ")
-                        .append(jsString(moduleInfo.packageName())).append(", ")
-                        .append(jsString(moduleInfo.packagePath()))
+                        .append(jsString(dataValueInfo.packageName())).append(", ")
+                        .append(jsString(dataValueInfo.packagePath())).append(", ")
+                        .append(renderDataValueMetadata(dataValueInfo))
                         .append(");\n");
                 exportNames.add(enumName);
                 return code.toString();
@@ -290,14 +302,16 @@ public final class JavaScriptGenerator implements Generator {
                 var aliases = valueName.equals(value)
                         ? List.<String>of()
                         : List.of(valueName);
+                var dataValueInfo = javaEnum.dataValueInfos().get(i);
                 code.append("        capy.enumValue(")
                         .append(jsString(value)).append(", ")
                         .append(jsString(enumName)).append(", ")
                         .append(jsArray(programContext.parentTypes(valueName))).append(", ")
                         .append(i).append(", ")
                         .append(jsArray(aliases)).append(", ")
-                        .append(jsString(moduleInfo.packageName())).append(", ")
-                        .append(jsString(moduleInfo.packagePath())).append("),\n");
+                        .append(jsString(dataValueInfo.packageName())).append(", ")
+                        .append(jsString(dataValueInfo.packagePath())).append(", ")
+                        .append(renderDataValueMetadata(dataValueInfo)).append("),\n");
             }
             code.append("    ];\n");
             code.append("    return Object.freeze({\n");
@@ -1148,7 +1162,8 @@ public final class JavaScriptGenerator implements Generator {
                    + jsString(reflectionValue.name()) + ", "
                    + jsString(reflectionValue.packageName()) + ", "
                    + jsString(reflectionValue.packagePath()) + ", "
-                   + jsArray(reflectionValue.fields().stream().map(CompiledReflectionValue.Field::name).toList())
+                   + renderReflectionFieldDescriptors(reflectionValue.fields(), reflectionValue.packagePath()) + ", "
+                   + renderAnnotations(reflectionValue.annotations())
                    + ")";
         }
 
@@ -1502,6 +1517,252 @@ public final class JavaScriptGenerator implements Generator {
             }
             return base + "_j" + idx;
         }
+    }
+
+    private static String renderDataValueMetadata(JavaDataValueInfo dataValueInfo) {
+        return "{ fields: "
+               + renderDataValueFieldDescriptors(dataValueInfo.fields(), dataValueInfo.packagePath())
+               + ", annotations: "
+               + renderAnnotations(dataValueInfo.annotations())
+               + " }";
+    }
+
+    private static String renderDataValueFieldDescriptors(List<JavaDataValueInfo.Field> fields, String fallbackPackagePath) {
+        if (fields.isEmpty()) {
+            return "[]";
+        }
+        return fields.stream()
+                .map(field -> "{ name: "
+                              + jsString(field.name())
+                              + ", type: "
+                              + renderReflectionTypeInfo(field.type(), fallbackPackagePath)
+                              + ", annotations: "
+                              + renderAnnotations(field.annotations())
+                              + " }")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private static String renderReflectionFieldDescriptors(List<CompiledReflectionValue.Field> fields, String fallbackPackagePath) {
+        if (fields.isEmpty()) {
+            return "[]";
+        }
+        return fields.stream()
+                .map(field -> "{ name: "
+                              + jsString(field.name())
+                              + ", type: "
+                              + renderReflectionTypeInfo(field.type(), fallbackPackagePath)
+                              + ", annotations: "
+                              + renderAnnotations(field.annotations())
+                              + " }")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    static String renderReflectionTypeInfo(CompiledType type, String fallbackPackagePath) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive ->
+                    renderDataInfo(primitiveReflectionTypeName(primitive), renderEmptyReflectionPackage(), List.of());
+            case CollectionLinkedType.CompiledList listType ->
+                    "{ kind: 'list', name: 'List', pkg: " + renderEmptyReflectionPackage()
+                    + ", element_type: " + renderReflectionTypeInfo(listType.elementType(), fallbackPackagePath) + " }";
+            case CollectionLinkedType.CompiledSet setType ->
+                    "{ kind: 'set', name: 'Set', pkg: " + renderEmptyReflectionPackage()
+                    + ", element_type: " + renderReflectionTypeInfo(setType.elementType(), fallbackPackagePath) + " }";
+            case CollectionLinkedType.CompiledDict dictType ->
+                    "{ kind: 'dict', name: 'Dict', pkg: " + renderEmptyReflectionPackage()
+                    + ", value_type: " + renderReflectionTypeInfo(dictType.valueType(), fallbackPackagePath) + " }";
+            case CompiledTupleType tupleType -> {
+                var elements = tupleType.elementTypes().stream()
+                        .map(elementType -> renderReflectionTypeInfo(elementType, fallbackPackagePath))
+                        .collect(joining(", ", "[", "]"));
+                yield "{ kind: 'tuple', name: 'Tuple', pkg: " + renderEmptyReflectionPackage()
+                      + ", elements: " + elements + " }";
+            }
+            case CompiledFunctionType functionType -> {
+                var shape = flattenReflectionFunctionType(functionType);
+                var params = shape.parameterTypes().stream()
+                        .map(parameterType -> renderReflectionTypeInfo(parameterType, fallbackPackagePath))
+                        .collect(joining(", ", "[", "]"));
+                yield "{ kind: 'function', name: 'function', pkg: " + renderEmptyReflectionPackage()
+                      + ", params: " + params
+                      + ", return_type: " + renderReflectionTypeInfo(shape.returnType(), fallbackPackagePath)
+                      + " }";
+            }
+            case CompiledGenericTypeParameter genericTypeParameter ->
+                    renderDataInfo(genericTypeParameter.name(), renderEmptyReflectionPackage(), List.of());
+            case CompiledPrimitiveBackedType primitiveBackedType ->
+                    renderReflectionTypeInfo(primitiveBackedType.backingType(), fallbackPackagePath);
+            case CompiledDataParentType parentType ->
+                    renderDataInfo(
+                            simpleReflectionTypeName(parentType.name()),
+                            renderReflectionPackageForType(parentType.name(), fallbackPackagePath),
+                            parentType.annotations()
+                    );
+            case CompiledDataType dataType ->
+                    renderDataInfo(
+                            simpleReflectionTypeName(dataType.name()),
+                            renderReflectionPackageForType(dataType.name(), fallbackPackagePath),
+                            dataType.annotations()
+                    );
+            case CompiledObjectType objectType ->
+                    renderDataInfo(
+                            simpleReflectionTypeName(objectType.name()),
+                            renderReflectionPackageForType(objectType.name(), fallbackPackagePath),
+                            objectType.annotations()
+                    );
+        };
+    }
+
+    private static ReflectionFunctionShape flattenReflectionFunctionType(CompiledFunctionType functionType) {
+        var parameterTypes = new ArrayList<CompiledType>();
+        CompiledType current = functionType;
+        while (current instanceof CompiledFunctionType currentFunctionType) {
+            parameterTypes.add(currentFunctionType.argumentType());
+            current = currentFunctionType.returnType();
+        }
+        return new ReflectionFunctionShape(List.copyOf(parameterTypes), current);
+    }
+
+    private static String renderDataInfo(String name, String pkg, List<CompiledAnnotation> annotations) {
+        return "{ kind: 'data', name: "
+               + jsString(name)
+               + ", pkg: "
+               + pkg
+               + ", annotations: "
+               + renderAnnotations(annotations)
+               + " }";
+    }
+
+    private static String primitiveReflectionTypeName(PrimitiveLinkedType type) {
+        return type == PrimitiveLinkedType.STRING
+                ? "String"
+                : type.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    static String renderAnnotations(List<CompiledAnnotation> annotations) {
+        if (annotations == null || annotations.isEmpty()) {
+            return "[]";
+        }
+        return annotations.stream()
+                .map(JavaScriptGenerator::renderAnnotation)
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private static String renderAnnotation(CompiledAnnotation annotation) {
+        var arguments = annotation.arguments().stream()
+                .map(argument -> "{ name: "
+                                 + jsString(argument.name())
+                                 + ", value: "
+                                 + renderAnnotationValue(argument.value())
+                                 + " }")
+                .collect(joining(", ", "[", "]"));
+        return "{ name: "
+               + jsString(annotation.name())
+               + ", pkg: "
+               + renderReflectionPackage(annotation.packageName(), annotation.packagePath())
+               + ", arguments: "
+               + arguments
+               + " }";
+    }
+
+    private static String renderAnnotationValue(CompiledAnnotationValue value) {
+        return switch (value) {
+            case CompiledAnnotationValue.StringValue stringValue ->
+                    "{ kind: 'string', value: " + jsString(normalizeAnnotationStringValue(stringValue.value())) + " }";
+            case CompiledAnnotationValue.IntValue intValue ->
+                    "{ kind: 'int', value: " + stripNumericSuffix(intValue.value()) + " }";
+            case CompiledAnnotationValue.LongValue longValue ->
+                    "{ kind: 'long', value: " + renderLongLiteral(longValue.value()) + " }";
+            case CompiledAnnotationValue.DoubleValue doubleValue ->
+                    "{ kind: 'double', value: " + stripNumericSuffix(doubleValue.value()) + " }";
+            case CompiledAnnotationValue.FloatValue floatValue ->
+                    "{ kind: 'float', value: " + stripNumericSuffix(floatValue.value()) + " }";
+            case CompiledAnnotationValue.BoolValue boolValue ->
+                    "{ kind: 'bool', value: " + boolValue.value() + " }";
+            case CompiledAnnotationValue.TypeNameValue typeNameValue ->
+                    "{ kind: 'type_name', value: " + jsString(typeNameValue.name()) + " }";
+            case CompiledAnnotationValue.NothingValue ignored ->
+                    "{ kind: 'nothing' }";
+        };
+    }
+
+    private static String normalizeAnnotationStringValue(String raw) {
+        if (raw.length() < 2) {
+            return raw;
+        }
+        if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            return normalizeAnnotationDoubleQuotedContent(raw.substring(1, raw.length() - 1));
+        }
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
+            return raw.substring(1, raw.length() - 1);
+        }
+        return raw;
+    }
+
+    private static String normalizeAnnotationDoubleQuotedContent(String content) {
+        var normalized = new StringBuilder(content.length());
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '\\' && i + 1 < content.length()) {
+                var next = content.charAt(i + 1);
+                if (next == '"' || next == '\\') {
+                    normalized.append(next);
+                    i++;
+                    continue;
+                }
+            }
+            normalized.append(ch);
+        }
+        return normalized.toString();
+    }
+
+    private static String renderReflectionPackageForType(String symbolName, String fallbackPackagePath) {
+        var path = reflectionPackagePath(symbolName, fallbackPackagePath);
+        var name = path.isBlank() ? "" : simpleReflectionTypeName(path);
+        return renderReflectionPackage(name, path);
+    }
+
+    private static String renderReflectionPackage(String packageName, String packagePath) {
+        return "{ name: "
+               + jsString(packageName == null ? "" : packageName)
+               + ", path: "
+               + jsString(packagePath == null ? "" : packagePath.replaceFirst("^/", ""))
+               + " }";
+    }
+
+    static String renderEmptyReflectionPackage() {
+        return "{ name: '', path: '' }";
+    }
+
+    private static String reflectionPackagePath(String symbolName, String fallbackPackagePath) {
+        var normalized = symbolName.replace('\\', '/');
+        var dot = normalized.lastIndexOf('.');
+        var slash = normalized.lastIndexOf('/');
+        if (slash >= 0) {
+            if (dot > slash) {
+                return normalized.substring(0, dot).replaceFirst("^/", "");
+            }
+            return normalized.substring(0, slash).replaceFirst("^/", "");
+        }
+        if (dot > 0) {
+            return normalized.substring(0, dot);
+        }
+        return fallbackPackagePath == null ? "" : fallbackPackagePath;
+    }
+
+    private static String simpleReflectionTypeName(String typeName) {
+        var normalized = stripGenericSuffix(typeName);
+        var slash = normalized.lastIndexOf('/');
+        var dot = normalized.lastIndexOf('.');
+        var index = Math.max(slash, dot);
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
+    }
+
+    private static String stripGenericSuffix(String typeName) {
+        var idx = typeName.indexOf('[');
+        return idx >= 0 ? typeName.substring(0, idx) : typeName;
+    }
+
+    private record ReflectionFunctionShape(List<CompiledType> parameterTypes, CompiledType returnType) {
     }
 
     record ModuleInfo(CompiledModule module, JavaClass javaClass, String className, Path relativePath, String packageName, String packagePath) {
@@ -4839,7 +5100,9 @@ public final class JavaScriptGenerator implements Generator {
                         return list(mapper === undefined ? values ?? [] : Array.from(values ?? [], mapper));
                     }
 
-                    function enumValue(name, owner, parents = [], ordinal = 0, aliases = [], packageName = '', packagePath = owner) {
+                    function enumValue(name, owner, parents = [], ordinal = 0, aliases = [], packageName = '', packagePath = owner, metadata = undefined) {
+                        const reflectionFields = metadata && Array.isArray(metadata.fields) ? metadata.fields : [];
+                        const reflectionAnnotations = metadata && Array.isArray(metadata.annotations) ? metadata.annotations : [];
                         const value = {
                             __capybaraType: name,
                             __capybaraTypes: [name, ...aliases, owner, ...parents],
@@ -4848,7 +5111,7 @@ public final class JavaScriptGenerator implements Generator {
                             ordinal,
                             order: ordinal,
                             toString() { return name; },
-                            capybaraDataValueInfo() { return { name, packageName, packagePath, fields: [] }; },
+                            capybaraDataValueInfo() { return dataValueInfo(this, name, packageName, packagePath, reflectionFields, reflectionAnnotations); },
                         };
                         if (parents.includes('Seq') && name === 'End') {
                             Object.assign(value, {
@@ -5501,32 +5764,56 @@ public final class JavaScriptGenerator implements Generator {
                         return typeof value === 'string' ? `"${value}"` : toStringValue(value);
                     }
 
-                        function dataValueInfo(value, name, packageName, packagePath, fieldNames) {
-                            const keys = Array.isArray(fieldNames) && fieldNames.length > 0
-                                ? fieldNames
-                                : nativeArrayFilter.call(Object.keys(value), key => !key.startsWith('__') && typeof value[key] !== 'function');
-                            const fields = nativeArrayMap.call(keys, key => ({ name: key, value: value[key] }));
-                        return { name, packageName, packagePath, fields };
+                    function reflectionPackage(packageName, packagePath) {
+                        return {
+                            name: packageName ?? '',
+                            path: String(packagePath ?? '').replace(/^\\/+/u, ''),
+                        };
                     }
 
-                    function reflection(target, name, packageName, packagePath, fieldNames) {
-                        if (name) {
+                    function reflectionFieldDescriptor(field) {
+                        if (typeof field === 'string') {
+                            return { name: field, type: undefined, annotations: [] };
+                        }
+                        return {
+                            name: field.name,
+                            type: field.type,
+                            annotations: Array.isArray(field.annotations) ? field.annotations : [],
+                        };
+                    }
+
+                    function dataValueInfo(value, name, packageName, packagePath, fieldInfos, annotations = []) {
+                        const descriptors = Array.isArray(fieldInfos)
+                            ? fieldInfos
+                            : nativeArrayFilter.call(Object.keys(value), key => !key.startsWith('__') && typeof value[key] !== 'function');
+                        const fields = nativeArrayMap.call(descriptors, field => {
+                            const descriptor = reflectionFieldDescriptor(field);
                             return {
-                                name,
-                                packageName,
-                                packagePath,
-                                    fields: nativeArrayMap.call(fieldNames, field => ({ name: field, value: target[field] })),
+                                name: descriptor.name,
+                                type: descriptor.type,
+                                value: value[descriptor.name],
+                                annotations: descriptor.annotations,
                             };
+                        });
+                        const pkg = reflectionPackage(packageName, packagePath);
+                        return {
+                            name,
+                            pkg,
+                            packageName: pkg.name,
+                            packagePath: pkg.path,
+                            fields,
+                            annotations: Array.isArray(annotations) ? annotations : [],
+                        };
+                    }
+
+                    function reflection(target, name, packageName, packagePath, fieldInfos, annotations = []) {
+                        if (name) {
+                            return dataValueInfo(target, name, packageName, packagePath, fieldInfos, annotations);
                         }
                         if (target && typeof target.capybaraDataValueInfo === 'function') {
                             return target.capybaraDataValueInfo();
                         }
-                        return {
-                            name,
-                            packageName,
-                            packagePath,
-                                fields: nativeArrayMap.call(fieldNames, field => ({ name: field, value: target[field] })),
-                        };
+                        return dataValueInfo(target, name, packageName, packagePath, fieldInfos, annotations);
                     }
 
                     function writeProgramResult(value) {

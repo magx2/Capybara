@@ -12,7 +12,18 @@ public record TypeDeclaration(String name, List<String> subTypes, List<DataField
                               List<DeriveDirective> derives,
                               List<String> comments,
                               Visibility visibility,
-                              Optional<SourcePosition> position) implements Definition {
+                              Optional<SourcePosition> position,
+                              List<AnnotationUsage> annotations) implements Definition {
+    public TypeDeclaration(String name, List<String> subTypes, List<DataField> fields,
+                           List<String> typeParameters,
+                           Optional<Expression> constructor,
+                           List<DeriveDirective> derives,
+                           List<String> comments,
+                           Visibility visibility,
+                           Optional<SourcePosition> position) {
+        this(name, subTypes, fields, typeParameters, constructor, derives, comments, visibility, position, List.of());
+    }
+
     public TypeDeclaration(String name, List<String> subTypes, List<DataField> fields,
                            List<String> typeParameters,
                            Optional<Expression> constructor,

@@ -185,6 +185,108 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldExposeFunctionalAnnotationReflectionMetadataInPython() throws Exception {
+        var program = compileProgram("""
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
+                annotation TypeMarker on data {
+                    label: String
+                    order: int = 1
+                }
+
+                annotation FieldMarker on field {
+                    value: String
+                }
+
+                @TypeMarker(label: "entity", order: 7)
+                data User {
+                    @FieldMarker(value: "identifier")
+                    id: String
+                }
+
+                fun reflected(user: User): DataValueInfo = reflection(user)
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                info = m.reflected(m.User({'id': 'U-1'}))
+                print('|'.join([
+                    info.annotations[0].name,
+                    info.annotations[0].arguments[0].value.kind,
+                    str(info.annotations[0].arguments[1].value.value),
+                    info.fields[0].annotations[0].name,
+                    info.fields[0].annotations[0].arguments[0].value.value,
+                    info.fields[0].type.name,
+                    info.pkg.path
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("TypeMarker|string|7|FieldMarker|identifier|String|foo/Main");
+    }
+
+    @Test
+    void shouldExposeObjectOrientedAnnotationReflectionMetadataInPython() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "Markers",
+                        "/foo",
+                        """
+                                annotation TypeMarker on class {
+                                    label: String
+                                }
+
+                                annotation FieldMarker on field {
+                                    value: String
+                                }
+
+                                annotation MethodMarker on method {
+                                    value: String
+                                }
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "Thing",
+                        "/foo",
+                        """
+                                from /foo/Markers import { TypeMarker, FieldMarker, MethodMarker }
+
+                                @TypeMarker(label: "entity")
+                                class Thing(name: String) {
+                                    @FieldMarker(value: "display_name")
+                                    field name: String = name
+
+                                    @MethodMarker(value: "greet")
+                                    def greet(): String = this.name
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                from foo.Thing import Thing
+                info = Thing.type()
+                print('|'.join([
+                    info.annotations[0].name,
+                    info.annotations[0].arguments[0].value.value,
+                    info.fields[0].annotations[0].name,
+                    info.fields[0].annotations[0].arguments[0].value.value,
+                    info.methods[0].annotations[0].name,
+                    info.methods[0].annotations[0].arguments[0].value.value
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("TypeMarker|entity|FieldMarker|display_name|MethodMarker|greet");
+    }
+
+    @Test
     void shouldWrapIntArithmeticLikeJava() throws Exception {
         var program = compileProgram("""
                 const MAX_INT: int = 2147483647

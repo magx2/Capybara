@@ -1,6 +1,7 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Seq import { * }
 from /capy/collection/CollectionTypes import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 /// Native ordered collection type backed by the runtime List implementation.
 /// List literals use square brackets: [1, 2, 3].
@@ -38,7 +39,8 @@ fun List[T].minus(other: List[T]): List[T] = this - other
 
 /// Returns true when at least one value satisfies `predicate`.
 fun List[T].any(predicate: T => bool): bool =
-    fun rec any_match(list: List[T], idx: int, predicate: T => bool): bool =
+    @Recursive
+    fun any_match(list: List[T], idx: int, predicate: T => bool): bool =
         match list[idx] with
         case None -> false
         case Some { value } ->
@@ -52,7 +54,8 @@ fun List[T].any(predicate: T => bool): bool =
 ///
 /// Empty lists return true.
 fun List[T].all(predicate: T => bool): bool =
-    fun rec all(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
+    @Recursive
+    fun all(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
         match list[idx] with
         case None -> acc
         case Some { value } ->
@@ -71,7 +74,8 @@ fun List[T].`?`(value: T): bool = this.contains(value)
 
 /// Combines all values from left to right.
 fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
-    fun rec reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
+    @Recursive
+    fun reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
         match list[idx] with
         case None -> acc
         case Some { value } -> reduce(list, idx + 1, reducer(acc, value), reducer)

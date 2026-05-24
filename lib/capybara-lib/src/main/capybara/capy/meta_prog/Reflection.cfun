@@ -14,14 +14,41 @@ union CooInfo =
 // COMMON
 data PackageInfo { name: String, path: String }
 
+union AnnotationValue =
+    AnnotationString
+    | AnnotationInt
+    | AnnotationLong
+    | AnnotationDouble
+    | AnnotationFloat
+    | AnnotationBool
+    | AnnotationTypeName
+    | AnnotationNothing
+
+data AnnotationString { value: String }
+data AnnotationInt { value: int }
+data AnnotationLong { value: long }
+data AnnotationDouble { value: double }
+data AnnotationFloat { value: float }
+data AnnotationBool { value: bool }
+data AnnotationTypeName { value: String }
+data AnnotationNothing {}
+
+data AnnotationArgumentInfo { name: String, value: AnnotationValue }
+
+data AnnotationInfo {
+    name: String,
+    pkg: PackageInfo,
+    arguments: List[AnnotationArgumentInfo]
+}
+
 // CFUN
 data FunctionTypeInfo { params: List[AnyInfo], return_type: AnyInfo }
 
-data DataInfo { name: String, pkg: PackageInfo }
+data DataInfo { name: String, pkg: PackageInfo, annotations: List[AnnotationInfo] }
 
-data FieldInfo { name: String, type: AnyInfo }
-data FieldValueInfo { name: String, type: AnyInfo, value: any }
-data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo] }
+data FieldInfo { name: String, type: AnyInfo, annotations: List[AnnotationInfo] }
+data FieldValueInfo { name: String, type: AnyInfo, value: any, annotations: List[AnnotationInfo] }
+data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo], annotations: List[AnnotationInfo] }
 
 // CFUN > COLLECTIONS
 data ListInfo { element_type: AnyInfo }
@@ -30,10 +57,10 @@ data DictInfo { value_type: AnyInfo }
 data TupleInfo { elements: List[AnyInfo] }
 
 // COO
-data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
-data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo] }
-data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
-data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo }
+data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo, annotations: List[AnnotationInfo] }
 
 /// Returns reflection metadata and field values for a concrete data value.
 fun reflection(obj: data): DataValueInfo = <native>

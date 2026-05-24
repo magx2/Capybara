@@ -1,6 +1,7 @@
 from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/Result import {*}
 from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 /// Semantic version major component, greater than or equal to zero.
 type major -> int with constructor {
@@ -187,7 +188,8 @@ fun parse_semver(version: String): Result[SemVer] =
         fun parse_dot_separated_pre_release_identifiers(version: String): Result[Parse[String]] =
             let parse <- parse_pre_release_identifier(version)
             parse_dot_separated_pre_release_identifiers_rest(parse.buffer, parse.value)
-        fun rec parse_dot_separated_pre_release_identifiers_rest(version: String, parsed: String): Result[Parse[String]] =
+        @Recursive
+        fun parse_dot_separated_pre_release_identifiers_rest(version: String, parsed: String): Result[Parse[String]] =
             match version[0] with
             case None -> Success { Parse { buffer: version, value: parsed } }
             case Some { char } when char == '.' -> {
@@ -219,7 +221,8 @@ fun parse_semver(version: String): Result[SemVer] =
         fun parse_dot_separated_build_identifiers(version: String): Result[Parse[String]] =
             let parse_identifier <- parse_dot_separated_build_identifier(version)
             parse_dot_separated_build_identifiers_rest(parse_identifier.buffer, parse_identifier.value)
-        fun rec parse_dot_separated_build_identifiers_rest(version: String, parsed: String): Result[Parse[String]] =
+        @Recursive
+        fun parse_dot_separated_build_identifiers_rest(version: String, parsed: String): Result[Parse[String]] =
             match version[0] with
             case None -> Success { Parse { buffer: version, value: parsed } }
             case Some { char } when char == '.' -> {
@@ -271,7 +274,8 @@ fun parse_semver(version: String): Result[SemVer] =
         fun parse_identifier_characters(version: String): Result[Parse[String]] =
             let pic <- parse_identifier_character(version)
             parse_identifier_characters_rest(pic.buffer, pic.value)
-        fun rec parse_identifier_characters_rest(version: String, parsed: String): Result[Parse[String]] =
+        @Recursive
+        fun parse_identifier_characters_rest(version: String, parsed: String): Result[Parse[String]] =
             match parse_identifier_character(version) with
             case Success { parse } -> parse_identifier_characters_rest(parse.buffer, parsed + parse.value)
             case Error -> Success { Parse { buffer: version, value: parsed } }
@@ -301,7 +305,8 @@ fun parse_semver(version: String): Result[SemVer] =
         fun parse_digits(version: String): Result[Parse[int]] =
             let parse <- parse_digit(version)
             parse_digits_rest(parse.buffer, parse.value)
-        fun rec parse_digits_rest(version: String, parsed: int): Result[Parse[int]] =
+        @Recursive
+        fun parse_digits_rest(version: String, parsed: int): Result[Parse[int]] =
             match parse_digit(version) with
             case Success { parse } -> parse_digits_rest(parse.buffer, parsed * 10 + parse.value)
             case Error -> Success { Parse { buffer: version, value: parsed } }
@@ -309,7 +314,8 @@ fun parse_semver(version: String): Result[SemVer] =
         fun parse_digits_as_string(version: String): Result[Parse[String]] =
             let parse <- parse_digit_as_string(version)
             parse_digits_as_string_rest(parse.buffer, parse.value)
-        fun rec parse_digits_as_string_rest(version: String, parsed: String): Result[Parse[String]] =
+        @Recursive
+        fun parse_digits_as_string_rest(version: String, parsed: String): Result[Parse[String]] =
             match parse_digit_as_string(version) with
             case Success { parse } -> parse_digits_as_string_rest(parse.buffer, parsed + parse.value)
             case Error -> Success { Parse { buffer: version, value: parsed } }

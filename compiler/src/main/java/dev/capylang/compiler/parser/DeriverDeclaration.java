@@ -10,15 +10,37 @@ public record DeriverDeclaration(
         List<DeriverMethod> methods,
         List<String> comments,
         Visibility visibility,
-        Optional<SourcePosition> position
+        Optional<SourcePosition> position,
+        List<AnnotationUsage> annotations
 ) implements Definition {
+    public DeriverDeclaration(
+            String name,
+            List<DeriverMethod> methods,
+            List<String> comments,
+            Visibility visibility,
+            Optional<SourcePosition> position
+    ) {
+        this(name, methods, comments, visibility, position, List.of());
+    }
+
     public record DeriverMethod(
             String name,
             List<Parameter> parameters,
             Type returnType,
             Expression expression,
             List<String> comments,
-            Optional<SourcePosition> position
+            Optional<SourcePosition> position,
+            List<AnnotationUsage> annotations
     ) {
+        public DeriverMethod(
+                String name,
+                List<Parameter> parameters,
+                Type returnType,
+                Expression expression,
+                List<String> comments,
+                Optional<SourcePosition> position
+        ) {
+            this(name, parameters, returnType, expression, comments, position, List.of());
+        }
     }
 }

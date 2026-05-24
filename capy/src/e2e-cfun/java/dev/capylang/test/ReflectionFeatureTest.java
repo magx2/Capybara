@@ -55,6 +55,44 @@ class ReflectionFeatureTest {
     }
 
     @Test
+    void reflectsFunctionalDataValueAnnotations() {
+        var user = ReflectionFeature.reflectionDataAnnotatedUser(
+                new ReflectionFeature.ReflectedAnnotatedUser("U-1", "Ada"));
+
+        assertThat(user.annotations()).extracting(Reflection.AnnotationInfo::name)
+                .containsExactly("ReflectionDataMarker");
+        var marker = user.annotations().getFirst();
+        assertThat(marker.pkg().name()).isEqualTo("ReflectionFeature");
+        assertThat(marker.arguments()).extracting(Reflection.AnnotationArgumentInfo::name)
+                .containsExactly("label", "order", "active");
+        assertThat(((Reflection.AnnotationString) marker.arguments().get(0).value()).value()).isEqualTo("user");
+        assertThat(((Reflection.AnnotationInt) marker.arguments().get(1).value()).value()).isEqualTo(7);
+        assertThat(((Reflection.AnnotationBool) marker.arguments().get(2).value()).value()).isTrue();
+    }
+
+    @Test
+    void reflectsFunctionalDataFieldAnnotations() {
+        var user = ReflectionFeature.reflectionDataAnnotatedUser(
+                new ReflectionFeature.ReflectedAnnotatedUser("U-1", "Ada"));
+
+        assertThat(user.fields()).extracting(Reflection.FieldValueInfo::name).containsExactly("id", "display");
+        assertThat(user.fields().get(0).annotations()).extracting(Reflection.AnnotationInfo::name)
+                .containsExactly("ReflectionFieldMarker");
+        var idMarker = user.fields().get(0).annotations().getFirst();
+        assertThat(idMarker.arguments()).extracting(Reflection.AnnotationArgumentInfo::name).containsExactly("value");
+        assertThat(((Reflection.AnnotationString) idMarker.arguments().getFirst().value()).value()).isEqualTo("identifier");
+    }
+
+    @Test
+    void functionalDataAnnotationsDoNotAffectEqualityOrToString() {
+        var first = new ReflectionFeature.ReflectedAnnotatedUser("U-1", "Ada");
+        var second = new ReflectionFeature.ReflectedAnnotatedUser("U-1", "Ada");
+
+        assertThat(first).isEqualTo(second);
+        assertThat(first.toString()).isEqualTo("ReflectedAnnotatedUser { \"id\": \"U-1\", \"display\": \"Ada\" }");
+    }
+
+    @Test
     void reflectionDataPreservesDataInfoMetadataSurface() {
         var a = ReflectionFeature.reflectionDataA(new ReflectionFeature.A("letter-a", 1));
 
@@ -129,6 +167,10 @@ class ReflectionFeatureTest {
 
         assertThat(singleton.name()).isEqualTo("ReflectedSingleton");
         assertThat(singleton.fields()).isEmpty();
+        assertThat(singleton.annotations()).extracting(Reflection.AnnotationInfo::name)
+                .containsExactly("ReflectionDataMarker");
+        assertThat(((Reflection.AnnotationString) singleton.annotations().getFirst().arguments().getFirst().value()).value())
+                .isEqualTo("singleton");
         assertThat(enumValue.name()).isEqualTo("REFLECTED_READY");
         assertThat(enumValue.fields()).isEmpty();
     }

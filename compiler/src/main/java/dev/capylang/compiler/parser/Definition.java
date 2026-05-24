@@ -4,7 +4,7 @@ import dev.capylang.compiler.Visibility;
 
 import java.util.Optional;
 
-public sealed interface Definition permits DataDeclaration, DeriverDeclaration, EnumDeclaration, Function, PrimitiveBackedTypeDeclaration, TypeDeclaration {
+public sealed interface Definition permits AnnotationDeclaration, DataDeclaration, DeriverDeclaration, EnumDeclaration, Function, PrimitiveBackedTypeDeclaration, TypeDeclaration {
     Optional<SourcePosition> position();
 
     default Visibility visibility() {

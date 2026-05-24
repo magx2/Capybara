@@ -1,0 +1,2 @@
+/// Marks a function as a compiler-verified direct tail-recursion contract.
+annotation Recursive on fun {}

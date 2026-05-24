@@ -11,6 +11,17 @@ public record PrimitiveBackedTypeDeclaration(
         Optional<Expression> constructor,
         List<String> comments,
         Visibility visibility,
-        Optional<SourcePosition> position
+        Optional<SourcePosition> position,
+        List<AnnotationUsage> annotations
 ) implements Definition {
+    public PrimitiveBackedTypeDeclaration(
+            String name,
+            PrimitiveType backingType,
+            Optional<Expression> constructor,
+            List<String> comments,
+            Visibility visibility,
+            Optional<SourcePosition> position
+    ) {
+        this(name, backingType, constructor, comments, visibility, position, List.of());
+    }
 }

@@ -5,6 +5,7 @@ from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/lang/Seq import { * }
 from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 data Regex { pattern: String, flags: String }
 data Match { group_value: String }
@@ -12,7 +13,8 @@ data Match { group_value: String }
 fun from_literal(pattern: String, flags: String): Regex = Regex { pattern, flags }
 
 private fun drop_prefix(value: String, size: int): String =
-    fun rec drop_prefix(value: String, size: int): String =
+    @Recursive
+    fun drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
@@ -23,7 +25,8 @@ private fun drop_prefix(value: String, size: int): String =
     drop_prefix(value, size)
 
 private fun find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
-    fun rec find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
+    @Recursive
+    fun find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
         if pattern == ""
         then acc
         else
@@ -37,7 +40,8 @@ private fun find_all(pattern: String, input: String, acc: List[Match]): List[Mat
     find_all(pattern, input, acc)
 
 private fun split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
-    fun rec split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
+    @Recursive
+    fun split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
         if pattern == ""
         then [input]
         else

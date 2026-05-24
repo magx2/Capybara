@@ -7,8 +7,23 @@ public record CompiledPrimitiveBackedType(
         PrimitiveLinkedType backingType,
         String cfunType,
         List<String> comments,
-        Visibility visibility
+        Visibility visibility,
+        List<CompiledAnnotation> annotations
 ) implements GenericDataType, Comparable<CompiledPrimitiveBackedType> {
+    public CompiledPrimitiveBackedType {
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
+    }
+
+    public CompiledPrimitiveBackedType(
+            String name,
+            PrimitiveLinkedType backingType,
+            String cfunType,
+            List<String> comments,
+            Visibility visibility
+    ) {
+        this(name, backingType, cfunType, comments, visibility, List.of());
+    }
+
     public CompiledPrimitiveBackedType(
             String name,
             PrimitiveLinkedType backingType,

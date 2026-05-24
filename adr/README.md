@@ -3,6 +3,7 @@
 - [ADR-2026-05-07: `.cfun` Compile-Time Derive v1](ADR-2026-05-07-cfun-derive-v1.md)
 - [ADR-2026-05-08: Reflection v1](ADR-2026-05-08-reflection-v1.md)
 - [ADR-2026-05-21: `.cfun` Empty Data v1](ADR-2026-05-21-cfun-empty-data-v1.md)
+- [ADR-2026-05-24: Declaration Annotations v1](ADR-2026-05-24-declaration-annotations-v1.md)
 - [ADR-2026-04-14: Capybara OO v1 Frontend Boundary](ADR-2026-04-14-capybara-oo-v1.md)
-- [ADR-2026-04-29: `.cfun` `fun rec` Tail-Recursion Contract](ADR-2026-04-29-cfun-rec-tail-recursion.md)
+- [ADR-2026-04-29: `.cfun` `@Recursive` Tail-Recursion Contract](ADR-2026-04-29-cfun-rec-tail-recursion.md)
 - [ADR-2026-04-12: Unsafe Constructor Bypass](2026-04-12-unsafe-constructor-bypass.md)

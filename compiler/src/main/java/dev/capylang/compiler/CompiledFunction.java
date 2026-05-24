@@ -13,7 +13,24 @@ public record CompiledFunction(String name,
                              Visibility visibility,
                              boolean programMain,
                              boolean recursive,
-                             boolean tailRecursive) implements Comparable<CompiledFunction> {
+                             boolean tailRecursive,
+                             List<CompiledAnnotation> annotations) implements Comparable<CompiledFunction> {
+    public CompiledFunction {
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
+    }
+
+    public CompiledFunction(String name,
+                            CompiledType returnType,
+                            List<CompiledFunctionParameter> parameters,
+                            CompiledExpression expression,
+                            List<String> comments,
+                            Visibility visibility,
+                            boolean programMain,
+                            boolean recursive,
+                            boolean tailRecursive) {
+        this(name, returnType, parameters, expression, comments, visibility, programMain, recursive, tailRecursive, List.of());
+    }
+
     public CompiledFunction(String name,
                           CompiledType returnType,
                           List<CompiledFunctionParameter> parameters,
