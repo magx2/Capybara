@@ -406,6 +406,47 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRunPythonConsoleEffects() throws Exception {
+        var program = compileProgram("""
+                from /capy/io/Console import { * }
+                from /capy/lang/Effect import { * }
+                from /capy/lang/Option import { * }
+
+                fun emit(bytes: List[byte]): Effect[String] =
+                    let out <- print("out")
+                    let out_line <- println(" line")
+                    let err <- print_error("err")
+                    let err_line <- println_error(" line")
+                    let out_bytes <- println(bytes)
+                    let err_bytes <- println_error(bytes)
+                    pure(out + out_line + err + err_line)
+
+                fun read_pair(): Effect[String] =
+                    let first <- read_line()
+                    let second <- read_line()
+                    pure(line_or_eof(first) + "|" + line_or_eof(second))
+
+                private fun line_or_eof(line: Option[String]): String =
+                    match line with
+                    case Some { value } -> value
+                    case None -> "EOF"
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var run = runPythonCommandWithInput("Capy\n", "-c", """
+                import foo.Main as m
+                print("EMIT:" + m.emit([65, 90]).unsafe_run())
+                print("READ:" + m.readPair().unsafe_run())
+                """);
+
+        assertThat(run.exitCode()).isEqualTo(0);
+        assertThat(run.stdout()).isEqualTo("out line\nAZ\nEMIT:out lineerr line\nREAD:Capy|EOF");
+        assertThat(run.stderr()).isEqualTo("err line\nAZ");
+    }
+
+    @Test
     void shouldEmitConstsBeforeDependentConsts() throws Exception {
         var program = compileProgram("""
                 const Z_BASE: long = 21L
@@ -518,6 +559,21 @@ class PythonGeneratorTest {
         var process = new ProcessBuilder(command)
                 .directory(tempDir.toFile())
                 .start();
+        var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var exit = process.waitFor();
+        return new ProcessResult(exit, stdout, stderr);
+    }
+
+    private ProcessResult runPythonCommandWithInput(String input, String... args) throws Exception {
+        var command = new java.util.ArrayList<String>();
+        command.add("python3");
+        command.addAll(List.of(args));
+        var process = new ProcessBuilder(command)
+                .directory(tempDir.toFile())
+                .start();
+        process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
+        process.getOutputStream().close();
         var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         var exit = process.waitFor();
