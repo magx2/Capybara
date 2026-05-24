@@ -1,0 +1,93 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from AnnotationQualifiedImportReflection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/AnnotationQualifiedImportReflection.cfun", [
+        test("reflects annotations imported with qualified import syntax", () => reflects_annotations_imported_with_qualified_import_syntax()),
+    ])
+
+fun reflects_annotations_imported_with_qualified_import_syntax(): Assert =
+    let info = qualified_import_annotation_reflection_sample()
+    let data_annotation = info.annotations[0]
+    let field_annotation = first_field_annotation(info)
+    assert_all([
+        assert_that(info.name).is_equal_to("QualifiedImportCustomer"),
+        assert_that(annotation_names(info.annotations)).is_equal_to(["ImportedDataLabel"]),
+        assert_that(annotation_pkg_name(data_annotation)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(annotation_string(data_annotation, "label")).is_equal_to("qualified-import"),
+        assert_that(annotation_int(data_annotation, "order")).is_equal_to(11),
+        assert_that(annotation_bool(data_annotation, "active")).is_true(),
+        assert_that(first_field_annotation_names(info)).is_equal_to(["ImportedFieldName"]),
+        assert_that(annotation_string(field_annotation, "value")).is_equal_to("qualified_id"),
+    ])
+
+private fun first_field_annotation(info: DataValueInfo): Option[AnnotationInfo] =
+    match info.fields[0] with
+    case Some { field } -> field.annotations[0]
+    case None -> None {}
+
+private fun first_field_annotation_names(info: DataValueInfo): List[String] =
+    match info.fields[0] with
+    case Some { field } -> annotation_names(field.annotations)
+    case None -> []
+
+private fun annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    annotation_names_at(annotations, 0, [])
+
+private fun annotation_names_at(annotations: List[AnnotationInfo], idx: int, acc: List[String]): List[String] =
+    match annotations[idx] with
+    case Some { annotation } -> annotation_names_at(annotations, idx + 1, acc + annotation.name)
+    case None -> acc
+
+private fun annotation_pkg_name(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.name
+    case None -> ""
+
+private fun annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun annotation_int(annotation: Option[AnnotationInfo], name: String): int =
+    match annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationInt { value } -> value
+            case _ -> 0
+        }
+    case None -> 0
+
+private fun annotation_bool(annotation: Option[AnnotationInfo], name: String): bool =
+    match annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationBool { value } -> value
+            case _ -> false
+        }
+    case None -> false

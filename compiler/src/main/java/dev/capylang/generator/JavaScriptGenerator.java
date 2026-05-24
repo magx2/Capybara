@@ -1667,22 +1667,33 @@ public final class JavaScriptGenerator implements Generator {
     private static String renderAnnotationValue(CompiledAnnotationValue value) {
         return switch (value) {
             case CompiledAnnotationValue.StringValue stringValue ->
-                    "{ kind: 'string', value: " + jsString(normalizeAnnotationStringValue(stringValue.value())) + " }";
+                    renderAnnotationValue("AnnotationString", "string", jsString(normalizeAnnotationStringValue(stringValue.value())));
             case CompiledAnnotationValue.IntValue intValue ->
-                    "{ kind: 'int', value: " + stripNumericSuffix(intValue.value()) + " }";
+                    renderAnnotationValue("AnnotationInt", "int", stripNumericSuffix(intValue.value()));
             case CompiledAnnotationValue.LongValue longValue ->
-                    "{ kind: 'long', value: " + renderLongLiteral(longValue.value()) + " }";
+                    renderAnnotationValue("AnnotationLong", "long", renderLongLiteral(longValue.value()));
             case CompiledAnnotationValue.DoubleValue doubleValue ->
-                    "{ kind: 'double', value: " + stripNumericSuffix(doubleValue.value()) + " }";
+                    renderAnnotationValue("AnnotationDouble", "double", stripNumericSuffix(doubleValue.value()));
             case CompiledAnnotationValue.FloatValue floatValue ->
-                    "{ kind: 'float', value: " + stripNumericSuffix(floatValue.value()) + " }";
+                    renderAnnotationValue("AnnotationFloat", "float", stripNumericSuffix(floatValue.value()));
             case CompiledAnnotationValue.BoolValue boolValue ->
-                    "{ kind: 'bool', value: " + boolValue.value() + " }";
+                    renderAnnotationValue("AnnotationBool", "bool", String.valueOf(boolValue.value()));
             case CompiledAnnotationValue.TypeNameValue typeNameValue ->
-                    "{ kind: 'type_name', value: " + jsString(typeNameValue.name()) + " }";
+                    renderAnnotationValue("AnnotationTypeName", "type_name", jsString(typeNameValue.name()));
             case CompiledAnnotationValue.NothingValue ignored ->
-                    "{ kind: 'nothing' }";
+                    renderAnnotationValue("AnnotationNothing", "nothing", null);
         };
+    }
+
+    private static String renderAnnotationValue(String typeName, String kind, String valueExpression) {
+        return "{ __capybaraType: "
+               + jsString(typeName)
+               + ", __capybaraTypes: ["
+               + jsString(typeName)
+               + ", 'AnnotationValue', 'CapybaraDataValue'], kind: "
+               + jsString(kind)
+               + (valueExpression == null ? "" : ", value: " + valueExpression)
+               + " }";
     }
 
     private static String normalizeAnnotationStringValue(String raw) {
