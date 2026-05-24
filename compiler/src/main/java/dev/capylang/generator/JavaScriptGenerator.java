@@ -2363,6 +2363,7 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.collection.Tuple", Set.of("get"));
             exports.put("capy.io.Console", Set.of("print", "println", "print_error", "printError", "println_error", "printlnError", "read_line", "readLine"));
             exports.put("capy.io.Stdout", Set.of("print", "println"));
+            exports.put("capy.io.PathModule", Set.of("Path", "PathRoot", "RELATIVE", "ABSOLUTE", "HOME", "from_string", "fromString"));
             exports.put("capy.io.IO", Set.of("read_text", "readText", "read_lines", "readLines", "read_bytes", "readBytes",
                     "write_text", "writeText", "write_lines", "writeLines", "write_bytes", "writeBytes",
                     "append_text", "appendText", "append_lines", "appendLines", "append_bytes", "appendBytes",
@@ -2439,6 +2440,7 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "collection", "Tuple.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Console.js"), consoleRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Stdout.js"), stdoutRuntime()),
+                    new GeneratedModule(Path.of("capy", "io", "PathModule.js"), pathRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "IO.js"), ioRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "DateModule.js"), dateRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "TimeModule.js"), timeRuntime()),
@@ -2469,6 +2471,7 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.collection.Tuple",
                     "capy.io.Console",
                     "capy.io.Stdout",
+                    "capy.io.PathModule",
                     "capy.io.IO",
                     "capy.date_time.DateModule",
                     "capy.date_time.TimeModule",
@@ -2928,6 +2931,130 @@ public final class JavaScriptGenerator implements Generator {
                    + "    print(value) { process.stdout.write(consoleString(value)); },\n"
                    + "    println(value) { console.log(consoleString(value)); },\n"
                    + "};\n";
+        }
+
+        private static String pathRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    const PathRoot = (() => {
+                        const values = [
+                            capy.enumValue('RELATIVE', 'PathRoot', ['PathRoot'], 0, [], 'Path', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('ABSOLUTE', 'PathRoot', ['PathRoot'], 1, [], 'Path', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('HOME', 'PathRoot', ['PathRoot'], 2, [], 'Path', 'capy/io/Path', { fields: [], annotations: [] }),
+                        ];
+                        return Object.freeze({
+                            RELATIVE: values[0],
+                            ABSOLUTE: values[1],
+                            HOME: values[2],
+                            values,
+                            valuesSet: () => capy.set(values),
+                            parse: value => capy.parseEnum(value, values, 'PathRoot'),
+                        });
+                    })();
+                    const RELATIVE = PathRoot.RELATIVE;
+                    const ABSOLUTE = PathRoot.ABSOLUTE;
+                    const HOME = PathRoot.HOME;
+
+                    class Path {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'Path';
+                            this.__capybaraTypes = ['Path', 'CapybaraDataValue'];
+                            this.root = fields.root;
+                            this.prefix = fields.prefix ?? capy.None;
+                            this.segments = fields.segments ?? [];
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new Path({
+                                root: Object.prototype.hasOwnProperty.call(fields, 'root') ? fields.root : this.root,
+                                prefix: Object.prototype.hasOwnProperty.call(fields, 'prefix') ? fields.prefix : this.prefix,
+                                segments: Object.prototype.hasOwnProperty.call(fields, 'segments') ? fields.segments : this.segments,
+                            });
+                        }
+                        slash(other) {
+                            return other instanceof Path
+                                ? new Path({ root: this.root, prefix: this.prefix, segments: this.segments.concat(other.segments) })
+                                : new Path({ root: this.root, prefix: this.prefix, segments: this.segments.concat(String(other)) });
+                        }
+                        normalize() {
+                            const normalized = [];
+                            for (const segment of this.segments) {
+                                if (segment === '' || segment === '.') {
+                                    continue;
+                                }
+                                if (segment === '..') {
+                                    if (normalized.length > 0) {
+                                        normalized.pop();
+                                    } else if (capy.isType(this.root, 'RELATIVE')) {
+                                        normalized.push(segment);
+                                    }
+                                } else {
+                                    normalized.push(segment);
+                                }
+                            }
+                            return new Path({ root: this.root, prefix: this.prefix, segments: normalized });
+                        }
+                        parent() {
+                            return this.segments.length === 0
+                                ? capy.None
+                                : new capy.Some({ value: new Path({ root: this.root, prefix: this.prefix, segments: this.segments.slice(0, -1) }) });
+                        }
+                        isAbsolute() {
+                            return !capy.isType(this.root, 'RELATIVE');
+                        }
+                        isRoot() {
+                            return this.segments.length === 0;
+                        }
+                        name() {
+                            if (capy.isType(this.prefix, 'Some')) {
+                                return this.prefix.value;
+                            }
+                            if (capy.isType(this.root, 'ABSOLUTE')) {
+                                return '/';
+                            }
+                            if (capy.isType(this.root, 'HOME')) {
+                                return '~';
+                            }
+                            return '.';
+                        }
+                        toString() {
+                            const body = this.segments.join('/');
+                            if (capy.isType(this.root, 'ABSOLUTE')) {
+                                return '/' + body;
+                            }
+                            if (capy.isType(this.root, 'HOME')) {
+                                return body.length === 0 ? '~' : '~/' + body;
+                            }
+                            return body.length === 0 ? '.' : body;
+                        }
+                        toString_() {
+                            return this.toString();
+                        }
+                        capybaraDataValueInfo() {
+                            return capy.dataValueInfo(this, 'Path', 'Path', 'capy/io/Path', [], []);
+                        }
+                    }
+
+                    function fromString(pathString) {
+                        const input = String(pathString);
+                        const root = input.startsWith('/') ? ABSOLUTE : input.startsWith('~') ? HOME : RELATIVE;
+                        const value = input.startsWith('/') ? input.slice(1) : input.startsWith('~/') ? input.slice(2) : input.startsWith('~') ? input.slice(1) : input;
+                        const segments = value.split('/').filter(segment => segment.length > 0);
+                        return new Path({ root, prefix: capy.None, segments }).normalize();
+                    }
+
+                    module.exports = {
+                        Path,
+                        PathRoot,
+                        RELATIVE,
+                        ABSOLUTE,
+                        HOME,
+                        fromString,
+                        from_string: fromString,
+                    };
+                    """;
         }
 
         private static String ioRuntime() {
