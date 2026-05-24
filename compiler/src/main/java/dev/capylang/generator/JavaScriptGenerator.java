@@ -867,25 +867,54 @@ public final class JavaScriptGenerator implements Generator {
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
                 case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
-                case MINUS -> "(" + renderCollectionMinus(expression, left, right) + ")";
-                case MUL -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.longMul(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.intMul(" + left + ", " + right + ")"
-                        : "((" + left + ") * (" + right + "))";
-                case DIV -> expression.type() == PrimitiveLinkedType.INT
-                        ? "capy.intDiv(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.LONG
-                                ? "capy.longDiv(" + left + ", " + right + ")"
-                        : "((" + left + ") / (" + right + "))";
-                case MOD -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.longMod(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.intMod(" + left + ", " + right + ")"
-                        : "((" + left + ") % (" + right + "))";
-                case POWER -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.longPow(" + left + ", " + right + ")"
-                        : "Math.pow(" + left + ", " + right + ")";
+                case MINUS -> expression.type() == PrimitiveLinkedType.STRING
+                        ? "(" + renderStringConcat(left, right) + ")"
+                        : "(" + renderCollectionMinus(expression, left, right) + ")";
+                case MUL -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longMul(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intMul(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") * (" + right + "))";
+                }
+                case DIV -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intDiv(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longDiv(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") / (" + right + "))";
+                }
+                case MOD -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longMod(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intMod(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") % (" + right + "))";
+                }
+                case POWER -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longPow(" + left + ", " + right + ")";
+                    }
+                    yield "Math.pow(" + left + ", " + right + ")";
+                }
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
@@ -899,6 +928,10 @@ public final class JavaScriptGenerator implements Generator {
                 case BITWISE_NOT -> "(~(" + left + "))";
                 default -> throw new UnsupportedOperationException("Unsupported JS infix operator: " + expression.operator());
             };
+        }
+
+        private String renderStringConcat(String left, String right) {
+            return "capy.toStringValue(" + left + ") + capy.toStringValue(" + right + ")";
         }
 
         private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {

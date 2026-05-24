@@ -863,25 +863,54 @@ public final class PythonGenerator implements Generator {
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
                 case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
-                case MINUS -> "(" + renderCollectionMinus(expression, left, right) + ")";
-                case MUL -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.long_mul(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.int_mul(" + left + ", " + right + ")"
-                                : "((" + left + ") * (" + right + "))";
-                case DIV -> expression.type() == PrimitiveLinkedType.INT
-                        ? "capy.int_div(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.LONG
-                                ? "capy.long_div(" + left + ", " + right + ")"
-                                : "((" + left + ") / (" + right + "))";
-                case MOD -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.long_mod(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.int_mod(" + left + ", " + right + ")"
-                                : "((" + left + ") % (" + right + "))";
-                case POWER -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.long_pow(" + left + ", " + right + ")"
-                        : "capy.math.pow(" + left + ", " + right + ")";
+                case MINUS -> expression.type() == PrimitiveLinkedType.STRING
+                        ? "(" + renderStringConcat(left, right) + ")"
+                        : "(" + renderCollectionMinus(expression, left, right) + ")";
+                case MUL -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_mul(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_mul(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") * (" + right + "))";
+                }
+                case DIV -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_div(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_div(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") / (" + right + "))";
+                }
+                case MOD -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_mod(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_mod(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") % (" + right + "))";
+                }
+                case POWER -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_pow(" + left + ", " + right + ")";
+                    }
+                    yield "capy.math.pow(" + left + ", " + right + ")";
+                }
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
@@ -895,6 +924,10 @@ public final class PythonGenerator implements Generator {
                 case BITWISE_NOT -> "(~(" + left + "))";
                 default -> throw new UnsupportedOperationException("Unsupported Python infix operator: " + expression.operator());
             };
+        }
+
+        private String renderStringConcat(String left, String right) {
+            return "capy.to_string_value(" + left + ") + capy.to_string_value(" + right + ")";
         }
 
         private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {
