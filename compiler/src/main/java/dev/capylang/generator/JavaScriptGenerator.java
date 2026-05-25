@@ -913,6 +913,9 @@ public final class JavaScriptGenerator implements Generator {
                     if (expression.type() == PrimitiveLinkedType.LONG) {
                         yield "capy.longPow(" + left + ", " + right + ")";
                     }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intPow(" + left + ", " + right + ")";
+                    }
                     yield "Math.pow(" + left + ", " + right + ")";
                 }
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
@@ -5795,6 +5798,20 @@ public final class JavaScriptGenerator implements Generator {
                         return toInt(left % right);
                     }
 
+                    function intPow(left, right) {
+                        let base = toInt(left);
+                        let exponent = Number(right);
+                        let result = 1;
+                        while (exponent > 0) {
+                            if ((exponent & 1) === 1) {
+                                result = intMul(result, base);
+                            }
+                            base = intMul(base, base);
+                            exponent >>= 1;
+                        }
+                        return toInt(result);
+                    }
+
                     function longAdd(left, right) {
                         return toLong(BigInt(left) + BigInt(right));
                     }
@@ -6064,6 +6081,7 @@ public final class JavaScriptGenerator implements Generator {
                         intMul,
                         intDiv,
                         intMod,
+                        intPow,
                         longAdd,
                         longSub,
                         longMul,

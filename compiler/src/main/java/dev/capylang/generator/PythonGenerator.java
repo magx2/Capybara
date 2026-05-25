@@ -909,6 +909,9 @@ public final class PythonGenerator implements Generator {
                     if (expression.type() == PrimitiveLinkedType.LONG) {
                         yield "capy.long_pow(" + left + ", " + right + ")";
                     }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_pow(" + left + ", " + right + ")";
+                    }
                     yield "capy.math.pow(" + left + ", " + right + ")";
                 }
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
@@ -3676,6 +3679,16 @@ public final class PythonGenerator implements Generator {
                     def int_mod(left, right):
                         if right == 0: raise ZeroDivisionError('/ by zero')
                         return to_int(left - int(left / right) * right)
+                    def int_pow(left, right):
+                        base = to_int(left)
+                        exponent = int(right)
+                        result = 1
+                        while exponent > 0:
+                            if exponent & 1 == 1:
+                                result = int_mul(result, base)
+                            base = int_mul(base, base)
+                            exponent >>= 1
+                        return to_int(result)
                     def long_add(left, right): return to_long(left + right)
                     def long_sub(left, right): return to_long(left - right)
                     def long_mul(left, right): return to_long(left * right)
