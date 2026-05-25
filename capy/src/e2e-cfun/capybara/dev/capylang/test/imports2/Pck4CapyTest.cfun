@@ -1,0 +1,21 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Pck4 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports2/Pck4.cfun", [
+        test("awesome maps level thresholds to messages", () => awesome_maps_level_thresholds_to_messages()),
+    ])
+
+private fun awesome_maps_level_thresholds_to_messages(): Assert =
+    let ordinary: String = awesome(10)
+    let pumping: String = awesome(11)
+    let strong: String = awesome(101)
+    let extreme: String = awesome(9001)
+    assert_all([
+        assert_that(ordinary).is_equal_to("Day as usual"),
+        assert_that(pumping).is_equal_to("Keep pumping!"),
+        assert_that(strong).is_equal_to("Not Bad B)"),
+        assert_that(extreme).is_equal_to("IT'S OVER NINE THOUSAND!!!"),
+    ])
