@@ -1,0 +1,54 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from PrimitiveMethods import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/PrimitiveMethods.cfun", [
+        test("long_to_int uses cast overflow semantics", () => long_to_int_uses_cast_overflow_semantics()),
+        test("float_to_int truncates and clamps to int range", () => float_to_int_truncates_and_clamps_to_int_range()),
+        test("double_to_int truncates and clamps to int range", () => double_to_int_truncates_and_clamps_to_int_range()),
+        test("float_to_long truncates and clamps to long range", () => float_to_long_truncates_and_clamps_to_long_range()),
+        test("double_to_long truncates and clamps to long range", () => double_to_long_truncates_and_clamps_to_long_range()),
+    ])
+
+private fun long_to_int_uses_cast_overflow_semantics(): Assert =
+    assert_all([
+        assert_that(long_to_int(42L)).is_equal_to(42),
+        assert_that(long_to_int(2147483647L)).is_equal_to(2147483647),
+        assert_that(long_to_int(2147483648L)).is_equal_to(-2147483648),
+        assert_that(long_to_int(4294967295L)).is_equal_to(-1),
+        assert_that(long_to_int(-2147483649L)).is_equal_to(2147483647),
+    ])
+
+private fun float_to_int_truncates_and_clamps_to_int_range(): Assert =
+    assert_all([
+        assert_that(float_to_int(42.9f)).is_equal_to(42),
+        assert_that(float_to_int(-42.9f)).is_equal_to(-42),
+        assert_that(float_to_int(2147483648.0f)).is_equal_to(2147483647),
+        assert_that(float_to_int(-2147483904.0f)).is_equal_to(-2147483648),
+    ])
+
+private fun double_to_int_truncates_and_clamps_to_int_range(): Assert =
+    assert_all([
+        assert_that(double_to_int(42.9)).is_equal_to(42),
+        assert_that(double_to_int(-42.9)).is_equal_to(-42),
+        assert_that(double_to_int(2147483648.0)).is_equal_to(2147483647),
+        assert_that(double_to_int(-2147483649.0)).is_equal_to(-2147483648),
+    ])
+
+private fun float_to_long_truncates_and_clamps_to_long_range(): Assert =
+    assert_all([
+        assert_that(float_to_long(42.9f)).is_equal_to(42L),
+        assert_that(float_to_long(-42.9f)).is_equal_to(-42L),
+        assert_that(float_to_long(9223372036854775808.0f)).is_equal_to(9223372036854775807L),
+        assert_that(float_to_long(-9223372036854775808.0f)).is_equal_to(-9223372036854775808L),
+    ])
+
+private fun double_to_long_truncates_and_clamps_to_long_range(): Assert =
+    assert_all([
+        assert_that(double_to_long(42.9)).is_equal_to(42L),
+        assert_that(double_to_long(-42.9)).is_equal_to(-42L),
+        assert_that(double_to_long(9223372036854775808.0)).is_equal_to(9223372036854775807L),
+        assert_that(double_to_long(-9223372036854775809.0)).is_equal_to(-9223372036854775808L),
+    ])
