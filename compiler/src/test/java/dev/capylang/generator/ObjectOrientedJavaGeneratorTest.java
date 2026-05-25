@@ -723,6 +723,58 @@ class ObjectOrientedJavaGeneratorTest {
 
     }
 
+    @Test
+    void shouldGenerateNormalClassImportsForSingleLetterObjectTypes() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "ObjectTypes",
+                        "/foo/boo",
+                        """
+                                interface X {
+                                    def print(): String
+                                }
+
+                                trait Y {
+                                    def bracket(name: String): String = "[" + name + "]"
+                                }
+
+                                class Z(name: String): X, Y {
+                                    field name: String = name
+
+                                    override def print(): String = this.bracket(this.name)
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule(
+                        "Consumer",
+                        "/foo/boo",
+                        """
+                                from ObjectTypes import { X, Y, Z }
+
+                                fun marker(): String = "ok"
+                                """,
+                        SourceKind.FUNCTIONAL
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Consumer.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("import foo.boo.X;")
+                .contains("import foo.boo.Y;")
+                .contains("import foo.boo.Z;")
+                .doesNotContain("import static foo.boo.X.X;")
+                .doesNotContain("import static foo.boo.Y.Y;")
+                .doesNotContain("import static foo.boo.Z.Z;");
+
+        compileGeneratedJava(generatedProgram);
+    }
+
 
     @Test
     void shouldIgnoreSingleQuotedLiteralsDuringInferredImportScan() throws Exception {
