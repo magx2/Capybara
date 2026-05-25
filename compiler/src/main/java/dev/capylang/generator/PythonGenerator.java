@@ -3894,9 +3894,64 @@ public final class PythonGenerator implements Generator {
                         data.update(kwargs)
                         return SimpleNamespace(**data)
 
-                    def regex_from_literal(pattern):
-                        compiled = re.compile(pattern)
-                        return SimpleNamespace(__capybaraRegex=True, matches=lambda value: compiled.search(str(value)) is not None)
+                    class CapyRegexMatch:
+                        __capybaraType = 'Match'
+                        __capybaraTypes = ['Match']
+                        def __init__(self, group_value):
+                            self.group_value = group_value
+                        def group(self, index):
+                            return Some({'value': self.group_value}) if index == 0 else None_
+                        def groups(self):
+                            return list_([Some({'value': self.group_value})])
+
+                    class CapyRegex:
+                        __capybaraType = 'Regex'
+                        __capybaraTypes = ['Regex']
+                        __capybaraRegex = True
+                        def __init__(self, pattern, flags=''):
+                            self.pattern = pattern
+                            self.flags = flags or ''
+                        def _compiled(self):
+                            flags = 0
+                            if 'i' in self.flags:
+                                flags |= re.IGNORECASE
+                            if 'm' in self.flags:
+                                flags |= re.MULTILINE
+                            if 's' in self.flags:
+                                flags |= re.DOTALL
+                            return re.compile(self.pattern, flags)
+                        def matches(self, input):
+                            return self._compiled().search(str(input)) is not None
+                        def question(self, input):
+                            return self.matches(input)
+                        def find(self, input):
+                            match = self._compiled().search(str(input))
+                            return Some({'value': CapyRegexMatch(match.group(0))}) if match else None_
+                        def findAll(self, input):
+                            return seq([CapyRegexMatch(match.group(0)) for match in self._compiled().finditer(str(input))])
+                        def find_all(self, input):
+                            return self.findAll(input)
+                        def replace(self, replacement):
+                            return lambda input: self._compiled().sub(str(replacement), str(input))
+                        def split(self, input):
+                            return list_(self._compiled().split(str(input)))
+                        def tilde(self, input):
+                            return self.find(input)
+                        def tildeTilde(self, input):
+                            return self.findAll(input)
+                        def tilde_tilde(self, input):
+                            return self.tildeTilde(input)
+                        def tildeGreater(self, replacement):
+                            return self.replace(replacement)
+                        def tilde_greater(self, replacement):
+                            return self.tildeGreater(replacement)
+                        def slashGreater(self, input):
+                            return self.split(input)
+                        def slash_greater(self, input):
+                            return self.slashGreater(input)
+
+                    def regex_from_literal(pattern, flags=''):
+                        return CapyRegex(pattern, flags)
                     def current_millis(): return int(time.time() * 1000)
                     def nano_time(): return time.time_ns()
 
