@@ -1,0 +1,63 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from MatchWhen import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/MatchWhen.cfun", [
+        test("foo prefers guarded cases before general case", () => foo_prefers_guarded_cases_before_general_case()),
+        test("boo prefers guarded constructor pattern cases before general case", () => boo_prefers_guarded_constructor_pattern_cases_before_general_case()),
+        test("nested_guard works with constructor pattern binding", () => nested_guard_works_with_constructor_pattern_binding()),
+        test("sign prefers guarded data cases before general case", () => sign_prefers_guarded_data_cases_before_general_case()),
+        test("letter supports guards for user-defined type cases", () => letter_supports_guards_for_user_defined_type_cases()),
+        test("range_label supports complex guard expressions on custom data", () => range_label_supports_complex_guard_expressions_on_custom_data()),
+    ])
+
+fun foo_prefers_guarded_cases_before_general_case(): Assert =
+    assert_all([
+        assert_that(foo(Some { "-" })).is_equal_to("minus"),
+        assert_that(foo(Some { "+" })).is_equal_to("plus"),
+        assert_that(foo(Some { "x" })).is_equal_to("other"),
+        assert_that(foo(None {})).is_equal_to("none"),
+    ])
+
+fun boo_prefers_guarded_constructor_pattern_cases_before_general_case(): Assert =
+    assert_all([
+        assert_that(boo(Some { 1 })).is_equal_to("one"),
+        assert_that(boo(Some { 2 })).is_equal_to("two"),
+        assert_that(boo(Some { 7 })).is_equal_to("7"),
+        assert_that(boo(None {})).is_equal_to("none"),
+    ])
+
+fun nested_guard_works_with_constructor_pattern_binding(): Assert =
+    assert_all([
+        assert_that(nested_guard(Some { 11 })).is_equal_to("big"),
+        assert_that(nested_guard(Some { 5 })).is_equal_to("5"),
+        assert_that(nested_guard(None {})).is_equal_to("none"),
+    ])
+
+fun sign_prefers_guarded_data_cases_before_general_case(): Assert =
+    assert_all([
+        assert_that(sign(Sign { value: "-", weight: 20, enabled: true })).is_equal_to("heavy minus"),
+        assert_that(sign(Sign { value: "+", weight: 20, enabled: true })).is_equal_to("heavy plus"),
+        assert_that(sign(Sign { value: "-", weight: 5, enabled: true })).is_equal_to("minus"),
+        assert_that(sign(Sign { value: "+", weight: 5, enabled: true })).is_equal_to("plus"),
+        assert_that(sign(Sign { value: "x", weight: 5, enabled: true })).is_equal_to("other"),
+        assert_that(sign(Sign { value: "-", weight: 20, enabled: false })).is_equal_to("minus"),
+    ])
+
+fun letter_supports_guards_for_user_defined_type_cases(): Assert =
+    assert_all([
+        assert_that(letter(Vowel {})).is_equal_to("vowel"),
+        assert_that(letter(Consonant {})).is_equal_to("hard"),
+    ])
+
+fun range_label_supports_complex_guard_expressions_on_custom_data(): Assert =
+    assert_all([
+        assert_that(range_label(Range { start: 1, stop: 5, step: 1, enabled: true })).is_equal_to("ascending"),
+        assert_that(range_label(Range { start: 5, stop: 1, step: -1, enabled: true })).is_equal_to("descending"),
+        assert_that(range_label(Range { start: 1, stop: 5, step: 0, enabled: false })).is_equal_to("disabled 1"),
+        assert_that(range_label(Range { start: 1, stop: 5, step: 0, enabled: true })).is_equal_to("stuck"),
+        assert_that(range_label(Range { start: 1, stop: 5, step: 2, enabled: true })).is_equal_to("other"),
+    ])
