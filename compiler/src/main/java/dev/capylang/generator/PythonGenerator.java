@@ -3344,11 +3344,19 @@ public final class PythonGenerator implements Generator {
                         def asList(self): return self
                         def to_list(self): return self
                         def toList(self): return self
+                        def map(self, mapper): return map_collection(self, mapper)
                         def pipe(self, mapper): return map_collection(self, mapper)
+                        def flat_map(self, mapper): return flat_map_collection(self, mapper)
+                        def flatMap(self, mapper): return self.flat_map(mapper)
                         def pipeStar(self, mapper): return flat_map_collection(self, mapper)
                         def pipe_star(self, mapper): return self.pipeStar(mapper)
+                        def filter(self, predicate): return filter_collection(self, predicate)
                         def pipeMinus(self, predicate): return filter_collection(self, predicate)
                         def pipe_minus(self, predicate): return self.pipeMinus(predicate)
+                        def reject(self, predicate): return reject_collection(self, predicate)
+                        def reduce(self, initial, reducer): return reduce_collection(self, initial, reducer)
+                        def reduceLeft(self, initial, reducer): return self.reduce(initial, reducer)
+                        def reduce_left(self, initial, reducer): return self.reduce(initial, reducer)
                         def pipeGreater(self, initial, reducer): return reduce_collection(self, initial, reducer)
                         def pipe_greater(self, initial, reducer): return self.pipeGreater(initial, reducer)
 

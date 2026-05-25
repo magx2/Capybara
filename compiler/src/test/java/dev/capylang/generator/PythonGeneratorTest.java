@@ -342,6 +342,39 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRunSeqNamedMethodsOnPythonListRuntime() throws Exception {
+        var program = compileProgram("""
+                from /capy/lang/Seq import { * }
+                from /capy/collection/List import { * }
+
+                fun expand(value: int): Seq[int] = to_seq([value, value + 1])
+                fun seq_map(values: List[int]): List[int] = to_seq(values).map(x => x * 3).as_list()
+                fun seq_flat_map(values: List[int]): List[int] = to_seq(values).flat_map(x => expand(x)).as_list()
+                fun seq_filter(values: List[int]): List[int] = to_seq(values).filter(x => x > 1).as_list()
+                fun seq_reject(values: List[int]): List[int] = to_seq(values).reject(x => x > 1).as_list()
+                fun seq_reduce(values: List[int]): int = to_seq(values).reduce(0, (acc, value) => acc + value)
+                fun seq_reduce_left(values: List[int]): int = to_seq(values).reduce_left(0, (acc, value) => acc + value)
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([
+                    ','.join([str(value) for value in m.seqMap([1, 2, 3])]),
+                    ','.join([str(value) for value in m.seqFlatMap([1, 2])]),
+                    ','.join([str(value) for value in m.seqFilter([1, 2, 3])]),
+                    ','.join([str(value) for value in m.seqReject([1, 2, 3])]),
+                    str(m.seqReduce([1, 2, 3])),
+                    str(m.seqReduceLeft([1, 2, 3]))
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("3,6,9|1,2,2,3|2,3|1|6|6");
+    }
+
+    @Test
     void shouldPreserveUpperSnakeConstNames() throws Exception {
         var program = compileProgram("""
                 const FOO_BOO_X_Y: String = "foo"
