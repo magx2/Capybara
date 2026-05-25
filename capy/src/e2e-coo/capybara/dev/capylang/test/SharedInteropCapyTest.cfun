@@ -1,0 +1,52 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from SharedInterop import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/SharedInterop.cfun", [
+        test("SharedInteractor is constructible and exposes FP interop methods", () => shared_interactor_is_constructible_and_exposes_fp_interop_methods()),
+        test("shared FP functions create and match pets", () => shared_fp_functions_create_and_match_pets()),
+    ])
+
+fun shared_interactor_is_constructible_and_exposes_fp_interop_methods(): Assert =
+    let info = SharedInteractor.type()
+    assert_all([
+        assert_that(constructs_shared_interactor().unsafe_run()).is_true(),
+        assert_that(shared_interactor_type_name(info)).is_equal_to("SharedInteractor"),
+        assert_that(shared_interactor_method_names(info)).is_equal_to([
+            "invoke_fp_function",
+            "create_fp_data",
+            "match_fp_type",
+        ]),
+    ])
+
+fun shared_fp_functions_create_and_match_pets(): Assert =
+    // Legacy host tests also assert generated class identity and invoke OO instance
+    // methods. Capybara .cfun tests can construct and reflect OO values portably,
+    // while value-level assertions observe the same FP data and matching behavior.
+    assert_all([
+        assert_that(pet_text(make_dog("Capy"))).is_equal_to("dog:Capy"),
+        assert_that(shared_dog_name(make_dog("Bara"))).is_equal_to("Bara"),
+        assert_that(pet_text(make_dog("Bara"))).is_equal_to("dog:Bara"),
+        assert_that(pet_text(SharedDog { name: "Mochi" })).is_equal_to("dog:Mochi"),
+        assert_that(pet_text(SharedCat { age: 4 })).is_equal_to("cat:4"),
+    ])
+
+private fun constructs_shared_interactor(): Effect[bool] =
+    let interactor <- SharedInteractor()
+    true
+
+private fun shared_interactor_method_names(info: ObjectInfo): List[String] =
+    (info.methods | method => method.name).as_list()
+
+private fun shared_interactor_type_name(info: AnyInfo): String =
+    info.name
+
+private fun shared_dog_name(pet: SharedPet): String =
+    match pet with
+    case SharedDog { name } -> name
+    case SharedCat { age } -> ""
