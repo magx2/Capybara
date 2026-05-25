@@ -24,19 +24,25 @@ fun contains_method(s: Set[int], value: int): bool = s.contains(value)
 
 data User { name: String }
 
+fun ada_user_set(): Set[User] = {User! { name: "Ada" },}
+
+fun duplicate_ada_user_set(): Set[User] = ada_user_set() + User! { name: "Ada" }
+
 fun contains_structural_data_operator(s: Set[User]): bool = s ? User! { name: "Ada" }
 
 fun contains_structural_data_method(s: Set[User]): bool = s.contains(User! { name: "Ada" })
 
 fun contains_structural_tuple(s: Set[Tuple[int, String]]): bool = s ? (1, "one")
 
-fun structural_literal_size(): int = {User! { name: "Ada" }, User! { name: "Ada" }}.size()
+fun structural_literal_size(): int = duplicate_ada_user_set().size()
 
 fun structural_append_size(s: Set[User]): int = (s + User! { name: "Ada" }).size()
 
 fun structural_union_size(left: Set[User], right: Set[User]): int = (left + right).size()
 
-fun structural_mapped_values() = {1, 2}.map(value => User! { name: "Ada" })
+fun structural_mapped_values(): Set[User] =
+    let initial: Set[User] = {}
+    {1, 2}.reduce(initial, (acc, value) => acc + User! { name: "Ada" })
 
 fun structural_proper_subset_after_union(left: Set[User], right: Set[User]): bool = left ⊂ (left + right)
 
