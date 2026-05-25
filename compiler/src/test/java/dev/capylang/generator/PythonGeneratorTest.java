@@ -375,6 +375,76 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRunRegexRuntimeInPython() throws Exception {
+        var program = compileProgram("""
+                from /capy/lang/Regex import { * }
+                from /capy/lang/Option import { * }
+                from /capy/lang/Seq import { * }
+
+                fun matches_named(input: String): bool = regex/foo/.matches(input)
+                fun matches_alias(input: String): bool = regex/foo/ ? input
+
+                fun find_named(input: String): bool =
+                    match regex/foo/.find(input) with
+                    case Some { _ } -> true
+                    case None -> false
+
+                fun find_alias(input: String): bool =
+                    match regex/foo/ ~ input with
+                    case Some { _ } -> true
+                    case None -> false
+
+                fun find_all_named_count(input: String): int =
+                    if regex/foo/.find_all(input).any(_ => true)
+                    then 1
+                    else 0
+
+                fun find_all_alias_count(input: String): int =
+                    if (regex/foo/ ~~ input).any(_ => true)
+                    then 1
+                    else 0
+
+                fun replace_named(input: String): String = regex/1/.replace("#")(input)
+                fun replace_alias(input: String): String = (regex/1/ ~> "#")(input)
+
+                fun split_named(input: String): List[String] = regex/,/.split(input)
+                fun split_alias(input: String): List[String] = regex/,/ /> input
+                fun split_multi_char(input: String): List[String] = regex/--/.split(input)
+
+                fun escaped_slash_match(): bool = regex/a\\/b/ ? "--a/b--"
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([
+                    str(m.matchesNamed('xxfooyy')).lower(),
+                    str(m.matchesNamed('xxbaryy')).lower(),
+                    str(m.matchesAlias('xxfooyy')).lower(),
+                    str(m.matchesAlias('xxbaryy')).lower(),
+                    str(m.findNamed('xxfooyy')).lower(),
+                    str(m.findNamed('xxbaryy')).lower(),
+                    str(m.findAlias('xxfooyy')).lower(),
+                    str(m.findAlias('xxbaryy')).lower(),
+                    str(m.findAllNamedCount('xxfooyy')),
+                    str(m.findAllNamedCount('xxbaryy')),
+                    str(m.findAllAliasCount('xxfooyy')),
+                    str(m.findAllAliasCount('xxbaryy')),
+                    m.replaceNamed('a1b11'),
+                    m.replaceAlias('a1b11'),
+                    ','.join(m.splitNamed('a,b,c')),
+                    ','.join(m.splitAlias('a,b,c')),
+                    ','.join(m.splitMultiChar('a--b--c')),
+                    str(m.escapedSlashMatch()).lower()
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("true|false|true|false|true|false|true|false|1|0|1|0|a#b##|a#b##|a,b,c|a,b,c|a,b,c|true");
+    }
+
+    @Test
     void shouldPreserveUpperSnakeConstNames() throws Exception {
         var program = compileProgram("""
                 const FOO_BOO_X_Y: String = "foo"
