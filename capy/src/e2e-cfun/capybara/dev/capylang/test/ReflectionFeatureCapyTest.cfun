@@ -1,0 +1,376 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from ReflectionFeature import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ReflectionFeature.cfun", [
+        test("reflects functional data values", () => reflects_functional_data_values()),
+        test("reflects functional data values with collection fields", () => reflects_functional_data_values_with_collection_fields()),
+        test("reflects empty functional data values", () => reflects_empty_functional_data_values()),
+        test("reflects functional data values with spread fields", () => reflects_functional_data_values_with_spread_fields()),
+        test("reflects functional data value annotations", () => reflects_functional_data_value_annotations()),
+        test("reflects functional data field annotations", () => reflects_functional_data_field_annotations()),
+        test("functional data annotations do not affect equality or rendering", () => functional_data_annotations_do_not_affect_equality_or_rendering()),
+        test("reflection data preserves data info metadata surface", () => reflection_data_preserves_data_info_metadata_surface()),
+        test("reflection data entries preserve field metadata", () => reflection_data_entries_preserve_field_metadata()),
+        test("reflection data includes inherited parent field values in metadata order", () => reflection_data_includes_inherited_parent_field_values_in_metadata_order()),
+        test("reflects functional data values through generic data parameter", () => reflects_functional_data_values_through_generic_data_parameter()),
+        test("reflects functional data values with collection fields through generic data parameter", () => reflects_functional_data_values_with_collection_fields_through_generic_data_parameter()),
+        test("reflects empty functional data values through generic data parameter", () => reflects_empty_functional_data_values_through_generic_data_parameter()),
+        test("reflects functional data values with spread fields through generic data parameter", () => reflects_functional_data_values_with_spread_fields_through_generic_data_parameter()),
+        test("reflects singleton and enum data values through generic data parameter", () => reflects_singleton_and_enum_data_values_through_generic_data_parameter()),
+        test("json shaped reflection uses generic data for nested records", () => json_shaped_reflection_uses_generic_data_for_nested_records()),
+    ])
+
+fun reflects_functional_data_values(): Assert =
+    let info = reflection_data_a(A { name: "letter-a", a: 1 })
+    assert_all([
+        assert_that(info.name).is_equal_to("A"),
+        assert_that(rf_field_names(info)).is_equal_to(["name", "a"]),
+        assert_that(rf_field_type_name(info, 1)).is_equal_to("int"),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("letter-a"),
+        assert_that(rf_field_int_value(info, 1)).is_equal_to(1),
+    ])
+
+// The legacy Java host test also asserted generated Reflection.DataInfo/ListInfo
+// classes and ListInfo.element_type. Capybara tests keep this backend-portable by
+// asserting reflected type names and reflected field values.
+fun reflects_functional_data_values_with_collection_fields(): Assert =
+    let info = reflection_data_b(B { name: "letter-b", b: ["red", "blue"] })
+    assert_all([
+        assert_that(info.name).is_equal_to("B"),
+        assert_that(rf_field_names(info)).is_equal_to(["name", "b"]),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("letter-b"),
+        assert_that(rf_field_string_list_value(info, 1)).is_equal_to(["red", "blue"]),
+        assert_that(rf_field_type_name(info, 1)).is_equal_to("List"),
+    ])
+
+fun reflects_empty_functional_data_values(): Assert =
+    let info = reflection_data_empty()
+    assert_all([
+        assert_that(info.name).is_equal_to("ReflectedEmpty"),
+        assert_that(info.pkg.name).is_equal_to("ReflectionFeature"),
+        assert_that(info.pkg.path).is_equal_to("dev/capylang/test/ReflectionFeature"),
+        assert_that(info.fields).is_empty(),
+    ])
+
+fun reflects_functional_data_values_with_spread_fields(): Assert =
+    let info = reflection_data_employee(ReflectedEmployee {
+        id: "E-1",
+        department: "R&D",
+        active: true
+    })
+    assert_all([
+        assert_that(info.name).is_equal_to("ReflectedEmployee"),
+        assert_that(rf_field_names(info)).is_equal_to(["id", "department", "active"]),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("E-1"),
+        assert_that(rf_field_string_value(info, 1)).is_equal_to("R&D"),
+        assert_that(rf_field_bool_value(info, 2)).is_true(),
+        assert_that(rf_field_type_name(info, 2)).is_equal_to("bool"),
+    ])
+
+fun reflects_functional_data_value_annotations(): Assert =
+    let info = reflection_data_annotated_user(ReflectedAnnotatedUser { id: "U-1", display: "Ada" })
+    let marker = info.annotations[0]
+    assert_all([
+        assert_that(rf_annotation_names(info.annotations)).is_equal_to(["ReflectionDataMarker"]),
+        assert_that(rf_annotation_pkg_name(marker)).is_equal_to("ReflectionFeature"),
+        assert_that(rf_annotation_argument_names(marker)).is_equal_to(["label", "order", "active"]),
+        assert_that(rf_annotation_value_kind(marker, "label")).is_equal_to("string"),
+        assert_that(rf_annotation_string(marker, "label")).is_equal_to("user"),
+        assert_that(rf_annotation_int(marker, "order")).is_equal_to(7),
+        assert_that(rf_annotation_bool(marker, "active")).is_true(),
+        assert_that(info.pkg.path).is_equal_to("dev/capylang/test/ReflectionFeature"),
+    ])
+
+fun reflects_functional_data_field_annotations(): Assert =
+    let info = reflection_data_annotated_user(ReflectedAnnotatedUser { id: "U-1", display: "Ada" })
+    let id_marker = rf_field_annotation(info, 0, 0)
+    let display_marker = rf_field_annotation(info, 1, 0)
+    assert_all([
+        assert_that(rf_field_names(info)).is_equal_to(["id", "display"]),
+        assert_that(rf_field_annotation_names(info, 0)).is_equal_to(["ReflectionFieldMarker"]),
+        assert_that(rf_field_annotation_names(info, 1)).is_equal_to(["ReflectionFieldMarker"]),
+        assert_that(rf_annotation_argument_names(id_marker)).is_equal_to(["value"]),
+        assert_that(rf_annotation_string(id_marker, "value")).is_equal_to("identifier"),
+        assert_that(rf_annotation_string(display_marker, "value")).is_equal_to("display"),
+        assert_that(rf_field_type_name(info, 0)).is_equal_to("String"),
+        assert_that(rf_field_type_name(info, 1)).is_equal_to("String"),
+    ])
+
+// The legacy Java host test asserted exact generated toString punctuation.
+// Keep the rendering assertion to portable content so it can run on every backend.
+fun functional_data_annotations_do_not_affect_equality_or_rendering(): Assert =
+    let first = ReflectedAnnotatedUser { id: "U-1", display: "Ada" }
+    let second = ReflectedAnnotatedUser { id: "U-1", display: "Ada" }
+    let rendered = first + ""
+    assert_all([
+        assert_that(first).is_equal_to(second),
+        assert_that(rendered).contains("ReflectedAnnotatedUser"),
+        assert_that(rendered).contains("id"),
+        assert_that(rendered).contains("U-1"),
+        assert_that(rendered).contains("display"),
+        assert_that(rendered).contains("Ada"),
+    ])
+
+fun reflection_data_preserves_data_info_metadata_surface(): Assert =
+    let info = reflection_data_a(A { name: "letter-a", a: 1 })
+    assert_all([
+        assert_that(info.pkg.name).is_equal_to("ReflectionFeature"),
+        assert_that(info.pkg.path).is_equal_to("dev/capylang/test/ReflectionFeature"),
+        assert_that(rf_field_names(info)).is_equal_to(["name", "a"]),
+    ])
+
+fun reflection_data_entries_preserve_field_metadata(): Assert =
+    let info = reflection_data_a(A { name: "letter-a", a: 1 })
+    assert_all([
+        assert_that(info.fields).has_size(2),
+        assert_that(rf_field_name(info, 0)).is_equal_to("name"),
+        assert_that(rf_field_type_name(info, 0)).is_equal_to("String"),
+        assert_that(rf_field_name(info, 1)).is_equal_to("a"),
+        assert_that(rf_field_type_name(info, 1)).is_equal_to("int"),
+    ])
+
+fun reflection_data_includes_inherited_parent_field_values_in_metadata_order(): Assert =
+    let info = reflection_data_a(A { name: "letter-a", a: 1 })
+    assert_all([
+        assert_that(rf_field_names(info)).is_equal_to(["name", "a"]),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("letter-a"),
+        assert_that(rf_field_int_value(info, 1)).is_equal_to(1),
+    ])
+
+fun reflects_functional_data_values_through_generic_data_parameter(): Assert =
+    let info = reflection_data(A { name: "letter-a", a: 1 })
+    assert_all([
+        assert_that(info.name).is_equal_to("A"),
+        assert_that(rf_field_names(info)).is_equal_to(["name", "a"]),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("letter-a"),
+        assert_that(rf_field_int_value(info, 1)).is_equal_to(1),
+    ])
+
+fun reflects_functional_data_values_with_collection_fields_through_generic_data_parameter(): Assert =
+    let info = reflection_data(B { name: "letter-b", b: ["red", "blue"] })
+    assert_all([
+        assert_that(info.name).is_equal_to("B"),
+        assert_that(rf_field_names(info)).is_equal_to(["name", "b"]),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("letter-b"),
+        assert_that(rf_field_string_list_value(info, 1)).is_equal_to(["red", "blue"]),
+        assert_that(rf_field_type_name(info, 1)).is_equal_to("List"),
+    ])
+
+fun reflects_empty_functional_data_values_through_generic_data_parameter(): Assert =
+    let info = reflection_data(ReflectedEmpty {})
+    assert_all([
+        assert_that(info.name).is_equal_to("ReflectedEmpty"),
+        assert_that(info.fields).is_empty(),
+    ])
+
+fun reflects_functional_data_values_with_spread_fields_through_generic_data_parameter(): Assert =
+    let info = reflection_data(ReflectedEmployee {
+        id: "E-1",
+        department: "R&D",
+        active: true
+    })
+    assert_all([
+        assert_that(info.name).is_equal_to("ReflectedEmployee"),
+        assert_that(rf_field_names(info)).is_equal_to(["id", "department", "active"]),
+        assert_that(rf_field_string_value(info, 0)).is_equal_to("E-1"),
+        assert_that(rf_field_string_value(info, 1)).is_equal_to("R&D"),
+        assert_that(rf_field_bool_value(info, 2)).is_true(),
+    ])
+
+fun reflects_singleton_and_enum_data_values_through_generic_data_parameter(): Assert =
+    let singleton = reflection_data(ReflectedSingleton {})
+    let enum_value = reflection_data(REFLECTED_READY)
+    let singleton_marker = singleton.annotations[0]
+    assert_all([
+        assert_that(singleton.name).is_equal_to("ReflectedSingleton"),
+        assert_that(singleton.fields).is_empty(),
+        assert_that(rf_annotation_names(singleton.annotations)).is_equal_to(["ReflectionDataMarker"]),
+        assert_that(rf_annotation_string(singleton_marker, "label")).is_equal_to("singleton"),
+        assert_that(enum_value.name).is_equal_to("REFLECTED_READY"),
+        assert_that(enum_value.fields).is_empty(),
+    ])
+
+fun json_shaped_reflection_uses_generic_data_for_nested_records(): Assert =
+    let json = reflection_json_shape(ReflectedEnvelope {
+        label: "outer",
+        payload: A { name: "inner", a: 7 }
+    })
+    assert_that(json).is_equal_to(ReflectedJsonObject {
+        value: {
+            "label": ReflectedJsonString { value: "outer" },
+            "payload": ReflectedJsonObject {
+                value: {
+                    "name": ReflectedJsonString { value: "inner" },
+                    "a": ReflectedJsonNumber { value: 7 },
+                }
+            },
+        }
+    })
+
+private fun rf_field_name(info: DataValueInfo, idx: int): String =
+    match info.fields[idx] with
+    case Some { field } -> field.name
+    case None -> ""
+
+private fun rf_field_names(info: DataValueInfo): List[String] =
+    rf_field_names_at(info.fields, 0, [])
+
+private fun rf_field_names_at(fields: List[FieldValueInfo], idx: int, acc: List[String]): List[String] =
+    match fields[idx] with
+    case Some { field } -> rf_field_names_at(fields, idx + 1, acc + field.name)
+    case None -> acc
+
+private fun rf_field_type_name(info: DataValueInfo, idx: int): String =
+    match info.fields[idx] with
+    case Some { field } -> field.type.name
+    case None -> ""
+
+private fun rf_field_string_value(info: DataValueInfo, idx: int): String =
+    match info.fields[idx] with
+    case Some { field } ->
+        {
+            match field.value with
+            case String value -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun rf_field_int_value(info: DataValueInfo, idx: int): int =
+    match info.fields[idx] with
+    case Some { field } ->
+        {
+            match field.value with
+            case int value -> value
+            case _ -> 0
+        }
+    case None -> 0
+
+private fun rf_field_bool_value(info: DataValueInfo, idx: int): bool =
+    match info.fields[idx] with
+    case Some { field } ->
+        {
+            match field.value with
+            case bool value -> value
+            case _ -> false
+        }
+    case None -> false
+
+private fun rf_field_string_list_value(info: DataValueInfo, idx: int): List[String] =
+    match info.fields[idx] with
+    case Some { field } ->
+        {
+            match field.value with
+            case List values ->
+                {
+                    let initial: List[String] = []
+                    values |> initial, (acc, value) => acc + rf_any_string(value)
+                }
+            case _ -> []
+        }
+    case None -> []
+
+private fun rf_any_string(value: any): String =
+    match value with
+    case String text -> text
+    case _ -> ""
+
+private fun rf_field_annotation(info: DataValueInfo, field_idx: int, annotation_idx: int): Option[AnnotationInfo] =
+    match info.fields[field_idx] with
+    case Some { field } -> field.annotations[annotation_idx]
+    case None -> None {}
+
+private fun rf_field_annotation_names(info: DataValueInfo, field_idx: int): List[String] =
+    match info.fields[field_idx] with
+    case Some { field } -> rf_annotation_names(field.annotations)
+    case None -> []
+
+private fun rf_annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    rf_annotation_names_at(annotations, 0, [])
+
+private fun rf_annotation_names_at(annotations: List[AnnotationInfo], idx: int, acc: List[String]): List[String] =
+    match annotations[idx] with
+    case Some { annotation } -> rf_annotation_names_at(annotations, idx + 1, acc + annotation.name)
+    case None -> acc
+
+private fun rf_annotation_pkg_name(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.name
+    case None -> ""
+
+private fun rf_annotation_arguments(annotation: Option[AnnotationInfo]): List[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> value.arguments
+    case None -> []
+
+private fun rf_annotation_argument_names(annotation: Option[AnnotationInfo]): List[String] =
+    rf_annotation_argument_names_at(rf_annotation_arguments(annotation), 0, [])
+
+private fun rf_annotation_argument_names_at(args: List[AnnotationArgumentInfo], idx: int, acc: List[String]): List[String] =
+    match args[idx] with
+    case Some { argument } -> rf_annotation_argument_names_at(args, idx + 1, acc + argument.name)
+    case None -> acc
+
+private fun rf_annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> rf_annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun rf_annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else rf_annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun rf_annotation_value_kind(annotation: Option[AnnotationInfo], name: String): String =
+    match rf_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> "string"
+            case AnnotationInt { value } -> "int"
+            case AnnotationLong { value } -> "long"
+            case AnnotationDouble { value } -> "double"
+            case AnnotationFloat { value } -> "float"
+            case AnnotationBool { value } -> "bool"
+            case AnnotationTypeName { value } -> "type_name"
+            case AnnotationNothing -> "nothing"
+        }
+    case None -> ""
+
+private fun rf_annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match rf_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun rf_annotation_int(annotation: Option[AnnotationInfo], name: String): int =
+    match rf_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationInt { value } -> value
+            case _ -> 0
+        }
+    case None -> 0
+
+private fun rf_annotation_bool(annotation: Option[AnnotationInfo], name: String): bool =
+    match rf_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationBool { value } -> value
+            case _ -> false
+        }
+    case None -> false
