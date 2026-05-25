@@ -1,0 +1,18 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from PackageLocalSupport import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/local_visibility/PackageLocalSupport.cfun", [
+        test("same package module can use its own local members", () => same_package_module_can_use_its_own_local_members()),
+    ])
+
+// The legacy compilation-error host test verifies rejected imports for illegal
+// local/private visibility. This portable backend test covers executable
+// behavior for the source module itself.
+private fun same_package_module_can_use_its_own_local_members(): Assert =
+    assert_all([
+        assert_that(own_package_value(1)).is_equal_to(6),
+        assert_that(own_package_value(3)).is_equal_to(8),
+    ])
