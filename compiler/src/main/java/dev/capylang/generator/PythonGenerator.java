@@ -2659,7 +2659,7 @@ public final class PythonGenerator implements Generator {
                     HALF_UP = RoundMode.HALF_UP
                     HALF_DOWN = RoundMode.HALF_DOWN
                     HALF_EVEN = RoundMode.HALF_EVEN
-                    digits = lambda value: [int(ch) for ch in str(abs(value))]
+                    digits = lambda value: 10 if value == -2147483648 else len(str(abs(value)))
                     floor_div = lambda left, right: left // right
                     floorDiv = floor_div
                     floor_mod = lambda left, right: left % right

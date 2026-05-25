@@ -1,0 +1,36 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from MinLiteralValue import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/MinLiteralValue.cfun", [
+        test("min_int returns the minimum int literal", () => min_int_returns_the_minimum_int_literal()),
+        test("min_int_digits counts minimum int digits", () => min_int_digits_counts_minimum_int_digits()),
+        test("min_long returns the minimum long literal", () => min_long_returns_the_minimum_long_literal()),
+        test("max_long returns the maximum long literal", () => max_long_returns_the_maximum_long_literal()),
+        test("max_safe_integer_long returns the JavaScript safe integer boundary", () => max_safe_integer_long_returns_the_javascript_safe_integer_boundary()),
+        test("long_addition reaches the maximum long value", () => long_addition_reaches_the_maximum_long_value()),
+        test("long_overflow wraps to the minimum long value", () => long_overflow_wraps_to_the_minimum_long_value()),
+    ])
+
+private fun min_int_returns_the_minimum_int_literal(): Assert =
+    assert_that("" + min_int()).is_equal_to("-2147483648")
+
+private fun min_int_digits_counts_minimum_int_digits(): Assert =
+    assert_that(min_int_digits()).is_equal_to(10)
+
+private fun min_long_returns_the_minimum_long_literal(): Assert =
+    assert_that("" + min_long()).is_equal_to("-9223372036854775808")
+
+private fun max_long_returns_the_maximum_long_literal(): Assert =
+    assert_that("" + max_long()).is_equal_to("9223372036854775807")
+
+private fun max_safe_integer_long_returns_the_javascript_safe_integer_boundary(): Assert =
+    assert_that("" + max_safe_integer_long()).is_equal_to("9007199254740991")
+
+private fun long_addition_reaches_the_maximum_long_value(): Assert =
+    assert_that("" + long_addition()).is_equal_to("9223372036854775807")
+
+private fun long_overflow_wraps_to_the_minimum_long_value(): Assert =
+    assert_that("" + long_overflow()).is_equal_to("-9223372036854775808")

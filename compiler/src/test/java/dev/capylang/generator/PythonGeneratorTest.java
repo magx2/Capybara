@@ -317,6 +317,31 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRunNativeMathDigitsInPython() throws Exception {
+        var program = compileProgram("""
+                from /capy/lang/Math import { digits }
+
+                fun zero_digits(): int = digits(0)
+                fun positive_digits(): int = digits(2147483647)
+                fun min_int_digits(): int = digits(-2147483648)
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([
+                    str(m.zeroDigits()),
+                    str(m.positiveDigits()),
+                    str(m.minIntDigits())
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("1|10|10");
+    }
+
+    @Test
     void shouldPreserveUpperSnakeConstNames() throws Exception {
         var program = compileProgram("""
                 const FOO_BOO_X_Y: String = "foo"
