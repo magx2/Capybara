@@ -1,0 +1,88 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from With import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/With.cfun", [
+        test("update_foo updates selected data fields", () => update_foo_updates_selected_data_fields()),
+        test("chain_foo applies chained data updates", () => chain_foo_applies_chained_data_updates()),
+        test("update_letter preserves subtype fields", () => update_letter_preserves_subtype_fields()),
+        test("chain_letter preserves subtype fields", () => chain_letter_preserves_subtype_fields()),
+        test("update_a updates parent and subtype fields", () => update_a_updates_parent_and_subtype_fields()),
+        test("with reapplies data constructor for a single update", () => with_reapplies_data_constructor_for_a_single_update()),
+        test("with reapplies data constructor for chained updates", () => with_reapplies_data_constructor_for_chained_updates()),
+        test("with reapplies result-returning constructor for a single update", () => with_reapplies_result_returning_constructor_for_a_single_update()),
+        test("with reapplies result-returning constructor for chained updates", () => with_reapplies_result_returning_constructor_for_chained_updates()),
+    ])
+
+// The legacy WithCompilationErrorTest validates diagnostics for synthetic invalid
+// programs. Those checks must remain compiler/host-level because Capybara test
+// files have to compile before backend executors can run their assertions.
+
+private fun update_foo_updates_selected_data_fields(): Assert =
+    let result = update_foo(Foo { a: 1, b: "old", c: 1.5 })
+    assert_all([
+        assert_that(result.a).is_equal_to(2),
+        assert_that(result.b).is_equal_to("new value"),
+        assert_that(result.c).is_equal_to(1.5),
+    ])
+
+private fun chain_foo_applies_chained_data_updates(): Assert =
+    let result = chain_foo(Foo { a: 1, b: "old", c: 1.5 })
+    assert_all([
+        assert_that(result.a).is_equal_to(2),
+        assert_that(result.b).is_equal_to("new value"),
+        assert_that(result.c).is_equal_to(1.5),
+    ])
+
+private fun update_letter_preserves_subtype_fields(): Assert =
+    let result = update_letter(A { x: 1, a: "hello" })
+    match result with
+    case A { x, a } -> assert_all([
+        assert_that(x).is_equal_to(2),
+        assert_that(a).is_equal_to("hello"),
+    ])
+    case _ -> assert_that(false).is_true()
+
+private fun chain_letter_preserves_subtype_fields(): Assert =
+    let result = chain_letter(B { x: 7, b: 123 })
+    match result with
+    case B { x, b } -> assert_all([
+        assert_that(x).is_equal_to(99),
+        assert_that(b).is_equal_to(123),
+    ])
+    case _ -> assert_that(false).is_true()
+
+private fun update_a_updates_parent_and_subtype_fields(): Assert =
+    let result = update_a(A { x: 5, a: "abc" })
+    assert_all([
+        assert_that(result.x).is_equal_to(6),
+        assert_that(result.a).is_equal_to("abc!"),
+    ])
+
+private fun with_reapplies_data_constructor_for_a_single_update(): Assert =
+    let result = update_sanitized_counter(make_sanitized_counter(3))
+    assert_all([
+        assert_that(result.number).is_equal_to(5),
+        assert_that(result.constructor_runs).is_equal_to(2),
+    ])
+
+private fun with_reapplies_data_constructor_for_chained_updates(): Assert =
+    let result = chain_sanitized_counter(make_sanitized_counter(3))
+    assert_all([
+        assert_that(result.number).is_equal_to(9),
+        assert_that(result.constructor_runs).is_equal_to(3),
+    ])
+
+private fun with_reapplies_result_returning_constructor_for_a_single_update(): Assert =
+    assert_all([
+        assert_that(validated_counter_after_single_with(1)).is_equal_to("ok:2:2"),
+        assert_that(validated_counter_after_single_with(-1)).is_equal_to("err:negative:-1"),
+    ])
+
+private fun with_reapplies_result_returning_constructor_for_chained_updates(): Assert =
+    assert_all([
+        assert_that(validated_counter_after_multiple_withs(4)).is_equal_to("ok:0:3"),
+        assert_that(validated_counter_after_multiple_withs(3)).is_equal_to("err:negative:-1"),
+    ])
