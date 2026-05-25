@@ -1,0 +1,70 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ObjectOrientedFpInterop import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectOrientedFpInterop.cfun", [
+        test("FP functions create and match interop pets", () => fp_functions_create_and_match_interop_pets()),
+        test("FP functions handle interop maybe values", () => fp_functions_handle_interop_maybe_values()),
+        test("recursive data methods interoperate with FP functions", () => recursive_data_methods_interoperate_with_fp_functions()),
+        test("primitive-backed user ids unwrap and add", () => primitive_backed_user_ids_unwrap_and_add()),
+    ])
+
+fun fp_functions_create_and_match_interop_pets(): Assert =
+    // Legacy OO host tests also assert generated class identity from PetInteractor.
+    // Capybara .cfun tests cannot invoke OO instance methods portably, so this
+    // test observes the same FP values through matching and rendering.
+    assert_all([
+        assert_that(pet_text(make_dog("Capy"))).is_equal_to("dog:Capy"),
+        assert_that(interop_dog_name(make_dog("Bara"))).is_equal_to("Bara"),
+        assert_that(pet_text(make_dog("Bara"))).is_equal_to("dog:Bara"),
+        assert_that(pet_text(InteropDog { name: "Mochi" })).is_equal_to("dog:Mochi"),
+        assert_that(pet_text(InteropCat { age: 4 })).is_equal_to("cat:4"),
+    ])
+
+fun fp_functions_handle_interop_maybe_values(): Assert =
+    // Legacy OO host tests also asserted backend runtime singleton identity for
+    // InteropNone and Option.None. Portable assertions observe union behavior instead.
+    assert_all([
+        assert_that(interop_is_none(InteropNone {})).is_true(),
+        assert_that(maybe_text(InteropNone {})).is_equal_to("none"),
+        assert_that(maybe_text(InteropSome { value: "some" })).is_equal_to("some"),
+    ])
+
+fun recursive_data_methods_interoperate_with_fp_functions(): Assert =
+    let value = RecInteropValue { value: 10 }
+    assert_all([
+        assert_that(value.step(3)).is_equal_to(13),
+        assert_that(step(3, value, 0)).is_equal_to(36),
+    ])
+
+fun primitive_backed_user_ids_unwrap_and_add(): Assert =
+    // Legacy OO host tests also checked user_id[] array slots. Arrays are an OO
+    // runtime detail, so the Capybara assertions stay on portable ints.
+    assert_all([
+        assert_that(unwrap_user_id(echo_user_id(make_user_id(7)))).is_equal_to(7),
+        assert_that(unwrap_user_id(construct_user_id(11))).is_equal_to(11),
+        assert_that(unwrap_user_id(make_user_id(13))).is_equal_to(13),
+        assert_that(unwrap_user_id(make_user_id(17))).is_equal_to(17),
+        assert_that(unwrap_user_id(add_user_ids(make_user_id(19), make_user_id(23)))).is_equal_to(42),
+        assert_that(local_user_id(29)).is_equal_to(29),
+    ])
+
+private fun interop_dog_name(pet: InteropPet): String =
+    match pet with
+    case InteropDog { name } -> name
+    case InteropCat { age } -> ""
+
+private fun interop_is_none(value: InteropMaybe): bool =
+    match value with
+    case InteropSome { value } -> false
+    case InteropNone -> true
+
+private fun echo_user_id(id: user_id): user_id = id
+
+private fun construct_user_id(value: int): user_id = user_id { value }
+
+private fun local_user_id(value: int): int =
+    let id = construct_user_id(value)
+    unwrap_user_id(id)
