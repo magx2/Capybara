@@ -1,9 +1,8 @@
-package dev.capylang.test.compilation_error;
+package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.Result;
-import dev.capylang.generator.JavaGenerator;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -358,48 +357,6 @@ class ObjectOrientedCompilationErrorTest {
 
         assertThat(errors)
                 .anySatisfy(error -> assertThat(error.message()).contains(expectedMessage));
-    }
-
-    @Test
-    void shouldAllowMainMethodInClassThatRequiresConstructor() {
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(
-                new RawModule(
-                        "Main",
-                        "/foo/boo",
-                        """
-                                class Main(name: String) {
-                                    def main(args: List[String]): int = args.size()
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                )
-        ), new TreeSet<>());
-
-        assertThat(result).isInstanceOf(Result.Success.class);
-        var program = ((Result.Success<CompiledProgram>) result).value();
-        assertThat(new JavaGenerator().generate(program).modules()).isNotEmpty();
-    }
-
-    @Test
-    void shouldAllowMainMethodThatUsesInstanceState() {
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(
-                new RawModule(
-                        "Main",
-                        "/foo/boo",
-                        """
-                                class Main {
-                                    def helper(): int = 1
-
-                                    def main(args: List[String]): int = args.size() + this.helper()
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                )
-        ), new TreeSet<>());
-
-        assertThat(result).isInstanceOf(Result.Success.class);
-        var program = ((Result.Success<CompiledProgram>) result).value();
-        assertThat(new JavaGenerator().generate(program).modules()).isNotEmpty();
     }
 
     private static Stream<Arguments> invalidObjectOrientedAnnotationSyntax() {

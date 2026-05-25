@@ -1,4 +1,4 @@
-package dev.capylang.test.compilation_error;
+package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import org.junit.jupiter.api.Test;

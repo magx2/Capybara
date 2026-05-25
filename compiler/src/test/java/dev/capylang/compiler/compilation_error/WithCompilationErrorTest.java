@@ -1,4 +1,4 @@
-package dev.capylang.test.compilation_error;
+package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
@@ -71,4 +71,3 @@ class WithCompilationErrorTest {
         );
     }
 }
-

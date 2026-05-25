@@ -1,4 +1,4 @@
-package dev.capylang.test.compilation_error;
+package dev.capylang.compiler.compilation_error;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
