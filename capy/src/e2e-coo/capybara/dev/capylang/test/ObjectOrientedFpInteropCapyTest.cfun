@@ -1,20 +1,47 @@
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
 from ObjectOrientedFpInterop import { * }
 
 fun tests(): Effect[TestFile] =
-    test_file("/dev/capylang/test/ObjectOrientedFpInterop.cfun", [
+    test_file("/dev/capylang/test/ObjectOrientedFpInterop.coo", [
+        test("PetInteractor is constructible and exposes expected methods", () => pet_interactor_is_constructible_and_exposes_expected_methods()),
         test("FP functions create and match interop pets", () => fp_functions_create_and_match_interop_pets()),
         test("FP functions handle interop maybe values", () => fp_functions_handle_interop_maybe_values()),
         test("recursive data methods interoperate with FP functions", () => recursive_data_methods_interoperate_with_fp_functions()),
         test("primitive-backed user ids unwrap and add", () => primitive_backed_user_ids_unwrap_and_add()),
     ])
 
+fun pet_interactor_is_constructible_and_exposes_expected_methods(): Assert =
+    let info = PetInteractor.type()
+    assert_all([
+        assert_that(constructs_pet_interactor().unsafe_run()).is_true(),
+        assert_that(pet_interactor_type_name(info)).is_equal_to("PetInteractor"),
+        assert_that(pet_interactor_method_names(info)).is_equal_to([
+            "invoke_fp_function",
+            "create_fp_data",
+            "match_fp_type",
+            "create_fp_empty",
+            "match_fp_empty",
+            "create_runtime_none",
+            "invoke_rec_function",
+            "echo_user_id",
+            "construct_user_id",
+            "make_user_id",
+            "unwrap_user_id",
+            "add_user_ids",
+            "user_id_slots",
+            "local_user_id",
+        ]),
+    ])
+
 fun fp_functions_create_and_match_interop_pets(): Assert =
     // Legacy OO host tests also assert generated class identity from PetInteractor.
-    // Capybara .cfun tests cannot invoke OO instance methods portably, so this
-    // test observes the same FP values through matching and rendering.
+    // Capybara .cfun tests can construct and reflect OO values but cannot invoke
+    // OO instance methods portably, so this test observes the same FP values.
     assert_all([
         assert_that(pet_text(make_dog("Capy"))).is_equal_to("dog:Capy"),
         assert_that(interop_dog_name(make_dog("Bara"))).is_equal_to("Bara"),
@@ -25,7 +52,7 @@ fun fp_functions_create_and_match_interop_pets(): Assert =
 
 fun fp_functions_handle_interop_maybe_values(): Assert =
     // Legacy OO host tests also asserted backend runtime singleton identity for
-    // InteropNone and Option.None. Portable assertions observe union behavior instead.
+    // InteropNone and Option.None. Portable assertions observe union behavior.
     assert_all([
         assert_that(interop_is_none(InteropNone {})).is_true(),
         assert_that(maybe_text(InteropNone {})).is_equal_to("none"),
@@ -40,8 +67,8 @@ fun recursive_data_methods_interoperate_with_fp_functions(): Assert =
     ])
 
 fun primitive_backed_user_ids_unwrap_and_add(): Assert =
-    // Legacy OO host tests also checked user_id[] array slots. Arrays are an OO
-    // runtime detail, so the Capybara assertions stay on portable ints.
+    // Legacy OO host tests also checked user_id[] slot count. The reflected method
+    // surface above covers that OO-only array method; value assertions stay on ints.
     assert_all([
         assert_that(unwrap_user_id(echo_user_id(make_user_id(7)))).is_equal_to(7),
         assert_that(unwrap_user_id(construct_user_id(11))).is_equal_to(11),
@@ -50,6 +77,16 @@ fun primitive_backed_user_ids_unwrap_and_add(): Assert =
         assert_that(unwrap_user_id(add_user_ids(make_user_id(19), make_user_id(23)))).is_equal_to(42),
         assert_that(local_user_id(29)).is_equal_to(29),
     ])
+
+private fun constructs_pet_interactor(): Effect[bool] =
+    let interactor <- PetInteractor()
+    true
+
+private fun pet_interactor_method_names(info: ObjectInfo): List[String] =
+    (info.methods | method => method.name).as_list()
+
+private fun pet_interactor_type_name(info: AnyInfo): String =
+    info.name
 
 private fun interop_dog_name(pet: InteropPet): String =
     match pet with
