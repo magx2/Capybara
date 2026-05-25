@@ -945,6 +945,10 @@ public class CapybaraExpressionCompiler {
         }
         var resolvedModule = resolveQualifiedModule(moduleName);
         if (resolvedModule == null) {
+            var objectTypeCall = resolveObjectTypeInfoFunctionCall(functionCall, rawModuleName);
+            if (objectTypeCall.isPresent()) {
+                return objectTypeCall.orElseThrow();
+            }
             return withPosition(
                     Result.error("Unknown module `" + rawModuleName + "` in call `" + rawModuleName + "." + functionCall.name() + "`"),
                     functionCall.position()
@@ -1102,6 +1106,48 @@ public class CapybaraExpressionCompiler {
             }
         }
         return null;
+    }
+
+    private Optional<Result<CompiledExpression>> resolveObjectTypeInfoFunctionCall(
+            FunctionCall functionCall,
+            String rawModuleName
+    ) {
+        var objectConstructor = constructorRegistry.objectConstructorsByType().get(rawModuleName);
+        if (objectConstructor == null) {
+            return Optional.empty();
+        }
+        if (!"type".equals(functionCall.name())) {
+            return Optional.empty();
+        }
+        if (!functionCall.arguments().isEmpty()) {
+            return Optional.of(withPosition(
+                    Result.error("Object reflection call `" + rawModuleName + ".type` expects 0 argument(s), got "
+                                 + functionCall.arguments().size()),
+                    functionCall.position()
+            ));
+        }
+        var returnType = objectReflectionInfoType(objectConstructor);
+        if (returnType instanceof Result.Error<CompiledDataType> error) {
+            return Optional.of(new Result.Error<>(error.errors()));
+        }
+        return Optional.of(Result.success(new CompiledFunctionCall(
+                objectConstructor.objectType().backendClassName() + ".type",
+                List.of(),
+                ((Result.Success<CompiledDataType>) returnType).value()
+        )));
+    }
+
+    private Result<CompiledDataType> objectReflectionInfoType(ObjectConstructorRef objectConstructor) {
+        var simpleName = switch (objectConstructor.kind()) {
+            case "interface" -> "InterfaceInfo";
+            case "trait" -> "TraitInfo";
+            default -> "ObjectInfo";
+        };
+        var dataType = resolveDataTypeByName(simpleName);
+        if (dataType instanceof CompiledDataType compiledDataType) {
+            return Result.success(compiledDataType);
+        }
+        return Result.error("Reflection data type `" + simpleName + "` not found");
     }
 
     private ResolvedModule resolveQualifiedModuleDirect(String normalizedModuleName) {
