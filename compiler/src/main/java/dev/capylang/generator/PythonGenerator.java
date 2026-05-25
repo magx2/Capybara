@@ -3344,6 +3344,13 @@ public final class PythonGenerator implements Generator {
                         def asList(self): return self
                         def to_list(self): return self
                         def toList(self): return self
+                        def first(self): return Some({'value': self[0]}) if len(self) > 0 else None_
+                        def first_match(self, predicate):
+                            for index, item in enumerate(self):
+                                if invoke(predicate, item, index):
+                                    return Some({'value': item})
+                            return None_
+                        def firstMatch(self, predicate): return self.first_match(predicate)
                         def map(self, mapper): return map_collection(self, mapper)
                         def pipe(self, mapper): return map_collection(self, mapper)
                         def flat_map(self, mapper): return flat_map_collection(self, mapper)
