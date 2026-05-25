@@ -1,0 +1,25 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ResultBind import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ResultBind.cfun", [
+        test("users returns tuple when all constructors succeed", () => users_returns_tuple_when_all_constructors_succeed()),
+        test("users_with_regular_let keeps first error", () => users_with_regular_let_keeps_first_error()),
+    ])
+
+private fun users_returns_tuple_when_all_constructors_succeed(): Assert =
+    assert_that(users("Ann", "Bob", "Cid")).succeeds(value => assert_all([
+        // The old Java host test also asserted the generated backing list size;
+        // tuple arity is checked portably here by compiling and reading all positions.
+        assert_that(value[0].name).is_equal_to("Ann"),
+        assert_that(value[1].name).is_equal_to("Bob"),
+        assert_that(value[2].name).is_equal_to("Cid"),
+    ]))
+
+private fun users_with_regular_let_keeps_first_error(): Assert =
+    assert_all([
+        assert_that(first_error_message("", "Bob")).is_equal_to("You need to pass name"),
+        assert_that(first_error_message("Ann", "")).is_equal_to("You need to pass name"),
+    ])
