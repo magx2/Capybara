@@ -8,11 +8,11 @@ from FileIo import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/FileIo.cfun", [
-        effect_test("file effects read and write text lines and bytes", () => file_effects_read_and_write_text_lines_and_bytes()),
-        effect_test("file effects manage directories and delete files", () => file_effects_manage_directories_and_delete_files()),
-        effect_test("file effects copy and move files", () => file_effects_copy_and_move_files()),
-        effect_test("file effects replace existing copy and move targets", () => file_effects_replace_existing_copy_and_move_targets()),
-        effect_test("file effects return errors for failed operations", () => file_effects_return_errors_for_failed_operations()),
+        file_effects_read_and_write_text_lines_and_bytes().map(assertion => test("file effects read and write text lines and bytes", () => assertion)),
+        file_effects_manage_directories_and_delete_files().map(assertion => test("file effects manage directories and delete files", () => assertion)),
+        file_effects_copy_and_move_files().map(assertion => test("file effects copy and move files", () => assertion)),
+        file_effects_replace_existing_copy_and_move_targets().map(assertion => test("file effects replace existing copy and move targets", () => assertion)),
+        file_effects_return_errors_for_failed_operations().map(assertion => test("file effects return errors for failed operations", () => assertion)),
     ])
 
 fun file_effects_read_and_write_text_lines_and_bytes(): Effect[Assert] =

@@ -125,7 +125,7 @@ fun tests(): Effect[TestFile] =
         + list_long_cases
         + round_cases
 
-    test_file("/capy/lang/Math.cfun", all_cases)
+    test_file("/capy/lang/Math.cfun", pure_test_cases(all_cases))
 
 private fun test_digits(number: int, expected: int): Assert = assert_that(digits(number)).is_equal_to(expected)
 

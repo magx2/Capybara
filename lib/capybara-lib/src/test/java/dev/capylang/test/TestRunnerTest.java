@@ -2,7 +2,6 @@ package dev.capylang.test;
 
 import capy.io.Path;
 import capy.io.PathRoot;
-import capy.lang.Effect;
 import capy.lang.Result;
 import capy.test.CapyTest;
 import capy.test.CapyTest.TestCase;
@@ -431,9 +430,8 @@ class TestRunnerTest {
     @Test
     void shouldNotExecuteUnselectedTestBodies() {
         var executed = new AtomicInteger();
-        var testFile = CapyTest.testFileAt(
+        var testFile = new TestFile(
                 "/capy/lang/SelectionTest.cfun",
-                0L,
                 List.of(
                         CapyTest.test("selected", () -> {
                             executed.incrementAndGet();
@@ -443,7 +441,8 @@ class TestRunnerTest {
                             executed.addAndGet(100);
                             return capy.test.Assert.assertThat("capybara").startsWith("capy");
                         })
-                )
+                ),
+                0L
         );
         var filtered = TestRunner.filterTestFiles(
                 List.of(testFile),
@@ -466,9 +465,8 @@ class TestRunnerTest {
 
     @Test
     void shouldListAvailableTestsWithoutExecutingBodies() {
-        var testFile = CapyTest.testFileAt(
+        var testFile = new TestFile(
                 "/capy/lang/SelectionTest.cfun",
-                0L,
                 List.of(
                         CapyTest.test("first", () -> {
                             throw new AssertionError("available tests should not execute bodies");
@@ -476,7 +474,8 @@ class TestRunnerTest {
                         CapyTest.test("second", () -> {
                             throw new AssertionError("available tests should not execute bodies");
                         })
-                )
+                ),
+                0L
         );
 
         assertEquals(
@@ -627,13 +626,13 @@ class TestRunnerTest {
         var stdout = new ByteArrayOutputStream();
         try {
             System.setOut(new PrintStream(stdout));
-            var testFile = CapyTest.testFileAt(
+            var testFile = new TestFile(
                     "/capy/lang/StringTest.cfun",
-                    0L,
                     List.of(CapyTest.test("starts_with should fail", () -> {
                         System.out.println("ASSERTION_BODY");
                         return capy.test.Assert.assertThat("capybara").startsWith("bara");
-                    }))
+                    })),
+                    0L
             );
             successValue(CapyTest.runTests(
                     CapyTest.ReportType.JUNIT,
@@ -679,7 +678,7 @@ class TestRunnerTest {
                 CapyTest.Passed.INSTANCE,
                 1,
                 0.0,
-                () -> Effect.pure(capy.test.Assert.assertThat("capybara").startsWith("capy"))
+                () -> capy.test.Assert.assertThat("capybara").startsWith("capy")
         );
     }
 
@@ -693,7 +692,7 @@ class TestRunnerTest {
                 new CapyTest.Failed(message, type),
                 1,
                 0.0,
-                () -> Effect.pure(capy.test.Assert.assertThat("capybara").startsWith("capy"))
+                () -> capy.test.Assert.assertThat("capybara").startsWith("capy")
         );
     }
 

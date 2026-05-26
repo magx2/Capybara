@@ -26,6 +26,7 @@ fun tests(): Effect[TestFile] =
         (0, 0, -1, false),
     ] | (hour, minute, second, is_valid) => test_time(hour, minute, second, is_valid)).as_list()
     test_file('/capy/date_time/Time.cfun',
+        pure_test_cases(
         test_cases
         + component_type_tests()
         + test_to_seconds()
@@ -38,7 +39,7 @@ fun tests(): Effect[TestFile] =
         + test_add_hours()
         + time_test_to_iso_8601()
         + time_test_from_iso_8601_success()
-        + time_test_from_iso_8601_failure())
+        + time_test_from_iso_8601_failure()))
 
 private fun time_from_parts(hour_value: int, minute_value: int, second_value: int, offset_minutes: Option[offset_minutes]): Result[Time] = {
     let parsed_hour <- hour { hour_value }

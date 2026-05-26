@@ -71,7 +71,7 @@ fun tests(): Effect[TestFile] =
         "1.2.3-asd+QĘT" : "Expected end of version string or `.` for next build identifier, but got `Ę`!", }
         .entries() | (sem_ver, expected_message) => test("should fail parsing {sem_ver}", () => should_fail_parse_with_message(sem_ver, expected_message))).as_list()
 
-    test_file("/capy/util/SemVer.cfun", component_test_cases + parse_test_cases + to_string_test_cases + failed_test_cases)
+    test_file("/capy/util/SemVer.cfun", pure_test_cases(component_test_cases + parse_test_cases + to_string_test_cases + failed_test_cases))
 
 fun should_parse_sem_ver(str: String, expected: ExpectedSemVer) =
     assert_that(parse_semver(str)).succeeds(value => assert_all([

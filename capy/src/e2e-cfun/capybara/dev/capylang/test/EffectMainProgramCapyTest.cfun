@@ -6,7 +6,7 @@ from EffectMainProgram import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/EffectMainProgram.cfun", [
-        effect_test("effect main returns success", () => effect_main_returns_success()),
+        effect_main_returns_success().map(assertion => test("effect main returns success", () => assertion)),
     ])
 
 // The legacy Java host test also asserts the generated main(String...) signature.

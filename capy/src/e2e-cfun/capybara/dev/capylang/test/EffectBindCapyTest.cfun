@@ -6,12 +6,12 @@ from EffectBind import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/EffectBind.cfun", [
-        effect_test("binds effects lazily", () => binds_effects_lazily()),
+        binds_effects_lazily().map(assertion => test("binds effects lazily", () => assertion)),
         test("constructing delayed failure does not run thunk", () => constructing_delayed_failure_does_not_run_thunk()),
-        effect_test("effect delay is lazy and non-memoized", () => effect_delay_is_lazy_and_non_memoized()),
-        effect_test("clock now returns ISO date-time effect", () => clock_now_returns_iso_date_time_effect()),
-        effect_test("current millis returns bounded current time effect", () => current_millis_returns_bounded_current_time_effect()),
-        effect_test("nano time returns bounded monotonic time effect", () => nano_time_returns_bounded_monotonic_time_effect()),
+        effect_delay_is_lazy_and_non_memoized().map(assertion => test("effect delay is lazy and non-memoized", () => assertion)),
+        clock_now_returns_iso_date_time_effect().map(assertion => test("clock now returns ISO date-time effect", () => assertion)),
+        current_millis_returns_bounded_current_time_effect().map(assertion => test("current millis returns bounded current time effect", () => assertion)),
+        nano_time_returns_bounded_monotonic_time_effect().map(assertion => test("nano time returns bounded monotonic time effect", () => assertion)),
     ])
 
 fun binds_effects_lazily(): Effect[Assert] =

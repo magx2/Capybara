@@ -10,8 +10,8 @@ from ObjectOrientedRuntime import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ObjectOrientedRuntime.coo", [
-        effect_test("main is constructible and reflected as an object method", () => main_is_constructible_and_reflected_as_an_object_method()),
-        effect_test("person construction supports parent contracts", () => person_construction_supports_parent_contracts()),
+        main_is_constructible_and_reflected_as_an_object_method().map(assertion => test("main is constructible and reflected as an object method", () => assertion)),
+        person_construction_supports_parent_contracts().map(assertion => test("person construction supports parent contracts", () => assertion)),
         test("person exposes runtime behavior methods", () => person_exposes_runtime_behavior_methods()),
         test("arrays lists exceptions loops and void methods are reflected", () => arrays_lists_exceptions_loops_and_void_methods_are_reflected()),
         test("stdout methods are reflected as effectful void methods", () => stdout_methods_are_reflected_as_effectful_void_methods()),

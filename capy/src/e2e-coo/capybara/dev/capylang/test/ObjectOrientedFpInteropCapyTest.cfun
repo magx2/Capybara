@@ -8,7 +8,7 @@ from ObjectOrientedFpInterop import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ObjectOrientedFpInterop.coo", [
-        effect_test("PetInteractor is constructible and exposes expected methods", () => pet_interactor_is_constructible_and_exposes_expected_methods()),
+        pet_interactor_is_constructible_and_exposes_expected_methods().map(assertion => test("PetInteractor is constructible and exposes expected methods", () => assertion)),
         test("FP functions create and match interop pets", () => fp_functions_create_and_match_interop_pets()),
         test("FP functions handle interop maybe values", () => fp_functions_handle_interop_maybe_values()),
         test("recursive data methods interoperate with FP functions", () => recursive_data_methods_interoperate_with_fp_functions()),

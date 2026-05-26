@@ -4,8 +4,8 @@ from /capy/lang/Effect import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/test/EffectAssert.cfun", [
-        effect_test("effect assertion compares result", () => effect_assertion_compares_result()),
-        effect_test("effect assertion delegates to nested assertion", () => effect_assertion_delegates_to_nested_assertion()),
+        effect_assertion_compares_result().map(assertion => test("effect assertion compares result", () => assertion)),
+        effect_assertion_delegates_to_nested_assertion().map(assertion => test("effect assertion delegates to nested assertion", () => assertion)),
     ])
 
 fun effect_assertion_compares_result(): Effect[Assert] =
