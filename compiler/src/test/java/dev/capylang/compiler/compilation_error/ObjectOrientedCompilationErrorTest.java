@@ -324,7 +324,88 @@ class ObjectOrientedCompilationErrorTest {
 
         assertThat(errors)
                 .anySatisfy(error -> assertThat(error.message())
-                        .contains("`Effect.unsafe_run` cannot be called from Capybara source"));
+                        .contains("`unsafe_run` cannot be called from Capybara OO source"));
+    }
+
+    @Test
+    void shouldRejectUnsafeRunOnEffectLocalFromObjectOrientedMethod() {
+        var errors = compileObjectOrientedSource(
+                "UnsafeEffectRunner",
+                """
+                        from /capy/lang/Effect import { * }
+
+                        class UnsafeEffectRunner {
+                            def run(): int {
+                                let effect = pure(1)
+                                return effect.unsafe_run()
+                            }
+                        }
+                        """,
+                List.of(effectModule())
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("`unsafe_run` cannot be called from Capybara OO source"));
+    }
+
+    @Test
+    void shouldRejectUnsafeRunCamelCaseOnEffectLocalFromObjectOrientedMethod() {
+        var errors = compileObjectOrientedSource(
+                "UnsafeEffectRunner",
+                """
+                        from /capy/lang/Effect import { * }
+
+                        class UnsafeEffectRunner {
+                            def run(): int {
+                                let effect = pure(1)
+                                return effect.unsafeRun()
+                            }
+                        }
+                        """,
+                List.of(effectModule())
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("`unsafe_run` cannot be called from Capybara OO source"));
+    }
+
+    @Test
+    void shouldRejectUnsafeRunAsImportedFunctionFromObjectOrientedMethod() {
+        var errors = compileObjectOrientedSource(
+                "UnsafeEffectRunner",
+                """
+                        from /capy/lang/Effect import { pure, unsafe_run }
+
+                        class UnsafeEffectRunner {
+                            def run(): int = unsafe_run(pure(1))
+                        }
+                        """,
+                List.of(effectModule())
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("`unsafe_run` cannot be called from Capybara OO source"));
+    }
+
+    @Test
+    void shouldRejectUnsafeRunOnNonEffectTypeFromObjectOrientedMethod() {
+        var errors = compileObjectOrientedSource(
+                "UnsafeRunner",
+                """
+                        class UnsafeRunner {
+                            def unsafe_run(): int = 1
+
+                            def run(): int = this.unsafe_run()
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("`unsafe_run` cannot be called from Capybara OO source"));
     }
 
     @Test

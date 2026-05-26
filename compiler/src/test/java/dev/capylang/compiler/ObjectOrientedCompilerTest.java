@@ -66,6 +66,24 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldIgnoreUnsafeRunInsideStringLiteralInObjectOrientedMethod() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "Message",
+                        "/foo/boo",
+                        """
+                                class Message {
+                                    def run(): String = "effect.unsafe_run()"
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+    }
+
+    @Test
     void shouldTypeImportedObjectConstructionAsEffect() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 effectModule(),
