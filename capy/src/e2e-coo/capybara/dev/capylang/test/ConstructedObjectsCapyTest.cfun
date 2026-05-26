@@ -6,39 +6,45 @@ from ConstructedObjects import { EmptyTracked, TrackedPerson, TrackedPrintable }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ConstructedObjects.coo", [
-        test("person construction is delayed and executable", () => person_construction_is_delayed_and_executable()),
-        test("parent typed construction and sequencing work", () => parent_typed_construction_and_sequencing_work()),
-        test("zero argument construction is delayed", () => zero_argument_construction_is_delayed()),
-        test("qualified import construction works", () => qualified_import_construction_works()),
+        effect_test("person construction is delayed and executable", () => person_construction_is_delayed_and_executable()),
+        effect_test("parent typed construction and sequencing work", () => parent_typed_construction_and_sequencing_work()),
+        effect_test("zero argument construction is delayed", () => zero_argument_construction_is_delayed()),
+        effect_test("qualified import construction works", () => qualified_import_construction_works()),
     ])
 
-fun person_construction_is_delayed_and_executable(): Assert =
+fun person_construction_is_delayed_and_executable(): Effect[Assert] =
     // The legacy host tests also assert exact stdout capture, generated class identity,
     // fresh object identity, and label() results. Capybara .cfun tests can construct
     // OO values but cannot invoke OO instance methods or compare backend object identity,
     // so those host-facing observations remain there.
+    let person_constructed <- constructs_person("Ada")
     assert_all([
         assert_that(construct_person_lazily("Ada")).is_true(),
-        assert_that(constructs_person("Ada").unsafe_run()).is_true(),
+        assert_that(person_constructed).is_true(),
     ])
 
-fun parent_typed_construction_and_sequencing_work(): Assert =
+fun parent_typed_construction_and_sequencing_work(): Effect[Assert] =
+    let printable_constructed <- constructs_printable("Bara")
+    let sequence <- construct_in_sequence("A", "B")
     assert_all([
-        assert_that(constructs_printable("Bara").unsafe_run()).is_true(),
-        assert_that(construct_in_sequence("A", "B").unsafe_run()).is_equal_to("A:B"),
+        assert_that(printable_constructed).is_true(),
+        assert_that(sequence).is_equal_to("A:B"),
     ])
 
-fun zero_argument_construction_is_delayed(): Assert =
+fun zero_argument_construction_is_delayed(): Effect[Assert] =
     // Portable assertions cannot capture the absence or order of stdout writes or call label().
+    let empty_constructed <- constructs_empty()
     assert_all([
         assert_that(construct_empty_lazily()).is_true(),
-        assert_that(constructs_empty().unsafe_run()).is_true(),
+        assert_that(empty_constructed).is_true(),
     ])
 
-fun qualified_import_construction_works(): Assert =
+fun qualified_import_construction_works(): Effect[Assert] =
+    let qualified_person_constructed <- constructs_qualified_person("Qual")
+    let qualified_printable_constructed <- constructs_qualified_printable("Iface")
     assert_all([
-        assert_that(constructs_qualified_person("Qual").unsafe_run()).is_true(),
-        assert_that(constructs_qualified_printable("Iface").unsafe_run()).is_true(),
+        assert_that(qualified_person_constructed).is_true(),
+        assert_that(qualified_printable_constructed).is_true(),
     ])
 
 private fun construct_person_lazily(name: String): bool =

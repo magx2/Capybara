@@ -12,6 +12,10 @@ public final class ObjectOrientedValidator {
     public static final ObjectOrientedValidator INSTANCE = new ObjectOrientedValidator();
     private static final Pattern IDENTIFIER_REFERENCE = Pattern.compile("\\b[_a-z][_A-Za-z0-9]*\\b");
     private static final Pattern CALL_EXPRESSION = Pattern.compile(".*(?:\\)|\\]|[A-Za-z_][A-Za-z0-9_]*)\\s*\\([^()]*\\)\\s*$");
+    private static final Pattern STRING_LITERAL = Pattern.compile("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'");
+    private static final Pattern UNSAFE_EFFECT_FACTORY_RUN = Pattern.compile(
+            "(?s)(?:\\b(?:Effect\\s*\\.\\s*)?(?:pure|delay)\\s*\\([^;{}]*\\))\\s*\\.\\s*(?:unsafe_run|unsafeRun)\\s*\\("
+    );
 
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
         var errors = new TreeSet<Result.Error.SingleError>();
@@ -42,10 +46,16 @@ public final class ObjectOrientedValidator {
             TreeSet<Result.Error.SingleError> errors
     ) {
         if (member instanceof ObjectOriented.MethodDeclaration method
-            && method.body().orElse(null) instanceof ObjectOriented.StatementBlock body) {
-            validateBlock(module, typeName + "." + method.name(), body, Scope.root(method.parameters().stream().map(ObjectOriented.Parameter::name).toList()), errors);
+            && method.body().isPresent()) {
+            var owner = typeName + "." + method.name();
+            var body = method.body().orElseThrow();
+            validateUnsafeEffectRunUsage(module, owner, body, errors);
+            if (body instanceof ObjectOriented.StatementBlock block) {
+                validateBlock(module, owner, block, Scope.root(method.parameters().stream().map(ObjectOriented.Parameter::name).toList()), errors);
+            }
         }
         if (member instanceof ObjectOriented.InitBlock initBlock) {
+            validateUnsafeEffectRunUsage(module, typeName + ".init", initBlock.body(), errors);
             validateBlock(module, typeName + ".init", initBlock.body(), Scope.root(constructorParameters), errors);
         }
     }
@@ -251,6 +261,88 @@ public final class ObjectOrientedValidator {
         return callee.endsWith(")")
                || callee.endsWith("]")
                || IDENTIFIER_REFERENCE.matcher(callee).matches();
+    }
+
+    private void validateUnsafeEffectRunUsage(
+            ObjectOrientedModule module,
+            String owner,
+            ObjectOriented.MethodBody body,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (body) {
+            case ObjectOriented.ExpressionBody expressionBody -> validateUnsafeEffectRunUsage(module, owner, expressionBody.expression(), errors);
+            case ObjectOriented.StatementBlock statementBlock -> validateUnsafeEffectRunUsage(module, owner, statementBlock, errors);
+        }
+    }
+
+    private void validateUnsafeEffectRunUsage(
+            ObjectOrientedModule module,
+            String owner,
+            ObjectOriented.StatementBlock block,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var statement : block.statements()) {
+            validateUnsafeEffectRunUsage(module, owner, statement, errors);
+        }
+    }
+
+    private void validateUnsafeEffectRunUsage(
+            ObjectOrientedModule module,
+            String owner,
+            ObjectOriented.Statement statement,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        switch (statement) {
+            case ObjectOriented.LetStatement letStatement -> validateUnsafeEffectRunUsage(module, owner, letStatement.expression(), errors);
+            case ObjectOriented.LocalMethodStatement localMethodStatement ->
+                    validateUnsafeEffectRunUsage(module, owner + "." + localMethodStatement.name(), localMethodStatement.body(), errors);
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement ->
+                    validateUnsafeEffectRunUsage(module, owner, mutableVariableStatement.expression(), errors);
+            case ObjectOriented.AssignmentStatement assignmentStatement -> validateUnsafeEffectRunUsage(module, owner, assignmentStatement.expression(), errors);
+            case ObjectOriented.ExpressionStatement expressionStatement -> validateUnsafeEffectRunUsage(module, owner, expressionStatement.expression(), errors);
+            case ObjectOriented.ThrowStatement throwStatement -> validateUnsafeEffectRunUsage(module, owner, throwStatement.expression(), errors);
+            case ObjectOriented.ReturnStatement returnStatement -> validateUnsafeEffectRunUsage(module, owner, returnStatement.expression(), errors);
+            case ObjectOriented.IfStatement ifStatement -> {
+                validateUnsafeEffectRunUsage(module, owner, ifStatement.condition(), errors);
+                validateUnsafeEffectRunUsage(module, owner, ifStatement.thenBranch(), errors);
+                ifStatement.elseBranch().ifPresent(elseBranch -> validateUnsafeEffectRunUsage(module, owner, elseBranch, errors));
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                validateUnsafeEffectRunUsage(module, owner, tryCatchStatement.tryBlock(), errors);
+                tryCatchStatement.catches().forEach(catchClause -> validateUnsafeEffectRunUsage(module, owner, catchClause.body(), errors));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                validateUnsafeEffectRunUsage(module, owner, whileStatement.condition(), errors);
+                validateUnsafeEffectRunUsage(module, owner, whileStatement.body(), errors);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                validateUnsafeEffectRunUsage(module, owner, doWhileStatement.body(), errors);
+                validateUnsafeEffectRunUsage(module, owner, doWhileStatement.condition(), errors);
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                validateUnsafeEffectRunUsage(module, owner, forEachStatement.iterable(), errors);
+                validateUnsafeEffectRunUsage(module, owner, forEachStatement.body(), errors);
+            }
+            case ObjectOriented.StatementBlock nestedBlock -> validateUnsafeEffectRunUsage(module, owner, nestedBlock, errors);
+        }
+    }
+
+    private void validateUnsafeEffectRunUsage(
+            ObjectOrientedModule module,
+            String owner,
+            String expression,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var withoutStrings = STRING_LITERAL.matcher(expression).replaceAll(" ");
+        if (!UNSAFE_EFFECT_FACTORY_RUN.matcher(withoutStrings).find()) {
+            return;
+        }
+        errors.add(new Result.Error.SingleError(
+                0,
+                0,
+                module.moduleFile(),
+                "`Effect.unsafe_run` cannot be called from Capybara source in `" + owner + "`; use effect binding or return `Effect[...]` to the runtime/test runner."
+        ));
     }
 
     private void collectMutableCaptures(ObjectOriented.MethodBody body, Scope scope, TreeSet<String> mutableCaptures) {

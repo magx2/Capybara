@@ -11,18 +11,19 @@ data SharedInteropObservation { invoked: String, created_kind: String, created_n
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/SharedInterop.coo", [
-        test("object-oriented code can use FP sibling module without imports when file names match", () => object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match()),
+        effect_test("object-oriented code can use FP sibling module without imports when file names match", () => object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match()),
     ])
 
-fun object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match(): Assert =
+fun object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match(): Effect[Assert] =
     let info = SharedInteractor.type()
     let observation = observe_shared_interop_bridge()
+    let shared_interactor_constructed <- constructs_shared_interactor()
     // Direct OO instance method calls from .cfun are not registered as portable
     // method signatures yet. The legacy host tests invoke those generated methods
     // directly; this Capybara migration reflects the OO surface and asserts the
     // same backend-neutral SharedInterop values through a small .cfun bridge.
     assert_all([
-        assert_that(constructs_shared_interactor().unsafe_run()).is_true(),
+        assert_that(shared_interactor_constructed).is_true(),
         assert_that(shared_interactor_type_name(info)).is_equal_to("SharedInteractor"),
         assert_that(shared_interactor_method_names(info)).is_equal_to([
             "invoke_fp_function",

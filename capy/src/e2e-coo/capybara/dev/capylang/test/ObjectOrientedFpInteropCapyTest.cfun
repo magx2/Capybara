@@ -8,17 +8,18 @@ from ObjectOrientedFpInterop import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ObjectOrientedFpInterop.coo", [
-        test("PetInteractor is constructible and exposes expected methods", () => pet_interactor_is_constructible_and_exposes_expected_methods()),
+        effect_test("PetInteractor is constructible and exposes expected methods", () => pet_interactor_is_constructible_and_exposes_expected_methods()),
         test("FP functions create and match interop pets", () => fp_functions_create_and_match_interop_pets()),
         test("FP functions handle interop maybe values", () => fp_functions_handle_interop_maybe_values()),
         test("recursive data methods interoperate with FP functions", () => recursive_data_methods_interoperate_with_fp_functions()),
         test("primitive-backed user ids unwrap and add", () => primitive_backed_user_ids_unwrap_and_add()),
     ])
 
-fun pet_interactor_is_constructible_and_exposes_expected_methods(): Assert =
+fun pet_interactor_is_constructible_and_exposes_expected_methods(): Effect[Assert] =
     let info = PetInteractor.type()
+    let interactor_constructed <- constructs_pet_interactor()
     assert_all([
-        assert_that(constructs_pet_interactor().unsafe_run()).is_true(),
+        assert_that(interactor_constructed).is_true(),
         assert_that(pet_interactor_type_name(info)).is_equal_to("PetInteractor"),
         assert_that(pet_interactor_method_names(info)).is_equal_to([
             "invoke_fp_function",

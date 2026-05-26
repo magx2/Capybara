@@ -309,6 +309,25 @@ class ObjectOrientedCompilationErrorTest {
     }
 
     @Test
+    void shouldRejectUnsafeRunOnEffectFromObjectOrientedMethod() {
+        var errors = compileObjectOrientedSource(
+                "UnsafeEffectRunner",
+                """
+                        from /capy/lang/Effect import { * }
+
+                        class UnsafeEffectRunner {
+                            def run(): int = pure(1).unsafe_run()
+                        }
+                        """,
+                List.of(effectModule())
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("`Effect.unsafe_run` cannot be called from Capybara source"));
+    }
+
+    @Test
     void shouldRejectUnimportedObjectOrientedAnnotation() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule("Annotations", "/foo/meta", "annotation Entity on class {}"),
@@ -460,6 +479,20 @@ class ObjectOrientedCompilationErrorTest {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
         return ((Result.Error<?>) result).errors();
+    }
+
+    private static RawModule effectModule() {
+        return new RawModule("Effect", "/capy/lang", """
+                union Effect[T] = UnsafeEffect[T]
+                data UnsafeEffect[T] { unsafe_thunk: () => T }
+
+                fun pure(value: T): Effect[T] =
+                    UnsafeEffect { unsafe_thunk: () => value }
+
+                fun Effect[T].unsafe_run(): T =
+                    match this with
+                    case UnsafeEffect { unsafe_thunk } -> unsafe_thunk()
+                """);
     }
 
 }

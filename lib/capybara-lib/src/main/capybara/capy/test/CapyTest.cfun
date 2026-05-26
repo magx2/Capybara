@@ -19,7 +19,7 @@ from /capy/serialization/Json import { JsonString, stringify }
 from /capy/meta_prog/Recursive import { Recursive }
 
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
-data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Assert }
+data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Effect[Assert] }
 union TestResult = Passed | Failed
 data Passed {}
 data Failed { message: String, type: String }
@@ -37,6 +37,9 @@ fun test_file_at(file_name: String, timestamp_millis: long, test_cases: List[Tes
     }
 
 fun test(name: String, assert_supplier: () => Assert): TestCase =
+    effect_test(name, () => pure(assert_supplier()))
+
+fun effect_test(name: String, assert_supplier: () => Effect[Assert]): TestCase =
     TestCase {
         name: name,
         result: Passed {},
@@ -75,8 +78,7 @@ private fun execute_test_cases(log_type: LogType, test_cases: List[TestCase]): E
 private fun execute_test_case(log_type: LogType, test_case: TestCase): Effect[TestCase] =
     let started <- print_test_started(log_type, test_case.name)
     let start <- nano_time()
-    let assert_supplier = test_case.assert_supplier
-    let assert = assert_supplier()
+    let assert <- (test_case.assert_supplier)()
     let result = execute(assert.assertions)
     let end <- nano_time()
     let executed_test_case = TestCase {

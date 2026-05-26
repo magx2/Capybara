@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/collection/CollectionTypes import { * }
@@ -35,6 +36,7 @@ data BoolAssert { value: bool }
 data DataAssert { value: data }
 data OptionAssert[T] { value: /capy/lang/Option[T] }
 data ResultAssert[T] { value: /capy/lang/Result[T] }
+data EffectAssert[T] { value: /capy/lang/Effect[T] }
 data DateAssert { value: Date }
 data TimeAssert { value: Time }
 data DateTimeAssert { value: DateTime }
@@ -497,6 +499,20 @@ fun ResultAssert[T].fails(message: String): ResultAssert[T] =
         value: this.value,
         assertions: this.assertions + () => assertion
     }
+
+fun EffectAssert[T].is_equal_to(other: T): Effect[Assert] =
+    this.satisfies(value =>
+        let assertion = Assertion {
+            result: value == other,
+            message: "Expected effect result:\n" + value + "\nto be equal to:\n" + other,
+            type: 'EffectAssert[T].is_equal_to'
+        }
+        TechnicalAssert {
+            assertions: [() => assertion]
+        })
+
+fun EffectAssert[T].satisfies(assert: T => Assert): Effect[Assert] =
+    this.value.map(assert)
 
 fun DateAssert.is_equal_to(other: Date): DateAssert =
     let assertion = Assertion {
@@ -1127,4 +1143,5 @@ fun assert_that(value: Dict[T]): DictAssert[T] = DictAssert { value: value, asse
 fun assert_that(value: Seq[T]): SeqAssert[T] = SeqAssert { value: value, assertions: [] }
 fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] }
 fun assert_that(value: Result[T]) = ResultAssert { value: value, assertions: [] }
+fun assert_that(value: Effect[T]) = EffectAssert { value: value }
 fun assert_that(value: data) = DataAssert { value: value, assertions: [] }

@@ -2353,7 +2353,7 @@ public final class PythonGenerator implements Generator {
             exports.put("capy.date_time.Interval", Set.of("DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
             exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
-            exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile", "test_file_at", "testFileAt"));
+            exports.put("capy.test.CapyTest", Set.of("test", "effect_test", "effectTest", "test_file", "testFile", "test_file_at", "testFileAt"));
             return exports;
         }
 
@@ -3166,6 +3166,8 @@ public final class PythonGenerator implements Generator {
                     import time
                     import dev.capylang.capybara as capy
                     test = lambda name, body: {'name': name, 'body': body}
+                    effect_test = test
+                    effectTest = test
                     test_file_at = lambda path, timestamp_millis, test_cases: {'path': path, 'file_name': path, 'test_cases': test_cases, 'timestamp_millis': timestamp_millis}
                     testFileAt = test_file_at
                     test_file = lambda path, test_cases: capy.delay(lambda: test_file_at(path, int(time.time() * 1000), test_cases))
@@ -4210,7 +4212,36 @@ public final class PythonGenerator implements Generator {
                             return self.append(equals(value_at(self.value, 'duration'), expected), f'Expected duration to equal {display(expected)}', 'has_duration')
                         def has_duration(self, expected): return self.hasDuration(expected)
 
+                    class EffectAssert:
+                        def __init__(self, value):
+                            self.__capybaraType = 'EffectAssert'
+                            self.__capybaraTypes = ['EffectAssert']
+                            self.value = value
+                        def __getattr__(self, name):
+                            base = name.split('__', 1)[0]
+                            if base != name and hasattr(self, base):
+                                return getattr(self, base)
+                            if name.startswith('isEqualTo'):
+                                return self.isEqualTo
+                            raise AttributeError(name)
+                        def isEqualTo(self, expected):
+                            return self.satisfies(lambda value: GenericAssert(None, [
+                                assertion(
+                                    equals(value, expected),
+                                    f'Expected effect result:\\n{display(value)}\\nto be equal to:\\n{display(expected)}',
+                                    'EffectAssert[T].is_equal_to'
+                                )
+                            ]))
+                        def is_equal_to(self, expected): return self.isEqualTo(expected)
+                        def satisfies(self, assertion_mapper):
+                            mapper = getattr(self.value, 'map', None)
+                            if callable(mapper):
+                                return mapper(assertion_mapper)
+                            return delay(lambda: assertion_mapper(self.value.unsafe_run()))
+
                     def assert_that(value, message='Assertion failed'):
+                        if is_effect(value):
+                            return EffectAssert(value)
                         return GenericAssert(value)
                     def assert_all(values):
                         return GenericAssert(None, flatten_assertions(values))
