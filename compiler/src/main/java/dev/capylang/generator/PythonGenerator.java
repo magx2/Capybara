@@ -4000,7 +4000,6 @@ public final class PythonGenerator implements Generator {
                         return lambda: AssertionResult(result, message, type)
 
                     def assertions_of(value):
-                        value = value.unsafe_run() if is_effect(value) else value
                         if value is None:
                             return []
                         if isinstance(value, list):
@@ -4221,36 +4220,7 @@ public final class PythonGenerator implements Generator {
                             return self.append(equals(value_at(self.value, 'duration'), expected), f'Expected duration to equal {display(expected)}', 'has_duration')
                         def has_duration(self, expected): return self.hasDuration(expected)
 
-                    class EffectAssert:
-                        def __init__(self, value):
-                            self.__capybaraType = 'EffectAssert'
-                            self.__capybaraTypes = ['EffectAssert']
-                            self.value = value
-                        def __getattr__(self, name):
-                            base = name.split('__', 1)[0]
-                            if base != name and hasattr(self, base):
-                                return getattr(self, base)
-                            if name.startswith('isEqualTo'):
-                                return self.isEqualTo
-                            raise AttributeError(name)
-                        def isEqualTo(self, expected):
-                            return self.satisfies(lambda value: GenericAssert(None, [
-                                assertion(
-                                    equals(value, expected),
-                                    f'Expected effect result:\\n{display(value)}\\nto be equal to:\\n{display(expected)}',
-                                    'EffectAssert[T].is_equal_to'
-                                )
-                            ]))
-                        def is_equal_to(self, expected): return self.isEqualTo(expected)
-                        def satisfies(self, assertion_mapper):
-                            mapper = getattr(self.value, 'map', None)
-                            if callable(mapper):
-                                return mapper(assertion_mapper)
-                            return delay(lambda: assertion_mapper(self.value.unsafe_run()))
-
                     def assert_that(value, message='Assertion failed'):
-                        if is_effect(value):
-                            return EffectAssert(value)
                         return GenericAssert(value)
                     def assert_all(values):
                         return GenericAssert(None, flatten_assertions(values))

@@ -4899,37 +4899,7 @@ public final class JavaScriptGenerator implements Generator {
                         }
                     }
 
-                    class EffectAssert {
-                        constructor(value) {
-                            this.__capybaraType = 'EffectAssert';
-                            this.__capybaraTypes = ['EffectAssert'];
-                            this.value = value;
-                            return withMethodAliases(this);
-                        }
-                        isEqualTo(expected) {
-                            return this.satisfies(value => new GenericAssert(null, [
-                                assertion(
-                                    capy.equals(value, expected),
-                                    `Expected effect result:\\n${display(value)}\\nto be equal to:\\n${display(expected)}`,
-                                    'EffectAssert[T].is_equal_to'
-                                ),
-                            ]));
-                        }
-                        is_equal_to(expected) {
-                            return this.isEqualTo(expected);
-                        }
-                        satisfies(assertionMapper) {
-                            if (this.value && typeof this.value.map === 'function') {
-                                return this.value.map(assertionMapper);
-                            }
-                            return capy.delay(() => assertionMapper(this.value.unsafe_run()));
-                        }
-                    }
-
                     function assertThat(value) {
-                        if (capy.isEffect(value)) {
-                            return new EffectAssert(value);
-                        }
                         return new GenericAssert(value);
                     }
 

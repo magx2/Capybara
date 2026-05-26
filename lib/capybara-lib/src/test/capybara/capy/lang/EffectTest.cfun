@@ -11,16 +11,20 @@ fun tests(): Effect[TestFile] =
     ])
 
 fun should_run_pure_value(): Effect[Assert] =
-    assert_that(pure(42)).is_equal_to(42)
+    let value <- pure(42)
+    assert_that(value).is_equal_to(42)
 
 fun should_map_value(): Effect[Assert] =
-    assert_that(pure(2).map(x => x + 3)).is_equal_to(5)
+    let value <- pure(2).map(x => x + 3)
+    assert_that(value).is_equal_to(5)
 
 fun should_flat_map_value(): Effect[Assert] =
-    assert_that(pure(2).flat_map(x => pure(x + 4))).is_equal_to(6)
+    let value <- pure(2).flat_map(x => pure(x + 4))
+    assert_that(value).is_equal_to(6)
 
 fun should_bind_effects(): Effect[Assert] =
-    assert_that(bind_sum()).is_equal_to(7)
+    let value <- bind_sum()
+    assert_that(value).is_equal_to(7)
 
 private fun bind_sum(): Effect[int] =
     let a <- pure(3)
