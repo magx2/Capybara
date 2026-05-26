@@ -13,8 +13,9 @@ public final class ObjectOrientedValidator {
     private static final Pattern IDENTIFIER_REFERENCE = Pattern.compile("\\b[_a-z][_A-Za-z0-9]*\\b");
     private static final Pattern CALL_EXPRESSION = Pattern.compile(".*(?:\\)|\\]|[A-Za-z_][A-Za-z0-9_]*)\\s*\\([^()]*\\)\\s*$");
     private static final Pattern STRING_LITERAL = Pattern.compile("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'");
-    private static final Pattern UNSAFE_EFFECT_FACTORY_RUN = Pattern.compile(
-            "(?s)(?:\\b(?:Effect\\s*\\.\\s*)?(?:pure|delay)\\s*\\([^;{}]*\\))\\s*\\.\\s*(?:unsafe_run|unsafeRun)\\s*\\("
+    // OO expressions are raw strings until backend generation, so reject the unsafe escape hatch by call name.
+    private static final Pattern UNSAFE_RUN_CALL = Pattern.compile(
+            "(?s)(?:\\.\\s*|(?:^|[^A-Za-z0-9_\\.]))(?:unsafe_run|unsafeRun)\\s*\\("
     );
 
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
@@ -334,14 +335,14 @@ public final class ObjectOrientedValidator {
             TreeSet<Result.Error.SingleError> errors
     ) {
         var withoutStrings = STRING_LITERAL.matcher(expression).replaceAll(" ");
-        if (!UNSAFE_EFFECT_FACTORY_RUN.matcher(withoutStrings).find()) {
+        if (!UNSAFE_RUN_CALL.matcher(withoutStrings).find()) {
             return;
         }
         errors.add(new Result.Error.SingleError(
                 0,
                 0,
                 module.moduleFile(),
-                "`Effect.unsafe_run` cannot be called from Capybara source in `" + owner + "`; use effect binding or return `Effect[...]` to the runtime/test runner."
+                "`unsafe_run` cannot be called from Capybara OO source in `" + owner + "`; use effect binding or return `Effect[...]` to the runtime/test runner."
         ));
     }
 
