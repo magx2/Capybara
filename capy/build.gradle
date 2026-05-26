@@ -372,11 +372,13 @@ def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
 def e2eCooJsTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js')
 def e2eCooPyTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python')
 def e2eCooNativeWiringFile = layout.projectDirectory.file('src/e2e-coo/native/capy.native.json')
+def e2eCooNativeJavaSourceDir = layout.projectDirectory.dir('src/e2e-coo/native/java')
 def e2eCooJavaNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/capybara')
 def e2eCooJavaNativeJavaSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/java')
 def e2eCooJavaNativeGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo-java-native')
 def e2eCooJavaNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-coo-java-native')
 def e2eCooJavaNativeWiringFile = layout.projectDirectory.file('src/e2e-coo-java-native/native-providers.json')
+def e2eCooJavaNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-java-native')
 def e2eCooJsNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-js-native/capybara')
 def e2eCooJsNativeGeneratedJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-coo-js-native')
 def e2eCooJsNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-coo-js-native')
@@ -415,9 +417,14 @@ sourceSets {
     }
     e2eCoo {
         java.srcDir e2eCooGeneratedJavaDir
+        java.srcDir e2eCooNativeJavaSourceDir
+        resources.srcDir file('src/e2e-coo/resources')
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+    e2eCooJavaNative {
         java.srcDir e2eCooJavaNativeGeneratedJavaDir
         java.srcDir e2eCooJavaNativeJavaSourceDir
-        resources.srcDir file('src/e2e-coo/resources')
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
     }
@@ -428,17 +435,23 @@ configurations {
     e2eCfunRuntimeOnly.extendsFrom testRuntimeOnly
     e2eCooImplementation.extendsFrom testImplementation
     e2eCooRuntimeOnly.extendsFrom testRuntimeOnly
+    e2eCooJavaNativeImplementation.extendsFrom testImplementation
+    e2eCooJavaNativeRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 dependencies {
     e2eCfunImplementation project(':lib:capybara-lib')
     e2eCooImplementation project(':lib:capybara-lib')
+    e2eCooJavaNativeImplementation project(':lib:capybara-lib')
 }
 
 def e2eCfunRuntimeDependencies = configurations.e2eCfunRuntimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
 def e2eCooRuntimeDependencies = configurations.e2eCooRuntimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def e2eCooJavaNativeRuntimeDependencies = configurations.e2eCooJavaNativeRuntimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
 
@@ -507,6 +520,14 @@ def e2eCooTests = registerE2eTestTask(
         e2eCooRuntimeDependencies,
         'compileE2eCooJava',
         e2eCooTestResultsDir
+)
+def e2eCooJavaNativeTests = registerE2eTestTask(
+        'e2e-coo-java-native',
+        'Runs object-oriented Java native provider Capybara e2e tests.',
+        sourceSets.e2eCooJavaNative,
+        e2eCooJavaNativeRuntimeDependencies,
+        'compileE2eCooJavaNativeJava',
+        e2eCooJavaNativeTestResultsDir
 )
 def jsTests = tasks.register('jsTests', NodeTask) {
     description = 'Runs JavaScript tests.'
@@ -723,6 +744,7 @@ tasks.register('e2eTests') {
     dependsOn e2eCfunJsTests
     dependsOn e2eCfunPythonTests
     dependsOn e2eCooTests
+    dependsOn e2eCooJavaNativeTests
     dependsOn e2eCooJsTests
     dependsOn e2eCooJsNativeTests
     dependsOn e2eCooPythonTests
@@ -734,6 +756,7 @@ check {
     dependsOn e2eCfunJsTests
     dependsOn e2eCfunPythonTests
     dependsOn e2eCooTests
+    dependsOn e2eCooJavaNativeTests
     dependsOn e2eCooJsTests
     dependsOn e2eCooJsNativeTests
     dependsOn e2eCooPythonTests
@@ -887,6 +910,9 @@ tasks.named('e2e-cfun-python') {
 
 tasks.named('compileE2eCooJava') {
     dependsOn linkCapybaraE2eCooSources
+}
+
+tasks.named('compileE2eCooJavaNativeJava') {
     dependsOn linkCapybaraE2eCooJavaNativeSources
 }
 

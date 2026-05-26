@@ -60,7 +60,7 @@ public final class JavaGenerator implements Generator {
         JavaExpressionEvaluator.setPrimitiveBackedTypes(primitiveBackedEvaluatorTypes(primitiveBackedTypeInfo));
         var modules = new ArrayList<GeneratedModule>();
         for (var module : program.modules()) {
-            modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides));
+            modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides, functionNameOverrides, nativeProviderInfos));
         }
         var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(
                 primitiveBackedTypeInfo,
@@ -304,13 +304,17 @@ public final class JavaGenerator implements Generator {
             CompiledModule module,
             GenerationTimings timings,
             JavaAstBuilder astBuilder,
-            java.util.Map<String, String> globalEnumValueOwnerOverrides
+            java.util.Map<String, String> globalEnumValueOwnerOverrides,
+            java.util.Map<String, String> globalFunctionNameOverrides,
+            List<NativeProviderInfo> nativeProviderInfos
     ) {
         var javaClass = time(timings::addAstBuildNanos, () -> astBuilder.build(module));
         var enumValueOwnerOverrides = new java.util.LinkedHashMap<>(globalEnumValueOwnerOverrides);
         enumValueOwnerOverrides.putAll(importedEnumValueOwnerOverrides(module));
         enumValueOwnerOverrides.putAll(javaClass.enumValueOwnerOverrides());
+        var functionNameOverrides = nativeProviderFunctionNameOverrides(globalFunctionNameOverrides, module, nativeProviderInfos);
         JavaExpressionEvaluator.setEnumValueOwnerOverrides(enumValueOwnerOverrides);
+        JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         try {
             if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
                 return List.of(new GeneratedModule(
@@ -360,7 +364,36 @@ public final class JavaGenerator implements Generator {
             return List.copyOf(compiled);
         } finally {
             JavaExpressionEvaluator.setEnumValueOwnerOverrides(java.util.Map.of());
+            JavaExpressionEvaluator.setFunctionNameOverrides(globalFunctionNameOverrides);
         }
+    }
+
+    private java.util.Map<String, String> nativeProviderFunctionNameOverrides(
+            java.util.Map<String, String> baseOverrides,
+            CompiledModule module,
+            List<NativeProviderInfo> nativeProviderInfos
+    ) {
+        if (nativeProviderInfos.isEmpty()) {
+            return baseOverrides;
+        }
+        var overrides = new java.util.LinkedHashMap<>(baseOverrides);
+        var emptyParameters = List.<dev.capylang.compiler.CompiledType>of();
+        var localZeroArgFunctions = module.functions().stream()
+                .filter(function -> function.parameters().isEmpty())
+                .map(function -> signatureKey(function.name(), emptyParameters))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        for (var provider : nativeProviderInfos) {
+            var providerKey = signatureKey(provider.providerSymbolName(), emptyParameters);
+            if (localZeroArgFunctions.contains(providerKey)) {
+                continue;
+            }
+            overrides.putIfAbsent(providerKey, "dev.capylang.NativeProviderBootstrap." + provider.bootstrapMethodName());
+            var bootstrapKey = signatureKey(provider.bootstrapMethodName(), emptyParameters);
+            if (!localZeroArgFunctions.contains(bootstrapKey)) {
+                overrides.putIfAbsent(bootstrapKey, "dev.capylang.NativeProviderBootstrap." + provider.bootstrapMethodName());
+            }
+        }
+        return java.util.Map.copyOf(overrides);
     }
 
     private java.util.Map<String, String> importedEnumValueOwnerOverrides(CompiledModule module) {
