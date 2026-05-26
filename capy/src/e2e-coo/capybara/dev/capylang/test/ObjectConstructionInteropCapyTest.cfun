@@ -1,0 +1,72 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ObjectConstructionInterop import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectConstructionInterop.cfun", [
+        test("functional object construction is delayed and repeatable", () => functional_object_construction_is_delayed_and_repeatable()),
+        test("parent typed construction and sequencing work", () => parent_typed_construction_and_sequencing_work()),
+        test("zero argument construction is delayed and executable", () => zero_argument_construction_is_delayed_and_executable()),
+        test("qualified import construction works", () => qualified_import_construction_works()),
+    ])
+
+fun functional_object_construction_is_delayed_and_repeatable(): Assert =
+    // The legacy host tests also assert exact stdout capture, generated class identity,
+    // fresh object identity, CommonJS wiring, and label() results. Capybara .cfun tests
+    // can sequence OO construction effects across backends, but cannot capture stdout,
+    // compare backend object identity, or invoke OO instance methods portably.
+    assert_all([
+        assert_that(construct_lazily("Ada")).is_true(),
+        assert_that(runs_person_effect("Ada").unsafe_run()).is_true(),
+        assert_that(runs_person_effect_twice("Ada").unsafe_run()).is_true(),
+    ])
+
+fun parent_typed_construction_and_sequencing_work(): Assert =
+    assert_all([
+        assert_that(runs_printable_effect("Bara").unsafe_run()).is_true(),
+        assert_that(sequence_two("A", "B").unsafe_run()).is_equal_to("A:B"),
+    ])
+
+fun zero_argument_construction_is_delayed_and_executable(): Assert =
+    // Portable assertions cannot observe the absence of stdout at effect creation time.
+    assert_all([
+        assert_that(creates_empty_effect_lazily()).is_true(),
+        assert_that(runs_empty_effect().unsafe_run()).is_true(),
+    ])
+
+fun qualified_import_construction_works(): Assert =
+    assert_all([
+        assert_that(runs_qualified_person_effect("Qual").unsafe_run()).is_true(),
+        assert_that(runs_qualified_printable_effect("Iface").unsafe_run()).is_true(),
+    ])
+
+private fun runs_person_effect(name: String): Effect[bool] =
+    let person <- make_person(name)
+    true
+
+private fun runs_person_effect_twice(name: String): Effect[bool] =
+    let effect = make_person(name)
+    let first <- effect
+    let second <- effect
+    true
+
+private fun runs_printable_effect(name: String): Effect[bool] =
+    let printable <- make_printable(name)
+    true
+
+private fun creates_empty_effect_lazily(): bool =
+    let effect = make_empty()
+    true
+
+private fun runs_empty_effect(): Effect[bool] =
+    let empty <- make_empty()
+    true
+
+private fun runs_qualified_person_effect(name: String): Effect[bool] =
+    let person <- make_qualified_person(name)
+    true
+
+private fun runs_qualified_printable_effect(name: String): Effect[bool] =
+    let printable <- make_qualified_printable(name)
+    true

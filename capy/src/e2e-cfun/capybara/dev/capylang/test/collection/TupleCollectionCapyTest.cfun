@@ -1,0 +1,78 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from TupleCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/collection/TupleCollection.cfun", [
+        test("static_tuple returns expected values", () => static_tuple_returns_expected_values()),
+        test("static_tuple_option returns option value", () => static_tuple_option_returns_option_value()),
+        test("tuple_if returns conditional tuple value", () => tuple_if_returns_conditional_tuple_value()),
+        test("tuple indexes return expected values", () => tuple_indexes_return_expected_values()),
+        test("tuple slices return expected values", () => tuple_slices_return_expected_values()),
+        test("tuple_with_functions returns callable members", () => tuple_with_functions_returns_callable_members()),
+        test("tuple_with_functions_apply_first applies first function", () => tuple_with_functions_apply_first_applies_first_function()),
+        test("tuple_with_functions_apply_second applies second function", () => tuple_with_functions_apply_second_applies_second_function()),
+    ])
+
+private fun static_tuple_returns_expected_values(): Assert =
+    let tuple = static_tuple()
+    assert_all([
+        assert_that(tuple[0]).is_equal_to(1),
+        assert_that(tuple[1]).is_equal_to("foo"),
+        assert_that(tuple[2]).is_equal_to(5.0),
+    ])
+
+private fun static_tuple_option_returns_option_value(): Assert =
+    let tuple = static_tuple_option()
+    assert_all([
+        assert_that(tuple[0]).is_equal_to(1),
+        assert_that(tuple[1]).contains("foo"),
+        assert_that(tuple[2]).is_equal_to(5.0),
+    ])
+
+private fun tuple_if_returns_conditional_tuple_value(): Assert =
+    let big_tuple = tuple_if(5)
+    let small_tuple = tuple_if(4)
+    assert_all([
+        assert_that(big_tuple[0]).is_equal_to(5),
+        assert_that(big_tuple[1]).is_equal_to("big"),
+        assert_that(big_tuple[2]).is_equal_to(5.1f),
+        assert_that(big_tuple[3]).is_equal_to("foo"),
+        assert_that(small_tuple[1]).is_equal_to("small"),
+    ])
+
+private fun tuple_indexes_return_expected_values(): Assert =
+    assert_all([
+        assert_that(tuple_index_1()).is_equal_to("foo"),
+        assert_that(tuple_index_minus_1()).is_equal_to(5.0),
+        assert_that(tuple_index_on_var((1, "bar", 9.0))).is_equal_to("bar"),
+    ])
+
+private fun tuple_slices_return_expected_values(): Assert =
+    let from_one = tuple_slice_from_1()
+    let to_minus_one = tuple_slice_to_minus_1()
+    let on_var = tuple_slice_on_var((2, "bar", 9.0))
+    assert_all([
+        assert_that(from_one[0]).is_equal_to("foo"),
+        assert_that(from_one[1]).is_equal_to(5.0),
+        assert_that(to_minus_one[0]).is_equal_to(1),
+        assert_that(to_minus_one[1]).is_equal_to("foo"),
+        assert_that(on_var[0]).is_equal_to("bar"),
+        assert_that(on_var[1]).is_equal_to(9.0),
+    ])
+
+private fun tuple_with_functions_returns_callable_members(): Assert =
+    let funs = tuple_with_functions()
+    let first: int => int = funs[0]
+    let second: int => int = funs[1]
+    assert_all([
+        assert_that(first(7)).is_equal_to(8),
+        assert_that(second(7)).is_equal_to(14),
+    ])
+
+private fun tuple_with_functions_apply_first_applies_first_function(): Assert =
+    assert_that(tuple_with_functions_apply_first(7)).is_equal_to(8)
+
+private fun tuple_with_functions_apply_second_applies_second_function(): Assert =
+    assert_that(tuple_with_functions_apply_second(7)).is_equal_to(14)

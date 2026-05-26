@@ -1,0 +1,32 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from InfixFunctions import { Sum, add, plus, plus_minus, mul, slash_slash, dollar_minus }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/InfixFunctions.cfun", [
+        test("method-style extension function adds to Sum", () => method_style_extension_function_adds_to_sum()),
+        test("plus operator method adds to Sum", () => plus_operator_method_adds_to_sum()),
+        test("combined literal operator subtracts from Sum", () => combined_literal_operator_subtracts_from_sum()),
+        test("multiply operator method multiplies Sum", () => multiply_operator_method_multiplies_sum()),
+        test("slash-slash operator method divides Sum", () => slash_slash_operator_method_divides_sum()),
+        test("dollar-minus operator method subtracts with offset", () => dollar_minus_operator_method_subtracts_with_offset()),
+    ])
+
+private fun method_style_extension_function_adds_to_sum(): Assert =
+    assert_that(add(Sum { value: 10 }, 5) == Sum { value: 15 }).is_true()
+
+private fun plus_operator_method_adds_to_sum(): Assert =
+    assert_that(plus(Sum { value: 10 }, 5) == Sum { value: 15 }).is_true()
+
+private fun combined_literal_operator_subtracts_from_sum(): Assert =
+    assert_that(plus_minus(Sum { value: 10 }, 5) == Sum { value: 5 }).is_true()
+
+private fun multiply_operator_method_multiplies_sum(): Assert =
+    assert_that(mul(Sum { value: 10 }, 5) == Sum { value: 50 }).is_true()
+
+private fun slash_slash_operator_method_divides_sum(): Assert =
+    assert_that(slash_slash(Sum { value: 10 }, 5) == Sum { value: 2 }).is_true()
+
+private fun dollar_minus_operator_method_subtracts_with_offset(): Assert =
+    assert_that(dollar_minus(Sum { value: 10 }, 5) == Sum { value: 4 }).is_true()

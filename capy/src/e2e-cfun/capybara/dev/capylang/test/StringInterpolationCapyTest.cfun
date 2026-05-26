@@ -1,0 +1,40 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from StringInterpolation import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/StringInterpolation.cfun", [
+        test("simple interpolation inserts string values", () => simple_interpolation_inserts_string_values()),
+        test("expression interpolation evaluates the expression", () => expression_interpolation_evaluates_the_expression()),
+        test("escaped interpolation markers stay literal", () => escaped_interpolation_markers_stay_literal()),
+        test("escaped opening brace before interpolation stays literal", () => escaped_opening_brace_before_interpolation_stays_literal()),
+        test("quote escapes preserve interpolated values", () => quote_escapes_preserve_interpolated_values()),
+        test("data field interpolation reads fields", () => data_field_interpolation_reads_fields()),
+        test("single quoted strings do not interpolate", () => single_quoted_strings_do_not_interpolate()),
+    ])
+
+// The legacy Java compilation-error host tests assert compiler diagnostics for
+// synthetic invalid modules. That coverage belongs with compiler diagnostic
+// tests, not backend runtime assertions for StringInterpolation.cfun.
+
+private fun simple_interpolation_inserts_string_values(): Assert =
+    assert_that(simple("Capybara")).is_equal_to("Hello Capybara")
+
+private fun expression_interpolation_evaluates_the_expression(): Assert =
+    assert_that(expression("Capy", 7)).is_equal_to("Hello Capy7")
+
+private fun escaped_interpolation_markers_stay_literal(): Assert =
+    assert_that(escaped("ignored")).is_equal_to('Hello ' + '\\' + '{}')
+
+private fun escaped_opening_brace_before_interpolation_stays_literal(): Assert =
+    assert_that(escaped_with_interpolation_value("boo")).is_equal_to('xyz {boo}')
+
+private fun quote_escapes_preserve_interpolated_values(): Assert =
+    assert_that(quote_escape(Foo { "Martin" })).is_equal_to('Hello "Martin"')
+
+private fun data_field_interpolation_reads_fields(): Assert =
+    assert_that(data_field(Foo { "Martin" })).is_equal_to("Hello Martin")
+
+private fun single_quoted_strings_do_not_interpolate(): Assert =
+    assert_that(single_quoted("Capybara")).is_equal_to('Hello {name}')

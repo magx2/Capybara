@@ -863,25 +863,57 @@ public final class PythonGenerator implements Generator {
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
                 case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
-                case MINUS -> "(" + renderCollectionMinus(expression, left, right) + ")";
-                case MUL -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.long_mul(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.int_mul(" + left + ", " + right + ")"
-                                : "((" + left + ") * (" + right + "))";
-                case DIV -> expression.type() == PrimitiveLinkedType.INT
-                        ? "capy.int_div(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.LONG
-                                ? "capy.long_div(" + left + ", " + right + ")"
-                                : "((" + left + ") / (" + right + "))";
-                case MOD -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.long_mod(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.int_mod(" + left + ", " + right + ")"
-                                : "((" + left + ") % (" + right + "))";
-                case POWER -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.long_pow(" + left + ", " + right + ")"
-                        : "capy.math.pow(" + left + ", " + right + ")";
+                case MINUS -> expression.type() == PrimitiveLinkedType.STRING
+                        ? "(" + renderStringConcat(left, right) + ")"
+                        : "(" + renderCollectionMinus(expression, left, right) + ")";
+                case MUL -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_mul(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_mul(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") * (" + right + "))";
+                }
+                case DIV -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_div(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_div(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") / (" + right + "))";
+                }
+                case MOD -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_mod(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_mod(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") % (" + right + "))";
+                }
+                case POWER -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.long_pow(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.int_pow(" + left + ", " + right + ")";
+                    }
+                    yield "capy.math.pow(" + left + ", " + right + ")";
+                }
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
@@ -895,6 +927,10 @@ public final class PythonGenerator implements Generator {
                 case BITWISE_NOT -> "(~(" + left + "))";
                 default -> throw new UnsupportedOperationException("Unsupported Python infix operator: " + expression.operator());
             };
+        }
+
+        private String renderStringConcat(String left, String right) {
+            return "capy.to_string_value(" + left + ") + capy.to_string_value(" + right + ")";
         }
 
         private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {
@@ -2283,6 +2319,7 @@ public final class PythonGenerator implements Generator {
             exports.put("capy.collection.Tuple", Set.of("get"));
             exports.put("capy.io.Console", Set.of("print", "println", "print_error", "printError", "println_error", "printlnError", "read_line", "readLine"));
             exports.put("capy.io.Stdout", Set.of("print", "println"));
+            exports.put("capy.io.PathModule", Set.of("Path", "PathRoot", "RELATIVE", "ABSOLUTE", "HOME", "from_string", "fromString"));
             exports.put("capy.io.IO", Set.of("read_text", "readText", "read_lines", "readLines", "read_bytes", "readBytes",
                     "write_text", "writeText", "write_lines", "writeLines", "write_bytes", "writeBytes",
                     "append_text", "appendText", "append_lines", "appendLines", "append_bytes", "appendBytes",
@@ -2353,6 +2390,7 @@ public final class PythonGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "collection", "Tuple.py"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Console.py"), consoleRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Stdout.py"), stdoutRuntime()),
+                    new GeneratedModule(Path.of("capy", "io", "PathModule.py"), pathRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "IO.py"), ioRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "DateModule.py"), dateRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "TimeModule.py"), timeRuntime()),
@@ -2383,6 +2421,7 @@ public final class PythonGenerator implements Generator {
                     "capy.collection.Tuple",
                     "capy.io.Console",
                     "capy.io.Stdout",
+                    "capy.io.PathModule",
                     "capy.io.IO",
                     "capy.date_time.DateModule",
                     "capy.date_time.TimeModule",
@@ -2586,10 +2625,10 @@ public final class PythonGenerator implements Generator {
             return """
                     # Generated by Capybara. Do not edit.
                     import dev.capylang.capybara as capy
-                    current_millis = capy.current_millis
-                    currentMillis = capy.current_millis
-                    nano_time = capy.nano_time
-                    nanoTime = capy.nano_time
+                    current_millis = lambda: capy.delay(capy.current_millis)
+                    currentMillis = current_millis
+                    nano_time = lambda: capy.delay(capy.nano_time)
+                    nanoTime = nano_time
                     """;
         }
 
@@ -2623,7 +2662,7 @@ public final class PythonGenerator implements Generator {
                     HALF_UP = RoundMode.HALF_UP
                     HALF_DOWN = RoundMode.HALF_DOWN
                     HALF_EVEN = RoundMode.HALF_EVEN
-                    digits = lambda value: [int(ch) for ch in str(abs(value))]
+                    digits = lambda value: 10 if value == -2147483648 else len(str(abs(value)))
                     floor_div = lambda left, right: left // right
                     floorDiv = floor_div
                     floor_mod = lambda left, right: left % right
@@ -2670,13 +2709,47 @@ public final class PythonGenerator implements Generator {
                     # Generated by Capybara. Do not edit.
                     import sys
                     import dev.capylang.capybara as capy
-                    print = lambda value: (__builtins__['print'](capy.to_string_value(value), end='') if isinstance(__builtins__, dict) else __builtins__.print(capy.to_string_value(value), end=''))
-                    println = lambda value='': (__builtins__['print'](capy.to_string_value(value)) if isinstance(__builtins__, dict) else __builtins__.print(capy.to_string_value(value)))
-                    print_error = lambda value: sys.stderr.write(capy.to_string_value(value))
+
+                    def _console_text(value):
+                        if isinstance(value, list) and all(isinstance(item, int) and item >= 0 and item <= 255 for item in value):
+                            return ''.join(chr(item) for item in value)
+                        return capy.to_string_value(value)
+
+                    def _write(stream, value, newline=False):
+                        stream.write(_console_text(value))
+                        if newline:
+                            stream.write('\\n')
+                        return value
+
+                    def _read_line_value():
+                        line = sys.stdin.readline()
+                        if line == '':
+                            return capy.None_
+                        if line.endswith('\\n'):
+                            line = line[:-1]
+                        if line.endswith('\\r'):
+                            line = line[:-1]
+                        return capy.Some({'value': line})
+
+                    def print(value):
+                        return capy.delay(lambda: _write(sys.stdout, value))
+
+                    def println(value=''):
+                        return capy.delay(lambda: _write(sys.stdout, value, True))
+
+                    def print_error(value):
+                        return capy.delay(lambda: _write(sys.stderr, value))
+
                     printError = print_error
-                    println_error = lambda value='': sys.stderr.write(capy.to_string_value(value) + '\\n')
+
+                    def println_error(value=''):
+                        return capy.delay(lambda: _write(sys.stderr, value, True))
+
                     printlnError = println_error
-                    read_line = lambda: input()
+
+                    def read_line():
+                        return capy.delay(_read_line_value)
+
                     readLine = read_line
                     """;
         }
@@ -2690,52 +2763,256 @@ public final class PythonGenerator implements Generator {
                     """;
         }
 
+        private static String pathRuntime() {
+            return """
+                    # Generated by Capybara. Do not edit.
+                    import dev.capylang.capybara as capy
+
+                    class _PathRootValue:
+                        def __init__(self, name, order):
+                            self.__capybaraType = name
+                            self.__capybaraTypes = [name, 'PathRoot']
+                            self.name = name
+                            self.order = order
+                        def __str__(self): return self.name
+                        def toString(self): return str(self)
+
+                    RELATIVE = _PathRootValue('RELATIVE', 0)
+                    ABSOLUTE = _PathRootValue('ABSOLUTE', 1)
+                    HOME = _PathRootValue('HOME', 2)
+
+                    class PathRoot:
+                        RELATIVE = RELATIVE
+                        ABSOLUTE = ABSOLUTE
+                        HOME = HOME
+                        values = [RELATIVE, ABSOLUTE, HOME]
+                        @staticmethod
+                        def valuesSet(): return capy.set_(PathRoot.values)
+                        @staticmethod
+                        def parse(value): return capy.parse_enum(value, PathRoot.values, 'PathRoot')
+
+                    class Path:
+                        def __init__(self, fields=None):
+                            fields = fields or {}
+                            self.__capybaraType = 'Path'
+                            self.__capybaraTypes = ['Path', 'CapybaraDataValue']
+                            self.root = fields.get('root')
+                            self.prefix = fields.get('prefix', capy.None_)
+                            self.segments = fields.get('segments', [])
+                        def with_(self, fields=None):
+                            fields = fields or {}
+                            return Path({
+                                'root': fields.get('root', self.root),
+                                'prefix': fields.get('prefix', self.prefix),
+                                'segments': fields.get('segments', self.segments),
+                            })
+                        def slash(self, other):
+                            if isinstance(other, Path):
+                                return Path({'root': self.root, 'prefix': self.prefix, 'segments': self.segments + other.segments})
+                            return Path({'root': self.root, 'prefix': self.prefix, 'segments': self.segments + [str(other)]})
+                        def normalize(self):
+                            normalized = []
+                            for segment in self.segments:
+                                if segment == '' or segment == '.':
+                                    continue
+                                if segment == '..':
+                                    if normalized:
+                                        normalized.pop()
+                                    elif capy.is_type(self.root, 'RELATIVE'):
+                                        normalized.append(segment)
+                                else:
+                                    normalized.append(segment)
+                            return Path({'root': self.root, 'prefix': self.prefix, 'segments': normalized})
+                        def parent(self):
+                            if len(self.segments) == 0:
+                                return capy.None_
+                            return capy.Some({'value': Path({'root': self.root, 'prefix': self.prefix, 'segments': self.segments[:-1]})})
+                        def isAbsolute(self): return not capy.is_type(self.root, 'RELATIVE')
+                        def is_absolute(self): return self.isAbsolute()
+                        def isRoot(self): return len(self.segments) == 0
+                        def is_root(self): return self.isRoot()
+                        def name(self):
+                            if capy.is_type(self.prefix, 'Some'):
+                                return self.prefix.value
+                            if capy.is_type(self.root, 'ABSOLUTE'):
+                                return '/'
+                            if capy.is_type(self.root, 'HOME'):
+                                return '~'
+                            return '.'
+                        def __str__(self):
+                            body = '/'.join(self.segments)
+                            if capy.is_type(self.root, 'ABSOLUTE'):
+                                return '/' + body
+                            if capy.is_type(self.root, 'HOME'):
+                                return '~' if body == '' else '~/' + body
+                            return '.' if body == '' else body
+                        def __fspath__(self): return str(self)
+                        def toString(self): return str(self)
+                        def capybaraDataValueInfo(self):
+                            return capy.data_value_info(self, 'Path', 'capy.io', 'capy/io/Path', [])
+
+                    def fromString(path_string):
+                        path_string = str(path_string)
+                        root = ABSOLUTE if path_string.startswith('/') else HOME if path_string.startswith('~') else RELATIVE
+                        if path_string.startswith('/'):
+                            value = path_string[1:]
+                        elif path_string.startswith('~/'):
+                            value = path_string[2:]
+                        elif path_string.startswith('~'):
+                            value = path_string[1:]
+                        else:
+                            value = path_string
+                        return Path({'root': root, 'prefix': capy.None_, 'segments': [segment for segment in value.split('/') if segment]}).normalize()
+
+                    from_string = fromString
+                    """;
+        }
+
         private static String ioRuntime() {
             return """
                     # Generated by Capybara. Do not edit.
                     import shutil
                     from pathlib import Path
+                    import dev.capylang.capybara as capy
 
-                    read_text = lambda path: Path(path).read_text()
+                    def _success(value):
+                        return capy.Success({'value': value})
+
+                    def _failure(operation, error):
+                        return capy.Error({'message': f'{operation} failed: {error}'})
+
+                    def _effect_result(operation, thunk):
+                        def run():
+                            try:
+                                return _success(thunk())
+                            except Exception as error:
+                                return _failure(operation, error)
+                        return capy.delay(run)
+
+                    def _write_parent(path):
+                        parent = Path(path).parent
+                        if str(parent) != '.':
+                            parent.mkdir(parents=True, exist_ok=True)
+
+                    def _lines_text(lines):
+                        return '' if len(lines) == 0 else '\\n'.join(lines) + '\\n'
+
+                    read_text = lambda path: _effect_result('read_text', lambda: Path(path).read_text())
                     readText = read_text
-                    read_lines = lambda path: Path(path).read_text().splitlines()
+                    read_lines = lambda path: _effect_result('read_lines', lambda: Path(path).read_text().splitlines())
                     readLines = read_lines
-                    read_bytes = lambda path: list(Path(path).read_bytes())
+                    read_bytes = lambda path: _effect_result('read_bytes', lambda: list(Path(path).read_bytes()))
                     readBytes = read_bytes
-                    write_text = lambda path, text: Path(path).write_text(text)
+                    def write_text(path, text):
+                        def run():
+                            _write_parent(path)
+                            Path(path).write_text(str(text))
+                            return text
+                        return _effect_result('write_text', run)
                     writeText = write_text
-                    write_lines = lambda path, lines: Path(path).write_text('\\n'.join(lines))
+                    def write_lines(path, lines):
+                        def run():
+                            _write_parent(path)
+                            Path(path).write_text(_lines_text(lines))
+                            return lines
+                        return _effect_result('write_lines', run)
                     writeLines = write_lines
-                    write_bytes = lambda path, values: Path(path).write_bytes(bytes(values))
+                    def write_bytes(path, values):
+                        def run():
+                            _write_parent(path)
+                            Path(path).write_bytes(bytes(values))
+                            return values
+                        return _effect_result('write_bytes', run)
                     writeBytes = write_bytes
-                    append_text = lambda path, text: Path(path).open('a').write(text)
+                    def append_text(path, text):
+                        def run():
+                            _write_parent(path)
+                            with Path(path).open('a') as file:
+                                file.write(str(text))
+                            return text
+                        return _effect_result('append_text', run)
                     appendText = append_text
-                    append_lines = lambda path, lines: Path(path).open('a').write('\\n'.join(lines))
+                    def append_lines(path, lines):
+                        def run():
+                            _write_parent(path)
+                            with Path(path).open('a') as file:
+                                file.write(_lines_text(lines))
+                            return lines
+                        return _effect_result('append_lines', run)
                     appendLines = append_lines
-                    append_bytes = lambda path, values: Path(path).open('ab').write(bytes(values))
+                    def append_bytes(path, values):
+                        def run():
+                            _write_parent(path)
+                            with Path(path).open('ab') as file:
+                                file.write(bytes(values))
+                            return values
+                        return _effect_result('append_bytes', run)
                     appendBytes = append_bytes
-                    exists = lambda path: Path(path).exists()
-                    is_file = lambda path: Path(path).is_file()
+                    exists = lambda path: capy.delay(lambda: Path(path).exists())
+                    is_file = lambda path: capy.delay(lambda: Path(path).is_file())
                     isFile = is_file
-                    is_directory = lambda path: Path(path).is_dir()
+                    is_directory = lambda path: capy.delay(lambda: Path(path).is_dir())
                     isDirectory = is_directory
-                    size = lambda path: Path(path).stat().st_size
-                    create_file = lambda path: Path(path).touch()
+                    size = lambda path: _effect_result('size', lambda: Path(path).stat().st_size)
+                    def create_file(path):
+                        def run():
+                            _write_parent(path)
+                            Path(path).touch(exist_ok=False)
+                            return path
+                        return _effect_result('create_file', run)
                     createFile = create_file
-                    create_directory = lambda path: Path(path).mkdir(exist_ok=True)
+                    create_directory = lambda path: _effect_result('create_directory', lambda: (Path(path).mkdir(), path)[1])
                     createDirectory = create_directory
-                    create_directories = lambda path: Path(path).mkdir(parents=True, exist_ok=True)
+                    create_directories = lambda path: _effect_result('create_directories', lambda: (Path(path).mkdir(parents=True, exist_ok=True), path)[1])
                     createDirectories = create_directories
-                    list_entries = lambda path: [str(item) for item in Path(path).iterdir()]
+                    list_entries = lambda path: _effect_result('list_entries', lambda: [str(item) for item in Path(path).iterdir()])
                     listEntries = list_entries
-                    delete = lambda path: Path(path).unlink()
+                    def delete(path):
+                        def run():
+                            target = Path(path)
+                            existed = target.exists()
+                            if target.is_dir():
+                                target.rmdir()
+                            else:
+                                target.unlink(missing_ok=True)
+                            return existed
+                        return _effect_result('delete', run)
                     delete_ = delete
-                    copy = lambda source, target: shutil.copyfile(source, target)
-                    copy_replace = copy
-                    copyReplace = copy
-                    move = lambda source, target: shutil.move(source, target)
-                    move_replace = move
-                    moveReplace = move
+                    def copy(source, target):
+                        def run():
+                            _write_parent(target)
+                            if Path(target).exists():
+                                raise FileExistsError(target)
+                            shutil.copyfile(source, target)
+                            return target
+                        return _effect_result('copy', run)
+                    def copy_replace(source, target):
+                        def run():
+                            _write_parent(target)
+                            shutil.copyfile(source, target)
+                            return target
+                        return _effect_result('copy_replace', run)
+                    copyReplace = copy_replace
+                    def move(source, target):
+                        def run():
+                            _write_parent(target)
+                            if Path(target).exists():
+                                raise FileExistsError(target)
+                            shutil.move(source, target)
+                            return target
+                        return _effect_result('move', run)
+                    def move_replace(source, target):
+                        def run():
+                            _write_parent(target)
+                            if Path(target).exists():
+                                if Path(target).is_dir():
+                                    Path(target).rmdir()
+                                else:
+                                    Path(target).unlink()
+                            shutil.move(source, target)
+                            return target
+                        return _effect_result('move_replace', run)
+                    moveReplace = move_replace
                     """;
         }
 
@@ -2863,7 +3140,7 @@ public final class PythonGenerator implements Generator {
         }
 
         private static String clockRuntime() {
-            return "# Generated by Capybara. Do not edit.\nimport dev.capylang.capybara as capy\nnow = capy.clock_now\n";
+            return "# Generated by Capybara. Do not edit.\nimport dev.capylang.capybara as capy\nnow = lambda: capy.delay(capy.clock_now)\n";
         }
 
         private static String assertRuntime() {
@@ -3070,11 +3347,26 @@ public final class PythonGenerator implements Generator {
                         def asList(self): return self
                         def to_list(self): return self
                         def toList(self): return self
+                        def first(self): return Some({'value': self[0]}) if len(self) > 0 else None_
+                        def first_match(self, predicate):
+                            for index, item in enumerate(self):
+                                if invoke(predicate, item, index):
+                                    return Some({'value': item})
+                            return None_
+                        def firstMatch(self, predicate): return self.first_match(predicate)
+                        def map(self, mapper): return map_collection(self, mapper)
                         def pipe(self, mapper): return map_collection(self, mapper)
+                        def flat_map(self, mapper): return flat_map_collection(self, mapper)
+                        def flatMap(self, mapper): return self.flat_map(mapper)
                         def pipeStar(self, mapper): return flat_map_collection(self, mapper)
                         def pipe_star(self, mapper): return self.pipeStar(mapper)
+                        def filter(self, predicate): return filter_collection(self, predicate)
                         def pipeMinus(self, predicate): return filter_collection(self, predicate)
                         def pipe_minus(self, predicate): return self.pipeMinus(predicate)
+                        def reject(self, predicate): return reject_collection(self, predicate)
+                        def reduce(self, initial, reducer): return reduce_collection(self, initial, reducer)
+                        def reduceLeft(self, initial, reducer): return self.reduce(initial, reducer)
+                        def reduce_left(self, initial, reducer): return self.reduce(initial, reducer)
                         def pipeGreater(self, initial, reducer): return reduce_collection(self, initial, reducer)
                         def pipe_greater(self, initial, reducer): return self.pipeGreater(initial, reducer)
 
@@ -3387,6 +3679,16 @@ public final class PythonGenerator implements Generator {
                     def int_mod(left, right):
                         if right == 0: raise ZeroDivisionError('/ by zero')
                         return to_int(left - int(left / right) * right)
+                    def int_pow(left, right):
+                        base = to_int(left)
+                        exponent = int(right)
+                        result = 1
+                        while exponent > 0:
+                            if exponent & 1 == 1:
+                                result = int_mul(result, base)
+                            base = int_mul(base, base)
+                            exponent >>= 1
+                        return to_int(result)
                     def long_add(left, right): return to_long(left + right)
                     def long_sub(left, right): return to_long(left - right)
                     def long_mul(left, right): return to_long(left * right)
@@ -3573,7 +3875,24 @@ public final class PythonGenerator implements Generator {
                     def new_array(length, default_value=None): return [default_value for _ in range(length)]
 
                     def annotation_value(kind, value=None):
-                        return SimpleNamespace(kind=kind, value=value) if value is not None else SimpleNamespace(kind=kind)
+                        annotation_type = {
+                            'string': 'AnnotationString',
+                            'int': 'AnnotationInt',
+                            'long': 'AnnotationLong',
+                            'double': 'AnnotationDouble',
+                            'float': 'AnnotationFloat',
+                            'bool': 'AnnotationBool',
+                            'type_name': 'AnnotationTypeName',
+                            'nothing': 'AnnotationNothing',
+                        }.get(kind, 'AnnotationValue')
+                        fields = {
+                            '__capybaraType': annotation_type,
+                            '__capybaraTypes': [annotation_type, 'AnnotationValue', 'CapybaraDataValue'],
+                            'kind': kind,
+                        }
+                        if value is not None:
+                            fields['value'] = value
+                        return SimpleNamespace(**fields)
                     def annotation_argument_info(name, value): return SimpleNamespace(name=name, value=value)
                     def annotation_info(name, pkg=None, arguments=None): return SimpleNamespace(name=name, pkg=pkg or package_info(), arguments=arguments or [])
                     def object_info(kind, name, pkg=None, open=False, fields=None, methods=None, parents=None, annotations=None, **kwargs):
@@ -3588,9 +3907,64 @@ public final class PythonGenerator implements Generator {
                         data.update(kwargs)
                         return SimpleNamespace(**data)
 
-                    def regex_from_literal(pattern):
-                        compiled = re.compile(pattern)
-                        return SimpleNamespace(__capybaraRegex=True, matches=lambda value: compiled.search(str(value)) is not None)
+                    class CapyRegexMatch:
+                        __capybaraType = 'Match'
+                        __capybaraTypes = ['Match']
+                        def __init__(self, group_value):
+                            self.group_value = group_value
+                        def group(self, index):
+                            return Some({'value': self.group_value}) if index == 0 else None_
+                        def groups(self):
+                            return list_([Some({'value': self.group_value})])
+
+                    class CapyRegex:
+                        __capybaraType = 'Regex'
+                        __capybaraTypes = ['Regex']
+                        __capybaraRegex = True
+                        def __init__(self, pattern, flags=''):
+                            self.pattern = pattern
+                            self.flags = flags or ''
+                        def _compiled(self):
+                            flags = 0
+                            if 'i' in self.flags:
+                                flags |= re.IGNORECASE
+                            if 'm' in self.flags:
+                                flags |= re.MULTILINE
+                            if 's' in self.flags:
+                                flags |= re.DOTALL
+                            return re.compile(self.pattern, flags)
+                        def matches(self, input):
+                            return self._compiled().search(str(input)) is not None
+                        def question(self, input):
+                            return self.matches(input)
+                        def find(self, input):
+                            match = self._compiled().search(str(input))
+                            return Some({'value': CapyRegexMatch(match.group(0))}) if match else None_
+                        def findAll(self, input):
+                            return seq([CapyRegexMatch(match.group(0)) for match in self._compiled().finditer(str(input))])
+                        def find_all(self, input):
+                            return self.findAll(input)
+                        def replace(self, replacement):
+                            return lambda input: self._compiled().sub(str(replacement), str(input))
+                        def split(self, input):
+                            return list_(self._compiled().split(str(input)))
+                        def tilde(self, input):
+                            return self.find(input)
+                        def tildeTilde(self, input):
+                            return self.findAll(input)
+                        def tilde_tilde(self, input):
+                            return self.tildeTilde(input)
+                        def tildeGreater(self, replacement):
+                            return self.replace(replacement)
+                        def tilde_greater(self, replacement):
+                            return self.tildeGreater(replacement)
+                        def slashGreater(self, input):
+                            return self.split(input)
+                        def slash_greater(self, input):
+                            return self.slashGreater(input)
+
+                    def regex_from_literal(pattern, flags=''):
+                        return CapyRegex(pattern, flags)
                     def current_millis(): return int(time.time() * 1000)
                     def nano_time(): return time.time_ns()
 

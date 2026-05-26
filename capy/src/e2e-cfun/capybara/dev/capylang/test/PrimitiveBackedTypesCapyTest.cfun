@@ -1,0 +1,36 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from PrimitiveBackedTypes import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/PrimitiveBackedTypes.cfun", [
+        test("primitive backed values run as primitive ints and strings", () => primitive_backed_values_run_as_primitive_ints_and_strings()),
+        test("result returning constructor retags payload type", () => result_returning_constructor_retags_payload_type()),
+        test("result returning constructor rejects invalid values", () => result_returning_constructor_rejects_invalid_values()),
+    ])
+
+private fun primitive_backed_values_run_as_primitive_ints_and_strings(): Assert =
+    assert_all([
+        assert_that(unwrap_user_id(raw_user_id(7))).is_equal_to(7),
+        assert_that(unwrap_raw_user_id(7)).is_equal_to(7),
+        assert_that(unwrap_user_id(plus_user_ids(raw_user_id(2), raw_user_id(3)))).is_equal_to(5),
+        assert_that(unwrap_user_id(add_user_ids(raw_user_id(4), raw_user_id(5)))).is_equal_to(9),
+        assert_that(increment_user_id(raw_user_id(6))).is_equal_to(7),
+        assert_that(unwrap_score(score_of(11))).is_equal_to(11),
+        assert_that(unwrap_token(raw_token("abc"))).is_equal_to("abc"),
+        assert_that(pass_token_to_string(raw_token("abc"))).is_equal_to("abc_suffix"),
+    ])
+
+private fun result_returning_constructor_retags_payload_type(): Assert =
+    assert_that(new_user_id(7)).succeeds(value => assert_that(unwrap_user_id(value)).is_equal_to(7))
+
+private fun result_returning_constructor_rejects_invalid_values(): Assert =
+    assert_that(new_user_id(0)).fails("bad user id")
+
+// Backend-specific erased-signature and generated metadata assertions are
+// still covered by the existing Java, JavaScript, and Python host tests until
+// a portable Capybara reflection API exposes primitive-backed type metadata.
+// The `string_at` and `string_get` erased-index calls remain there too because
+// portable construction of `/capy/collection/CollectionTypes.index` currently
+// depends on a linked stdlib module that is not emitted for JS/Python e2e.

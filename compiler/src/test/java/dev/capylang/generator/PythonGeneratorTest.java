@@ -65,6 +65,20 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldEmitPathRuntimeReflectionPackageMetadata() throws Exception {
+        var generated = new PythonGenerator().generate(compileProgram("fun value(): int = 1"));
+        writeGenerated(generated);
+
+        var output = runPython("""
+                from capy.io.PathModule import fromString
+                info = fromString("tmp").capybaraDataValueInfo()
+                print('|'.join([info.name, info.pkg.name, info.pkg.path]))
+                """);
+
+        assertThat(output).isEqualTo("Path|capy.io|capy/io/Path");
+    }
+
+    @Test
     void shouldGenerateAndRunObjectOrientedModules() throws Exception {
         var program = compileProgram(List.of(new RawModule(
                 "User",
@@ -317,6 +331,134 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRunNativeMathDigitsInPython() throws Exception {
+        var program = compileProgram("""
+                from /capy/lang/Math import { digits }
+
+                fun zero_digits(): int = digits(0)
+                fun positive_digits(): int = digits(2147483647)
+                fun min_int_digits(): int = digits(-2147483648)
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([
+                    str(m.zeroDigits()),
+                    str(m.positiveDigits()),
+                    str(m.minIntDigits())
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("1|10|10");
+    }
+
+    @Test
+    void shouldRunSeqNamedMethodsOnPythonListRuntime() throws Exception {
+        var program = compileProgram("""
+                from /capy/lang/Seq import { * }
+                from /capy/collection/List import { * }
+
+                fun expand(value: int): Seq[int] = to_seq([value, value + 1])
+                fun seq_map(values: List[int]): List[int] = to_seq(values).map(x => x * 3).as_list()
+                fun seq_flat_map(values: List[int]): List[int] = to_seq(values).flat_map(x => expand(x)).as_list()
+                fun seq_filter(values: List[int]): List[int] = to_seq(values).filter(x => x > 1).as_list()
+                fun seq_reject(values: List[int]): List[int] = to_seq(values).reject(x => x > 1).as_list()
+                fun seq_reduce(values: List[int]): int = to_seq(values).reduce(0, (acc, value) => acc + value)
+                fun seq_reduce_left(values: List[int]): int = to_seq(values).reduce_left(0, (acc, value) => acc + value)
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([
+                    ','.join([str(value) for value in m.seqMap([1, 2, 3])]),
+                    ','.join([str(value) for value in m.seqFlatMap([1, 2])]),
+                    ','.join([str(value) for value in m.seqFilter([1, 2, 3])]),
+                    ','.join([str(value) for value in m.seqReject([1, 2, 3])]),
+                    str(m.seqReduce([1, 2, 3])),
+                    str(m.seqReduceLeft([1, 2, 3]))
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("3,6,9|1,2,2,3|2,3|1|6|6");
+    }
+
+    @Test
+    void shouldRunRegexRuntimeInPython() throws Exception {
+        var program = compileProgram("""
+                from /capy/lang/Regex import { * }
+                from /capy/lang/Option import { * }
+                from /capy/lang/Seq import { * }
+
+                fun matches_named(input: String): bool = regex/foo/.matches(input)
+                fun matches_alias(input: String): bool = regex/foo/ ? input
+
+                fun find_named(input: String): bool =
+                    match regex/foo/.find(input) with
+                    case Some { _ } -> true
+                    case None -> false
+
+                fun find_alias(input: String): bool =
+                    match regex/foo/ ~ input with
+                    case Some { _ } -> true
+                    case None -> false
+
+                fun find_all_named_count(input: String): int =
+                    if regex/foo/.find_all(input).any(_ => true)
+                    then 1
+                    else 0
+
+                fun find_all_alias_count(input: String): int =
+                    if (regex/foo/ ~~ input).any(_ => true)
+                    then 1
+                    else 0
+
+                fun replace_named(input: String): String = regex/1/.replace("#")(input)
+                fun replace_alias(input: String): String = (regex/1/ ~> "#")(input)
+
+                fun split_named(input: String): List[String] = regex/,/.split(input)
+                fun split_alias(input: String): List[String] = regex/,/ /> input
+                fun split_multi_char(input: String): List[String] = regex/--/.split(input)
+
+                fun escaped_slash_match(): bool = regex/a\\/b/ ? "--a/b--"
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([
+                    str(m.matchesNamed('xxfooyy')).lower(),
+                    str(m.matchesNamed('xxbaryy')).lower(),
+                    str(m.matchesAlias('xxfooyy')).lower(),
+                    str(m.matchesAlias('xxbaryy')).lower(),
+                    str(m.findNamed('xxfooyy')).lower(),
+                    str(m.findNamed('xxbaryy')).lower(),
+                    str(m.findAlias('xxfooyy')).lower(),
+                    str(m.findAlias('xxbaryy')).lower(),
+                    str(m.findAllNamedCount('xxfooyy')),
+                    str(m.findAllNamedCount('xxbaryy')),
+                    str(m.findAllAliasCount('xxfooyy')),
+                    str(m.findAllAliasCount('xxbaryy')),
+                    m.replaceNamed('a1b11'),
+                    m.replaceAlias('a1b11'),
+                    ','.join(m.splitNamed('a,b,c')),
+                    ','.join(m.splitAlias('a,b,c')),
+                    ','.join(m.splitMultiChar('a--b--c')),
+                    str(m.escapedSlashMatch()).lower()
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("true|false|true|false|true|false|true|false|1|0|1|0|a#b##|a#b##|a,b,c|a,b,c|a,b,c|true");
+    }
+
+    @Test
     void shouldPreserveUpperSnakeConstNames() throws Exception {
         var program = compileProgram("""
                 const FOO_BOO_X_Y: String = "foo"
@@ -403,6 +545,84 @@ class PythonGeneratorTest {
                 """);
 
         assertThat(output).isEqualTo("int");
+    }
+
+    @Test
+    void shouldRunPythonSystemAndClockEffects() throws Exception {
+        var program = compileProgram("""
+                from /capy/date_time/Clock import { now }
+                from /capy/date_time/DateTime import { * }
+                from /capy/lang/Effect import { * }
+                from /capy/lang/System import { current_millis, nano_time }
+
+                fun clock_now_iso(): Effect[String] =
+                    let current <- now()
+                    current.to_iso_8601()
+
+                fun current_millis_value(): Effect[long] =
+                    current_millis()
+
+                fun nano_time_value(): Effect[long] =
+                    nano_time()
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                millis = m.currentMillisValue().unsafe_run()
+                nanos = m.nanoTimeValue().unsafe_run()
+                iso = m.clockNowIso().unsafe_run()
+                print('|'.join([
+                    str(isinstance(millis, int)).lower(),
+                    str(isinstance(nanos, int)).lower(),
+                    str('T' in iso).lower()
+                ]))
+                """);
+
+        assertThat(output).isEqualTo("true|true|true");
+    }
+
+    @Test
+    void shouldRunPythonConsoleEffects() throws Exception {
+        var program = compileProgram("""
+                from /capy/io/Console import { * }
+                from /capy/lang/Effect import { * }
+                from /capy/lang/Option import { * }
+
+                fun emit(bytes: List[byte]): Effect[String] =
+                    let out <- print("out")
+                    let out_line <- println(" line")
+                    let err <- print_error("err")
+                    let err_line <- println_error(" line")
+                    let out_bytes <- println(bytes)
+                    let err_bytes <- println_error(bytes)
+                    pure(out + out_line + err + err_line)
+
+                fun read_pair(): Effect[String] =
+                    let first <- read_line()
+                    let second <- read_line()
+                    pure(line_or_eof(first) + "|" + line_or_eof(second))
+
+                private fun line_or_eof(line: Option[String]): String =
+                    match line with
+                    case Some { value } -> value
+                    case None -> "EOF"
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var run = runPythonCommandWithInput("Capy\n", "-c", """
+                import foo.Main as m
+                print("EMIT:" + m.emit([65, 90]).unsafe_run())
+                print("READ:" + m.readPair().unsafe_run())
+                """);
+
+        assertThat(run.exitCode()).isEqualTo(0);
+        assertThat(run.stdout()).isEqualTo("out line\nAZ\nEMIT:out lineerr line\nREAD:Capy|EOF");
+        assertThat(run.stderr()).isEqualTo("err line\nAZ");
     }
 
     @Test
@@ -518,6 +738,21 @@ class PythonGeneratorTest {
         var process = new ProcessBuilder(command)
                 .directory(tempDir.toFile())
                 .start();
+        var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        var exit = process.waitFor();
+        return new ProcessResult(exit, stdout, stderr);
+    }
+
+    private ProcessResult runPythonCommandWithInput(String input, String... args) throws Exception {
+        var command = new java.util.ArrayList<String>();
+        command.add("python3");
+        command.addAll(List.of(args));
+        var process = new ProcessBuilder(command)
+                .directory(tempDir.toFile())
+                .start();
+        process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
+        process.getOutputStream().close();
         var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         var exit = process.waitFor();

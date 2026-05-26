@@ -39,6 +39,7 @@ fun type5(x: int, y: int): /dev/capylang/capybara/imports2/Types3.T5 =
 
 fun qualified_import_result(x: int): int = A.foo(x) + B.foo(x)
 
-fun qualified_import_data(x: int): A.Value = A.Value { amount: x }
+fun qualified_import_data(x: int): /dev/capylang/test/imports/A.Value =
+    /dev/capylang/test/imports/A.Value { amount: x }
 
 fun qualified_import_function_data(x: int): int = A.value(x).amount + B.value(x).amount

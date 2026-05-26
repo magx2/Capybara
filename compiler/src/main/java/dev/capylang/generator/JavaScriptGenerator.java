@@ -867,25 +867,57 @@ public final class JavaScriptGenerator implements Generator {
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
                 case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
-                case MINUS -> "(" + renderCollectionMinus(expression, left, right) + ")";
-                case MUL -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.longMul(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.intMul(" + left + ", " + right + ")"
-                        : "((" + left + ") * (" + right + "))";
-                case DIV -> expression.type() == PrimitiveLinkedType.INT
-                        ? "capy.intDiv(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.LONG
-                                ? "capy.longDiv(" + left + ", " + right + ")"
-                        : "((" + left + ") / (" + right + "))";
-                case MOD -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.longMod(" + left + ", " + right + ")"
-                        : expression.type() == PrimitiveLinkedType.INT
-                                ? "capy.intMod(" + left + ", " + right + ")"
-                        : "((" + left + ") % (" + right + "))";
-                case POWER -> expression.type() == PrimitiveLinkedType.LONG
-                        ? "capy.longPow(" + left + ", " + right + ")"
-                        : "Math.pow(" + left + ", " + right + ")";
+                case MINUS -> expression.type() == PrimitiveLinkedType.STRING
+                        ? "(" + renderStringConcat(left, right) + ")"
+                        : "(" + renderCollectionMinus(expression, left, right) + ")";
+                case MUL -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longMul(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intMul(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") * (" + right + "))";
+                }
+                case DIV -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intDiv(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longDiv(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") / (" + right + "))";
+                }
+                case MOD -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longMod(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intMod(" + left + ", " + right + ")";
+                    }
+                    yield "((" + left + ") % (" + right + "))";
+                }
+                case POWER -> {
+                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                        yield "(" + renderStringConcat(left, right) + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                        yield "capy.longPow(" + left + ", " + right + ")";
+                    }
+                    if (expression.type() == PrimitiveLinkedType.INT) {
+                        yield "capy.intPow(" + left + ", " + right + ")";
+                    }
+                    yield "Math.pow(" + left + ", " + right + ")";
+                }
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
@@ -899,6 +931,10 @@ public final class JavaScriptGenerator implements Generator {
                 case BITWISE_NOT -> "(~(" + left + "))";
                 default -> throw new UnsupportedOperationException("Unsupported JS infix operator: " + expression.operator());
             };
+        }
+
+        private String renderStringConcat(String left, String right) {
+            return "capy.toStringValue(" + left + ") + capy.toStringValue(" + right + ")";
         }
 
         private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {
@@ -1667,22 +1703,33 @@ public final class JavaScriptGenerator implements Generator {
     private static String renderAnnotationValue(CompiledAnnotationValue value) {
         return switch (value) {
             case CompiledAnnotationValue.StringValue stringValue ->
-                    "{ kind: 'string', value: " + jsString(normalizeAnnotationStringValue(stringValue.value())) + " }";
+                    renderAnnotationValue("AnnotationString", "string", jsString(normalizeAnnotationStringValue(stringValue.value())));
             case CompiledAnnotationValue.IntValue intValue ->
-                    "{ kind: 'int', value: " + stripNumericSuffix(intValue.value()) + " }";
+                    renderAnnotationValue("AnnotationInt", "int", stripNumericSuffix(intValue.value()));
             case CompiledAnnotationValue.LongValue longValue ->
-                    "{ kind: 'long', value: " + renderLongLiteral(longValue.value()) + " }";
+                    renderAnnotationValue("AnnotationLong", "long", renderLongLiteral(longValue.value()));
             case CompiledAnnotationValue.DoubleValue doubleValue ->
-                    "{ kind: 'double', value: " + stripNumericSuffix(doubleValue.value()) + " }";
+                    renderAnnotationValue("AnnotationDouble", "double", stripNumericSuffix(doubleValue.value()));
             case CompiledAnnotationValue.FloatValue floatValue ->
-                    "{ kind: 'float', value: " + stripNumericSuffix(floatValue.value()) + " }";
+                    renderAnnotationValue("AnnotationFloat", "float", stripNumericSuffix(floatValue.value()));
             case CompiledAnnotationValue.BoolValue boolValue ->
-                    "{ kind: 'bool', value: " + boolValue.value() + " }";
+                    renderAnnotationValue("AnnotationBool", "bool", String.valueOf(boolValue.value()));
             case CompiledAnnotationValue.TypeNameValue typeNameValue ->
-                    "{ kind: 'type_name', value: " + jsString(typeNameValue.name()) + " }";
+                    renderAnnotationValue("AnnotationTypeName", "type_name", jsString(typeNameValue.name()));
             case CompiledAnnotationValue.NothingValue ignored ->
-                    "{ kind: 'nothing' }";
+                    renderAnnotationValue("AnnotationNothing", "nothing", null);
         };
+    }
+
+    private static String renderAnnotationValue(String typeName, String kind, String valueExpression) {
+        return "{ __capybaraType: "
+               + jsString(typeName)
+               + ", __capybaraTypes: ["
+               + jsString(typeName)
+               + ", 'AnnotationValue', 'CapybaraDataValue'], kind: "
+               + jsString(kind)
+               + (valueExpression == null ? "" : ", value: " + valueExpression)
+               + " }";
     }
 
     private static String normalizeAnnotationStringValue(String raw) {
@@ -2352,6 +2399,7 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.collection.Tuple", Set.of("get"));
             exports.put("capy.io.Console", Set.of("print", "println", "print_error", "printError", "println_error", "printlnError", "read_line", "readLine"));
             exports.put("capy.io.Stdout", Set.of("print", "println"));
+            exports.put("capy.io.PathModule", Set.of("Path", "PathRoot", "RELATIVE", "ABSOLUTE", "HOME", "from_string", "fromString"));
             exports.put("capy.io.IO", Set.of("read_text", "readText", "read_lines", "readLines", "read_bytes", "readBytes",
                     "write_text", "writeText", "write_lines", "writeLines", "write_bytes", "writeBytes",
                     "append_text", "appendText", "append_lines", "appendLines", "append_bytes", "appendBytes",
@@ -2428,6 +2476,7 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "collection", "Tuple.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Console.js"), consoleRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Stdout.js"), stdoutRuntime()),
+                    new GeneratedModule(Path.of("capy", "io", "PathModule.js"), pathRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "IO.js"), ioRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "DateModule.js"), dateRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "TimeModule.js"), timeRuntime()),
@@ -2458,6 +2507,7 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.collection.Tuple",
                     "capy.io.Console",
                     "capy.io.Stdout",
+                    "capy.io.PathModule",
                     "capy.io.IO",
                     "capy.date_time.DateModule",
                     "capy.date_time.TimeModule",
@@ -2917,6 +2967,130 @@ public final class JavaScriptGenerator implements Generator {
                    + "    print(value) { process.stdout.write(consoleString(value)); },\n"
                    + "    println(value) { console.log(consoleString(value)); },\n"
                    + "};\n";
+        }
+
+        private static String pathRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    const PathRoot = (() => {
+                        const values = [
+                            capy.enumValue('RELATIVE', 'PathRoot', ['PathRoot'], 0, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('ABSOLUTE', 'PathRoot', ['PathRoot'], 1, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('HOME', 'PathRoot', ['PathRoot'], 2, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
+                        ];
+                        return Object.freeze({
+                            RELATIVE: values[0],
+                            ABSOLUTE: values[1],
+                            HOME: values[2],
+                            values,
+                            valuesSet: () => capy.set(values),
+                            parse: value => capy.parseEnum(value, values, 'PathRoot'),
+                        });
+                    })();
+                    const RELATIVE = PathRoot.RELATIVE;
+                    const ABSOLUTE = PathRoot.ABSOLUTE;
+                    const HOME = PathRoot.HOME;
+
+                    class Path {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'Path';
+                            this.__capybaraTypes = ['Path', 'CapybaraDataValue'];
+                            this.root = fields.root;
+                            this.prefix = fields.prefix ?? capy.None;
+                            this.segments = fields.segments ?? [];
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new Path({
+                                root: Object.prototype.hasOwnProperty.call(fields, 'root') ? fields.root : this.root,
+                                prefix: Object.prototype.hasOwnProperty.call(fields, 'prefix') ? fields.prefix : this.prefix,
+                                segments: Object.prototype.hasOwnProperty.call(fields, 'segments') ? fields.segments : this.segments,
+                            });
+                        }
+                        slash(other) {
+                            return other instanceof Path
+                                ? new Path({ root: this.root, prefix: this.prefix, segments: this.segments.concat(other.segments) })
+                                : new Path({ root: this.root, prefix: this.prefix, segments: this.segments.concat(String(other)) });
+                        }
+                        normalize() {
+                            const normalized = [];
+                            for (const segment of this.segments) {
+                                if (segment === '' || segment === '.') {
+                                    continue;
+                                }
+                                if (segment === '..') {
+                                    if (normalized.length > 0) {
+                                        normalized.pop();
+                                    } else if (capy.isType(this.root, 'RELATIVE')) {
+                                        normalized.push(segment);
+                                    }
+                                } else {
+                                    normalized.push(segment);
+                                }
+                            }
+                            return new Path({ root: this.root, prefix: this.prefix, segments: normalized });
+                        }
+                        parent() {
+                            return this.segments.length === 0
+                                ? capy.None
+                                : new capy.Some({ value: new Path({ root: this.root, prefix: this.prefix, segments: this.segments.slice(0, -1) }) });
+                        }
+                        isAbsolute() {
+                            return !capy.isType(this.root, 'RELATIVE');
+                        }
+                        isRoot() {
+                            return this.segments.length === 0;
+                        }
+                        name() {
+                            if (capy.isType(this.prefix, 'Some')) {
+                                return this.prefix.value;
+                            }
+                            if (capy.isType(this.root, 'ABSOLUTE')) {
+                                return '/';
+                            }
+                            if (capy.isType(this.root, 'HOME')) {
+                                return '~';
+                            }
+                            return '.';
+                        }
+                        toString() {
+                            const body = this.segments.join('/');
+                            if (capy.isType(this.root, 'ABSOLUTE')) {
+                                return '/' + body;
+                            }
+                            if (capy.isType(this.root, 'HOME')) {
+                                return body.length === 0 ? '~' : '~/' + body;
+                            }
+                            return body.length === 0 ? '.' : body;
+                        }
+                        toString_() {
+                            return this.toString();
+                        }
+                        capybaraDataValueInfo() {
+                            return capy.dataValueInfo(this, 'Path', 'capy.io', 'capy/io/Path', [], []);
+                        }
+                    }
+
+                    function fromString(pathString) {
+                        const input = String(pathString);
+                        const root = input.startsWith('/') ? ABSOLUTE : input.startsWith('~') ? HOME : RELATIVE;
+                        const value = input.startsWith('/') ? input.slice(1) : input.startsWith('~/') ? input.slice(2) : input.startsWith('~') ? input.slice(1) : input;
+                        const segments = value.split('/').filter(segment => segment.length > 0);
+                        return new Path({ root, prefix: capy.None, segments }).normalize();
+                    }
+
+                    module.exports = {
+                        Path,
+                        PathRoot,
+                        RELATIVE,
+                        ABSOLUTE,
+                        HOME,
+                        fromString,
+                        from_string: fromString,
+                    };
+                    """;
         }
 
         private static String ioRuntime() {
@@ -5624,6 +5798,20 @@ public final class JavaScriptGenerator implements Generator {
                         return toInt(left % right);
                     }
 
+                    function intPow(left, right) {
+                        let base = toInt(left);
+                        let exponent = Number(right);
+                        let result = 1;
+                        while (exponent > 0) {
+                            if ((exponent & 1) === 1) {
+                                result = intMul(result, base);
+                            }
+                            base = intMul(base, base);
+                            exponent >>= 1;
+                        }
+                        return toInt(result);
+                    }
+
                     function longAdd(left, right) {
                         return toLong(BigInt(left) + BigInt(right));
                     }
@@ -5893,6 +6081,7 @@ public final class JavaScriptGenerator implements Generator {
                         intMul,
                         intDiv,
                         intMod,
+                        intPow,
                         longAdd,
                         longSub,
                         longMul,

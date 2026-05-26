@@ -1,0 +1,95 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from SharedInterop import { * }
+
+data SharedInteropObservation { invoked: String, created_kind: String, created_name: String, matched: String }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/SharedInterop.coo", [
+        test("object-oriented code can use FP sibling module without imports when file names match", () => object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match()),
+    ])
+
+fun object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match(): Assert =
+    let info = SharedInteractor.type()
+    let observation = observe_shared_interop_bridge()
+    // Direct OO instance method calls from .cfun are not registered as portable
+    // method signatures yet. The legacy host tests invoke those generated methods
+    // directly; this Capybara migration reflects the OO surface and asserts the
+    // same backend-neutral SharedInterop values through a small .cfun bridge.
+    assert_all([
+        assert_that(constructs_shared_interactor().unsafe_run()).is_true(),
+        assert_that(shared_interactor_type_name(info)).is_equal_to("SharedInteractor"),
+        assert_that(shared_interactor_method_names(info)).is_equal_to([
+            "invoke_fp_function",
+            "create_fp_data",
+            "match_fp_type",
+        ]),
+        assert_that(shared_interactor_method_param_type_names(info.methods, "invoke_fp_function")).is_equal_to(["String"]),
+        assert_that(shared_interactor_method_return_type_name(info.methods, "invoke_fp_function")).is_equal_to("String"),
+        assert_that(shared_interactor_method_param_type_names(info.methods, "create_fp_data")).is_equal_to(["String"]),
+        assert_that(shared_interactor_method_return_type_name(info.methods, "create_fp_data")).is_equal_to("SharedPet"),
+        assert_that(shared_interactor_method_param_type_names(info.methods, "match_fp_type")).is_equal_to(["String"]),
+        assert_that(shared_interactor_method_return_type_name(info.methods, "match_fp_type")).is_equal_to("String"),
+        assert_that(observation.invoked).is_equal_to("dog:Capy"),
+        assert_that(observation.created_kind).is_equal_to("SharedDog"),
+        assert_that(observation.created_name).is_equal_to("Bara"),
+        assert_that(observation.matched).is_equal_to("dog:Mochi"),
+    ])
+
+private fun constructs_shared_interactor(): Effect[bool] =
+    let interactor <- SharedInteractor()
+    true
+
+private fun observe_shared_interop_bridge(): SharedInteropObservation =
+    let pet: SharedPet = SharedDog { name: "Bara" }
+    SharedInteropObservation {
+        invoked: pet_text(make_dog("Capy")),
+        created_kind: shared_pet_kind(pet),
+        created_name: shared_pet_name(pet),
+        matched: match_shared_pet("Mochi")
+    }
+
+private fun shared_pet_kind(pet: SharedPet): String =
+    match pet with
+    case SharedDog -> "SharedDog"
+    case SharedCat -> "SharedCat"
+
+private fun shared_pet_name(pet: SharedPet): String =
+    match pet with
+    case SharedDog { name } -> name
+    case SharedCat -> ""
+
+private fun match_shared_pet(pet_name: String): String =
+    let pet: SharedPet = SharedDog { name: pet_name }
+    match pet with
+    case SharedDog { name } -> "dog:" + name
+    case SharedCat { age } -> "cat:" + age
+
+private fun shared_interactor_method_names(info: ObjectInfo): List[String] =
+    (info.methods | method => method.name).as_list()
+
+private fun shared_interactor_type_name(info: AnyInfo): String =
+    info.name
+
+private fun shared_interactor_method(methods: List[MethodInfo], name: String, idx: int): Option[MethodInfo] =
+    match methods[idx] with
+    case Some { method } ->
+        if method.name == name
+        then Some { method }
+        else shared_interactor_method(methods, name, idx + 1)
+    case None -> None {}
+
+private fun shared_interactor_method_param_type_names(methods: List[MethodInfo], name: String): List[String] =
+    match shared_interactor_method(methods, name, 0) with
+    case Some { method } -> (method.params | param => param.type.name).as_list()
+    case None -> []
+
+private fun shared_interactor_method_return_type_name(methods: List[MethodInfo], name: String): String =
+    match shared_interactor_method(methods, name, 0) with
+    case Some { method } -> method.return_type.name
+    case None -> ""

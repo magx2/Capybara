@@ -1017,6 +1017,11 @@ public final class JavaGenerator implements Generator {
             return false;
         }
         var member = staticImport.substring(lastDot + 1);
+        var ownerImport = extractClassNameFromStaticImport(staticImport);
+        var ownerSimpleName = ownerImport.substring(ownerImport.lastIndexOf('.') + 1);
+        if (ownerSimpleName.equals(member)) {
+            return true;
+        }
         return Character.isUpperCase(member.charAt(0)) && !member.equals(member.toUpperCase(java.util.Locale.ROOT));
     }
 

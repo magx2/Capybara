@@ -1,0 +1,32 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from A import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/A.cfun", [
+        test("foo increments the provided integer", () => foo_increments_the_provided_integer()),
+        test("Value preserves its amount field", () => value_preserves_its_amount_field()),
+        test("value returns a Value with amount increased by ten", () => value_returns_a_value_with_amount_increased_by_ten()),
+    ])
+
+private fun foo_increments_the_provided_integer(): Assert =
+    assert_all([
+        assert_that(foo(0)).is_equal_to(1),
+        assert_that(foo(7)).is_equal_to(8),
+        assert_that(foo(-2)).is_equal_to(-1),
+    ])
+
+private fun value_preserves_its_amount_field(): Assert =
+    let actual = Value { amount: 7 }
+    assert_all([
+        assert_that(actual).is_equal_to(Value { amount: 7 }),
+        assert_that(actual.amount).is_equal_to(7),
+    ])
+
+private fun value_returns_a_value_with_amount_increased_by_ten(): Assert =
+    assert_all([
+        assert_that(value(0)).is_equal_to(Value { amount: 10 }),
+        assert_that(value(0).amount).is_equal_to(10),
+        assert_that(value(7).amount).is_equal_to(17),
+    ])

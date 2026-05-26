@@ -1,0 +1,180 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/meta_prog/Reflection import { * }
+from ObjectOrientedRuntime import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectOrientedRuntime.coo", [
+        test("main is constructible and reflected as an object method", () => main_is_constructible_and_reflected_as_an_object_method()),
+        test("person construction supports parent contracts", () => person_construction_supports_parent_contracts()),
+        test("person exposes runtime behavior methods", () => person_exposes_runtime_behavior_methods()),
+        test("arrays lists exceptions loops and void methods are reflected", () => arrays_lists_exceptions_loops_and_void_methods_are_reflected()),
+        test("stdout methods are reflected as effectful void methods", () => stdout_methods_are_reflected_as_effectful_void_methods()),
+    ])
+
+fun main_is_constructible_and_reflected_as_an_object_method(): Assert =
+    let main = Main.type()
+    // The legacy host tests still cover generated entrypoint/static-main details; Capybara
+    // .cfun tests can construct OO values and reflect method metadata portably.
+    assert_all([
+        assert_that(oor_constructs_main().unsafe_run()).is_true(),
+        assert_that(runtime_type_name(main)).is_equal_to("Main"),
+        assert_that(method_names(main.methods)).is_equal_to(["main"]),
+        assert_that(method_param_type_names(main.methods, "main")).is_equal_to(["List"]),
+        assert_that(method_return_type_name(main.methods, "main")).is_equal_to("int"),
+    ])
+
+fun person_construction_supports_parent_contracts(): Assert =
+    let greeter = GreeterBase.type()
+    let printable = Printable.type()
+    let naming = BracketNaming.type()
+    let person = Person.type()
+    let parents = parent_names(person.parents)
+    // Body-level calls such as greet(), print(), display(), and bracket() remain covered by
+    // the legacy host tests because .cfun cannot invoke OO instance methods portably yet.
+    assert_all([
+        assert_that(oor_constructs_person("Capy").unsafe_run()).is_true(),
+        assert_that(oor_constructs_greeter_base("Capy").unsafe_run()).is_true(),
+        assert_that(oor_constructs_printable("Capy").unsafe_run()).is_true(),
+        assert_that(oor_constructs_bracket_naming("Capy").unsafe_run()).is_true(),
+        assert_that(greeter.open).is_true(),
+        assert_that(field_names(greeter.fields)).is_equal_to(["prefix"]),
+        assert_that(field_type_names(greeter.fields)).is_equal_to(["String"]),
+        assert_that(method_names(greeter.methods)).is_equal_to(["describe"]),
+        assert_that(method_param_type_names(greeter.methods, "describe")).is_equal_to(["String"]),
+        assert_that(method_return_type_name(greeter.methods, "describe")).is_equal_to("String"),
+        assert_that(method_names(printable.methods)).is_equal_to(["print"]),
+        assert_that(method_return_type_name(printable.methods, "print")).is_equal_to("String"),
+        assert_that(method_names(naming.methods)).is_equal_to(["bracket"]),
+        assert_that(method_param_type_names(naming.methods, "bracket")).is_equal_to(["String"]),
+        assert_that(method_return_type_name(naming.methods, "bracket")).is_equal_to("String"),
+        assert_that(parents).has_size(3).contains("GreeterBase").contains("Printable").contains("BracketNaming"),
+    ])
+
+fun person_exposes_runtime_behavior_methods(): Assert =
+    let person = Person.type()
+    assert_all([
+        assert_that(runtime_type_name(person)).is_equal_to("Person"),
+        assert_that(person.open).is_false(),
+        assert_that(field_names(person.fields)).is_equal_to(["name"]),
+        assert_that(field_type_names(person.fields)).is_equal_to(["String"]),
+        assert_that(method_names(person.methods)).is_equal_to([
+            "greet",
+            "mutable",
+            "ping",
+            "emit_greeting",
+            "emit_boxed_name",
+            "emit_star",
+            "print",
+            "display",
+            "nested_label",
+            "local_increment",
+            "parity",
+            "second_name",
+            "first_id",
+            "copy_people",
+            "names",
+            "slots",
+            "recover",
+            "catch_index",
+            "first_positive",
+            "first_large",
+            "while_flag",
+            "do_once",
+            "warmup",
+            "foreach_warm",
+            "while_warm",
+            "do_warm",
+        ]),
+        assert_that(method_return_type_name(person.methods, "greet")).is_equal_to("String"),
+        assert_that(method_return_type_name(person.methods, "mutable")).is_equal_to("String"),
+        assert_that(method_return_type_name(person.methods, "print")).is_equal_to("String"),
+        assert_that(method_param_type_names(person.methods, "display")).is_equal_to(["bool"]),
+        assert_that(method_return_type_name(person.methods, "display")).is_equal_to("String"),
+        assert_that(method_return_type_name(person.methods, "nested_label")).is_equal_to("String"),
+        assert_that(method_param_type_names(person.methods, "local_increment")).is_equal_to(["int"]),
+        assert_that(method_return_type_name(person.methods, "local_increment")).is_equal_to("int"),
+        assert_that(method_param_type_names(person.methods, "parity")).is_equal_to(["int"]),
+        assert_that(method_return_type_name(person.methods, "parity")).is_equal_to("bool"),
+    ])
+
+fun arrays_lists_exceptions_loops_and_void_methods_are_reflected(): Assert =
+    let methods = Person.type().methods
+    assert_all([
+        assert_that(method_param_type_names(methods, "second_name")).is_equal_to(["array"]),
+        assert_that(method_return_type_name(methods, "second_name")).is_equal_to("String"),
+        assert_that(method_param_type_names(methods, "first_id")).is_equal_to(["array"]),
+        assert_that(method_return_type_name(methods, "first_id")).is_equal_to("int"),
+        assert_that(method_param_type_names(methods, "copy_people")).is_equal_to(["array"]),
+        assert_that(method_return_type_name(methods, "copy_people")).is_equal_to("array"),
+        assert_that(method_return_type_name(methods, "names")).is_equal_to("array"),
+        assert_that(method_param_type_names(methods, "slots")).is_equal_to(["int"]),
+        assert_that(method_return_type_name(methods, "slots")).is_equal_to("array"),
+        assert_that(method_param_type_names(methods, "recover")).is_equal_to(["bool"]),
+        assert_that(method_return_type_name(methods, "recover")).is_equal_to("String"),
+        assert_that(method_param_type_names(methods, "catch_index")).is_equal_to(["array"]),
+        assert_that(method_return_type_name(methods, "catch_index")).is_equal_to("String"),
+        assert_that(method_param_type_names(methods, "first_positive")).is_equal_to(["List"]),
+        assert_that(method_return_type_name(methods, "first_positive")).is_equal_to("int"),
+        assert_that(method_param_type_names(methods, "first_large")).is_equal_to(["List"]),
+        assert_that(method_return_type_name(methods, "first_large")).is_equal_to("int"),
+        assert_that(method_param_type_names(methods, "while_flag")).is_equal_to(["bool"]),
+        assert_that(method_return_type_name(methods, "while_flag")).is_equal_to("int"),
+        assert_that(method_param_type_names(methods, "do_once")).is_equal_to(["bool"]),
+        assert_that(method_return_type_name(methods, "do_once")).is_equal_to("int"),
+        assert_that(method_return_type_name(methods, "ping")).is_equal_to("void"),
+        assert_that(method_param_type_names(methods, "warmup")).is_equal_to(["bool"]),
+        assert_that(method_return_type_name(methods, "warmup")).is_equal_to("void"),
+        assert_that(method_param_type_names(methods, "foreach_warm")).is_equal_to(["List"]),
+        assert_that(method_return_type_name(methods, "foreach_warm")).is_equal_to("void"),
+        assert_that(method_param_type_names(methods, "while_warm")).is_equal_to(["bool"]),
+        assert_that(method_return_type_name(methods, "while_warm")).is_equal_to("void"),
+        assert_that(method_return_type_name(methods, "do_warm")).is_equal_to("void"),
+    ])
+
+fun stdout_methods_are_reflected_as_effectful_void_methods(): Assert =
+    let methods = Person.type().methods
+    // Exact stdout capture is still host-tooling-only until the Capybara test framework
+    // exposes portable stream capture for generated OO methods.
+    assert_all([
+        assert_that(method_return_type_name(methods, "emit_greeting")).is_equal_to("void"),
+        assert_that(method_return_type_name(methods, "emit_boxed_name")).is_equal_to("void"),
+        assert_that(method_return_type_name(methods, "emit_star")).is_equal_to("void"),
+    ])
+
+private fun runtime_type_name(info: AnyInfo): String = info.name
+
+private fun field_names(fields: List[FieldInfo]): List[String] =
+    (fields | field => field.name).as_list()
+
+private fun field_type_names(fields: List[FieldInfo]): List[String] =
+    (fields | field => field.type.name).as_list()
+
+private fun method_names(methods: List[MethodInfo]): List[String] =
+    (methods | method => method.name).as_list()
+
+private fun parent_names(parents: Set[AnyInfo]): List[String] =
+    (parents | parent => parent.name).as_list()
+
+private fun runtime_method(methods: List[MethodInfo], name: String, idx: int): Option[MethodInfo] =
+    match methods[idx] with
+    case Some { method } ->
+        if method.name == name
+        then Some { method }
+        else runtime_method(methods, name, idx + 1)
+    case None -> None {}
+
+private fun method_param_type_names(methods: List[MethodInfo], name: String): List[String] =
+    match runtime_method(methods, name, 0) with
+    case Some { method } -> (method.params | param => param.type.name).as_list()
+    case None -> []
+
+private fun method_return_type_name(methods: List[MethodInfo], name: String): String =
+    match runtime_method(methods, name, 0) with
+    case Some { method } -> method.return_type.name
+    case None -> ""

@@ -65,6 +65,20 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldEmitPathRuntimeReflectionPackageMetadata() throws Exception {
+        var generated = new JavaScriptGenerator().generate(compileProgram("fun value(): int = 1"));
+        writeGenerated(generated);
+
+        var output = runNode("""
+                const path = require('./capy/io/PathModule.js').fromString('tmp');
+                const info = path.capybaraDataValueInfo();
+                console.log([info.name, info.pkg.name, info.pkg.path].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("Path|capy.io|capy/io/Path");
+    }
+
+    @Test
     void shouldGenerateAndRunObjectOrientedModules() throws Exception {
         var program = compileProgram(List.of(new RawModule(
                 "User",

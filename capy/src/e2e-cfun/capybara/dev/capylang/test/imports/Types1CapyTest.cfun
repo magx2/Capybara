@@ -1,0 +1,40 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Types1 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/Types1.cfun", [
+        test("D1 preserves its foo field", () => d1_preserves_its_foo_field()),
+        test("D2 preserves its boo field", () => d2_preserves_its_boo_field()),
+        test("T1 accepts both data variants", () => t1_accepts_both_data_variants()),
+    ])
+
+private fun d1_preserves_its_foo_field(): Assert =
+    let actual = D1 { foo: 7 }
+    assert_all([
+        assert_that(actual).is_equal_to(D1 { foo: 7 }),
+        assert_that(actual.foo).is_equal_to(7),
+    ])
+
+private fun d2_preserves_its_boo_field(): Assert =
+    let actual = D2 { boo: 11 }
+    assert_all([
+        assert_that(actual).is_equal_to(D2 { boo: 11 }),
+        assert_that(actual.boo).is_equal_to(11),
+    ])
+
+private fun t1_accepts_both_data_variants(): Assert =
+    let first: T1 = D1 { foo: 3 }
+    let second: T1 = D2 { boo: 5 }
+    assert_all([
+        assert_that(first).is_equal_to(D1 { foo: 3 }),
+        assert_that(second).is_equal_to(D2 { boo: 5 }),
+        assert_that(t1_variant_summary(first)).is_equal_to("D1:3"),
+        assert_that(t1_variant_summary(second)).is_equal_to("D2:5"),
+    ])
+
+private fun t1_variant_summary(value: T1): String =
+    match value with
+    case D1 { foo } -> "D1:" + foo
+    case D2 { boo } -> "D2:" + boo

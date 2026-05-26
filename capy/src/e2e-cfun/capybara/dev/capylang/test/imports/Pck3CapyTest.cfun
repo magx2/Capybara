@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Pck3 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/Pck3.cfun", [
+        test("foo_boo encodes boolean size flags as integer weights", () => foo_boo_encodes_boolean_size_flags_as_integer_weights()),
+    ])
+
+private fun foo_boo_encodes_boolean_size_flags_as_integer_weights(): Assert =
+    assert_all([
+        pck3_assert_int_equal(foo_boo(true, true), 100),
+        pck3_assert_int_equal(foo_boo(true, false), 10),
+        pck3_assert_int_equal(foo_boo(false, true), 1),
+        pck3_assert_int_equal(foo_boo(false, false), 0),
+    ])
+
+private fun pck3_assert_int_equal(value: int, expected: int): Assert =
+    assert_that(value).is_equal_to(expected)

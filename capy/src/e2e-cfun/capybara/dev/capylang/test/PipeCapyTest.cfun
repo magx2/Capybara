@@ -1,0 +1,255 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from Pipe import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Pipe.cfun", [
+        test("map operator maps list values", () => map_operator_maps_list_values()),
+        test("chained map methods map list values", () => chained_map_methods_map_list_values()),
+        test("map operator converts ints to strings", () => map_operator_converts_ints_to_strings()),
+        test("filter operator keeps positive values", () => filter_operator_keeps_positive_values()),
+        test("chained filter operators can return empty sequence", () => chained_filter_operators_can_return_empty_sequence()),
+        test("reduce operator sums list values", () => reduce_operator_sums_list_values()),
+        test("any detects positive values", () => any_detects_positive_values()),
+        test("all detects only positive values", () => all_detects_only_positive_values()),
+        test("any with function reference detects positive values", () => any_with_function_reference_detects_positive_values()),
+        test("all with function reference detects only positive values", () => all_with_function_reference_detects_only_positive_values()),
+        test("pipeline reduce filters after mapping", () => pipeline_reduce_filters_after_mapping()),
+        test("string reduce concatenates list values", () => string_reduce_concatenates_list_values()),
+        test("string reduce inserts spaces after prefix", () => string_reduce_inserts_spaces_after_prefix()),
+        test("string reduce returns prefix for empty list", () => string_reduce_returns_prefix_for_empty_list()),
+        test("string map wraps characters", () => string_map_wraps_characters()),
+        test("string filter keeps matching characters", () => string_filter_keeps_matching_characters()),
+        test("string reduce concatenates characters", () => string_reduce_concatenates_characters()),
+        test("string reduce returns empty string for empty input", () => string_reduce_returns_empty_string_for_empty_input()),
+        test("list reduce can accumulate data", () => list_reduce_can_accumulate_data()),
+        test("list reduce returns initial data for empty list", () => list_reduce_returns_initial_data_for_empty_list()),
+        test("dict reduce can accumulate data set", () => dict_reduce_can_accumulate_data_set()),
+        test("dict reduce returns empty data set for empty dict", () => dict_reduce_returns_empty_data_set_for_empty_dict()),
+        test("flat map expands each list value", () => flat_map_expands_each_list_value()),
+        test("flat map chains after map and filter", () => flat_map_chains_after_map_and_filter()),
+        test("set map maps every value", () => set_map_maps_every_value()),
+        test("set filter keeps positive values", () => set_filter_keeps_positive_values()),
+        test("set reduce sums values", () => set_reduce_sums_values()),
+        test("set string reduce inserts spaces after prefix", () => set_string_reduce_inserts_spaces_after_prefix()),
+        test("set string reduce returns prefix for empty set", () => set_string_reduce_returns_prefix_for_empty_set()),
+        test("set flat map expands every value", () => set_flat_map_expands_every_value()),
+        test("dict map converts values to strings", () => dict_map_converts_values_to_strings()),
+        test("dict filter keeps non-empty positive entries", () => dict_filter_keeps_non_empty_positive_entries()),
+        test("dict reduce formats entries", () => dict_reduce_formats_entries()),
+        test("dict reduce returns prefix for empty dict", () => dict_reduce_returns_prefix_for_empty_dict()),
+        test("dict string reduce inserts spaces after prefix", () => dict_string_reduce_inserts_spaces_after_prefix()),
+        test("dict string reduce returns prefix for empty dict", () => dict_string_reduce_returns_prefix_for_empty_dict()),
+        test("dict reduce ignores unused key while summing", () => dict_reduce_ignores_unused_key_while_summing()),
+        test("dict reduce ignores unused reduce key while summing", () => dict_reduce_ignores_unused_reduce_key_while_summing()),
+        test("list map can ignore lambda argument", () => list_map_can_ignore_lambda_argument()),
+        test("data pipe returns option based on input", () => data_pipe_returns_option_based_on_input()),
+        test("type pipe lambda keeps int box value", () => type_pipe_lambda_keeps_int_box_value()),
+        test("type pipe reference keeps int box value", () => type_pipe_reference_keeps_int_box_value()),
+        test("type pipe optional returns expected option", () => type_pipe_optional_returns_expected_option()),
+        test("pipe can chain method after lambda", () => pipe_can_chain_method_after_lambda()),
+        test("pipe can chain methods after lambda", () => pipe_can_chain_methods_after_lambda()),
+        test("pipe lambda body supports multiline method call", () => pipe_lambda_body_supports_multiline_method_call()),
+        test("pipe filter lambda body supports multiline method call", () => pipe_filter_lambda_body_supports_multiline_method_call()),
+        test("pipe any lambda body supports multiline method call", () => pipe_any_lambda_body_supports_multiline_method_call()),
+    ])
+
+private fun map_operator_maps_list_values(): Assert =
+    assert_that(map1([1, 2, 3]).as_list()).is_equal_to([2, 4, 6])
+
+private fun chained_map_methods_map_list_values(): Assert =
+    assert_that(map2([1, 2, 3]).as_list()).is_equal_to([1, 3, 5])
+
+private fun map_operator_converts_ints_to_strings(): Assert =
+    assert_that(map3([1, 2, 3]).as_list()).is_equal_to(["Hello 1", "Hello 2", "Hello 3"])
+
+private fun filter_operator_keeps_positive_values(): Assert =
+    assert_that(filter1([-1, 0, 1, 2]).as_list()).is_equal_to([1, 2])
+
+private fun chained_filter_operators_can_return_empty_sequence(): Assert =
+    assert_that(filter2([1, 2, 3, 4])).is_empty()
+
+private fun reduce_operator_sums_list_values(): Assert =
+    assert_that(reduce1([1, 2, 3, 4])).is_equal_to(10)
+
+private fun any_detects_positive_values(): Assert =
+    assert_all([
+        assert_that(any_positive([-1, 0, 2])).is_true(),
+        assert_that(any_positive([-3, -2, 0])).is_false(),
+    ])
+
+private fun all_detects_only_positive_values(): Assert =
+    assert_all([
+        assert_that(all_positive([1, 2, 3])).is_true(),
+        assert_that(all_positive([1, 0, 3])).is_false(),
+    ])
+
+private fun any_with_function_reference_detects_positive_values(): Assert =
+    assert_all([
+        assert_that(any_positive_ref([-1, 0, 2])).is_true(),
+        assert_that(any_positive_ref([-3, -2, 0])).is_false(),
+    ])
+
+private fun all_with_function_reference_detects_only_positive_values(): Assert =
+    assert_all([
+        assert_that(all_positive_ref([1, 2, 3])).is_true(),
+        assert_that(all_positive_ref([1, 0, 3])).is_false(),
+    ])
+
+private fun pipeline_reduce_filters_after_mapping(): Assert =
+    assert_that(reduce2([-1, 1, 2, 3])).is_equal_to(-2)
+
+private fun string_reduce_concatenates_list_values(): Assert =
+    assert_that(reduce_string1(["capy", "bara"])).is_equal_to("capybara")
+
+private fun string_reduce_inserts_spaces_after_prefix(): Assert =
+    assert_that(reduce_string2(["a", "b", "c"])).is_equal_to("start: a b c")
+
+private fun string_reduce_returns_prefix_for_empty_list(): Assert =
+    let values: List[String] = []
+    assert_that(reduce_string2(values)).is_equal_to("start: ")
+
+private fun string_map_wraps_characters(): Assert =
+    assert_that(string_map("abc").as_list()).is_equal_to(["[a]", "[b]", "[c]"])
+
+private fun string_filter_keeps_matching_characters(): Assert =
+    assert_that(string_filter("abc").as_list()).is_equal_to(["b"])
+
+private fun string_reduce_concatenates_characters(): Assert =
+    assert_that(string_reduce("abc")).is_equal_to("abc")
+
+private fun string_reduce_returns_empty_string_for_empty_input(): Assert =
+    assert_that(string_reduce("")).is_equal_to("")
+
+private fun list_reduce_can_accumulate_data(): Assert =
+    assert_that(reduce_to_data(["capy", "bara"])).is_equal_to(Foo { value: "capybara" })
+
+private fun list_reduce_returns_initial_data_for_empty_list(): Assert =
+    let values: List[String] = []
+    assert_that(reduce_to_data(values)).is_equal_to(Foo { value: "" })
+
+private fun dict_reduce_can_accumulate_data_set(): Assert =
+    let values: Dict[String] = {"a": "1", "b": "2"}
+    let entries = reduce_to_data(values)
+    assert_that(entries)
+        .has_size(2)
+        .contains(Entry { key: "a", value: "1" })
+        .contains(Entry { key: "b", value: "2" })
+
+private fun dict_reduce_returns_empty_data_set_for_empty_dict(): Assert =
+    let values: Dict[String] = {:}
+    assert_that(reduce_to_data(values)).is_empty()
+
+private fun flat_map_expands_each_list_value(): Assert =
+    assert_that(flatMap1([1, 2]).as_list()).is_equal_to([1, 2, 3, 2, 3, 4])
+
+private fun flat_map_chains_after_map_and_filter(): Assert =
+    assert_that(flatMap2([-1, 1, 2]).as_list()).is_equal_to([2, 3, 4, 4, 5, 6])
+
+private fun set_map_maps_every_value(): Assert =
+    let mapped = setMap1({1, 2, 3}).as_list()
+    assert_that(mapped).has_size(3).contains(2).contains(4).contains(6)
+
+private fun set_filter_keeps_positive_values(): Assert =
+    let filtered = setFilter1({-1, 0, 1, 2}).as_list()
+    assert_that(filtered).has_size(2).contains(1).contains(2)
+
+private fun set_reduce_sums_values(): Assert =
+    assert_that(setReduce1({1, 2, 3, 4})).is_equal_to(10)
+
+private fun set_string_reduce_inserts_spaces_after_prefix(): Assert =
+    assert_that(set_reduce_string2({"a",})).is_equal_to("start: a")
+
+private fun set_string_reduce_returns_prefix_for_empty_set(): Assert =
+    let values: Set[String] = {}
+    assert_that(set_reduce_string2(values)).is_equal_to("start: ")
+
+private fun set_flat_map_expands_every_value(): Assert =
+    let values = setFlatMap1({1, 2}).as_list()
+    assert_that(values).has_size(4).contains(1).contains(11).contains(2).contains(12)
+
+private fun dict_map_converts_values_to_strings(): Assert =
+    assert_that(mapDict({"a": 1, "b": 2})).is_equal_to({"a": "1", "b": "2"})
+
+private fun dict_filter_keeps_non_empty_positive_entries(): Assert =
+    assert_that(filterDict({"": 9, "zero": 0, "negative": -1, "positive": 2})).is_equal_to({"positive": 2})
+
+private fun dict_reduce_formats_entries(): Assert =
+    let reduced = reduceDict({"a": 1, "b": 2, "c": 3, "d": 4})
+    assert_all([
+        assert_that(reduced).starts_with("start: "),
+        assert_that(reduced).does_not_start_with("start: ,"),
+        assert_that(reduced).contains("(a:1)"),
+        assert_that(reduced).contains("(b:2)"),
+        assert_that(reduced).contains("(c:3)"),
+        assert_that(reduced).contains("(d:4)"),
+    ])
+
+private fun dict_reduce_returns_prefix_for_empty_dict(): Assert =
+    let values: Dict[int] = {:}
+    assert_that(reduceDict(values)).is_equal_to("start: ")
+
+private fun dict_string_reduce_inserts_spaces_after_prefix(): Assert =
+    assert_that(dict_reduce_string2({"k": "v"})).is_equal_to("start: v")
+
+private fun dict_string_reduce_returns_prefix_for_empty_dict(): Assert =
+    let values: Dict[String] = {:}
+    assert_that(dict_reduce_string2(values)).is_equal_to("start: ")
+
+private fun dict_reduce_ignores_unused_key_while_summing(): Assert =
+    assert_that(dict_unused_key_to_sum({"a": 1, "b": 2, "c": 3})).is_equal_to(6)
+
+private fun dict_reduce_ignores_unused_reduce_key_while_summing(): Assert =
+    assert_that(dict_unused_reduce_key({"a": 1, "b": 2, "c": 3})).is_equal_to(6)
+
+private fun list_map_can_ignore_lambda_argument(): Assert =
+    assert_that(list_unused_lambda_arg([7, 8, 9]).as_list()).is_equal_to([1, 1, 1])
+
+private fun data_pipe_returns_option_based_on_input(): Assert =
+    assert_all([
+        assert_that(data_pipe(1, 2, 3)).is_empty(),
+        assert_that(data_pipe(-1, 2, 3)).contains(Value { x: 4 }),
+    ])
+
+private fun type_pipe_lambda_keeps_int_box_value(): Assert =
+    assert_that(boxed_int_value(type_pipe_lambda(5))).contains(6)
+
+private fun type_pipe_reference_keeps_int_box_value(): Assert =
+    assert_that(boxed_int_value(type_pipe_ref(7))).contains(8)
+
+private fun type_pipe_optional_returns_expected_option(): Assert =
+    assert_all([
+        assert_that(type_pipe_optional(5)).is_empty(),
+        assert_that(optional_boxed_int_value(type_pipe_optional(0))).contains(1),
+    ])
+
+private fun pipe_can_chain_method_after_lambda(): Assert =
+    assert_that(pipe_then_chain_after_lambda()).is_equal_to(3)
+
+private fun pipe_can_chain_methods_after_lambda(): Assert =
+    assert_that(pipe_then_chain_methods_after_lambda()).is_equal_to("ok")
+
+private fun pipe_lambda_body_supports_multiline_method_call(): Assert =
+    assert_that(pipe_lambda_body_multiline_without_parentheses().as_list()).is_equal_to(["x", "y"])
+
+private fun pipe_filter_lambda_body_supports_multiline_method_call(): Assert =
+    assert_that(pipe_filter_lambda_body_multiline_without_parentheses().as_list()).is_equal_to(["bb"])
+
+private fun pipe_any_lambda_body_supports_multiline_method_call(): Assert =
+    assert_that(pipe_any_lambda_body_multiline_without_parentheses()).is_true()
+
+private fun boxed_int_value(boxed: Boxed): Option[int] =
+    match boxed with
+    case IntBox { value } -> Some { value }
+    case LongBox { value } -> None {}
+
+private fun optional_boxed_int_value(boxed: Option[Boxed]): Option[int] =
+    match boxed with
+    case Some { value } -> boxed_int_value(value)
+    case None -> None {}

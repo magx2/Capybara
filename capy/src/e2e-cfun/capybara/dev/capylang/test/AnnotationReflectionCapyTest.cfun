@@ -1,0 +1,131 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from AnnotationReflection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/AnnotationReflection.cfun", [
+        test("reflects functional declaration annotations", () => reflects_functional_declaration_annotations()),
+        test("reflects functional field annotations", () => reflects_functional_field_annotations()),
+    ])
+
+fun reflects_functional_declaration_annotations(): Assert =
+    let info = annotation_reflection_sample()
+    let imported_marker = info.annotations[0]
+    let local_data_label = info.annotations[1]
+    let imported_data_label = info.annotations[2]
+    assert_all([
+        assert_that(info.name).is_equal_to("AnnotatedCustomer"),
+        assert_that(ar_annotation_names(info.annotations)).is_equal_to(["ImportedAnnotationMarker", "LocalDataLabel", "ImportedDataLabel"]),
+        assert_that(ar_annotation_arguments(imported_marker)).is_empty(),
+        assert_that(ar_annotation_pkg_name(imported_marker)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(ar_annotation_string(local_data_label, "label")).is_equal_to("local"),
+        assert_that(ar_annotation_string(imported_data_label, "label")).is_equal_to("imported"),
+        assert_that(ar_annotation_int(imported_data_label, "order")).is_equal_to(5),
+        assert_that(ar_annotation_bool(imported_data_label, "active")).is_true(),
+    ])
+
+fun reflects_functional_field_annotations(): Assert =
+    let info = annotation_reflection_data(AnnotatedCustomer { id: "C-2", display: "Bea" })
+    let id_imported_marker = ar_field_annotation(info, 0, 0)
+    let id_field_name = ar_field_annotation(info, 0, 1)
+    assert_all([
+        assert_that(ar_field_names(info)).is_equal_to(["id", "display"]),
+        assert_that(ar_field_annotation_names(info, 0)).is_equal_to(["ImportedAnnotationMarker", "ImportedFieldName"]),
+        assert_that(ar_annotation_arguments(id_imported_marker)).is_empty(),
+        assert_that(ar_annotation_string(id_field_name, "value")).is_equal_to("customer_id"),
+        assert_that(ar_field_annotation_names(info, 1)).is_equal_to(["LocalFieldMarker"]),
+        assert_that(ar_field_string_value(info, 1)).is_equal_to("Bea"),
+    ])
+
+private fun ar_field_names(info: DataValueInfo): List[String] =
+    ar_field_names_at(info.fields, 0, [])
+
+private fun ar_field_names_at(fields: List[FieldValueInfo], idx: int, acc: List[String]): List[String] =
+    match fields[idx] with
+    case Some { field } -> ar_field_names_at(fields, idx + 1, acc + field.name)
+    case None -> acc
+
+private fun ar_field_annotation(info: DataValueInfo, field_idx: int, annotation_idx: int): Option[AnnotationInfo] =
+    match info.fields[field_idx] with
+    case Some { field } -> field.annotations[annotation_idx]
+    case None -> None {}
+
+private fun ar_field_annotation_names(info: DataValueInfo, field_idx: int): List[String] =
+    match info.fields[field_idx] with
+    case Some { field } -> ar_annotation_names(field.annotations)
+    case None -> []
+
+private fun ar_field_string_value(info: DataValueInfo, field_idx: int): String =
+    match info.fields[field_idx] with
+    case Some { field } ->
+        {
+            match field.value with
+            case String value -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun ar_annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    ar_annotation_names_at(annotations, 0, [])
+
+private fun ar_annotation_names_at(annotations: List[AnnotationInfo], idx: int, acc: List[String]): List[String] =
+    match annotations[idx] with
+    case Some { annotation } -> ar_annotation_names_at(annotations, idx + 1, acc + annotation.name)
+    case None -> acc
+
+private fun ar_annotation_pkg_name(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.name
+    case None -> ""
+
+private fun ar_annotation_arguments(annotation: Option[AnnotationInfo]): List[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> value.arguments
+    case None -> []
+
+private fun ar_annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> ar_annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun ar_annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else ar_annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun ar_annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match ar_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun ar_annotation_int(annotation: Option[AnnotationInfo], name: String): int =
+    match ar_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationInt { value } -> value
+            case _ -> 0
+        }
+    case None -> 0
+
+private fun ar_annotation_bool(annotation: Option[AnnotationInfo], name: String): bool =
+    match ar_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationBool { value } -> value
+            case _ -> false
+        }
+    case None -> false

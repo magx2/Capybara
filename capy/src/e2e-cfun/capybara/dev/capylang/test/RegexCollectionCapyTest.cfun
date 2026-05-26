@@ -1,0 +1,59 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from RegexCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/RegexCollection.cfun", [
+        test("matches_named detects matching input", () => matches_named_detects_matching_input()),
+        test("matches_alias detects matching input", () => matches_alias_detects_matching_input()),
+        test("find functions report presence", () => find_functions_report_presence()),
+        test("find_all functions report presence count", () => find_all_functions_report_presence_count()),
+        test("replace functions replace all matches", () => replace_functions_replace_all_matches()),
+        test("split functions split into list values", () => split_functions_split_into_list_values()),
+        test("escaped slash literal matches slash", () => escaped_slash_literal_matches_slash()),
+    ])
+
+private fun matches_named_detects_matching_input(): Assert =
+    assert_all([
+        assert_that(matches_named("xxfooyy")).is_true(),
+        assert_that(matches_named("xxbaryy")).is_false(),
+    ])
+
+private fun matches_alias_detects_matching_input(): Assert =
+    assert_all([
+        assert_that(matches_alias("xxfooyy")).is_true(),
+        assert_that(matches_alias("xxbaryy")).is_false(),
+    ])
+
+private fun find_functions_report_presence(): Assert =
+    assert_all([
+        assert_that(find_named("xxfooyy")).is_true(),
+        assert_that(find_named("xxbaryy")).is_false(),
+        assert_that(find_alias("xxfooyy")).is_true(),
+        assert_that(find_alias("xxbaryy")).is_false(),
+    ])
+
+private fun find_all_functions_report_presence_count(): Assert =
+    assert_all([
+        assert_that(find_all_named_count("xxfooyy")).is_equal_to(1),
+        assert_that(find_all_named_count("xxbaryy")).is_zero(),
+        assert_that(find_all_alias_count("xxfooyy")).is_equal_to(1),
+        assert_that(find_all_alias_count("xxbaryy")).is_zero(),
+    ])
+
+private fun replace_functions_replace_all_matches(): Assert =
+    assert_all([
+        assert_that(replace_named("a1b11")).is_equal_to("a#b##"),
+        assert_that(replace_alias("a1b11")).is_equal_to("a#b##"),
+    ])
+
+private fun split_functions_split_into_list_values(): Assert =
+    assert_all([
+        assert_that(split_named("a,b,c")).is_equal_to(["a", "b", "c"]),
+        assert_that(split_alias("a,b,c")).is_equal_to(["a", "b", "c"]),
+        assert_that(split_multi_char("a--b--c")).is_equal_to(["a", "b", "c"]),
+    ])
+
+private fun escaped_slash_literal_matches_slash(): Assert =
+    assert_that(escaped_slash_match()).is_true()

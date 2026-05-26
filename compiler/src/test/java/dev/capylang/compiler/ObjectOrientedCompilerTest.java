@@ -3,6 +3,7 @@ package dev.capylang.compiler;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.expression.CompiledEffectBindExpression;
+import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledObjectConstruction;
 import org.junit.jupiter.api.Test;
 
@@ -129,6 +130,49 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldTypeImportedObjectOrientedReflectionInfoCalls() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                reflectionModule(),
+                constructiblesModule(),
+                new RawModule(
+                        "ObjectUse",
+                        "/foo/app",
+                        """
+                                from /capy/meta_prog/Reflection import { * }
+                                from Constructibles import { Person, Printable, NamedTrait }
+
+                                fun person_info(): ObjectInfo =
+                                    Person.type()
+
+                                fun printable_info(): InterfaceInfo =
+                                    Printable.type()
+
+                                fun trait_info(): TraitInfo =
+                                    NamedTrait.type()
+                                """
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+
+        var personInfo = compiledFunction(program, "ObjectUse", "person_info");
+        assertThat(personInfo.returnType().name()).endsWith("ObjectInfo");
+        assertThat(personInfo.expression()).isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                assertThat(call.name()).isEqualTo("foo.app.Person.type"));
+
+        var printableInfo = compiledFunction(program, "ObjectUse", "printable_info");
+        assertThat(printableInfo.returnType().name()).endsWith("InterfaceInfo");
+        assertThat(printableInfo.expression()).isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                assertThat(call.name()).isEqualTo("foo.app.Printable.type"));
+
+        var traitInfo = compiledFunction(program, "ObjectUse", "trait_info");
+        assertThat(traitInfo.returnType().name()).endsWith("TraitInfo");
+        assertThat(traitInfo.expression()).isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                assertThat(call.name()).isEqualTo("foo.app.NamedTrait.type"));
+    }
+
+    @Test
     void shouldRejectInvalidObjectConstructionTargetsAndArguments() {
         assertThat(errorMessages(compileInvalid("""
                 fun bad(): any =
@@ -215,6 +259,30 @@ class ObjectOrientedCompilerTest {
         return new RawModule("Effect", "/capy/lang", """
                 union Effect[T] = UnsafeEffect[T]
                 private data UnsafeEffect[T] { unsafe_thunk: () => T }
+                """);
+    }
+
+    private RawModule reflectionModule() {
+        return new RawModule("Reflection", "/capy/meta_prog", """
+                union AnyInfo { name: String, pkg: PackageInfo } =
+                    DataInfo
+                    | InterfaceInfo
+                    | ObjectInfo
+                    | TraitInfo
+                    | MethodInfo
+
+                union AnnotationValue = AnnotationString
+
+                data PackageInfo { name: String, path: String }
+                data AnnotationString { value: String }
+                data AnnotationArgumentInfo { name: String, value: AnnotationValue }
+                data AnnotationInfo { name: String, pkg: PackageInfo, arguments: List[AnnotationArgumentInfo] }
+                data DataInfo { name: String, pkg: PackageInfo, annotations: List[AnnotationInfo] }
+                data FieldInfo { name: String, type: AnyInfo, annotations: List[AnnotationInfo] }
+                data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo, annotations: List[AnnotationInfo] }
+                data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+                data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+                data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
                 """);
     }
 
