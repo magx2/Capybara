@@ -6,8 +6,8 @@ import MainProgram
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/MainProgram.cfun", [
-        effect_test("main returns success when ok argument is present", () => main_returns_success_when_ok_argument_is_present()),
-        effect_test("main returns default failed program when ok argument is missing", () => main_returns_default_failed_program_when_ok_argument_is_missing()),
+        main_returns_success_when_ok_argument_is_present().map(assertion => test("main returns success when ok argument is present", () => assertion)),
+        main_returns_default_failed_program_when_ok_argument_is_missing().map(assertion => test("main returns default failed program when ok argument is missing", () => assertion)),
     ])
 
 // The legacy Java host test also asserts the generated main(String...) signature.

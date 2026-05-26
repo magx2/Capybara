@@ -5,7 +5,7 @@ from ConsoleIo import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ConsoleIo.cfun", [
-        effect_test("console effects return written values", () => console_effects_return_written_values()),
+        console_effects_return_written_values().map(assertion => test("console effects return written values", () => assertion)),
     ])
 
 fun console_effects_return_written_values(): Effect[Assert] =

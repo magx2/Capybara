@@ -6,10 +6,10 @@ from ConstructedObjects import { EmptyTracked, TrackedPerson, TrackedPrintable }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ConstructedObjects.coo", [
-        effect_test("person construction is delayed and executable", () => person_construction_is_delayed_and_executable()),
-        effect_test("parent typed construction and sequencing work", () => parent_typed_construction_and_sequencing_work()),
-        effect_test("zero argument construction is delayed", () => zero_argument_construction_is_delayed()),
-        effect_test("qualified import construction works", () => qualified_import_construction_works()),
+        person_construction_is_delayed_and_executable().map(assertion => test("person construction is delayed and executable", () => assertion)),
+        parent_typed_construction_and_sequencing_work().map(assertion => test("parent typed construction and sequencing work", () => assertion)),
+        zero_argument_construction_is_delayed().map(assertion => test("zero argument construction is delayed", () => assertion)),
+        qualified_import_construction_works().map(assertion => test("qualified import construction works", () => assertion)),
     ])
 
 fun person_construction_is_delayed_and_executable(): Effect[Assert] =

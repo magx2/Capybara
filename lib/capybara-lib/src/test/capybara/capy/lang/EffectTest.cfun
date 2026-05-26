@@ -4,10 +4,10 @@ from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/Effect.cfun", [
-        effect_test("should run pure value", () => should_run_pure_value()),
-        effect_test("should map value", () => should_map_value()),
-        effect_test("should flat map value", () => should_flat_map_value()),
-        effect_test("should bind effects", () => should_bind_effects()),
+        should_run_pure_value().map(assertion => test("should run pure value", () => assertion)),
+        should_map_value().map(assertion => test("should map value", () => assertion)),
+        should_flat_map_value().map(assertion => test("should flat map value", () => assertion)),
+        should_bind_effects().map(assertion => test("should bind effects", () => assertion)),
     ])
 
 fun should_run_pure_value(): Effect[Assert] =

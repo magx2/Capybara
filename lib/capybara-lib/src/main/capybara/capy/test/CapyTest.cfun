@@ -19,27 +19,33 @@ from /capy/serialization/Json import { JsonString, stringify }
 from /capy/meta_prog/Recursive import { Recursive }
 
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
-data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Effect[Assert] }
+data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Assert }
 union TestResult = Passed | Failed
 data Passed {}
 data Failed { message: String, type: String }
 enum LogType { NONE, LOG, TEAM_CITY }
 
-fun test_file(file_name: String, test_cases: List[TestCase]): Effect[TestFile] =
+fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
     test_file_at(file_name, current.timestamp() * 1000L, test_cases)
 
-fun test_file_at(file_name: String, timestamp_millis: long, test_cases: List[TestCase]): TestFile =
+private fun test_file_at(file_name: String, timestamp_millis: long, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
+    let unwrapped_test_cases <- unwrap_test_cases(test_cases)
     TestFile {
         file_name: file_name,
-        test_cases: test_cases,
+        test_cases: unwrapped_test_cases,
         timestamp_millis: timestamp_millis
     }
 
-fun test(name: String, assert_supplier: () => Assert): TestCase =
-    effect_test(name, () => pure(assert_supplier()))
+private fun unwrap_test_cases(test_cases: List[Effect[TestCase]]): Effect[List[TestCase]] =
+    match test_cases[0] with
+    case None -> pure([])
+    case Some { effect } ->
+        let test_case <- effect
+        let unwrapped_test_cases <- unwrap_test_cases(test_cases[1:])
+        [test_case] + unwrapped_test_cases
 
-fun effect_test(name: String, assert_supplier: () => Effect[Assert]): TestCase =
+fun test(name: String, assert_supplier: () => Assert): TestCase =
     TestCase {
         name: name,
         result: Passed {},
@@ -47,6 +53,9 @@ fun effect_test(name: String, assert_supplier: () => Effect[Assert]): TestCase =
         execution_time: 0.0,
         assert_supplier: assert_supplier
     }
+
+fun pure_test_cases(test_cases: List[TestCase]): List[Effect[TestCase]] =
+    (test_cases | test_case => pure(test_case)).as_list()
 
 private fun execute_test_files(log_type: LogType, test_files: List[TestFile]): Effect[List[TestFile]] =
     match test_files[0] with
@@ -78,7 +87,7 @@ private fun execute_test_cases(log_type: LogType, test_cases: List[TestCase]): E
 private fun execute_test_case(log_type: LogType, test_case: TestCase): Effect[TestCase] =
     let started <- print_test_started(log_type, test_case.name)
     let start <- nano_time()
-    let assert <- (test_case.assert_supplier)()
+    let assert = (test_case.assert_supplier)()
     let result = execute(assert.assertions)
     let end <- nano_time()
     let executed_test_case = TestCase {

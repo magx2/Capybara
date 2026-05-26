@@ -58,12 +58,13 @@ fun tests(): Effect[TestFile] =
         (0, FEBRUARY, 2020, false),
     ] | (day, month, year, is_valid) => test_date(day, month, year, is_valid)).as_list()
     test_file('/capy/date_time/Date.cfun',
+        pure_test_cases(
         test_cases
         + test_month()
         + test_leap_year()
         + date_test_to_iso_8601()
         + date_test_from_iso_8601_success()
-        + date_test_from_iso_8601_failure())
+        + date_test_from_iso_8601_failure()))
 
 private fun test_date(day: int, month: month, year: int, is_valid: bool): TestCase =
     let assert: Assert =

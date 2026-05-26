@@ -22,6 +22,7 @@ private fun at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
 
 fun tests(): Effect[TestFile] =
     test_file('/capy/date_time/DateTime.cfun',
+        pure_test_cases(
         [test_unix_epoch()]
         + datetime_test_to_iso_8601()
         + test_timestamp()
@@ -31,7 +32,7 @@ fun tests(): Effect[TestFile] =
         + test_minus_datetime()
         + test_comparisons()
         + datetime_test_from_iso_8601_success()
-        + datetime_test_from_iso_8601_failure())
+        + datetime_test_from_iso_8601_failure()))
 
 private fun test_unix_epoch(): TestCase =
     test("UNIX_EPOCH should return the correct DateTime for 1 January 1970 at 00:00:00",

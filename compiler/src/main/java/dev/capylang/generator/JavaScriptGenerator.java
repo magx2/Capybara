@@ -2439,7 +2439,7 @@ public final class JavaScriptGenerator implements Generator {
                     "DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
             exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
-            exports.put("capy.test.CapyTest", Set.of("test", "effect_test", "effectTest", "test_file", "testFile", "test_file_at", "testFileAt"));
+            exports.put("capy.test.CapyTest", Set.of("test", "pure_test_cases", "pureTestCases", "test_file", "testFile", "test_file_at", "testFileAt"));
             return exports;
         }
 
@@ -4967,14 +4967,21 @@ public final class JavaScriptGenerator implements Generator {
                     function test(name, body) {
                         return { name, body };
                     }
-                    const effectTest = test;
-                    const effect_test = test;
+
+                    function pureTestCases(testCases) {
+                        return testCases.map(testCase => capy.pure(testCase));
+                    }
+                    const pure_test_cases = pureTestCases;
+
+                    function unwrapTestCases(testCases) {
+                        return testCases.map(testCase => capy.isEffect(testCase) ? testCase.unsafe_run() : testCase);
+                    }
 
                     function testFileAt(path, timestampMillis, testCases) {
                         return {
                             path,
                             file_name: path,
-                            test_cases: testCases,
+                            test_cases: unwrapTestCases(testCases),
                             timestamp_millis: timestampMillis,
                         };
                     }
@@ -4985,8 +4992,8 @@ public final class JavaScriptGenerator implements Generator {
 
                     module.exports = {
                         test,
-                        effectTest,
-                        effect_test,
+                        pureTestCases,
+                        pure_test_cases,
                         testFileAt,
                         test_file_at: testFileAt,
                         testFile,

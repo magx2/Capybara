@@ -11,7 +11,7 @@ data SharedInteropObservation { invoked: String, created_kind: String, created_n
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/SharedInterop.coo", [
-        effect_test("object-oriented code can use FP sibling module without imports when file names match", () => object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match()),
+        object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match().map(assertion => test("object-oriented code can use FP sibling module without imports when file names match", () => assertion)),
     ])
 
 fun object_oriented_code_can_use_fp_sibling_module_without_imports_when_file_names_match(): Effect[Assert] =
