@@ -67,4 +67,4 @@ fun tests(): Effect[TestFile] =
         "P1D2Y",
         "P0003-13-04T12:30:05",
     ] | iso => test("should fail parsing {iso}", () => assert_that(/capy/date_time/Duration.from_iso_8601(iso)).fails())).as_list()
-    test_file("/capy/date_time/Duration.cfun", pure_test_cases(round_trip_test_cases + parse_only_test_cases + week_component_test_cases + failed_test_cases))
+    test_file("/capy/date_time/Duration.cfun", round_trip_test_cases + parse_only_test_cases + week_component_test_cases + failed_test_cases)

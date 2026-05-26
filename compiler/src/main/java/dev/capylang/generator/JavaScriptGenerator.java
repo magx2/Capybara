@@ -2439,7 +2439,7 @@ public final class JavaScriptGenerator implements Generator {
                     "DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
             exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
-            exports.put("capy.test.CapyTest", Set.of("test", "pure_test_cases", "pureTestCases", "test_file", "testFile", "test_file_at", "testFileAt"));
+            exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile", "test_file_at", "testFileAt"));
             return exports;
         }
 
@@ -4968,11 +4968,6 @@ public final class JavaScriptGenerator implements Generator {
                         return { name, body };
                     }
 
-                    function pureTestCases(testCases) {
-                        return testCases.map(testCase => capy.pure(testCase));
-                    }
-                    const pure_test_cases = pureTestCases;
-
                     function unwrapTestCases(testCases) {
                         return testCases.map(testCase => capy.isEffect(testCase) ? testCase.unsafe_run() : testCase);
                     }
@@ -4990,15 +4985,27 @@ public final class JavaScriptGenerator implements Generator {
                         return capy.delay(() => testFileAt(path, Date.now(), testCases));
                     }
 
-                    module.exports = {
+                    const exportsObject = {
                         test,
-                        pureTestCases,
-                        pure_test_cases,
                         testFileAt,
                         test_file_at: testFileAt,
                         testFile,
                         test_file: testFile,
                     };
+
+                    module.exports = new Proxy(exportsObject, {
+                        get(target, property) {
+                            if (property in target) return target[property];
+                            if (typeof property === 'string'
+                                && (property.startsWith('testFile__string__compiledlist_elementtype_')
+                                    || property.startsWith('test_file__string__compiledlist_elementtype_'))
+                                && (property.includes('compileddatatype_name_testcase')
+                                    || property.includes('compileddataparenttype_name_effect'))) {
+                                return testFile;
+                            }
+                            return undefined;
+                        },
+                    });
                     """;
         }
 

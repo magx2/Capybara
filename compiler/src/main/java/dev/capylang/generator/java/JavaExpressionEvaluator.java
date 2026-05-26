@@ -3602,9 +3602,18 @@ public class JavaExpressionEvaluator {
         }
         var methodName = simpleMethodName;
         if (methodName.contains("__compiled")) {
-            return methodName;
+            return normalizeLinkedOverloadMethodName(methodName);
         }
         return normalizeJavaMethodName(methodName);
+    }
+
+    private static String normalizeLinkedOverloadMethodName(String methodName) {
+        var overloadSeparator = methodName.indexOf("__");
+        if (overloadSeparator < 0) {
+            return normalizeJavaMethodName(methodName);
+        }
+        return normalizeJavaMethodName(methodName.substring(0, overloadSeparator))
+               + methodName.substring(overloadSeparator);
     }
 
     private static boolean isTopLevelConstName(String name) {
