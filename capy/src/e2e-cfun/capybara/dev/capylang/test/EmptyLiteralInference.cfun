@@ -123,5 +123,5 @@ fun build_test_file_from_three_inferred_test_case_lists(): int =
     let to_string_test_cases = (["1.2.3"] | (value => test("stringify {value}", () => assert_that(value).is_equal_to(value)))).as_list()
     let failed_test_cases = (["1"] | (value => test("fail {value}", () => assert_that(value).is_equal_to(value)))).as_list()
     let test_cases = parse_test_cases + to_string_test_cases + failed_test_cases
-    let test_file = test_file("/dev/capylang/test/EmptyLiteralInference.cfun", pure_test_cases(test_cases))
+    let test_file = test_file("/dev/capylang/test/EmptyLiteralInference.cfun", test_cases)
     test_cases.size()

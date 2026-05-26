@@ -25,16 +25,21 @@ data Passed {}
 data Failed { message: String, type: String }
 enum LogType { NONE, LOG, TEAM_CITY }
 
+fun test_file(file_name: String, test_cases: List[TestCase]): Effect[TestFile] =
+    let current <- now()
+    TestFile {
+        file_name: file_name,
+        test_cases: test_cases,
+        timestamp_millis: current.timestamp() * 1000L
+    }
+
 fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
-    test_file_at(file_name, current.timestamp() * 1000L, test_cases)
-
-private fun test_file_at(file_name: String, timestamp_millis: long, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
     let unwrapped_test_cases <- unwrap_test_cases(test_cases)
     TestFile {
         file_name: file_name,
         test_cases: unwrapped_test_cases,
-        timestamp_millis: timestamp_millis
+        timestamp_millis: current.timestamp() * 1000L
     }
 
 private fun unwrap_test_cases(test_cases: List[Effect[TestCase]]): Effect[List[TestCase]] =
@@ -53,9 +58,6 @@ fun test(name: String, assert_supplier: () => Assert): TestCase =
         execution_time: 0.0,
         assert_supplier: assert_supplier
     }
-
-fun pure_test_cases(test_cases: List[TestCase]): List[Effect[TestCase]] =
-    (test_cases | test_case => pure(test_case)).as_list()
 
 private fun execute_test_files(log_type: LogType, test_files: List[TestFile]): Effect[List[TestFile]] =
     match test_files[0] with

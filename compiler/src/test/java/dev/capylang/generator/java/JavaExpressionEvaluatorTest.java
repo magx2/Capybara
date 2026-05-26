@@ -6,7 +6,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import dev.capylang.compiler.*;
+import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledLambdaExpression;
+import dev.capylang.compiler.expression.CompiledNewList;
+import dev.capylang.compiler.expression.CompiledStringValue;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.generator.JavaGenerator;
 
@@ -152,6 +155,26 @@ class JavaExpressionEvaluatorTest {
                 "CompiledList[elementType=INT]");
 
         assertThat(resolved).contains("choose_target");
+    }
+
+    @Test
+    void shouldNormalizeSnakeCaseBaseNameForLinkedOverloadWithoutOverride() {
+        JavaExpressionEvaluator.setFunctionNameOverrides(Map.of());
+
+        var expression = new CompiledFunctionCall(
+                "capy.test.CapyTest.test_file__string__compiledlist_elementtype_int",
+                List.of(
+                        new CompiledStringValue("\"suite\""),
+                        new CompiledNewList(List.of(), new CollectionLinkedType.CompiledList(PrimitiveLinkedType.INT))
+                ),
+                PrimitiveLinkedType.STRING
+        );
+
+        var evaluated = JavaExpressionEvaluator.evaluateExpression(expression);
+
+        assertThat(evaluated)
+                .contains("capy.test.CapyTest.testFile__string__compiledlist_elementtype_int(")
+                .doesNotContain("capy.test.CapyTest.test_file__string__compiledlist_elementtype_int(");
     }
 
     @Test

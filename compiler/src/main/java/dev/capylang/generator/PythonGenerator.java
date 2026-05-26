@@ -2353,7 +2353,7 @@ public final class PythonGenerator implements Generator {
             exports.put("capy.date_time.Interval", Set.of("DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
             exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
-            exports.put("capy.test.CapyTest", Set.of("test", "pure_test_cases", "pureTestCases", "test_file", "testFile", "test_file_at", "testFileAt"));
+            exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile", "test_file_at", "testFileAt"));
             return exports;
         }
 
@@ -3166,13 +3166,21 @@ public final class PythonGenerator implements Generator {
                     import time
                     import dev.capylang.capybara as capy
                     test = lambda name, body: {'name': name, 'body': body}
-                    pure_test_cases = lambda test_cases: [capy.pure(test_case) for test_case in test_cases]
-                    pureTestCases = pure_test_cases
                     unwrap_test_cases = lambda test_cases: [test_case.unsafe_run() if capy.is_effect(test_case) else test_case for test_case in test_cases]
                     test_file_at = lambda path, timestamp_millis, test_cases: {'path': path, 'file_name': path, 'test_cases': unwrap_test_cases(test_cases), 'timestamp_millis': timestamp_millis}
                     testFileAt = test_file_at
                     test_file = lambda path, test_cases: capy.delay(lambda: test_file_at(path, int(time.time() * 1000), test_cases))
                     testFile = test_file
+                    def __getattr__(name):
+                        if (
+                            name.startswith('testFileStringCompiledlistElementtype')
+                            and (
+                                'CompileddatatypeNameTestcase' in name
+                                or 'CompileddataparenttypeNameEffect' in name
+                            )
+                        ):
+                            return test_file
+                        raise AttributeError(name)
                     """;
         }
 
