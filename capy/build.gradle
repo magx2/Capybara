@@ -602,8 +602,6 @@ tasks.register('e2eTests') {
     dependsOn e2eCooTests
     dependsOn e2eCooJsTests
     dependsOn e2eCooPythonTests
-    dependsOn jsTests
-    dependsOn pythonTests
 }
 
 check {
