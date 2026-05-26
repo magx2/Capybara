@@ -65,6 +65,20 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldEmitPathRuntimeReflectionPackageMetadata() throws Exception {
+        var generated = new PythonGenerator().generate(compileProgram("fun value(): int = 1"));
+        writeGenerated(generated);
+
+        var output = runPython("""
+                from capy.io.PathModule import fromString
+                info = fromString("tmp").capybaraDataValueInfo()
+                print('|'.join([info.name, info.pkg.name, info.pkg.path]))
+                """);
+
+        assertThat(output).isEqualTo("Path|capy.io|capy/io/Path");
+    }
+
+    @Test
     void shouldGenerateAndRunObjectOrientedModules() throws Exception {
         var program = compileProgram(List.of(new RawModule(
                 "User",

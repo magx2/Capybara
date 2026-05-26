@@ -2976,9 +2976,9 @@ public final class JavaScriptGenerator implements Generator {
 
                     const PathRoot = (() => {
                         const values = [
-                            capy.enumValue('RELATIVE', 'PathRoot', ['PathRoot'], 0, [], 'Path', 'capy/io/Path', { fields: [], annotations: [] }),
-                            capy.enumValue('ABSOLUTE', 'PathRoot', ['PathRoot'], 1, [], 'Path', 'capy/io/Path', { fields: [], annotations: [] }),
-                            capy.enumValue('HOME', 'PathRoot', ['PathRoot'], 2, [], 'Path', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('RELATIVE', 'PathRoot', ['PathRoot'], 0, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('ABSOLUTE', 'PathRoot', ['PathRoot'], 1, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('HOME', 'PathRoot', ['PathRoot'], 2, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
                         ];
                         return Object.freeze({
                             RELATIVE: values[0],
@@ -3069,7 +3069,7 @@ public final class JavaScriptGenerator implements Generator {
                             return this.toString();
                         }
                         capybaraDataValueInfo() {
-                            return capy.dataValueInfo(this, 'Path', 'Path', 'capy/io/Path', [], []);
+                            return capy.dataValueInfo(this, 'Path', 'capy.io', 'capy/io/Path', [], []);
                         }
                     }
 

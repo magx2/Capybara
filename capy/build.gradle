@@ -206,7 +206,11 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
 
     @TaskAction
     void runCapybaraTests() {
-        outputDir.get().asFile.mkdirs()
+        def directory = outputDir.get().asFile
+        if (directory.exists()) {
+            directory.deleteDir()
+        }
+        directory.mkdirs()
 
         def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
         URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())

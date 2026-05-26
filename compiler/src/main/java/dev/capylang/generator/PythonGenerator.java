@@ -2849,7 +2849,7 @@ public final class PythonGenerator implements Generator {
                         def __fspath__(self): return str(self)
                         def toString(self): return str(self)
                         def capybaraDataValueInfo(self):
-                            return capy.data_value_info(self, 'Path', 'Path', 'capy/io/Path', [])
+                            return capy.data_value_info(self, 'Path', 'capy.io', 'capy/io/Path', [])
 
                     def fromString(path_string):
                         path_string = str(path_string)
