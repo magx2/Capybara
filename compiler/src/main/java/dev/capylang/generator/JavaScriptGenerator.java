@@ -59,6 +59,7 @@ public final class JavaScriptGenerator implements Generator {
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
     static final Path NATIVE_PROVIDER_BOOTSTRAP_PATH = Path.of("dev", "capylang", "native_providers.js");
+    private static final String NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME = "dev.capylang.native_providers";
     private static final Set<String> RUNTIME_PROVIDED_MODULE_NAMES = Set.of(
             "capy/collection/Dict",
             "capy/collection/List",
@@ -724,11 +725,44 @@ public final class JavaScriptGenerator implements Generator {
             if (nativeCall.isPresent()) {
                 return nativeCall.orElseThrow();
             }
+            var nativeProviderCall = renderNativeProviderFunctionCall(functionCall, args);
+            if (nativeProviderCall.isPresent()) {
+                return nativeProviderCall.orElseThrow();
+            }
             var target = resolveFunctionTarget(functionCall);
             if (ConstDependencyOrder.isConstCall(functionCall)) {
                 return target;
             }
             return target + "(" + String.join(", ", args) + ")";
+        }
+
+        private Optional<String> renderNativeProviderFunctionCall(CompiledFunctionCall functionCall, List<String> args) {
+            if (!args.isEmpty()) {
+                return Optional.empty();
+            }
+            var emittedName = emittedMethodName(functionCall);
+            if (hasLocalFunction(functionCall, emittedName)) {
+                return Optional.empty();
+            }
+            var importedOwner = programContext.importedMemberOwner(moduleInfo.className(), emittedName)
+                    .or(() -> programContext.importedMemberOwner(moduleInfo.className(), simpleMethodName(functionCall.name())));
+            if (importedOwner.isPresent()) {
+                return Optional.empty();
+            }
+            return programContext.nativeProviderInfo(functionCall.name(), emittedName)
+                    .map(provider -> {
+                        requiredModules.putIfAbsent(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME, NATIVE_PROVIDER_BOOTSTRAP_PATH);
+                        return moduleVar(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME) + "." + provider.bootstrapFunctionName() + "()";
+                    });
+        }
+
+        private boolean hasLocalFunction(CompiledFunctionCall functionCall, String emittedName) {
+            var parameterTypes = functionCall.arguments().stream().map(CompiledExpression::type).toList();
+            return moduleInfo.javaClass().staticMethods().stream()
+                    .anyMatch(method -> method.sourceParameterTypes().equals(parameterTypes)
+                                        && (method.sourceName().equals(functionCall.name())
+                                            || method.name().equals(emittedName)
+                                            || programContext.emittedFunctionName(method.sourceName(), parameterTypes).equals(emittedName)));
         }
 
         private Optional<String> renderRuntimeBackedFunctionCall(CompiledFunctionCall functionCall, List<String> args) {
@@ -2620,6 +2654,18 @@ public final class JavaScriptGenerator implements Generator {
 
         Optional<String> importedMemberOwner(String className, String memberName) {
             return Optional.ofNullable(importedOwnersByClassName.getOrDefault(className, Map.of()).get(memberName));
+        }
+
+        Optional<NativeProviderInfo> nativeProviderInfo(String sourceName, String emittedName) {
+            var simpleName = simpleMethodName(sourceName);
+            return nativeProviderInfos.stream()
+                    .filter(provider -> provider.providerSymbolName().equals(sourceName)
+                                        || provider.providerSymbolName().equals(simpleName)
+                                        || provider.bootstrapFunctionName().equals(sourceName)
+                                        || provider.bootstrapFunctionName().equals(simpleName)
+                                        || normalizeJsIdentifier(provider.providerSymbolName()).equals(emittedName)
+                                        || normalizeJsIdentifier(provider.bootstrapFunctionName()).equals(emittedName))
+                    .findFirst();
         }
 
         Optional<String> classNameForModuleVariable(String moduleVariable) {
