@@ -825,6 +825,59 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectUnsafeRunOnEffect() {
+        var errors = compileProgramWithEffect("""
+                        from /capy/lang/Effect import { * }
+                        fun broken(): int = pure(1).unsafe_run()
+                        """,
+                "effect_unsafe_run");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`Effect.unsafe_run` cannot be called from Capybara source");
+    }
+
+    @Test
+    void shouldRejectUnsafeRunCamelCaseOnEffect() {
+        var errors = compileProgramWithEffect("""
+                        from /capy/lang/Effect import { * }
+                        fun broken(): int = pure(1).unsafeRun()
+                        """,
+                "effect_unsafe_run_camel_case");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`Effect.unsafe_run` cannot be called from Capybara source");
+    }
+
+    @Test
+    void shouldRejectUnsafeRunPartialCallOnEffect() {
+        var errors = compileProgramWithEffect("""
+                        from /capy/lang/Effect import { * }
+                        fun broken(): Effect[int] => int = _.unsafe_run()
+                        """,
+                "effect_unsafe_run_partial");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`Effect.unsafe_run` cannot be called from Capybara source");
+    }
+
+    @Test
+    void shouldAllowUnsafeRunOnNonEffectType() {
+        var rawModules = new ArrayList<>(DEFAULT_MODULES);
+        rawModules.add(new RawModule("unsafe_run_non_effect", "/foo/boo", """
+                        data Box { value: int }
+                        fun Box.unsafe_run(): int = this.value
+                        fun ok(): int = Box { value: 1 }.unsafe_run()
+                        """));
+
+        var result = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+    }
+
+    @Test
     void shouldRejectResultBindDeclaredTypeMismatch() {
         var errors = compileProgram("""
                         from /capy/lang/Result import { * }
@@ -2036,6 +2089,27 @@ public class CompilationErrorTest {
 
     private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName) {
         return compileProgram(fun, moduleName, List.of());
+    }
+
+    private static SortedSet<Result.Error.SingleError> compileProgramWithEffect(String fun, String moduleName) {
+        var rawModules = new ArrayList<>(DEFAULT_MODULES);
+        rawModules.add(new RawModule("Effect", "/capy/lang", """
+                union Effect[T] = UnsafeEffect[T]
+                data UnsafeEffect[T] { unsafe_thunk: () => T }
+
+                fun pure(value: T): Effect[T] =
+                    UnsafeEffect { unsafe_thunk: () => value }
+
+                fun Effect[T].unsafe_run(): T =
+                    match this with
+                    case UnsafeEffect { unsafe_thunk } -> unsafe_thunk()
+                """));
+        rawModules.add(new RawModule(moduleName, "/foo/boo", fun));
+        var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
+        if (programResult instanceof Result.Success<CompiledProgram> value) {
+            throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
+        }
+        return ((Result.Error<?>) programResult).errors();
     }
 
     private static void assertInvalidPrimitiveBackedTypeName(String moduleName, String typeName) {

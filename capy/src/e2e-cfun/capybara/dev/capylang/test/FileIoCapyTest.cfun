@@ -8,15 +8,15 @@ from FileIo import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/FileIo.cfun", [
-        test("file effects read and write text lines and bytes", () => file_effects_read_and_write_text_lines_and_bytes()),
-        test("file effects manage directories and delete files", () => file_effects_manage_directories_and_delete_files()),
-        test("file effects copy and move files", () => file_effects_copy_and_move_files()),
-        test("file effects replace existing copy and move targets", () => file_effects_replace_existing_copy_and_move_targets()),
-        test("file effects return errors for failed operations", () => file_effects_return_errors_for_failed_operations()),
+        effect_test("file effects read and write text lines and bytes", () => file_effects_read_and_write_text_lines_and_bytes()),
+        effect_test("file effects manage directories and delete files", () => file_effects_manage_directories_and_delete_files()),
+        effect_test("file effects copy and move files", () => file_effects_copy_and_move_files()),
+        effect_test("file effects replace existing copy and move targets", () => file_effects_replace_existing_copy_and_move_targets()),
+        effect_test("file effects return errors for failed operations", () => file_effects_return_errors_for_failed_operations()),
     ])
 
-fun file_effects_read_and_write_text_lines_and_bytes(): Assert =
-    file_effects_read_and_write_text_lines_and_bytes_effect().unsafe_run()
+fun file_effects_read_and_write_text_lines_and_bytes(): Effect[Assert] =
+    file_effects_read_and_write_text_lines_and_bytes_effect()
 
 private fun file_effects_read_and_write_text_lines_and_bytes_effect(): Effect[Assert] =
     let base <- unique_base_path("read-write")
@@ -54,8 +54,8 @@ private fun file_effects_read_and_write_text_lines_and_bytes_effect(): Effect[As
         assert_that(bytes_is_directory).is_false(),
     ])
 
-fun file_effects_manage_directories_and_delete_files(): Assert =
-    file_effects_manage_directories_and_delete_files_effect().unsafe_run()
+fun file_effects_manage_directories_and_delete_files(): Effect[Assert] =
+    file_effects_manage_directories_and_delete_files_effect()
 
 private fun file_effects_manage_directories_and_delete_files_effect(): Effect[Assert] =
     let base <- unique_base_path("directories")
@@ -88,8 +88,8 @@ private fun file_effects_manage_directories_and_delete_files_effect(): Effect[As
         assert_that(delete_target_exists).is_false(),
     ])
 
-fun file_effects_copy_and_move_files(): Assert =
-    file_effects_copy_and_move_files_effect().unsafe_run()
+fun file_effects_copy_and_move_files(): Effect[Assert] =
+    file_effects_copy_and_move_files_effect()
 
 private fun file_effects_copy_and_move_files_effect(): Effect[Assert] =
     let base <- unique_base_path("copy-move")
@@ -113,8 +113,8 @@ private fun file_effects_copy_and_move_files_effect(): Effect[Assert] =
         assert_that(moved_text).succeeds("payload"),
     ])
 
-fun file_effects_replace_existing_copy_and_move_targets(): Assert =
-    file_effects_replace_existing_copy_and_move_targets_effect().unsafe_run()
+fun file_effects_replace_existing_copy_and_move_targets(): Effect[Assert] =
+    file_effects_replace_existing_copy_and_move_targets_effect()
 
 private fun file_effects_replace_existing_copy_and_move_targets_effect(): Effect[Assert] =
     let base <- unique_base_path("replace")
@@ -138,8 +138,8 @@ private fun file_effects_replace_existing_copy_and_move_targets_effect(): Effect
         assert_that(moved_text).succeeds("new"),
     ])
 
-fun file_effects_return_errors_for_failed_operations(): Assert =
-    file_effects_return_errors_for_failed_operations_effect().unsafe_run()
+fun file_effects_return_errors_for_failed_operations(): Effect[Assert] =
+    file_effects_return_errors_for_failed_operations_effect()
 
 private fun file_effects_return_errors_for_failed_operations_effect(): Effect[Assert] =
     let base <- unique_base_path("errors")

@@ -6,15 +6,15 @@ from EffectMainProgram import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/EffectMainProgram.cfun", [
-        test("effect main returns success", () => effect_main_returns_success()),
+        effect_test("effect main returns success", () => effect_main_returns_success()),
     ])
 
 // The legacy Java host test also asserts the generated main(String...) signature.
 // The legacy Java/JavaScript host tests assert exact stdout/stderr capture through generated
 // entry points and process wrappers; those are backend/tooling details, not portable
 // Capybara assertions.
-fun effect_main_returns_success(): Assert =
-    effect_main_assertions().unsafe_run()
+fun effect_main_returns_success(): Effect[Assert] =
+    effect_main_assertions()
 
 private fun effect_main_assertions(): Effect[Assert] =
     let program <- main(["one", "two"])

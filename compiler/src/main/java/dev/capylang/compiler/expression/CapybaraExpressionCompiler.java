@@ -2109,6 +2109,10 @@ public class CapybaraExpressionCompiler {
     ) {
         var methodName = functionCall.name().substring(METHOD_INVOKE_PREFIX.length());
         var candidates = methodsByNameAndArity(functionSignatures, methodName, functionCall.arguments().size());
+        var unsafeEffectRun = rejectUnsafeEffectRunCall(functionCall, scope, methodName, expectedType, candidates);
+        if (unsafeEffectRun.isPresent()) {
+            return unsafeEffectRun.orElseThrow();
+        }
         if (candidates.isEmpty()) {
             if (hasPlaceholderArguments(functionCall.arguments())) {
                 var partialBuiltin = resolvePartialBuiltinMethodInvoke(functionCall, scope, methodName, expectedType);
@@ -2203,6 +2207,57 @@ public class CapybaraExpressionCompiler {
                 best.arguments(),
                 best.returnType()
         ));
+    }
+
+    private Optional<Result<CompiledExpression>> rejectUnsafeEffectRunCall(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName,
+            Optional<CompiledType> expectedType,
+            List<FunctionSignature> candidates
+    ) {
+        if (!isUnsafeEffectRunMethodName(methodName) || functionCall.arguments().isEmpty()) {
+            return Optional.empty();
+        }
+        var receiver = functionCall.arguments().getFirst();
+        if (receiver instanceof PlaceholderExpression
+            && expectedType.orElse(null) instanceof CompiledFunctionType functionType) {
+            var shape = flattenFunctionType(functionType);
+            if (!shape.parameterTypes().isEmpty()
+                && resolveSpecializedEffectType(shape.parameterTypes().getFirst()).isPresent()) {
+                return Optional.of(unsafeEffectRunError(functionCall));
+            }
+        }
+        if (receiver instanceof PlaceholderExpression && placeholderCanOnlyResolveToEffect(candidates)) {
+            return Optional.of(unsafeEffectRunError(functionCall));
+        }
+        if (receiver instanceof PlaceholderExpression) {
+            return Optional.empty();
+        }
+        var linkedReceiver = linkExpression(receiver, scope);
+        if (linkedReceiver instanceof Result.Success<CompiledExpression> value
+            && resolveSpecializedEffectType(value.value().type()).isPresent()) {
+            return Optional.of(unsafeEffectRunError(functionCall));
+        }
+        return Optional.empty();
+    }
+
+    private boolean placeholderCanOnlyResolveToEffect(List<FunctionSignature> candidates) {
+        return !candidates.isEmpty()
+               && candidates.stream()
+                       .allMatch(signature -> !signature.parameterTypes().isEmpty()
+                                              && resolveSpecializedEffectType(signature.parameterTypes().getFirst()).isPresent());
+    }
+
+    private boolean isUnsafeEffectRunMethodName(String methodName) {
+        return "unsafe_run".equals(methodName) || "unsafeRun".equals(methodName);
+    }
+
+    private Result<CompiledExpression> unsafeEffectRunError(FunctionCall functionCall) {
+        return withPosition(
+                Result.error("`Effect.unsafe_run` cannot be called from Capybara source; use `let value <- effect` inside an `Effect[...]` expression or return `Effect[...]` to the runtime/test runner."),
+                functionCall.position()
+        );
     }
 
     private Result.Error.SingleError findUnsafeCollectionArgumentError(
@@ -3613,7 +3668,7 @@ public class CapybaraExpressionCompiler {
             }
             var effectCompatibleExpression = ((Result.Success<CompiledExpression>) wrapped).value();
             if (!linkedWasAlreadyEffect) {
-                return Result.success(new CoercedArgument(effectCompatibleExpression, 1));
+                return Result.success(new CoercedArgument(effectCompatibleExpression, 3));
             }
             maybeCoerced = coerceArgument(effectCompatibleExpression, expected);
             if (maybeCoerced == null) {

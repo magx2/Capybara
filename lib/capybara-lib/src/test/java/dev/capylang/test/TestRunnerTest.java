@@ -2,6 +2,7 @@ package dev.capylang.test;
 
 import capy.io.Path;
 import capy.io.PathRoot;
+import capy.lang.Effect;
 import capy.lang.Result;
 import capy.test.CapyTest;
 import capy.test.CapyTest.TestCase;
@@ -678,7 +679,7 @@ class TestRunnerTest {
                 CapyTest.Passed.INSTANCE,
                 1,
                 0.0,
-                () -> capy.test.Assert.assertThat("capybara").startsWith("capy")
+                () -> Effect.pure(capy.test.Assert.assertThat("capybara").startsWith("capy"))
         );
     }
 
@@ -692,7 +693,7 @@ class TestRunnerTest {
                 new CapyTest.Failed(message, type),
                 1,
                 0.0,
-                () -> capy.test.Assert.assertThat("capybara").startsWith("capy")
+                () -> Effect.pure(capy.test.Assert.assertThat("capybara").startsWith("capy"))
         );
     }
 

@@ -10,38 +10,43 @@ from ObjectOrientedRuntime import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ObjectOrientedRuntime.coo", [
-        test("main is constructible and reflected as an object method", () => main_is_constructible_and_reflected_as_an_object_method()),
-        test("person construction supports parent contracts", () => person_construction_supports_parent_contracts()),
+        effect_test("main is constructible and reflected as an object method", () => main_is_constructible_and_reflected_as_an_object_method()),
+        effect_test("person construction supports parent contracts", () => person_construction_supports_parent_contracts()),
         test("person exposes runtime behavior methods", () => person_exposes_runtime_behavior_methods()),
         test("arrays lists exceptions loops and void methods are reflected", () => arrays_lists_exceptions_loops_and_void_methods_are_reflected()),
         test("stdout methods are reflected as effectful void methods", () => stdout_methods_are_reflected_as_effectful_void_methods()),
     ])
 
-fun main_is_constructible_and_reflected_as_an_object_method(): Assert =
+fun main_is_constructible_and_reflected_as_an_object_method(): Effect[Assert] =
     let main = Main.type()
     // The legacy host tests still cover generated entrypoint/static-main details; Capybara
     // .cfun tests can construct OO values and reflect method metadata portably.
+    let main_constructed <- oor_constructs_main()
     assert_all([
-        assert_that(oor_constructs_main().unsafe_run()).is_true(),
+        assert_that(main_constructed).is_true(),
         assert_that(runtime_type_name(main)).is_equal_to("Main"),
         assert_that(method_names(main.methods)).is_equal_to(["main"]),
         assert_that(method_param_type_names(main.methods, "main")).is_equal_to(["List"]),
         assert_that(method_return_type_name(main.methods, "main")).is_equal_to("int"),
     ])
 
-fun person_construction_supports_parent_contracts(): Assert =
+fun person_construction_supports_parent_contracts(): Effect[Assert] =
     let greeter = GreeterBase.type()
     let printable = Printable.type()
     let naming = BracketNaming.type()
     let person = Person.type()
     let parents = parent_names(person.parents)
+    let person_constructed <- oor_constructs_person("Capy")
+    let greeter_constructed <- oor_constructs_greeter_base("Capy")
+    let printable_constructed <- oor_constructs_printable("Capy")
+    let bracket_naming_constructed <- oor_constructs_bracket_naming("Capy")
     // Body-level calls such as greet(), print(), display(), and bracket() remain covered by
     // the legacy host tests because .cfun cannot invoke OO instance methods portably yet.
     assert_all([
-        assert_that(oor_constructs_person("Capy").unsafe_run()).is_true(),
-        assert_that(oor_constructs_greeter_base("Capy").unsafe_run()).is_true(),
-        assert_that(oor_constructs_printable("Capy").unsafe_run()).is_true(),
-        assert_that(oor_constructs_bracket_naming("Capy").unsafe_run()).is_true(),
+        assert_that(person_constructed).is_true(),
+        assert_that(greeter_constructed).is_true(),
+        assert_that(printable_constructed).is_true(),
+        assert_that(bracket_naming_constructed).is_true(),
         assert_that(greeter.open).is_true(),
         assert_that(field_names(greeter.fields)).is_equal_to(["prefix"]),
         assert_that(field_type_names(greeter.fields)).is_equal_to(["String"]),

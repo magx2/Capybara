@@ -6,16 +6,16 @@ from EffectBind import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/EffectBind.cfun", [
-        test("binds effects lazily", () => binds_effects_lazily()),
+        effect_test("binds effects lazily", () => binds_effects_lazily()),
         test("constructing delayed failure does not run thunk", () => constructing_delayed_failure_does_not_run_thunk()),
-        test("effect delay is lazy and non-memoized", () => effect_delay_is_lazy_and_non_memoized()),
-        test("clock now returns ISO date-time effect", () => clock_now_returns_iso_date_time_effect()),
-        test("current millis returns bounded current time effect", () => current_millis_returns_bounded_current_time_effect()),
-        test("nano time returns bounded monotonic time effect", () => nano_time_returns_bounded_monotonic_time_effect()),
+        effect_test("effect delay is lazy and non-memoized", () => effect_delay_is_lazy_and_non_memoized()),
+        effect_test("clock now returns ISO date-time effect", () => clock_now_returns_iso_date_time_effect()),
+        effect_test("current millis returns bounded current time effect", () => current_millis_returns_bounded_current_time_effect()),
+        effect_test("nano time returns bounded monotonic time effect", () => nano_time_returns_bounded_monotonic_time_effect()),
     ])
 
-fun binds_effects_lazily(): Assert =
-    bind_effects_lazily_assertions().unsafe_run()
+fun binds_effects_lazily(): Effect[Assert] =
+    bind_effects_lazily_assertions()
 
 private fun bind_effects_lazily_assertions(): Effect[Assert] =
     let sum <- add_effects(2, 3)
@@ -30,8 +30,8 @@ fun constructing_delayed_failure_does_not_run_thunk(): Assert =
     // the Capybara assertion framework does not currently expose a portable assert-throws primitive.
     assert_that(construct_delayed_divide_by_zero()).is_true()
 
-fun effect_delay_is_lazy_and_non_memoized(): Assert =
-    effect_delay_assertions().unsafe_run()
+fun effect_delay_is_lazy_and_non_memoized(): Effect[Assert] =
+    effect_delay_assertions()
 
 private fun effect_delay_assertions(): Effect[Assert] =
     let effect = nano_time_value()
@@ -46,13 +46,13 @@ private fun effect_delay_assertions(): Effect[Assert] =
 private fun consume_time(count: int): int =
     if count == 0 then 0 else 1 + consume_time(count - 1)
 
-fun clock_now_returns_iso_date_time_effect(): Assert =
+fun clock_now_returns_iso_date_time_effect(): Effect[Assert] =
     clock_now_iso().map(value =>
         assert_that(value).contains("T")
-    ).unsafe_run()
+    )
 
-fun current_millis_returns_bounded_current_time_effect(): Assert =
-    current_millis_assertions().unsafe_run()
+fun current_millis_returns_bounded_current_time_effect(): Effect[Assert] =
+    current_millis_assertions()
 
 private fun current_millis_assertions(): Effect[Assert] =
     let before <- current_millis()
@@ -61,8 +61,8 @@ private fun current_millis_assertions(): Effect[Assert] =
     // The old JavaScript host test inspected BigInt representation; this asserts portable long behavior.
     assert_that(actual).is_between(before, after)
 
-fun nano_time_returns_bounded_monotonic_time_effect(): Assert =
-    nano_time_assertions().unsafe_run()
+fun nano_time_returns_bounded_monotonic_time_effect(): Effect[Assert] =
+    nano_time_assertions()
 
 private fun nano_time_assertions(): Effect[Assert] =
     let before <- nano_time()

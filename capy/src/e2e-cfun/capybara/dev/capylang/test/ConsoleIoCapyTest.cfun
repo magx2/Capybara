@@ -5,14 +5,17 @@ from ConsoleIo import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ConsoleIo.cfun", [
-        test("console effects return written values", () => console_effects_return_written_values()),
+        effect_test("console effects return written values", () => console_effects_return_written_values()),
     ])
 
-fun console_effects_return_written_values(): Assert =
+fun console_effects_return_written_values(): Effect[Assert] =
     // The legacy Java/JS host tests still cover exact stdout/stderr capture and stdin-fed reads;
     // the Capybara test framework does not expose portable stream capture or input fixtures.
+    let emitted <- emit_all()
+    let primitive_emitted <- emit_primitives(0x07)
+    let byte_list_emitted <- emit_byte_lists([0x41, 0x5A])
     assert_all([
-        assert_that(emit_all().unsafe_run()).is_equal_to(" line"),
-        assert_that(emit_primitives(0x07).unsafe_run()).is_false(),
-        assert_that(emit_byte_lists([0x41, 0x5A]).unsafe_run()).is_equal_to([0x41, 0x5A]),
+        assert_that(emitted).is_equal_to(" line"),
+        assert_that(primitive_emitted).is_false(),
+        assert_that(byte_list_emitted).is_equal_to([0x41, 0x5A]),
     ])
