@@ -63,7 +63,7 @@ public final class SystemClock implements Clock {
 ```javascript
 const { Clock } = require('../Clock.js');
 
-/** @NativeImplementation(qualifier: "system") */
+@NativeImplementation("system")
 class SystemClock extends Clock {
 }
 ```
@@ -151,7 +151,7 @@ public final class SystemClock implements Clock {
 ```
 
 ```javascript
-/** @NativeImplementation(qualifier: "system") */
+@NativeImplementation("system")
 class SystemClock extends Clock {
 }
 ```
@@ -199,10 +199,12 @@ class names derived from native Java source annotations. The generated provider
 table constructs a new implementation object for each lookup.
 
 JavaScript CommonJS generation can lower native JavaScript annotations to
-deterministic `require(...)` calls for the selected backend and export name. The
-generated provider table remains immutable. Startup or lookup validation must
-report missing modules, missing exports, wrong factory shape, or incompatible
-objects against the provider key.
+deterministic `require(...)` calls for the selected backend and export name.
+JavaScript native source uses decorator syntax for `@NativeImplementation`; the
+generated bootstrap removes that compile-time decorator before CommonJS loads
+the module. The generated provider table remains immutable. Startup or lookup
+validation must report missing modules, missing exports, wrong factory shape, or
+incompatible objects against the provider key.
 
 Python generation can lower native Python annotations to deterministic imports
 for the selected module and class name. The generated provider table remains

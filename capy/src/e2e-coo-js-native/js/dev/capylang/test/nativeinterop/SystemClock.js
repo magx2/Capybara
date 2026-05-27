@@ -2,7 +2,7 @@
 
 const { Clock } = require('../Clock.js');
 
-/** @NativeImplementation(qualifier: "system") */
+@NativeImplementation("system")
 class SystemClock extends Clock {
     now_millis() {
         return 12345;
