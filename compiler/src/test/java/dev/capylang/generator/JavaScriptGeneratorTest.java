@@ -223,7 +223,7 @@ class JavaScriptGeneratorTest {
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
                 .contains("const capy = require('./capybara.js');")
-                .contains("const __capy_provider_system_clock_module = require('host-clock');")
+                .contains("const __capy_provider_system_clock_module = capy.requireNativeProviderModule('host-clock', __filename);")
                 .contains("const providers = capy.defineNativeProviders({")
                 .contains("exportExists: Object.prototype.hasOwnProperty.call(__capy_provider_system_clock_module, 'SystemClock')")
                 .contains("exportValue: __capy_provider_system_clock_module.SystemClock")

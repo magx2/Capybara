@@ -40,8 +40,8 @@ fun person_construction_supports_parent_contracts(): Effect[Assert] =
     let greeter_constructed <- oor_constructs_greeter_base("Capy")
     let printable_constructed <- oor_constructs_printable("Capy")
     let bracket_naming_constructed <- oor_constructs_bracket_naming("Capy")
-    // Body-level calls such as greet(), print(), display(), and bracket() remain covered by
-    // the legacy host tests because .cfun cannot invoke OO instance methods portably yet.
+    // Keep broad body-level runtime coverage in the host tests; this assertion focuses on
+    // construction, parent contracts, and reflection metadata.
     assert_all([
         assert_that(person_constructed).is_true(),
         assert_that(greeter_constructed).is_true(),

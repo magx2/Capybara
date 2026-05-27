@@ -405,6 +405,41 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldLinkImportedObjectOrientedMethodsFromFunctionalCode() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                constructiblesModule(),
+                new RawModule(
+                        "ObjectUse",
+                        "/foo/app",
+                        """
+                                from Constructibles import { * }
+
+                                fun printable_label(printable: Printable): String =
+                                    printable.label()
+
+                                fun person_label(person: Person): String =
+                                    person.label()
+
+                                fun inherited_label(person: Person): String =
+                                    person.decorate("Ada")
+                                """
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+        assertThat(compiledFunction(program, "ObjectUse", "printable_label").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.name()).isEqualTo("__method__Printable__label"));
+        assertThat(compiledFunction(program, "ObjectUse", "person_label").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.name()).isEqualTo("__method__Person__label"));
+        assertThat(compiledFunction(program, "ObjectUse", "inherited_label").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.name()).isEqualTo("__method__NamedTrait__decorate"));
+    }
+
+    @Test
     void shouldRejectPureObjectConstruction() {
         var result = compileInvalid("""
                 from Constructibles import { Person }
@@ -690,13 +725,13 @@ class ObjectOrientedCompilerTest {
                         }
 
                         trait NamedTrait {
-                            def label(): String = "trait"
+                            def decorate(name: String): String = "trait " + name
                         }
 
                         abstract class AbstractPerson {
                         }
 
-                        class Person(name: String): Printable {
+                        class Person(name: String): Printable, NamedTrait {
                             field name: String = name
 
                             override def label(): String = this.name

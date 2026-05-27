@@ -484,7 +484,10 @@ public class JavaExpressionEvaluator {
             var methodName = idx >= 0 && idx + 2 < functionCall.name().length()
                     ? functionCall.name().substring(idx + 2)
                     : functionCall.name();
-            var normalizedMethodName = emittedMethodName(functionCall);
+            var receiverType = functionCall.arguments().getFirst().type();
+            var normalizedMethodName = receiverType instanceof dev.capylang.compiler.CompiledObjectType
+                    ? javaObjectMethodName(methodName)
+                    : emittedMethodName(functionCall);
             var primitiveBackedMethodCall = isPrimitiveBackedMethodCall(functionCall);
             if ("size".equals(methodName) && isStringLike(functionCall.arguments().getFirst().type()) && args.size() == 1) {
                 return current.addExpression("(" + args.getFirst() + ").length()");
@@ -1990,6 +1993,8 @@ public class JavaExpressionEvaluator {
                                     .orElseGet(() -> normalizeJavaTypeReference(linkedDataType.name()));
             case dev.capylang.compiler.CompiledDataParentType linkedDataParentType ->
                     normalizeJavaTypeReference(linkedDataParentType.name());
+            case dev.capylang.compiler.CompiledObjectType objectType ->
+                    normalizeJavaClassReference(objectType.backendClassName());
             case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
                     genericTypeParameter.name();
             default -> "java.lang.Object";
@@ -3182,6 +3187,7 @@ public class JavaExpressionEvaluator {
             };
             case dev.capylang.compiler.CompiledDataType dataType -> normalizeJavaTypeReference(dataType.name());
             case dev.capylang.compiler.CompiledDataParentType dataParentType -> normalizeJavaTypeReference(dataParentType.name());
+            case dev.capylang.compiler.CompiledObjectType objectType -> normalizeJavaClassReference(objectType.backendClassName());
             case dev.capylang.compiler.CollectionLinkedType.CompiledList ignored -> "java.util.List";
             case dev.capylang.compiler.CollectionLinkedType.CompiledSet ignored -> "java.util.Set";
             case dev.capylang.compiler.CollectionLinkedType.CompiledDict ignored -> "java.util.Map";
@@ -3484,6 +3490,13 @@ public class JavaExpressionEvaluator {
             return identifier + "_";
         }
         return identifier;
+    }
+
+    private static String javaObjectMethodName(String name) {
+        if (JAVA_KEYWORDS.contains(name)) {
+            return name + "_";
+        }
+        return name;
     }
 
     private static int countLeadingUnderscores(String value) {
