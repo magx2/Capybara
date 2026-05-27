@@ -954,10 +954,9 @@ public final class PythonGenerator implements Generator {
                         .orElseGet(() -> resolveFunctionTarget(functionCall));
                 return target + "(" + String.join(", ", args) + ")";
             }
-            var emittedName = pyIdentifier(emittedMethodName(functionCall));
-            if ("with".equals(emittedName)) {
-                emittedName = "with_";
-            }
+            var emittedName = receiverType instanceof CompiledObjectType
+                    ? objectMethodIdentifier(methodName)
+                    : pyIdentifier(emittedMethodName(functionCall));
             return "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
         }
 
@@ -5489,6 +5488,13 @@ public final class PythonGenerator implements Generator {
     }
 
     static String enumValueIdentifier(String rawName) {
+        if (isValidPyIdentifier(rawName) && !PY_KEYWORDS.contains(rawName)) {
+            return rawName;
+        }
+        return pyIdentifier(rawName);
+    }
+
+    static String objectMethodIdentifier(String rawName) {
         if (isValidPyIdentifier(rawName) && !PY_KEYWORDS.contains(rawName)) {
             return rawName;
         }

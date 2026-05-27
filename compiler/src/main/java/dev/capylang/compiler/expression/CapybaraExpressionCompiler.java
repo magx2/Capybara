@@ -2114,6 +2114,10 @@ public class CapybaraExpressionCompiler {
             return unsafeEffectRun.orElseThrow();
         }
         if (candidates.isEmpty()) {
+            var objectMethod = resolveObjectMethodInvokeCall(functionCall, scope, methodName, expectedType);
+            if (objectMethod.isPresent()) {
+                return objectMethod.orElseThrow();
+            }
             if (hasPlaceholderArguments(functionCall.arguments())) {
                 var partialBuiltin = resolvePartialBuiltinMethodInvoke(functionCall, scope, methodName, expectedType);
                 if (partialBuiltin.isPresent()) {
@@ -2207,6 +2211,146 @@ public class CapybaraExpressionCompiler {
                 best.arguments(),
                 best.returnType()
         ));
+    }
+
+    private Optional<Result<CompiledExpression>> resolveObjectMethodInvokeCall(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName,
+            Optional<CompiledType> expectedType
+    ) {
+        if (functionCall.arguments().isEmpty() || hasPlaceholderArguments(functionCall.arguments())) {
+            return Optional.empty();
+        }
+        var linkedReceiver = linkExpression(functionCall.arguments().getFirst(), scope);
+        if (linkedReceiver instanceof Result.Error<CompiledExpression> error) {
+            return Optional.of(new Result.Error<>(error.errors()));
+        }
+        var receiver = ((Result.Success<CompiledExpression>) linkedReceiver).value();
+        if (!(receiver.type() instanceof CompiledObjectType receiverType)) {
+            return Optional.empty();
+        }
+        var candidates = objectMethodSignatures(receiverType, methodName, functionCall.arguments().size());
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ResolvedFunctionCall best = null;
+        Result.Error.SingleError deepestError = null;
+        for (var candidate : candidates) {
+            var maybeResolved = linkArgumentsForExpectedTypes(
+                    functionCall.arguments(),
+                    scope,
+                    candidate.parameterTypes(),
+                    candidate.returnType(),
+                    expectedType
+            );
+            if (maybeResolved instanceof Result.Error<CoercedArguments> error) {
+                deepestError = preferDeeperError(deepestError, firstError(error));
+                continue;
+            }
+            if (!(maybeResolved instanceof Result.Success<CoercedArguments> resolvedValue)) {
+                continue;
+            }
+            var resolved = resolvedValue.value();
+            var returnType = resolveReturnType(candidate, resolved.arguments());
+            if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
+                continue;
+            }
+            if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), returnType, expectedType, best)) {
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
+            }
+        }
+        if (best == null) {
+            if (deepestError != null) {
+                return Optional.of(new Result.Error<>(deepestError));
+            }
+            return Optional.of(withPosition(
+                    Result.error("No matching method `" + methodName + "` for object receiver `" + receiver.type().name() + "`"),
+                    functionCall.position()
+            ));
+        }
+        return Optional.of(Result.success(new CompiledFunctionCall(
+                best.signature().name(),
+                best.arguments(),
+                best.returnType()
+        )));
+    }
+
+    private List<FunctionSignature> objectMethodSignatures(
+            CompiledObjectType receiverType,
+            String methodName,
+            int functionCallArity
+    ) {
+        var signatures = new ArrayList<FunctionSignature>();
+        for (var ownerType : objectMethodOwnerTypes(receiverType)) {
+            for (var method : ownerType.methods()) {
+                if (!method.name().equals(methodName) || method.parameters().size() + 1 != functionCallArity) {
+                    continue;
+                }
+                objectMethodSignature(ownerType, method).ifPresent(signatures::add);
+            }
+        }
+        return List.copyOf(signatures);
+    }
+
+    private List<CompiledObjectType> objectMethodOwnerTypes(CompiledObjectType receiverType) {
+        var owners = new LinkedHashMap<String, CompiledObjectType>();
+        owners.put(receiverType.name(), receiverType);
+        for (var parentName : receiverType.parents()) {
+            findObjectType(parentName).ifPresent(parentType -> owners.putIfAbsent(parentType.name(), parentType));
+        }
+        return List.copyOf(owners.values());
+    }
+
+    private Optional<CompiledObjectType> findObjectType(String typeName) {
+        var direct = dataTypes.get(typeName);
+        if (direct instanceof CompiledObjectType objectType) {
+            return Optional.of(objectType);
+        }
+        var simpleName = simpleTypeName(typeName);
+        return dataTypes.values().stream()
+                .filter(CompiledObjectType.class::isInstance)
+                .map(CompiledObjectType.class::cast)
+                .filter(objectType -> objectType.name().equals(typeName) || simpleTypeName(objectType.name()).equals(simpleName))
+                .findFirst();
+    }
+
+    private Optional<FunctionSignature> objectMethodSignature(CompiledObjectType ownerType, CompiledObjectMethod method) {
+        var parameterTypes = new ArrayList<CompiledType>();
+        var parameterNames = new ArrayList<String>();
+        parameterTypes.add(ownerType);
+        parameterNames.add("this");
+        for (var parameter : method.parameters()) {
+            var parameterType = objectMethodType(parameter.type());
+            if (parameterType.isEmpty()) {
+                return Optional.empty();
+            }
+            parameterTypes.add(parameterType.orElseThrow());
+            parameterNames.add(parameter.name());
+        }
+        var returnType = objectMethodType(method.returnType());
+        if (returnType.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new FunctionSignature(
+                METHOD_DECL_PREFIX + ownerType.name() + "__" + method.name(),
+                List.copyOf(parameterTypes),
+                List.copyOf(parameterNames),
+                returnType.orElseThrow()
+        ));
+    }
+
+    private Optional<CompiledType> objectMethodType(String rawType) {
+        var trimmed = rawType.trim();
+        if ("void".equals(trimmed) || trimmed.endsWith("[]")) {
+            return Optional.empty();
+        }
+        var linkedType = linkTypeInScope(CapybaraParser.parseTypeDescriptor(trimmed), Scope.EMPTY);
+        if (linkedType instanceof Result.Error<CompiledType>) {
+            return Optional.empty();
+        }
+        return Optional.of(((Result.Success<CompiledType>) linkedType).value());
     }
 
     private Optional<Result<CompiledExpression>> rejectUnsafeEffectRunCall(
@@ -5383,7 +5527,7 @@ public class CapybaraExpressionCompiler {
             ownerNames.add("String");
         }
         ownerNames.addAll(linkCache.methodOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
-        if (receiverType instanceof CompiledDataType) {
+        if (receiverType instanceof CompiledDataType || receiverType instanceof CompiledObjectType) {
             ownerNames.addAll(linkCache.subtypeParentOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
         }
         return Set.copyOf(ownerNames);
@@ -8466,6 +8610,14 @@ public class CapybaraExpressionCompiler {
     private static Map<String, Set<String>> buildSubtypeParentOwnerCandidatesBySimpleType(Map<String, GenericDataType> availableDataTypes) {
         var ownersBySimpleType = new LinkedHashMap<String, LinkedHashSet<String>>();
         for (var entry : availableDataTypes.entrySet()) {
+            if (entry.getValue() instanceof CompiledObjectType objectType) {
+                var subtypeSimple = simpleTypeNameStatic(baseTypeNameStatic(entry.getKey()));
+                var owners = ownersBySimpleType.computeIfAbsent(subtypeSimple, ignored -> new LinkedHashSet<>());
+                for (var parentName : objectType.parents()) {
+                    owners.add(baseTypeNameStatic(parentName));
+                }
+                continue;
+            }
             if (!(entry.getValue() instanceof CompiledDataParentType parentType)) {
                 continue;
             }

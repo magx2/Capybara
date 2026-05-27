@@ -12,8 +12,9 @@ fun tests(): Effect[TestFile] =
 
 fun java_native_provider_bootstrap_resolves_backend(): Effect[Assert] =
     let clock <- system_clock()
-    assert_that(true).is_true()
+    assert_that(clock.now_millis()).is_equal_to(12345L)
 
 fun native_provider_can_be_injected_through_generated_interface(): Effect[Assert] =
     let clock <- system_clock()
-    assert_that(true).is_true()
+    let domain <- NativeProviderDomain(clock)
+    assert_that(domain.read()).is_equal_to(12345L)
