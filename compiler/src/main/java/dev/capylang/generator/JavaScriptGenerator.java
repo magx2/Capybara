@@ -137,9 +137,9 @@ public final class JavaScriptGenerator implements Generator {
         for (var provider : providers) {
             code.append("const ")
                     .append(nativeProviderModuleVariable(provider))
-                    .append(" = require(")
+                    .append(" = capy.requireNativeProviderModule(")
                     .append(jsString(provider.binding().moduleName()))
-                    .append(");\n");
+                    .append(", __filename);\n");
         }
         code.append("\n");
         code.append("const providers = capy.defineNativeProviders({\n");
@@ -5431,6 +5431,37 @@ public final class JavaScriptGenerator implements Generator {
                         return value;
                     }
 
+                    function lowerNativeImplementationDecorators(source) {
+                        return source.replace(/^[ \\t]*@NativeImplementation(?:\\([^\\r\\n)]*\\))?[ \\t]*(?:\\r?\\n)/gm, '');
+                    }
+
+                    function requireNativeProviderModule(moduleName, parentFilename) {
+                        const Module = require('node:module');
+                        const fs = require('node:fs');
+                        const path = require('node:path');
+                        const parentRequire = Module.createRequire(parentFilename);
+                        const resolved = parentRequire.resolve(moduleName);
+                        const cached = Module._cache[resolved];
+                        if (cached) {
+                            return cached.exports;
+                        }
+                        const source = fs.readFileSync(resolved, 'utf8');
+                        if (!/(^|\\r?\\n)[ \\t]*@NativeImplementation\\b/m.test(source)) {
+                            return parentRequire(moduleName);
+                        }
+                        const nativeModule = new Module(resolved, module.parent);
+                        nativeModule.filename = resolved;
+                        nativeModule.paths = Module._nodeModulePaths(path.dirname(resolved));
+                        Module._cache[resolved] = nativeModule;
+                        try {
+                            nativeModule._compile(lowerNativeImplementationDecorators(source), resolved);
+                            return nativeModule.exports;
+                        } catch (error) {
+                            delete Module._cache[resolved];
+                            throw error;
+                        }
+                    }
+
                     function nativeFactory(options) {
                         const metadata = {
                             interfaceId: options?.interfaceId,
@@ -6727,6 +6758,7 @@ public final class JavaScriptGenerator implements Generator {
                         unsupported,
                         NativeProviderError,
                         nativeProviderError,
+                        requireNativeProviderModule,
                         nativeFactory,
                         defineNativeProviders,
                         resolveNativeImplementation,
