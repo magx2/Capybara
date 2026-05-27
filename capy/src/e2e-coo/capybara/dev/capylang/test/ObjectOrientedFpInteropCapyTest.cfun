@@ -41,8 +41,8 @@ fun pet_interactor_is_constructible_and_exposes_expected_methods(): Effect[Asser
 
 fun fp_functions_create_and_match_interop_pets(): Assert =
     // Legacy OO host tests also assert generated class identity from PetInteractor.
-    // Capybara .cfun tests can construct and reflect OO values but cannot invoke
-    // OO instance methods portably, so this test observes the same FP values.
+    // Capybara .cfun tests keep this coverage on the FP values because generated
+    // class identity is still a host-level concern.
     assert_all([
         assert_that(pet_text(make_dog("Capy"))).is_equal_to("dog:Capy"),
         assert_that(interop_dog_name(make_dog("Bara"))).is_equal_to("Bara"),

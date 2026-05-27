@@ -1,0 +1,9 @@
+class Foo {
+    def foo(x: int): String {
+        if x == 5 {
+            return "number is 5"
+        } else {
+            return "unexpected"
+        }
+    }
+}

@@ -1,0 +1,14 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ObjectMethodInterop import { * }
+
+fun tests(): Effect[TestFile] =
+    let assertion <- invoke_foo_returns_effect()
+    test_file("/dev/capylang/test/ObjectMethodInterop.cfun", [
+        test("invoke_foo returns the OO method result", () => assertion),
+    ])
+
+fun invoke_foo_returns_effect(): Effect[Assert] =
+    let result <- invoke_foo(5)
+    assert_that(result).is_equal_to("number is 5")

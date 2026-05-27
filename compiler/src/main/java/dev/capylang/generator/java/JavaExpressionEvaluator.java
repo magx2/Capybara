@@ -568,7 +568,11 @@ public class JavaExpressionEvaluator {
                             .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
                             .collect(java.util.stream.Collectors.joining(", "))
                     : "";
-            return current.addExpression(typedReceiver + "." + normalizedMethodName + "(" + invokeArgs + ")");
+            var invocation = typedReceiver + "." + normalizedMethodName + "(" + invokeArgs + ")";
+            if (receiverType instanceof dev.capylang.compiler.CompiledObjectType && isEffectType(functionCall.type())) {
+                return current.addExpression("capy.lang.Effect.delay(() -> (" + invocation + "))");
+            }
+            return current.addExpression(invocation);
         }
 
         var callArgs = java.util.stream.IntStream.range(0, args.size())
@@ -4157,6 +4161,16 @@ public class JavaExpressionEvaluator {
             return false;
         }
         return isOptionTypeName(genericDataType.name());
+    }
+
+    private static boolean isEffectType(dev.capylang.compiler.CompiledType type) {
+        if (!(type instanceof dev.capylang.compiler.GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = normalizeQualifiedTypeName(genericDataType.name());
+        return "Effect".equals(genericDataType.name())
+               || normalized.endsWith("/Effect.Effect")
+               || normalized.endsWith("/Effect");
     }
 
     private static boolean isOptionTypeName(String typeName) {

@@ -2329,15 +2329,19 @@ public class CapybaraExpressionCompiler {
             parameterTypes.add(parameterType.orElseThrow());
             parameterNames.add(parameter.name());
         }
-        var returnType = objectMethodType(method.returnType());
-        if (returnType.isEmpty()) {
+        var rawReturnType = objectMethodType(method.returnType());
+        if (rawReturnType.isEmpty()) {
+            return Optional.empty();
+        }
+        var returnType = effectTypeFor(rawReturnType.orElseThrow());
+        if (returnType == null) {
             return Optional.empty();
         }
         return Optional.of(new FunctionSignature(
                 METHOD_DECL_PREFIX + ownerType.name() + "__" + method.name(),
                 List.copyOf(parameterTypes),
                 List.copyOf(parameterNames),
-                returnType.orElseThrow()
+                returnType
         ));
     }
 
