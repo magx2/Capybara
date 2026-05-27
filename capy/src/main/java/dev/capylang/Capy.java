@@ -15,6 +15,7 @@ import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.NativeProviderCatalog;
 import dev.capylang.compiler.NativeProviderManifest;
+import dev.capylang.compiler.NativeImplementationScanner;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.expression.CompiledExpression;
@@ -777,8 +778,9 @@ public class Capy {
                 .toList();
         log.info("Built " + rawModules.size() + " raw modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - rawModuleBuildStartedAt));
 
+        var nativeImplementationProviders = NativeImplementationScanner.scan(input);
         var linkingStartedAt = System.nanoTime();
-        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries, nativeProviders);
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries, nativeProviders, nativeImplementationProviders);
         log.info("Linked " + rawModules.size() + " modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - linkingStartedAt));
         if (linking instanceof Result.Error<CompiledProgram> error) {
             err.println("Compilation failed with " + error.errors().size() + " error(s):");

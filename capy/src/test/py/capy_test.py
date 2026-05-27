@@ -102,20 +102,21 @@ class CapyPythonCliTest(unittest.TestCase):
         regenerated_dir = root / "regenerated"
         (source_dir / "foo").mkdir(parents=True)
         (source_dir / "dev" / "capylang" / "test").mkdir(parents=True)
-        (source_dir / "dev" / "capylang" / "test" / "nativeinterop").mkdir(parents=True)
+        (root / "py" / "dev" / "capylang" / "test" / "nativeinterop").mkdir(parents=True)
         (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
         (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
             interface Clock {
                 def now(): String
             }
         """))
-        (source_dir / "dev" / "capylang" / "test" / "nativeinterop" / "SystemClock.coo").write_text(textwrap.dedent("""
-            from /capy/meta_prog/NativeImplementation import { NativeImplementation }
-            from /dev/capylang/test/Clock import { Clock }
+        (root / "py" / "dev" / "capylang" / "test" / "nativeinterop" / "SystemClock.py").write_text(textwrap.dedent("""
+            from dev.capylang.capybara import NativeImplementation
+            from dev.capylang.test.Clock import Clock
 
-            @NativeImplementation(qualifier: "system")
-            class SystemClock: Clock {
-            }
+            @NativeImplementation(qualifier="system")
+            class SystemClock(Clock):
+                def now(self):
+                    return "now"
         """))
         (source_dir / "dev" / "capylang" / "test" / "ClockProvider.cfun").write_text(textwrap.dedent("""
             from /capy/lang/Effect import { Effect }

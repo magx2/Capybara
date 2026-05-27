@@ -18,6 +18,7 @@ import javax.tools.ToolProvider;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapyTest {
@@ -378,19 +379,25 @@ class CapyTest {
         var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-native-source"));
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
-        Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop"));
+        var nativeSourceDir = Files.createDirectories(tempDir.resolve("java").resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
                 interface Clock {
                     def now(): String
                 }
                 """);
-        Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop").resolve("SystemClock.coo"), """
-                from /capy/meta_prog/NativeImplementation import { NativeImplementation }
-                from /dev/capylang/test/Clock import { Clock }
+        Files.writeString(nativeSourceDir.resolve("SystemClock.java"), """
+                package dev.capylang.test.nativeinterop;
 
-                @NativeImplementation(qualifier: "system")
-                class SystemClock: Clock {
+                import dev.capylang.NativeImplementation;
+                import dev.capylang.test.Clock;
+
+                @NativeImplementation(qualifier = "system")
+                public final class SystemClock implements Clock {
+                    @Override
+                    public String now() {
+                        return "now";
+                    }
                 }
                 """);
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProvider.cfun"), """
@@ -428,8 +435,8 @@ class CapyTest {
         assertEquals("/dev/capylang/test/Clock", binding.interfaceId());
         assertEquals("system", binding.qualifier());
         assertEquals("dev.capylang.test.nativeinterop.SystemClock", binding.javaBinding().className());
-        assertEquals("./test/nativeinterop/SystemClock.js", binding.javascriptBinding().moduleName());
-        assertEquals("dev.capylang.test.nativeinterop.SystemClock", binding.pythonBinding().moduleName());
+        assertNull(binding.javascriptBinding());
+        assertNull(binding.pythonBinding());
 
         var generateExit = Capy.execute(
                 new String[]{

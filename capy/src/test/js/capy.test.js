@@ -115,20 +115,26 @@ test('compile-generate JS accepts native provider annotation wiring', async () =
     const regeneratedDir = join(root, 'regenerated');
     await mkdir(join(sourceDir, 'foo'), { recursive: true });
     await mkdir(join(sourceDir, 'dev', 'capylang', 'test'), { recursive: true });
-    await mkdir(join(sourceDir, 'dev', 'capylang', 'test', 'nativeinterop'), { recursive: true });
+    await mkdir(join(root, 'js', 'dev', 'capylang', 'test', 'nativeinterop'), { recursive: true });
     await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
 interface Clock {
     def now(): String
 }
 `);
-    await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'nativeinterop', 'SystemClock.coo'), `
-from /capy/meta_prog/NativeImplementation import { NativeImplementation }
-from /dev/capylang/test/Clock import { Clock }
+    await writeFile(join(root, 'js', 'dev', 'capylang', 'test', 'nativeinterop', 'SystemClock.js'), `
+'use strict';
 
-@NativeImplementation(qualifier: "system")
-class SystemClock: Clock {
+const { Clock } = require('../Clock.js');
+
+/** @NativeImplementation(qualifier: "system") */
+class SystemClock extends Clock {
+    now() {
+        return 'now';
+    }
 }
+
+module.exports = { SystemClock };
 `);
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'ClockProvider.cfun'), `
 from /capy/lang/Effect import { Effect }

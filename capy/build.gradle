@@ -382,11 +382,13 @@ def e2eCooJsNativeGeneratedJsDir = layout.buildDirectory.dir('generated/sources/
 def e2eCooJsNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-coo-js-native')
 def e2eCooJsNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js-native')
 def e2eCooNativeJsSourceDir = layout.projectDirectory.dir('src/e2e-coo/native/js')
+def e2eCooJsNativeJsSourceDir = layout.projectDirectory.dir('src/e2e-coo-js-native/js')
 def e2eCooPyNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-py-native/capybara')
 def e2eCooPyNativeGeneratedPyDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-coo-py-native')
 def e2eCooPyNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo-py-native')
 def e2eCooPyNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python-native')
 def e2eCooNativePySourceDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
+def e2eCooPyNativePySourceDir = layout.projectDirectory.dir('src/e2e-coo-py-native/py')
 def jsTestSourcePath = 'src/test/js'
 def jsTestRunner = layout.projectDirectory.file("${jsTestSourcePath}/run-tests.js")
 def pyTestSourcePath = 'src/test/py'
@@ -653,8 +655,8 @@ def e2eCooJsNativeTests = tasks.register('e2e-coo-js-native', CapybaraNodeTestTa
     inputs.dir(e2eCooJsNativeGeneratedJsDir)
             .withPropertyName('e2eCooJsNativeGeneratedJsSources')
             .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooNativeJsSourceDir)
-            .withPropertyName('e2eCooNativeJsSources')
+    inputs.dir(e2eCooJsNativeJsSourceDir)
+            .withPropertyName('e2eCooJsNativeJsSources')
             .withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir(e2eCooJsNativeTestResultsDir)
     shouldRunAfter e2eCooJsTests
@@ -726,8 +728,8 @@ def e2eCooPythonNativeTests = tasks.register('e2e-coo-python-native', CapybaraPy
     inputs.dir(e2eCooPyNativeGeneratedPyDir)
             .withPropertyName('e2eCooPyNativeGeneratedPySources')
             .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooNativePySourceDir)
-            .withPropertyName('e2eCooNativePySources')
+    inputs.dir(e2eCooPyNativePySourceDir)
+            .withPropertyName('e2eCooPyNativePySources')
             .withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir(e2eCooPyNativeTestResultsDir)
     shouldRunAfter e2eCooPythonTests
@@ -839,7 +841,7 @@ def linkCapybaraE2eCooJsNativeSources = registerCapybaraE2eLinkTask(
 )
 def copyE2eCooJsNativeFixtures = tasks.register('copyE2eCooJsNativeFixtures', Copy) {
     dependsOn linkCapybaraE2eCooJsNativeSources
-    from(e2eCooNativeJsSourceDir)
+    from(e2eCooJsNativeJsSourceDir)
     into(e2eCooJsNativeGeneratedJsDir)
 }
 def copyE2eCooJsNativeWiringFixtures = tasks.register('copyE2eCooJsNativeWiringFixtures', Copy) {
@@ -865,7 +867,7 @@ def linkCapybaraE2eCooPyNativeSources = registerCapybaraE2eLinkTask(
 )
 def copyE2eCooPyNativeFixtures = tasks.register('copyE2eCooPyNativeFixtures', Copy) {
     dependsOn linkCapybaraE2eCooPyNativeSources
-    from(e2eCooNativePySourceDir)
+    from(e2eCooPyNativePySourceDir)
     into(e2eCooPyNativeGeneratedPyDir)
 }
 def copyE2eCooPyNativeWiringFixtures = tasks.register('copyE2eCooPyNativeWiringFixtures', Copy) {
