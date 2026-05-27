@@ -933,7 +933,9 @@ public final class JavaScriptGenerator implements Generator {
                         .orElseGet(() -> resolveFunctionTarget(functionCall));
                 return target + "(" + String.join(", ", args) + ")";
             }
-            var emittedName = emittedMethodName(functionCall);
+            var emittedName = receiverType instanceof CompiledObjectType
+                    ? objectMethodIdentifier(methodName)
+                    : emittedMethodName(functionCall);
             return "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
         }
 
@@ -7049,6 +7051,13 @@ public final class JavaScriptGenerator implements Generator {
     }
 
     static String enumValueIdentifier(String rawName) {
+        if (isValidJsIdentifier(rawName) && !JS_KEYWORDS.contains(rawName)) {
+            return rawName;
+        }
+        return normalizeJsIdentifier(rawName);
+    }
+
+    static String objectMethodIdentifier(String rawName) {
         if (isValidJsIdentifier(rawName) && !JS_KEYWORDS.contains(rawName)) {
             return rawName;
         }

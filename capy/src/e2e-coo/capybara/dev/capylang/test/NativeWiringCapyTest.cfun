@@ -12,8 +12,9 @@ fun tests(): Effect[TestFile] =
 
 fun native_provider_effect_resolves_host_provider(): Effect[Assert] =
     let clock <- system_native_clock()
-    assert_that(true).is_true()
+    assert_that(clock.now_millis()).is_equal_to(12345L)
 
 fun native_provider_can_be_passed_to_domain_code(): Effect[Assert] =
     let clock <- system_native_clock()
-    assert_that(true).is_true()
+    let consumer <- NativeClockConsumer(clock)
+    assert_that(consumer.read()).is_equal_to(12345L)
