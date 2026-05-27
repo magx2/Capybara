@@ -127,7 +127,7 @@ interface Clock {
 
 const { Clock } = require('../Clock.js');
 
-/** @NativeImplementation(qualifier: "system") */
+@NativeImplementation("system")
 class SystemClock extends Clock {
     now() {
         return 'now';

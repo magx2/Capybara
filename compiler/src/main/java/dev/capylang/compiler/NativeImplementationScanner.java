@@ -24,8 +24,8 @@ public final class NativeImplementationScanner {
             "(?:const|let|var)\\s*\\{([^}]+)}\\s*=\\s*require\\(\\s*(['\"])([^'\"]+)\\2\\s*\\)"
     );
     private static final Pattern JS_NATIVE_IMPLEMENTATION = Pattern.compile(
-            "@NativeImplementation\\s*(?:\\(([^)]*)\\))?[\\s\\S]*?"
-            + "class\\s+([A-Za-z_$][\\w$]*)\\s+extends\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)?)"
+            "(?m)^\\s*@NativeImplementation\\s*(?:\\(([^\\r\\n)]*)\\))?\\s*\\R\\s*"
+            + "(?:export\\s+)?class\\s+([A-Za-z_$][\\w$]*)\\s+extends\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)?)"
     );
     private static final Pattern PY_IMPORT = Pattern.compile("(?m)^\\s*from\\s+([A-Za-z_][\\w.]*)\\s+import\\s+([^\\n]+)");
     private static final Pattern PY_NATIVE_IMPLEMENTATION = Pattern.compile(
