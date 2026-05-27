@@ -91,11 +91,8 @@ class ObjectOrientedCompilerTest {
     void shouldCompileNativeProviderDeclarationTargetingLocalInterface() {
         var program = compileProviderSuccess(
                 List.of(
-                        clockProviderModule(),
-                        new RawModule("Clock", "/dev/capylang/test", """
-                                fun identity(clock: Clock): Clock =
-                                    clock
-                                """)
+                        clockObjectInterfaceModule(),
+                        clockProviderModule()
                 ),
                 providerManifest(providerBinding("/dev/capylang/test/Clock", "system"))
         );
@@ -105,11 +102,11 @@ class ObjectOrientedCompilerTest {
                 .satisfies(declaration -> {
                     assertThat(declaration.providerName()).isEqualTo("system_clock");
                     assertThat(declaration.sourceModulePath()).isEqualTo("/dev/capylang/test");
-                    assertThat(declaration.sourceModuleName()).isEqualTo("Clock");
+                    assertThat(declaration.sourceModuleName()).isEqualTo("ClockProvider");
                     assertThat(declaration.targetTypeName()).isEqualTo("Clock");
                     assertThat(declaration.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
                     assertThat(declaration.qualifier()).isEqualTo("system");
-                    assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/test/Clock.coo");
+                    assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/test/ClockProvider.cfun");
                 });
         assertThat(program.nativeProviderCatalog().bindings())
                 .singleElement()
@@ -120,32 +117,17 @@ class ObjectOrientedCompilerTest {
                     assertThat(binding.javaBinding().className()).isEqualTo("dev.capylang.test.SystemClock");
                 });
 
-        var objectType = (CompiledObjectType) program.modules().stream()
-                .filter(module -> module.name().equals("Clock") && module.path().equals("/dev/capylang/test"))
-                .findFirst()
-                .orElseThrow()
-                .types()
-                .get("Clock");
-        assertThat(objectType.kind()).isEqualTo(CompiledObjectKind.INTERFACE);
-        assertThat(objectType.methods())
+        assertThat(program.objectOrientedModules())
                 .singleElement()
-                .satisfies(method -> {
-                    assertThat(method.name()).isEqualTo("now");
-                    assertThat(method.parameters())
-                            .singleElement()
-                            .satisfies(parameter -> {
-                                assertThat(parameter.name()).isEqualTo("zone");
-                                assertThat(parameter.type()).isEqualTo("String");
-                            });
-                    assertThat(method.returnType()).isEqualTo("String");
-                    assertThat(method.backendMethodNames()).isEmpty();
-                });
+                .satisfies(module -> assertThat(module.name()).isEqualTo("Clock"));
     }
 
     @Test
     void shouldCompileNativeProviderBackendWiringFromAnnotation() {
-        var program = compileProviderSuccess(List.of(new RawModule("Clock", "/dev/capylang/test", """
+        var program = compileProviderSuccess(List.of(clockObjectInterfaceModule(), new RawModule("ClockProvider", "/dev/capylang/test", """
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(
                     qualifier: "system",
@@ -156,10 +138,8 @@ class ObjectOrientedCompilerTest {
                     pythonModule: "nativeinterop.system_clock",
                     pythonClassName: "SystemClock"
                 )
-                interface Clock {
-                    def now(zone: String): String
-                }
-                """, SourceKind.OBJECT_ORIENTED)), NativeProviderManifest.empty());
+                fun system_clock(): Effect[Clock] = <native>
+                """)), NativeProviderManifest.empty());
 
         assertThat(program.nativeProviderCatalog().declarations())
                 .singleElement()
@@ -191,12 +171,13 @@ class ObjectOrientedCompilerTest {
                 List.of(
                         clockInterfaceModule(),
                         new RawModule("Providers", "/dev/capylang/app", """
-                                from /dev/capylang/time/Clock import { Clock, system_clock }
+                                from /capy/lang/Effect import { Effect }
+                                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                                from /dev/capylang/time/Clock import { Clock }
 
-                                class App {
-                                    def clock(): Clock = system_clock()
-                                }
-                                """, SourceKind.OBJECT_ORIENTED)
+                                @NativeProvider(qualifier: "system")
+                                fun app_clock(): Effect[Clock] = <native>
+                                """)
                 ),
                 providerManifest(providerBinding("/dev/capylang/time/Clock", "system"))
         );
@@ -204,21 +185,22 @@ class ObjectOrientedCompilerTest {
         assertThat(program.nativeProviderCatalog().declarations())
                 .singleElement()
                 .satisfies(declaration -> {
-                    assertThat(declaration.providerName()).isEqualTo("system_clock");
+                    assertThat(declaration.providerName()).isEqualTo("app_clock");
                     assertThat(declaration.targetTypeName()).isEqualTo("Clock");
                     assertThat(declaration.interfaceId()).isEqualTo("/dev/capylang/time/Clock");
-                    assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/time/Clock.coo");
+                    assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/app/Providers.cfun");
                 });
     }
 
     @Test
     void shouldRejectUnknownNativeProviderAnnotation() {
-        var result = compileProviders("""
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(clockObjectInterfaceModule(), new RawModule("ClockProvider", "/dev/capylang/test", """
+                from /capy/lang/Effect import { Effect }
+                from Clock import { Clock }
+
                 @NativeProvider(qualifier: "system")
-                interface Clock {
-                    def now(zone: String): String
-                }
-                """, NativeProviderManifest.empty());
+                fun system_clock(): Effect[Clock] = <native>
+                """)), new TreeSet<>(), NativeProviderManifest.empty());
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
@@ -228,12 +210,12 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldRejectNativeProviderNameArgument() {
         var result = compileProviders("""
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(name: "system_clock", qualifier: "system")
-                interface Clock {
-                    def now(zone: String): String
-                }
+                fun system_clock(): Effect[Clock] = <native>
                 """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
         assertThat(errorMessages(result))
@@ -242,8 +224,10 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldRejectNativeProviderAnnotationOnNonInterfaceTargets() {
-        var result = compileProviders("""
+    void shouldRejectNativeProviderAnnotationOnObjectOrientedTargets() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                nativeProviderAnnotationModule(),
+                new RawModule("Clock", "/dev/capylang/test", """
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
                 @NativeProvider(qualifier: "system")
@@ -254,7 +238,8 @@ class ObjectOrientedCompilerTest {
                 trait ClockTrait {
                     def now(zone: String): String = zone
                 }
-                """, NativeProviderManifest.empty());
+                """, SourceKind.OBJECT_ORIENTED)
+        ), new TreeSet<>(), NativeProviderManifest.empty());
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message).contains("Annotation NativeProvider").contains("is not valid on class declarations"))
@@ -262,38 +247,35 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldRejectDuplicateDerivedNativeProviderSymbols() {
+    void shouldRejectNativeProviderFunctionWithParameters() {
         var result = compileProviders("""
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(qualifier: "system")
-                interface Clock {
-                    def now(zone: String): String
-                }
-
-                @NativeProvider(qualifier: "")
-                interface SystemClock {
-                    def now(zone: String): String
-                }
+                fun system_clock(zone: String): Effect[Clock] = <native>
                 """, NativeProviderManifest.empty());
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
                         .contains("Native provider `system_clock`")
-                        .contains("duplicates another provider symbol")
-                        .contains("/dev/capylang/test/Clock.coo"));
+                        .contains("must not declare parameters")
+                        .contains("/dev/capylang/test/ClockProvider.cfun"));
     }
 
     @Test
     void shouldRejectDuplicateNativeProviderDeclarationsForSameInterfaceAndQualifier() {
         var result = compileProviders("""
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+
                 @NativeProvider(qualifier: "system")
-                interface Clock {
-                    def now(zone: String): String
-                }
+                fun duplicate_system_clock(): Effect[Clock] = <native>
                 """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
         assertThat(errorMessages(result))
@@ -301,7 +283,7 @@ class ObjectOrientedCompilerTest {
                         .contains("Duplicate native provider declaration")
                         .contains("interface `/dev/capylang/test/Clock`")
                         .contains("qualifier `system`")
-                        .contains("/dev/capylang/test/Clock.coo"));
+                        .contains("/dev/capylang/test/ClockProvider.cfun"));
     }
 
     @Test
@@ -327,7 +309,7 @@ class ObjectOrientedCompilerTest {
                         .contains("Native provider `system_clock`")
                         .contains("interface `/dev/capylang/test/Clock`")
                         .contains("no annotation backend wiring or matching manifest entry")
-                        .contains("/dev/capylang/test/Clock.coo"));
+                        .contains("/dev/capylang/test/ClockProvider.cfun"));
     }
 
     @Test
@@ -341,71 +323,42 @@ class ObjectOrientedCompilerTest {
                         .contains("Native provider `system_clock`")
                         .contains("unsupported lifetime `request`")
                         .contains("qualifier `system`")
-                        .contains("/dev/capylang/test/Clock.coo"));
+                        .contains("/dev/capylang/test/ClockProvider.cfun"));
     }
 
     @Test
-    void shouldRejectNativeProviderCallWithArgumentsDuringValidation() {
+    void shouldRejectNativeProviderFunctionReturningNonEffect() {
         var result = compileProviders("""
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(qualifier: "system")
-                interface Clock {
-                    def now(zone: String): String
-                }
-
-                class App {
-                    def clock(): Clock = system_clock(1)
-                }
+                fun system_clock(): Clock = <native>
                 """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
                         .contains("TypeMismatch")
                         .contains("Native provider `system_clock`")
-                        .contains("qualifier `system`")
-                        .contains("does not accept arguments")
-                        .contains("system_clock()")
-                        .contains("/dev/capylang/test/Clock.coo"));
+                        .contains("must return `Effect[Interface]"))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("/dev/capylang/test/ClockProvider.cfun"));
     }
 
     @Test
-    void shouldNotRejectNativeProviderArgumentCallWhenProviderNameIsShadowedByLocalBinding() {
+    void shouldRejectNativeProviderFunctionReturningEffectOfNonInterface() {
         var result = compileProviders("""
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
                 @NativeProvider(qualifier: "system")
-                interface Clock {
-                    def now(zone: String): String
-                }
-
-                class App {
-                    def call_parameter(system_clock: any): any =
-                        system_clock(1)
-
-                    def call_local(): any {
-                        let system_clock: any = "local"
-                        return system_clock(1)
-                    }
-                }
-
-                class FieldApp {
-                    field system_clock: any = "local"
-
-                    def call_field(): any =
-                        system_clock(1)
-                }
-
-                class MethodApp {
-                    def system_clock(value: any): any =
-                        value
-
-                    def call_method(): any =
-                        system_clock(1)
-                }
+                fun system_clock(): Effect[String] = <native>
                 """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("target type `String`")
+                        .contains("is not an interface"));
     }
 
     @Test
@@ -441,7 +394,7 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldRoundTripCompiledProgramWithNativeProviderCatalogThroughJackson() throws Exception {
         var program = compileProviderSuccess(
-                List.of(clockProviderModule()),
+                List.of(clockObjectInterfaceModule(), clockProviderModule()),
                 providerManifest(providerBinding("/dev/capylang/test/Clock", "system"))
         );
         var mapper = objectMapper();
@@ -650,7 +603,8 @@ class ObjectOrientedCompilerTest {
     private Result<CompiledProgram> compileProviders(String source, NativeProviderManifest manifest) {
         return CapybaraCompiler.INSTANCE.compile(List.of(
                 nativeProviderAnnotationModule(),
-                new RawModule("Clock", "/dev/capylang/test", source, SourceKind.OBJECT_ORIENTED)
+                clockObjectInterfaceModule(),
+                new RawModule("ClockProvider", "/dev/capylang/test", source)
         ), new TreeSet<>(), manifest);
     }
 
@@ -685,25 +639,30 @@ class ObjectOrientedCompilerTest {
     }
 
     private RawModule clockProviderModule() {
-        return new RawModule("Clock", "/dev/capylang/test", clockProviderSource(), SourceKind.OBJECT_ORIENTED);
+        return new RawModule("ClockProvider", "/dev/capylang/test", clockProviderSource());
     }
 
     private String clockProviderSource() {
         return """
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """;
+    }
+
+    private RawModule clockObjectInterfaceModule() {
+        return new RawModule("Clock", "/dev/capylang/test", """
                 interface Clock {
                     def now(zone: String): String
                 }
-                """;
+                """, SourceKind.OBJECT_ORIENTED);
     }
 
     private RawModule clockInterfaceModule() {
         return new RawModule("Clock", "/dev/capylang/time", """
-                from /capy/meta_prog/NativeProvider import { NativeProvider }
-
-                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -712,7 +671,7 @@ class ObjectOrientedCompilerTest {
 
     private RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
-                annotation NativeProvider on interface {
+                annotation NativeProvider on fun {
                     qualifier: String = ""
                     lifetime: String = "singleton"
                     javaClassName: String = ""

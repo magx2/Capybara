@@ -37,41 +37,22 @@ class ObjectOrientedJavaGeneratorTest {
     Path tempDir;
 
     @Test
-    void shouldLowerObjectOrientedNativeProviderCallToJavaBootstrap() {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "/foo/boo",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+    void shouldLowerNativeProviderFunctionToEffectBackedJavaBootstrapCall() {
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def clock(): Clock = system_clock()
-                        }
-
-                        class Domain(clock: Clock) {
-                            field clock: Clock = clock
-
-                            def read(): long = this.clock.now_millis()
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
 
         var generatedProgram = new JavaGenerator().generate(program);
         assertThat(generatedProgram.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(Path.of("dev", "capylang", "NativeProviderBootstrap.java"));
-        var appModule = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("App.java"))
-                .findFirst()
-                .orElseThrow();
-        var domainModule = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("Domain.java"))
+        var providerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("ProvidersNative.java"))
                 .findFirst()
                 .orElseThrow();
         var bootstrapModule = generatedProgram.modules().stream()
@@ -79,13 +60,10 @@ class ObjectOrientedJavaGeneratorTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(appModule.code())
-                .contains("return dev.capylang.NativeProviderBootstrap.system_clock();")
+        assertThat(providerModule.code())
+                .contains("systemClock()")
+                .contains("return capy.lang.Effect.delay(() -> dev.capylang.NativeProviderBootstrap.system_clock());")
                 .doesNotContain("dev.capylang.test.SystemClock");
-        assertThat(domainModule.code())
-                .contains("public Domain(Clock clock)")
-                .doesNotContain("dev.capylang.test.SystemClock")
-                .doesNotContain("NativeProviderBootstrap");
         assertThat(bootstrapModule.code())
                 .contains("public static foo.boo.Clock system_clock()")
                 .contains("private static final NativeProviders PROVIDERS = NativeProviders.of(")
@@ -94,28 +72,19 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("\"system\",")
                 .contains("foo.boo.Clock.class,")
                 .contains("dev.capylang.test.SystemClock::new")
-                .contains("return PROVIDERS.resolve(\"/foo/boo/Providers.Clock\", \"system\", \"system_clock\", \"java\", \"/foo/boo/Providers.coo\", foo.boo.Clock.class);");
+                .contains("return PROVIDERS.resolve(\"/foo/boo/Providers.Clock\", \"system\", \"system_clock\", \"java\", \"/foo/boo/ProvidersNative.cfun\", foo.boo.Clock.class);");
     }
 
     @Test
-    void shouldGenerateAndRunJavaNativeProviderBootstrap() throws Exception {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "/foo/boo",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+    void shouldGenerateAndRunJavaNativeProviderEffect() throws Exception {
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def now(): long = system_clock().now_millis()
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javaProviderBinding(
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(javaProviderBinding(
                 "/foo/boo/Providers.Clock",
                 "system",
                 "factory",
@@ -137,9 +106,10 @@ class ObjectOrientedJavaGeneratorTest {
         ));
         var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
         try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL(), capybaraLibClasses.toUri().toURL()})) {
-            var appType = classLoader.loadClass("foo.boo.App");
-            var app = appType.getConstructor().newInstance();
-            assertThat(appType.getMethod("now").invoke(app)).isEqualTo(4242L);
+            var providerType = classLoader.loadClass("foo.boo.ProvidersNative");
+            var effect = providerType.getMethod("systemClock").invoke(null);
+            var clock = effect.getClass().getMethod("unsafeRun").invoke(effect);
+            assertThat(clock.getClass().getMethod("now_millis").invoke(clock)).isEqualTo(4242L);
 
             var bootstrapType = classLoader.loadClass("dev.capylang.NativeProviderBootstrap");
             var first = bootstrapType.getMethod("system_clock").invoke(null);
@@ -150,19 +120,14 @@ class ObjectOrientedJavaGeneratorTest {
 
     @Test
     void shouldRejectNativeProviderWithoutJavaBindingDuringGeneration() {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "/foo/boo",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(providerBindingWithoutJava("/foo/boo/Providers.Clock", "system")));
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(providerBindingWithoutJava("/foo/boo/Providers.Clock", "system")));
 
         assertThatThrownBy(() -> new JavaGenerator().generate(program))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -171,24 +136,19 @@ class ObjectOrientedJavaGeneratorTest {
                 .hasMessageContaining("interface `/foo/boo/Providers.Clock`")
                 .hasMessageContaining("qualifier `system`")
                 .hasMessageContaining("backend `java`")
-                .hasMessageContaining("/foo/boo/Providers.coo");
+                .hasMessageContaining("/foo/boo/ProvidersNative.cfun");
     }
 
     @Test
     void shouldFailGeneratedJavaCompileForWrongNativeProviderClassType() throws Exception {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "/foo/boo",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javaProviderBinding(
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(javaProviderBinding(
                 "/foo/boo/Providers.Clock",
                 "system",
                 "factory",
@@ -215,164 +175,15 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
-    void shouldNotRewriteNativeProviderNameOutsideVisibilityRules() {
-        var program = compileProgram(List.of(
-                new RawModule(
-                        "Providers",
-                        "/foo",
-                        """
-                                from /capy/meta_prog/NativeProvider import { NativeProvider }
+    void shouldRejectNativeProviderFunctionsWithArguments() {
+        var result = CapybaraCompiler.INSTANCE.compile(modulesWithNativeProviderAnnotation(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                                @NativeProvider(qualifier: "system")
-                                interface Clock {
-                                    def now_millis(): long
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                ),
-                new RawModule(
-                        "Consumer",
-                        "/foo",
-                        """
-                                class Consumer {
-                                    def clock(): Clock = system_clock()
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                ),
-                new RawModule(
-                        "ImportedConsumer",
-                        "/foo",
-                        """
-                                from Providers import { system_clock }
-
-                                class ImportedConsumer {
-                                    def clock(): Clock = system_clock()
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                )
-        ), providerManifest(javaProviderBinding("/foo/Providers.Clock", "system")));
-
-        var generatedProgram = new JavaGenerator().generate(program);
-        var consumer = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("Consumer.java"))
-                .findFirst()
-                .orElseThrow();
-        var importedConsumer = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("ImportedConsumer.java"))
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(consumer.code())
-                .contains("return system_clock();")
-                .doesNotContain("NativeProviderBootstrap.system_clock()");
-        assertThat(importedConsumer.code())
-                .contains("return dev.capylang.NativeProviderBootstrap.system_clock();");
-    }
-
-    @Test
-    void shouldNotRewriteNativeProviderNameWhenShadowedByLexicalBinding() {
-        var program = compileProgram(List.of(
-                new RawModule(
-                        "Providers",
-                        "/foo",
-                        """
-                                from /capy/meta_prog/NativeProvider import { NativeProvider }
-
-                                @NativeProvider(qualifier: "system")
-                                interface Clock {
-                                    def now_millis(): long
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                ),
-                new RawModule(
-                        "Consumer",
-                        "/foo",
-                        """
-                                from Providers import { system_clock }
-
-                                class App {
-                                    def parameter_shadow(system_clock: any): any =
-                                        system_clock()
-
-                                    def local_shadow(): any {
-                                        let system_clock: any = "local"
-                                        return system_clock()
-                                    }
-                                }
-
-                                class FieldApp {
-                                    field system_clock: any = "local"
-
-                                    def field_shadow(): any =
-                                        system_clock()
-                                }
-
-                                class MethodApp {
-                                    def system_clock(): any =
-                                        "method"
-
-                                    def method_shadow(): any =
-                                        system_clock()
-                                }
-                                """,
-                        SourceKind.OBJECT_ORIENTED
-                )
-        ), providerManifest(javaProviderBinding("/foo/Providers.Clock", "system")));
-
-        var generatedProgram = new JavaGenerator().generate(program);
-        var app = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("App.java"))
-                .findFirst()
-                .orElseThrow();
-        var fieldApp = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("FieldApp.java"))
-                .findFirst()
-                .orElseThrow();
-        var methodApp = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().endsWith("MethodApp.java"))
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(app.code())
-                .contains("Object parameter_shadow(Object system_clock)")
-                .contains("return system_clock();")
-                .contains("final Object system_clock = \"local\";")
-                .doesNotContain("NativeProviderBootstrap.system_clock()")
-                .doesNotContain("Providers.system_clock()");
-        assertThat(fieldApp.code())
-                .contains("Object system_clock = \"local\";")
-                .contains("return system_clock();")
-                .doesNotContain("NativeProviderBootstrap.system_clock()")
-                .doesNotContain("Providers.system_clock()");
-        assertThat(methodApp.code())
-                .contains("Object system_clock()")
-                .contains("return system_clock();")
-                .doesNotContain("NativeProviderBootstrap.system_clock()")
-                .doesNotContain("Providers.system_clock()");
-    }
-
-    @Test
-    void shouldRejectNativeProviderCallsWithArguments() {
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(nativeProviderAnnotationModule(), new RawModule(
-                "Providers",
-                "/foo/boo",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
-
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def clock(): Clock = system_clock(1)
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), new TreeSet<>(), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+                @NativeProvider(qualifier: "system")
+                fun system_clock(value: int): Effect[Clock] = <native>
+                """)), new TreeSet<>(), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
 
         assertThat(result).isInstanceOf(Result.Error.class);
         assertThat(((Result.Error<CompiledProgram>) result).errors())
@@ -380,9 +191,7 @@ class ObjectOrientedJavaGeneratorTest {
                 .anySatisfy(message -> assertThat(message)
                         .contains("TypeMismatch")
                         .contains("Native provider `system_clock`")
-                        .contains("qualifier `system`")
-                        .contains("does not accept arguments")
-                        .contains("system_clock()"));
+                        .contains("must not declare parameters"));
     }
 
     @Test
@@ -1184,6 +993,22 @@ class ObjectOrientedJavaGeneratorTest {
         return compileProgram(modules, NativeProviderManifest.empty());
     }
 
+    private List<RawModule> nativeProviderModules(String providerSource) {
+        return List.of(
+                new RawModule(
+                        "Providers",
+                        "/foo/boo",
+                        """
+                                interface Clock {
+                                    def now_millis(): long
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule("ProvidersNative", "/foo/boo", providerSource)
+        );
+    }
+
     private CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
         var allModules = modulesWithNativeProviderAnnotation(modules);
         var result = CapybaraCompiler.INSTANCE.compile(allModules, new TreeSet<>(), nativeProviders);
@@ -1235,7 +1060,7 @@ class ObjectOrientedJavaGeneratorTest {
 
     private RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
-                annotation NativeProvider on interface {
+                annotation NativeProvider on fun {
                     qualifier: String = ""
                     lifetime: String = "singleton"
                     javaClassName: String = ""
