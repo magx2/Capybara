@@ -311,7 +311,7 @@ class PythonGeneratorTest {
                 """
                         from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                        @NativeProvider(name: "system_clock", qualifier: "system")
+                        @NativeProvider(qualifier: "system")
                         interface Clock {
                             def now_millis(): long
                         }
@@ -364,7 +364,7 @@ class PythonGeneratorTest {
                 """
                         from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                        @NativeProvider(name: "system_clock", qualifier: "system")
+                        @NativeProvider(qualifier: "system")
                         interface Clock {
                             def now_millis(): long
                         }
@@ -1027,7 +1027,7 @@ class PythonGeneratorTest {
                 """
                         from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                        @NativeProvider(name: "system_clock", qualifier: "system")
+                        @NativeProvider(qualifier: "system")
                         interface Clock {
                             %s
                         }
@@ -1049,7 +1049,6 @@ class PythonGeneratorTest {
     private static RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on interface {
-                    name: String
                     qualifier: String = ""
                 }
                 """);

@@ -383,7 +383,7 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(): String
                 }

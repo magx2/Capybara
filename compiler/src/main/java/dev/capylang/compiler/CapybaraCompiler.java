@@ -3555,6 +3555,7 @@ public class CapybaraCompiler {
                 continue;
             }
             validateNativeProviderCalls(module, nativeProviders, errors);
+            var declaredProviderSymbols = new LinkedHashSet<String>();
             var availableTypes = availableNativeProviderTypes(module, moduleLinkIndex, linkedTypesByModule, allModuleRefs, compileCache);
             if (availableTypes instanceof Result.Error<Map<String, NativeProviderTarget>> error) {
                 errors.addAll(error.errors());
@@ -3602,6 +3603,15 @@ public class CapybaraCompiler {
                             "DuplicateProvider: Duplicate native provider declaration for native provider `" + provider.name()
                             + "` and interface `" + interfaceId
                             + "` with qualifier `" + provider.qualifier() + "`"
+                    ));
+                    continue;
+                }
+                if (!declaredProviderSymbols.add(provider.name())) {
+                    errors.add(nativeProviderError(
+                            module,
+                            provider,
+                            "DuplicateProvider: Native provider `" + provider.name() + "` duplicates another provider symbol in module `" + module.name()
+                            + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
                     ));
                     continue;
                 }
@@ -3656,7 +3666,6 @@ public class CapybaraCompiler {
         var typeNames = module.objectOriented().definitions().stream()
                 .map(ObjectOriented.TypeDeclaration::name)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        var providerNames = new LinkedHashSet<String>();
         var providers = new ArrayList<ObjectOriented.NativeProviderDeclaration>();
         for (var definition : module.objectOriented().definitions()) {
             if (!(definition instanceof ObjectOriented.InterfaceDeclaration interfaceDeclaration)) {
@@ -3666,8 +3675,8 @@ public class CapybaraCompiler {
                 if (!isNativeProviderAnnotation(annotation)) {
                     continue;
                 }
-                var providerName = nativeProviderAnnotationStringArgument(annotation, "name").orElse("");
                 var qualifier = nativeProviderAnnotationStringArgument(annotation, "qualifier").orElse("");
+                var providerName = nativeProviderSymbolName(interfaceDeclaration.name(), qualifier);
                 var provider = new ObjectOriented.NativeProviderDeclaration(
                         providerName,
                         interfaceDeclaration.name(),
@@ -3679,17 +3688,8 @@ public class CapybaraCompiler {
                             module,
                             provider,
                             "TypeMismatch: Native provider annotation on interface `" + interfaceDeclaration.name()
-                            + "` declares invalid provider name `" + providerName
+                            + "` derives invalid provider name `" + providerName
                             + "`; expected an identifier"
-                    ));
-                    continue;
-                }
-                if (!providerNames.add(providerName)) {
-                    errors.add(nativeProviderError(
-                            module,
-                            provider,
-                            "DuplicateProvider: Native provider `" + providerName + "` duplicates another provider in module `" + module.name()
-                            + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
                     ));
                     continue;
                 }
@@ -3707,6 +3707,53 @@ public class CapybaraCompiler {
             }
         }
         return List.copyOf(providers);
+    }
+
+    private String nativeProviderSymbolName(String interfaceName, String qualifier) {
+        var typeName = lowerSnakeIdentifier(interfaceName);
+        if (qualifier == null || qualifier.isBlank()) {
+            return typeName;
+        }
+        return lowerSnakeIdentifier(qualifier) + "_" + typeName;
+    }
+
+    private String lowerSnakeIdentifier(String value) {
+        var builder = new StringBuilder();
+        var previousWasUnderscore = false;
+        for (var index = 0; index < value.length(); index++) {
+            var current = value.charAt(index);
+            if (!Character.isLetterOrDigit(current)) {
+                if (!builder.isEmpty() && !previousWasUnderscore) {
+                    builder.append('_');
+                    previousWasUnderscore = true;
+                }
+                continue;
+            }
+            if (Character.isUpperCase(current)
+                && !builder.isEmpty()
+                && !previousWasUnderscore
+                && shouldSeparateUppercase(value, index)) {
+                builder.append('_');
+            }
+            builder.append(Character.toLowerCase(current));
+            previousWasUnderscore = false;
+        }
+        while (!builder.isEmpty() && builder.charAt(builder.length() - 1) == '_') {
+            builder.deleteCharAt(builder.length() - 1);
+        }
+        if (builder.isEmpty() || Character.isDigit(builder.charAt(0))) {
+            builder.insert(0, '_');
+        }
+        return builder.toString();
+    }
+
+    private boolean shouldSeparateUppercase(String value, int index) {
+        var previous = value.charAt(index - 1);
+        if (Character.isLowerCase(previous) || Character.isDigit(previous)) {
+            return true;
+        }
+        var nextIndex = index + 1;
+        return nextIndex < value.length() && Character.isLowerCase(value.charAt(nextIndex));
     }
 
     private void validateNativeProviderCalls(

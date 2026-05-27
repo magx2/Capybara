@@ -191,7 +191,7 @@ class ObjectOrientedParserTest {
                 """
                         from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                        @NativeProvider(name: "system_clock", qualifier: "system")
+                        @NativeProvider(qualifier: "system")
                         interface Clock {
                             def now_millis(): long
                         }
@@ -213,7 +213,7 @@ class ObjectOrientedParserTest {
                 .satisfies(annotation -> {
                     assertThat(annotation.name()).isEqualTo("NativeProvider");
                     assertThat(annotation.arguments()).extracting(argument -> argument.name())
-                            .containsExactly("name", "qualifier");
+                            .containsExactly("qualifier");
                 });
         assertThat(module.objectOriented().nativeProviders()).isEmpty();
     }
@@ -254,7 +254,7 @@ class ObjectOrientedParserTest {
                         }
 
                         class App {
-                            @NativeProvider(name: "system_clock", qualifier: "system")
+                            @NativeProvider(qualifier: "system")
                             field clock: Clock
                         }
                         """,

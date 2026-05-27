@@ -171,7 +171,7 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldRejectUnknownNativeProviderAnnotation() {
         var result = compileProviders("""
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -183,15 +183,31 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldRejectNativeProviderNameArgument() {
+        var result = compileProviders("""
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(name: "system_clock", qualifier: "system")
+                interface Clock {
+                    def now(zone: String): String
+                }
+                """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("Unknown annotation argument name for NativeProvider"));
+    }
+
+    @Test
     void shouldRejectNativeProviderAnnotationOnNonInterfaceTargets() {
         var result = compileProviders("""
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "class_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 class ClockClass {
                 }
 
-                @NativeProvider(name: "trait_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 trait ClockTrait {
                     def now(zone: String): String = zone
                 }
@@ -203,17 +219,17 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldRejectDuplicateNativeProviderNames() {
+    void shouldRejectDuplicateDerivedNativeProviderSymbols() {
         var result = compileProviders("""
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
 
-                @NativeProvider(name: "system_clock", qualifier: "backup")
-                interface BackupClock {
+                @NativeProvider(qualifier: "")
+                interface SystemClock {
                     def now(zone: String): String
                 }
                 """, NativeProviderManifest.empty());
@@ -221,7 +237,7 @@ class ObjectOrientedCompilerTest {
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
                         .contains("Native provider `system_clock`")
-                        .contains("duplicates another provider")
+                        .contains("duplicates another provider symbol")
                         .contains("/dev/capylang/test/Clock.coo"));
     }
 
@@ -230,8 +246,8 @@ class ObjectOrientedCompilerTest {
         var result = compileProviders("""
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
-                @NativeProvider(name: "backup_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -290,7 +306,7 @@ class ObjectOrientedCompilerTest {
         var result = compileProviders("""
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -315,7 +331,7 @@ class ObjectOrientedCompilerTest {
         var result = compileProviders("""
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -633,7 +649,7 @@ class ObjectOrientedCompilerTest {
         return """
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -644,7 +660,7 @@ class ObjectOrientedCompilerTest {
         return new RawModule("Clock", "/dev/capylang/time", """
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(name: "system_clock", qualifier: "system")
+                @NativeProvider(qualifier: "system")
                 interface Clock {
                     def now(zone: String): String
                 }
@@ -654,7 +670,6 @@ class ObjectOrientedCompilerTest {
     private RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on interface {
-                    name: String
                     qualifier: String = ""
                 }
                 """);

@@ -1,5 +1,4 @@
 /// Marks an OO interface as a compile-time native provider contract.
 annotation NativeProvider on interface {
-    name: String
     qualifier: String = ""
 }

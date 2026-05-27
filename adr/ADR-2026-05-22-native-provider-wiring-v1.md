@@ -46,15 +46,16 @@ runtime registration as the provider selection mechanism.
 After `ADR-2026-05-24: Declaration Annotations v1`, the implementation slice
 uses a standard `.cfun` annotation from `/capy/meta_prog/NativeProvider` to
 declare a typed provider symbol on the Capybara OO interface. The annotation
-names the generated provider symbol and qualifier only; it does not name the
-host implementation. `.coo` code may mark an interface as a native provider
-contract, but it must not import Java packages, CommonJS modules, npm packages,
-or Python modules directly:
+names the qualifier only; the interface id comes from the annotated interface
+and the generated provider symbol is derived from the qualifier plus interface
+name. It does not name the host implementation. `.coo` code may mark an
+interface as a native provider contract, but it must not import Java packages,
+CommonJS modules, npm packages, or Python modules directly:
 
 ```coo
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(name: "system_clock", qualifier: "system")
+@NativeProvider(qualifier: "system")
 interface Clock {
     def now_millis(): long
 }
@@ -140,15 +141,16 @@ Supported `.coo` syntax:
 ```coo
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(name: "system_clock", qualifier: "system")
+@NativeProvider(qualifier: "system")
 interface Clock {
     def now_millis(): long
 }
 ```
 
-The provider symbol is callable as `system_clock()` and returns the annotated
-Capybara interface type. `.coo` still contains only Capybara type names,
-provider names, and qualifiers; host class or module names live in the
+The provider symbol is derived from the qualifier and interface name, so this
+example is callable as `system_clock()` and returns the annotated Capybara
+interface type. `.coo` still contains only Capybara type names and qualifiers;
+host class or module names live in the
 manifest.
 
 Implemented manifest format:
