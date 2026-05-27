@@ -94,38 +94,26 @@ class CapyPythonCliTest(unittest.TestCase):
         self.assertEqual(python.returncode, 0, python.stderr)
         self.assertEqual(python.stdout.strip(), "7")
 
-    def test_compile_generate_python_accepts_native_wiring_manifest(self):
+    def test_compile_generate_python_accepts_native_provider_annotation_wiring(self):
         root = self.temp_project()
         source_dir = root / "src"
         generated_dir = root / "generated"
         linked_dir = root / "linked"
         regenerated_dir = root / "regenerated"
-        native_wiring_file = root / "capy.native.json"
         (source_dir / "foo").mkdir(parents=True)
         (source_dir / "dev" / "capylang" / "test").mkdir(parents=True)
         (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
         (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
             from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-            @NativeProvider(qualifier: "system")
+            @NativeProvider(
+                qualifier: "system",
+                lifetime: "factory",
+                pythonModule: "nativeinterop.system_clock",
+                pythonClassName: "SystemClock"
+            )
             interface Clock {
                 def now(): String
-            }
-        """))
-        native_wiring_file.write_text(textwrap.dedent("""
-            {
-              "providers": [
-                {
-                  "interface": "/dev/capylang/test/Clock",
-                  "qualifier": "system",
-                  "lifetime": "factory",
-                  "python": {
-                    "module": "nativeinterop.system_clock",
-                    "className": "SystemClock",
-                    "factory": "call"
-                  }
-                }
-              ]
             }
         """))
 
@@ -135,7 +123,6 @@ class CapyPythonCliTest(unittest.TestCase):
             "-i", str(source_dir),
             "-o", str(generated_dir),
             "--linked-output", str(linked_dir),
-            "--native-wiring", str(native_wiring_file),
         ])
 
         self.assertEqual(result.returncode, 0, result.stderr)

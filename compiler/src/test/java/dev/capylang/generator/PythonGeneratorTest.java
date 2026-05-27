@@ -1050,6 +1050,15 @@ class PythonGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on interface {
                     qualifier: String = ""
+                    lifetime: String = "singleton"
+                    javaClassName: String = ""
+                    javaFactory: String = "constructor"
+                    javascriptModule: String = ""
+                    javascriptExport: String = ""
+                    javascriptFactory: String = "new"
+                    pythonModule: String = ""
+                    pythonClassName: String = ""
+                    pythonFactory: String = "call"
                 }
                 """);
     }

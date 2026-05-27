@@ -375,7 +375,7 @@ class CapyTest {
     }
 
     @Test
-    void shouldCompileGenerateWithNativeWiringManifest() throws IOException {
+    void shouldCompileGenerateWithNativeProviderAnnotationWiring() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-native-source"));
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
@@ -383,7 +383,15 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-                @NativeProvider(qualifier: "system")
+                @NativeProvider(
+                    qualifier: "system",
+                    lifetime: "factory",
+                    javaClassName: "dev.capylang.test.nativeinterop.SystemClock",
+                    javascriptModule: "./nativeinterop/system_clock.js",
+                    javascriptExport: "SystemClock",
+                    pythonModule: "nativeinterop.system_clock",
+                    pythonClassName: "SystemClock"
+                )
                 interface Clock {
                     def now(): String
                 }
@@ -391,32 +399,6 @@ class CapyTest {
         var generatedDir = tempDir.resolve("compile-generate-native-output");
         var linkedDir = tempDir.resolve("compile-generate-native-linked");
         var regeneratedDir = tempDir.resolve("compile-generate-native-regenerated");
-        var manifestFile = tempDir.resolve("capy.native.json");
-        Files.writeString(manifestFile, """
-                {
-                  "providers": [
-                    {
-                      "interface": "/dev/capylang/test/Clock",
-                      "qualifier": "system",
-                      "lifetime": "factory",
-                      "java": {
-                        "className": "dev.capylang.test.nativeinterop.SystemClock",
-                        "factory": "constructor"
-                      },
-                      "javascript": {
-                        "module": "./nativeinterop/system_clock.js",
-                        "export": "SystemClock",
-                        "factory": "new"
-                      },
-                      "python": {
-                        "module": "nativeinterop.system_clock",
-                        "className": "SystemClock",
-                        "factory": "call"
-                      }
-                    }
-                  ]
-                }
-                """);
 
         var exitCode = Capy.execute(
                 new String[]{
@@ -425,7 +407,6 @@ class CapyTest {
                         "-i", sourceDir.toString(),
                         "-o", generatedDir.toString(),
                         "--linked-output", linkedDir.toString(),
-                        "--native-wiring", manifestFile.toString(),
                         "--skip-java-lib"
                 },
                 new PrintStream(new ByteArrayOutputStream()),
@@ -435,15 +416,15 @@ class CapyTest {
         assertEquals(0, exitCode);
         assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
         var program = Capy.readLinkedProgram(linkedDir, true);
-        assertEquals(1, program.nativeProviders().providers().size());
-        var provider = program.nativeProviders().providers().getFirst();
-        assertEquals("/dev/capylang/test/Clock", provider.interfaceId());
-        assertEquals("system", provider.qualifier());
-        assertEquals("dev.capylang.test.nativeinterop.SystemClock", provider.javaBinding().className());
-        assertEquals("./nativeinterop/system_clock.js", provider.javascriptBinding().moduleName());
-        assertEquals("nativeinterop.system_clock", provider.pythonBinding().moduleName());
+        assertTrue(program.nativeProviders().providers().isEmpty());
         assertEquals(1, program.nativeProviderCatalog().declarations().size());
         assertEquals(1, program.nativeProviderCatalog().bindings().size());
+        var binding = program.nativeProviderCatalog().bindings().getFirst();
+        assertEquals("/dev/capylang/test/Clock", binding.interfaceId());
+        assertEquals("system", binding.qualifier());
+        assertEquals("dev.capylang.test.nativeinterop.SystemClock", binding.javaBinding().className());
+        assertEquals("./nativeinterop/system_clock.js", binding.javascriptBinding().moduleName());
+        assertEquals("nativeinterop.system_clock", binding.pythonBinding().moduleName());
 
         var generateExit = Capy.execute(
                 new String[]{

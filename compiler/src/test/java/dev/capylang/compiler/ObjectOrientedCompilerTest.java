@@ -143,6 +143,49 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldCompileNativeProviderBackendWiringFromAnnotation() {
+        var program = compileProviderSuccess(List.of(new RawModule("Clock", "/dev/capylang/test", """
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+
+                @NativeProvider(
+                    qualifier: "system",
+                    lifetime: "factory",
+                    javaClassName: "dev.capylang.test.SystemClock",
+                    javascriptModule: "./nativeinterop/system_clock.js",
+                    javascriptExport: "SystemClock",
+                    pythonModule: "nativeinterop.system_clock",
+                    pythonClassName: "SystemClock"
+                )
+                interface Clock {
+                    def now(zone: String): String
+                }
+                """, SourceKind.OBJECT_ORIENTED)), NativeProviderManifest.empty());
+
+        assertThat(program.nativeProviderCatalog().declarations())
+                .singleElement()
+                .satisfies(declaration -> {
+                    assertThat(declaration.providerName()).isEqualTo("system_clock");
+                    assertThat(declaration.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
+                    assertThat(declaration.qualifier()).isEqualTo("system");
+                });
+        assertThat(program.nativeProviderCatalog().bindings())
+                .singleElement()
+                .satisfies(binding -> {
+                    assertThat(binding.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
+                    assertThat(binding.qualifier()).isEqualTo("system");
+                    assertThat(binding.lifetime()).isEqualTo(NativeProviderLifetime.FACTORY);
+                    assertThat(binding.javaBinding().className()).isEqualTo("dev.capylang.test.SystemClock");
+                    assertThat(binding.javaBinding().factory()).isEqualTo("constructor");
+                    assertThat(binding.javascriptBinding().moduleName()).isEqualTo("./nativeinterop/system_clock.js");
+                    assertThat(binding.javascriptBinding().exportName()).isEqualTo("SystemClock");
+                    assertThat(binding.javascriptBinding().factory()).isEqualTo("new");
+                    assertThat(binding.pythonBinding().moduleName()).isEqualTo("nativeinterop.system_clock");
+                    assertThat(binding.pythonBinding().className()).isEqualTo("SystemClock");
+                    assertThat(binding.pythonBinding().factory()).isEqualTo("call");
+                });
+    }
+
+    @Test
     void shouldCompileNativeProviderAnnotationOnImportedInterfaceModule() {
         var program = compileProviderSuccess(
                 List.of(
@@ -283,7 +326,7 @@ class ObjectOrientedCompilerTest {
                 .anySatisfy(message -> assertThat(message)
                         .contains("Native provider `system_clock`")
                         .contains("interface `/dev/capylang/test/Clock`")
-                        .contains("no matching manifest entry")
+                        .contains("no annotation backend wiring or matching manifest entry")
                         .contains("/dev/capylang/test/Clock.coo"));
     }
 
@@ -671,6 +714,15 @@ class ObjectOrientedCompilerTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on interface {
                     qualifier: String = ""
+                    lifetime: String = "singleton"
+                    javaClassName: String = ""
+                    javaFactory: String = "constructor"
+                    javascriptModule: String = ""
+                    javascriptExport: String = ""
+                    javascriptFactory: String = "new"
+                    pythonModule: String = ""
+                    pythonClassName: String = ""
+                    pythonFactory: String = "call"
                 }
                 """);
     }
