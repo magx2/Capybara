@@ -225,7 +225,6 @@ class CapyTest {
                     {
                       "interface": "/dev/capylang/test/Clock",
                       "qualifier": "system",
-                      "lifetime": "factory",
                       "java": {
                         "className": "dev.capylang.test.nativeinterop.SystemClock",
                         "factory": "call"
@@ -392,7 +391,6 @@ class CapyTest {
 
                 @NativeProvider(
                     qualifier: "system",
-                    lifetime: "factory",
                     javaClassName: "dev.capylang.test.nativeinterop.SystemClock",
                     javascriptModule: "./nativeinterop/system_clock.js",
                     javascriptExport: "SystemClock",

@@ -113,7 +113,6 @@ class ObjectOrientedCompilerTest {
                 .satisfies(binding -> {
                     assertThat(binding.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
                     assertThat(binding.qualifier()).isEqualTo("system");
-                    assertThat(binding.lifetime()).isEqualTo(NativeProviderLifetime.SINGLETON);
                     assertThat(binding.javaBinding().className()).isEqualTo("dev.capylang.test.SystemClock");
                 });
 
@@ -131,7 +130,6 @@ class ObjectOrientedCompilerTest {
 
                 @NativeProvider(
                     qualifier: "system",
-                    lifetime: "factory",
                     javaClassName: "dev.capylang.test.SystemClock",
                     javascriptModule: "./nativeinterop/system_clock.js",
                     javascriptExport: "SystemClock",
@@ -153,7 +151,6 @@ class ObjectOrientedCompilerTest {
                 .satisfies(binding -> {
                     assertThat(binding.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
                     assertThat(binding.qualifier()).isEqualTo("system");
-                    assertThat(binding.lifetime()).isEqualTo(NativeProviderLifetime.FACTORY);
                     assertThat(binding.javaBinding().className()).isEqualTo("dev.capylang.test.SystemClock");
                     assertThat(binding.javaBinding().factory()).isEqualTo("constructor");
                     assertThat(binding.javascriptBinding().moduleName()).isEqualTo("./nativeinterop/system_clock.js");
@@ -313,17 +310,19 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldRejectUnsupportedNativeProviderLifetime() {
-        var result = compileProviders(clockProviderSource(), providerManifest(
-                providerBinding("/dev/capylang/test/Clock", "system", "request", "constructor")
-        ));
+    void shouldRejectNativeProviderLifetimeArgument() {
+        var result = compileProviders("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
+
+                @NativeProvider(qualifier: "system", lifetime: "singleton")
+                fun system_clock(): Effect[Clock] = <native>
+                """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
-                        .contains("Native provider `system_clock`")
-                        .contains("unsupported lifetime `request`")
-                        .contains("qualifier `system`")
-                        .contains("/dev/capylang/test/ClockProvider.cfun"));
+                        .contains("Unknown annotation argument lifetime for NativeProvider"));
     }
 
     @Test
@@ -364,7 +363,7 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldRejectUnsupportedNativeProviderBackendFactory() {
         var result = compileProviders(clockProviderSource(), providerManifest(
-                providerBinding("/dev/capylang/test/Clock", "system", "singleton", "call")
+                providerBinding("/dev/capylang/test/Clock", "system", "call")
         ));
 
         assertThat(errorMessages(result))
@@ -624,14 +623,13 @@ class ObjectOrientedCompilerTest {
     }
 
     private NativeProviderBinding providerBinding(String interfaceId, String qualifier) {
-        return providerBinding(interfaceId, qualifier, "singleton", "constructor");
+        return providerBinding(interfaceId, qualifier, "constructor");
     }
 
-    private NativeProviderBinding providerBinding(String interfaceId, String qualifier, String lifetime, String javaFactory) {
+    private NativeProviderBinding providerBinding(String interfaceId, String qualifier, String javaFactory) {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                lifetime,
                 new NativeProviderBackendBinding("dev.capylang.test.SystemClock", null, null, javaFactory),
                 null,
                 null
@@ -673,7 +671,6 @@ class ObjectOrientedCompilerTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
-                    lifetime: String = "singleton"
                     javaClassName: String = ""
                     javaFactory: String = "constructor"
                     javascriptModule: String = ""

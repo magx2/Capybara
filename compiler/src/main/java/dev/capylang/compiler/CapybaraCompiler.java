@@ -3808,7 +3808,6 @@ public class CapybaraCompiler {
 
     private NativeProviderAnnotationBinding nativeProviderAnnotationBinding(CompiledAnnotation annotation) {
         return new NativeProviderAnnotationBinding(
-                nativeProviderAnnotationStringArgument(annotation, "lifetime").orElse("singleton"),
                 nativeProviderJavaBinding(annotation),
                 nativeProviderJavaScriptBinding(annotation),
                 nativeProviderPythonBinding(annotation)
@@ -3873,7 +3872,6 @@ public class CapybaraCompiler {
     }
 
     private record NativeProviderAnnotationBinding(
-            String lifetime,
             NativeProviderBackendBinding javaBinding,
             NativeProviderBackendBinding javascriptBinding,
             NativeProviderBackendBinding pythonBinding
@@ -4347,7 +4345,6 @@ public class CapybaraCompiler {
         return compiledNativeProviderBinding(
                 provider,
                 interfaceId,
-                binding.lifetime(),
                 binding.javaBinding(),
                 binding.javascriptBinding(),
                 binding.pythonBinding(),
@@ -4364,7 +4361,6 @@ public class CapybaraCompiler {
         return compiledNativeProviderBinding(
                 provider,
                 interfaceId,
-                binding.lifetime(),
                 binding.javaBinding(),
                 binding.javascriptBinding(),
                 binding.pythonBinding(),
@@ -4375,47 +4371,25 @@ public class CapybaraCompiler {
     private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
             NativeProviderDeclaration provider,
             String interfaceId,
-            String lifetimeValue,
             NativeProviderBackendBinding javaBinding,
             NativeProviderBackendBinding javascriptBinding,
             NativeProviderBackendBinding pythonBinding,
             TreeSet<Result.Error.SingleError> errors
     ) {
         var errorCount = errors.size();
-        var lifetime = parseNativeProviderLifetime(provider, interfaceId, lifetimeValue, errors);
         validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
         validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVASCRIPT, javascriptBinding, errors);
         validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.PYTHON, pythonBinding, errors);
-        if (lifetime.isEmpty() || errors.size() != errorCount) {
+        if (errors.size() != errorCount) {
             return Optional.empty();
         }
         return Optional.of(new CompiledNativeProviderBinding(
                 interfaceId,
                 provider.qualifier(),
-                lifetime.orElseThrow(),
                 javaBinding,
                 javascriptBinding,
                 pythonBinding
         ));
-    }
-
-    private Optional<NativeProviderLifetime> parseNativeProviderLifetime(
-            NativeProviderDeclaration provider,
-            String interfaceId,
-            String lifetime,
-            TreeSet<Result.Error.SingleError> errors
-    ) {
-        try {
-            return Optional.of(NativeProviderLifetime.fromJson(lifetime));
-        } catch (IllegalArgumentException exception) {
-            errors.add(nativeProviderError(
-                    provider,
-                    "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                    + "` with qualifier `" + provider.qualifier()
-                    + "` has unsupported lifetime `" + lifetime + "`"
-            ));
-            return Optional.empty();
-        }
     }
 
     private void validateNativeProviderBackendFactory(
