@@ -3662,6 +3662,12 @@ public final class PythonGenerator implements Generator {
                             self.backend = metadata.get('backend')
                             self.source_file = metadata.get('sourceFile') or metadata.get('source_file')
 
+                    def NativeImplementation(qualifier=''):
+                        def decorate(cls):
+                            cls.__capybaraNativeImplementation = {'qualifier': qualifier}
+                            return cls
+                        return decorate
+
                     def _native_provider_key(interface_id, qualifier):
                         return f'{interface_id}#{qualifier}'
 

@@ -7,8 +7,8 @@
 ## Status
 
 Accepted. The v1 slice is implemented for compile-time provider annotations,
-native implementation annotations, and Java, JavaScript CommonJS, and Python
-provider bootstrap generation.
+backend native implementation annotations, and Java, JavaScript CommonJS, and
+Python provider bootstrap generation.
 
 ## Context
 
@@ -26,10 +26,6 @@ Existing decisions constrain the design:
 - `2026-04-12: Unsafe Constructor Bypass` scopes unsafe construction to
   `.cfun data` values.
 
-Before changing compiler behavior, Capybara needs one decision for how native
-providers are named, wired, validated, and generated across Java, JavaScript
-CommonJS, and Python.
-
 ## Decision
 
 Capybara adopts compile-time native provider wiring for the first native
@@ -39,9 +35,6 @@ Capybara OO owns the interface contract. A native provider targets the return
 interface of the annotated `.cfun` provider function plus qualifier. The stable
 interface id is derived from that return type and is not repeated in sidecar
 configuration.
-
-Host implementations are wired through compile-time source annotations. v1 must
-not use mutable runtime registration as the provider selection mechanism.
 
 Provider functions use `/capy/meta_prog/NativeProvider` in `.cfun`:
 
@@ -54,41 +47,51 @@ from /dev/capylang/test/Clock import { Clock }
 fun system_clock(): Effect[Clock] = <native>
 ```
 
-Native implementation declarations use `/capy/meta_prog/NativeImplementation`
-in `.coo`:
+Host implementations are wired through backend source annotations. The native
+class implements or extends the generated Capybara interface and carries a
+`NativeImplementation` annotation with the same qualifier:
 
-```coo
-from /capy/meta_prog/NativeImplementation import { NativeImplementation }
-from /dev/capylang/test/Clock import { Clock }
+```java
+import dev.capylang.NativeImplementation;
+import dev.capylang.test.Clock;
 
-@NativeImplementation(qualifier: "system")
-class SystemClock: Clock {
+@NativeImplementation(qualifier = "system")
+public final class SystemClock implements Clock {
 }
 ```
 
-The implementation declaration is a source-level binding contract only. OO
-generators skip classes marked with `@NativeImplementation`; Java, JavaScript,
-and Python source must provide the corresponding host implementation class or
-module.
+```javascript
+const { Clock } = require('../Clock.js');
+
+/** @NativeImplementation(qualifier: "system") */
+class SystemClock extends Clock {
+}
+```
+
+```python
+from dev.capylang.capybara import NativeImplementation
+from dev.capylang.test.Clock import Clock
+
+@NativeImplementation(qualifier="system")
+class SystemClock(Clock):
+    pass
+```
 
 The v1 provider key is `(interfaceId, qualifier)`. The first implementation
-slice supports exactly one provider for each key in the selected
-compile/generate input set. Duplicate providers for the same key fail
-deterministically; they are not merged, ordered by precedence, or accepted
-silently.
+slice supports exactly one provider for each key and backend in the selected
+compile/generate input set. Duplicate providers for the same key and backend
+fail deterministically.
 
 Provider lookups always create a fresh host implementation object. There is no
 provider caching mode in this slice.
 
 Backend factories default to Java constructors, JavaScript `new`, and Python
 class calls. The backend location is derived from the annotated implementation
-class:
+class source:
 
-- Java: the generated OO package plus implementation class name.
-- JavaScript CommonJS: the generated OO module path plus implementation class
-  file, with the class name exported.
-- Python: the generated OO module path plus implementation class name, with the
-  class name imported from that module.
+- Java: the implementation package plus class name.
+- JavaScript CommonJS: the implementation module path plus exported class name.
+- Python: the implementation module path plus class name.
 
 Reflection metadata remains descriptive. It may document OO shapes, but it must
 not be used as the dispatch, invocation, or host-provider validation mechanism
@@ -108,9 +111,9 @@ is:
   functions;
 - require provider functions to return `Effect[X]` where `X` is the interface
   type;
-- parse and link typed `@NativeImplementation` annotations for `.coo`
-  implementation classes;
-- derive provider backend names from the implementation class declaration;
+- scan Java, JavaScript, and Python native source for `NativeImplementation`
+  class annotations;
+- derive provider backend names from annotated backend implementation classes;
 - validate provider key uniqueness and target interface existence;
 - generate immutable provider tables or typed provider methods;
 - support Java, JavaScript CommonJS, and Python backend generation.
@@ -121,7 +124,7 @@ Non-goals for this slice are:
 - mutable runtime provider registration or test overrides;
 - reflection-based invocation, dispatch, or validation;
 - reusing unsafe `.cfun data` constructor bypass behavior;
-- multiple providers for the same `(interfaceId, qualifier)` key;
+- multiple providers for the same `(interfaceId, qualifier, backend)` key;
 - provider disposal, request scopes, and async host APIs;
 - pure `.cfun` host calls or automatic conversion of host effects into pure
   functional values.
@@ -139,26 +142,37 @@ from /dev/capylang/test/Clock import { Clock }
 fun system_clock(): Effect[Clock] = <native>
 ```
 
-Supported `.coo` syntax:
+Supported backend annotations:
 
-```coo
-from /capy/meta_prog/NativeImplementation import { NativeImplementation }
-from /dev/capylang/test/Clock import { Clock }
-
-@NativeImplementation(qualifier: "system")
-class SystemClock: Clock {
+```java
+@NativeImplementation(qualifier = "system")
+public final class SystemClock implements Clock {
 }
+```
+
+```javascript
+/** @NativeImplementation(qualifier: "system") */
+class SystemClock extends Clock {
+}
+```
+
+```python
+@NativeImplementation(qualifier="system")
+class SystemClock(Clock):
+    pass
 ```
 
 The provider symbol is the annotated function name, so this example is callable
 as `system_clock()` and returns an `Effect[Clock]`. Running the effect creates a
 fresh host `SystemClock` instance. The compiler derives
-`/dev/capylang/test/Clock` from the provider return type and derives the backend
-binding from the matching implementation class.
+`/dev/capylang/test/Clock` from the provider return type and derives backend
+bindings from annotated backend classes.
 
-External native wiring manifests remain accepted as compatibility input, but
-e2e native provider wiring is represented in Capybara source annotations rather
-than JSON sidecar files.
+Native implementation source is discovered from sibling `java`, `js`, `py`,
+`native/java`, `native/js`, and `native/py` directories near the Capybara input
+directory. External native wiring manifests remain accepted as compatibility
+input, but e2e native provider wiring is represented in native source
+annotations rather than JSON sidecar files.
 
 Implemented diagnostics use these stable terms: `NotWired`,
 `DuplicateProvider`, `TypeMismatch`, `UnsupportedBackend`, and
@@ -173,25 +187,24 @@ disposal hooks, and no pure `.cfun` native lookup.
 ## Consequences
 
 Domain code depends on Capybara interfaces and provider symbols. Provider
-contract files carry only Capybara-level selectors in annotations, while
-ordinary consumers still call typed provider symbols and do not import host
-runtime modules directly.
+contract files carry only Capybara-level selectors in annotations, while host
+implementation files carry backend implementation annotations.
 
 Compiler and generator diagnostics can be deterministic for missing providers,
 duplicate provider keys, unknown target interfaces, unsupported backend
 metadata, and host shape mismatches where those can be checked before runtime.
 
 Java generation can wire providers with generated interface types and concrete
-class names derived from implementation annotations. The generated provider
+class names derived from native Java source annotations. The generated provider
 table constructs a new implementation object for each lookup.
 
-JavaScript CommonJS generation can lower implementation annotations to
+JavaScript CommonJS generation can lower native JavaScript annotations to
 deterministic `require(...)` calls for the selected backend and export name. The
 generated provider table remains immutable. Startup or lookup validation must
 report missing modules, missing exports, wrong factory shape, or incompatible
 objects against the provider key.
 
-Python generation can lower implementation annotations to deterministic imports
+Python generation can lower native Python annotations to deterministic imports
 for the selected module and class name. The generated provider table remains
 immutable. Startup or lookup validation must report missing modules, missing
 classes, wrong factory shape, or incompatible objects against the provider key.

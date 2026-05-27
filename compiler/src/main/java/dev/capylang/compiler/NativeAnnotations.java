@@ -6,9 +6,6 @@ public final class NativeAnnotations {
     public static final String NATIVE_PROVIDER_ANNOTATION_NAME = "NativeProvider";
     public static final String NATIVE_PROVIDER_ANNOTATION_MODULE_NAME = "NativeProvider";
     public static final String NATIVE_PROVIDER_ANNOTATION_MODULE_PATH = "capy/meta_prog";
-    public static final String NATIVE_IMPLEMENTATION_ANNOTATION_NAME = "NativeImplementation";
-    public static final String NATIVE_IMPLEMENTATION_ANNOTATION_MODULE_NAME = "NativeImplementation";
-    public static final String NATIVE_IMPLEMENTATION_ANNOTATION_MODULE_PATH = "capy/meta_prog";
 
     private NativeAnnotations() {
     }
@@ -19,15 +16,6 @@ public final class NativeAnnotations {
                 NATIVE_PROVIDER_ANNOTATION_NAME,
                 NATIVE_PROVIDER_ANNOTATION_MODULE_NAME,
                 NATIVE_PROVIDER_ANNOTATION_MODULE_PATH
-        );
-    }
-
-    public static boolean isNativeImplementationAnnotation(CompiledAnnotation annotation) {
-        return isAnnotation(
-                annotation,
-                NATIVE_IMPLEMENTATION_ANNOTATION_NAME,
-                NATIVE_IMPLEMENTATION_ANNOTATION_MODULE_NAME,
-                NATIVE_IMPLEMENTATION_ANNOTATION_MODULE_PATH
         );
     }
 

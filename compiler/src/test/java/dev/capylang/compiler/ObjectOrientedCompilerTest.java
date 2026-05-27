@@ -122,40 +122,6 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldCompileNativeProviderBackendWiringFromNativeImplementationAnnotation() {
-        var program = compileProviderSuccess(List.of(clockObjectInterfaceModule(), new RawModule("ClockProvider", "/dev/capylang/test", """
-                from /capy/lang/Effect import { Effect }
-                from /capy/meta_prog/NativeProvider import { NativeProvider }
-                from Clock import { Clock }
-
-                @NativeProvider(qualifier: "system")
-                fun system_clock(): Effect[Clock] = <native>
-                """), nativeImplementationModule("system")), NativeProviderManifest.empty());
-
-        assertThat(program.nativeProviderCatalog().declarations())
-                .singleElement()
-                .satisfies(declaration -> {
-                    assertThat(declaration.providerName()).isEqualTo("system_clock");
-                    assertThat(declaration.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
-                    assertThat(declaration.qualifier()).isEqualTo("system");
-                });
-        assertThat(program.nativeProviderCatalog().bindings())
-                .singleElement()
-                .satisfies(binding -> {
-                    assertThat(binding.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
-                    assertThat(binding.qualifier()).isEqualTo("system");
-                    assertThat(binding.javaBinding().className()).isEqualTo("dev.capylang.test.SystemClock");
-                    assertThat(binding.javaBinding().factory()).isEqualTo("constructor");
-                    assertThat(binding.javascriptBinding().moduleName()).isEqualTo("./test/SystemClock.js");
-                    assertThat(binding.javascriptBinding().exportName()).isEqualTo("SystemClock");
-                    assertThat(binding.javascriptBinding().factory()).isEqualTo("new");
-                    assertThat(binding.pythonBinding().moduleName()).isEqualTo("dev.capylang.test.SystemClock");
-                    assertThat(binding.pythonBinding().className()).isEqualTo("SystemClock");
-                    assertThat(binding.pythonBinding().factory()).isEqualTo("call");
-                });
-    }
-
-    @Test
     void shouldCompileNativeProviderAnnotationOnImportedInterfaceModule() {
         var program = compileProviderSuccess(
                 List.of(
@@ -298,7 +264,7 @@ class ObjectOrientedCompilerTest {
                 .anySatisfy(message -> assertThat(message)
                         .contains("Native provider `system_clock`")
                         .contains("interface `/dev/capylang/test/Clock`")
-                        .contains("no matching @NativeImplementation declaration or manifest entry")
+                        .contains("no matching @NativeImplementation backend class or manifest entry")
                         .contains("/dev/capylang/test/ClockProvider.cfun"));
     }
 
@@ -595,7 +561,6 @@ class ObjectOrientedCompilerTest {
     private Result<CompiledProgram> compileProviders(String source, NativeProviderManifest manifest) {
         return CapybaraCompiler.INSTANCE.compile(List.of(
                 nativeProviderAnnotationModule(),
-                nativeImplementationAnnotationModule(),
                 clockObjectInterfaceModule(),
                 new RawModule("ClockProvider", "/dev/capylang/test", source)
         ), new TreeSet<>(), manifest);
@@ -604,7 +569,6 @@ class ObjectOrientedCompilerTest {
     private CompiledProgram compileProviderSuccess(List<RawModule> modules, NativeProviderManifest manifest) {
         var allModules = new java.util.ArrayList<RawModule>();
         allModules.add(nativeProviderAnnotationModule());
-        allModules.add(nativeImplementationAnnotationModule());
         allModules.addAll(modules);
         var result = CapybaraCompiler.INSTANCE.compile(allModules, new TreeSet<>(), manifest);
         if (result instanceof Result.Error<CompiledProgram> error) {
@@ -629,17 +593,6 @@ class ObjectOrientedCompilerTest {
                 null,
                 null
         );
-    }
-
-    private RawModule nativeImplementationModule(String qualifier) {
-        return new RawModule("SystemClock", "/dev/capylang/test", """
-                from /capy/meta_prog/NativeImplementation import { NativeImplementation }
-                from Clock import { Clock }
-
-                @NativeImplementation(qualifier: "%s")
-                class SystemClock: Clock {
-                }
-                """.formatted(qualifier), SourceKind.OBJECT_ORIENTED);
     }
 
     private RawModule clockProviderModule() {
@@ -676,14 +629,6 @@ class ObjectOrientedCompilerTest {
     private RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
-                    qualifier: String = ""
-                }
-                """);
-    }
-
-    private RawModule nativeImplementationAnnotationModule() {
-        return new RawModule("NativeImplementation", "/capy/meta_prog", """
-                annotation NativeImplementation on class {
                     qualifier: String = ""
                 }
                 """);
