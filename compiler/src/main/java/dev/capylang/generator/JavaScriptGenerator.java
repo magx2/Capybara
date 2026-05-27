@@ -936,7 +936,11 @@ public final class JavaScriptGenerator implements Generator {
             var emittedName = receiverType instanceof CompiledObjectType
                     ? objectMethodIdentifier(methodName)
                     : emittedMethodName(functionCall);
-            return "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
+            var invocation = "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
+            if (receiverType instanceof CompiledObjectType && isEffectType(functionCall.type())) {
+                return "capy.delay(() => " + invocation + ")";
+            }
+            return invocation;
         }
 
         private Optional<String> primitiveBackedMethodTarget(CompiledFunctionCall functionCall) {
@@ -6983,6 +6987,17 @@ public final class JavaScriptGenerator implements Generator {
                || name.endsWith("/Option")
                || name.endsWith(".Option")
                || name.endsWith("/Option.Option");
+    }
+
+    private static boolean isEffectType(CompiledType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        var name = genericDataType.name();
+        return "Effect".equals(name)
+               || name.endsWith("/Effect")
+               || name.endsWith(".Effect")
+               || name.endsWith("/Effect.Effect");
     }
 
     static String simpleTypeName(String typeName) {

@@ -14,8 +14,8 @@ fun tests(): Effect[TestFile] =
 fun functional_object_construction_is_delayed_and_repeatable(): Effect[Assert] =
     // The legacy host tests also assert exact stdout capture, generated class identity,
     // fresh object identity, CommonJS wiring, and label() results. Capybara .cfun tests
-    // can sequence OO construction effects across backends, but cannot capture stdout,
-    // compare backend object identity, or invoke OO instance methods portably.
+    // can sequence OO construction effects across backends, but cannot capture stdout
+    // or compare backend object identity portably.
     let person_runs <- runs_person_effect("Ada")
     let person_runs_twice <- runs_person_effect_twice("Ada")
     assert_all([

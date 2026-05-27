@@ -407,21 +407,27 @@ class ObjectOrientedCompilerTest {
     @Test
     void shouldLinkImportedObjectOrientedMethodsFromFunctionalCode() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                effectModule(),
                 constructiblesModule(),
                 new RawModule(
                         "ObjectUse",
                         "/foo/app",
                         """
+                                from /capy/lang/Effect import { * }
                                 from Constructibles import { * }
 
-                                fun printable_label(printable: Printable): String =
+                                fun printable_label(printable: Printable): Effect[String] =
                                     printable.label()
 
-                                fun person_label(person: Person): String =
+                                fun person_label(person: Person): Effect[String] =
                                     person.label()
 
-                                fun inherited_label(person: Person): String =
+                                fun inherited_label(person: Person): Effect[String] =
                                     person.decorate("Ada")
+
+                                fun bind_person_label(person: Person): Effect[String] =
+                                    let label <- person.label()
+                                    label
                                 """
                 )
         ), new TreeSet<>());
@@ -429,14 +435,27 @@ class ObjectOrientedCompilerTest {
         assertThat(result).isInstanceOf(Result.Success.class);
         var program = ((Result.Success<CompiledProgram>) result).value();
         assertThat(compiledFunction(program, "ObjectUse", "printable_label").expression())
-                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
-                        assertThat(call.name()).isEqualTo("__method__Printable__label"));
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
+                    assertThat(call.name()).isEqualTo("__method__Printable__label");
+                    assertThat(call.returnType()).isInstanceOfSatisfying(CompiledDataParentType.class, effect ->
+                            assertThat(effect.typeParameters()).containsExactly("String"));
+                });
         assertThat(compiledFunction(program, "ObjectUse", "person_label").expression())
-                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
-                        assertThat(call.name()).isEqualTo("__method__Person__label"));
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
+                    assertThat(call.name()).isEqualTo("__method__Person__label");
+                    assertThat(call.returnType()).isInstanceOfSatisfying(CompiledDataParentType.class, effect ->
+                            assertThat(effect.typeParameters()).containsExactly("String"));
+                });
         assertThat(compiledFunction(program, "ObjectUse", "inherited_label").expression())
-                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
-                        assertThat(call.name()).isEqualTo("__method__NamedTrait__decorate"));
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
+                    assertThat(call.name()).isEqualTo("__method__NamedTrait__decorate");
+                    assertThat(call.returnType()).isInstanceOfSatisfying(CompiledDataParentType.class, effect ->
+                            assertThat(effect.typeParameters()).containsExactly("String"));
+                });
+        assertThat(compiledFunction(program, "ObjectUse", "bind_person_label").expression())
+                .isInstanceOfSatisfying(CompiledEffectBindExpression.class, bind ->
+                        assertThat(bind.source()).isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                                assertThat(call.name()).isEqualTo("__method__Person__label")));
     }
 
     @Test
@@ -451,6 +470,20 @@ class ObjectOrientedCompilerTest {
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
                         .contains("Object construction of Person returns Effect[Person], but Person was expected"));
+    }
+
+    @Test
+    void shouldRejectPureObjectOrientedMethodInvocation() {
+        var result = compileInvalid("""
+                from Constructibles import { Person }
+
+                fun bad(person: Person): String =
+                    person.label()
+                """);
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("Expected `String`, got `Effect[String]`"));
     }
 
     @Test
