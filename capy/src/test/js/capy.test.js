@@ -120,7 +120,7 @@ test('compile-generate JS accepts native wiring manifest', async () => {
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(name: "system_clock", qualifier: "system")
+@NativeProvider(qualifier: "system")
 interface Clock {
     def now(): String
 }

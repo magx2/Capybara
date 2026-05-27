@@ -107,7 +107,7 @@ class CapyPythonCliTest(unittest.TestCase):
         (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
             from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-            @NativeProvider(name: "system_clock", qualifier: "system")
+            @NativeProvider(qualifier: "system")
             interface Clock {
                 def now(): String
             }

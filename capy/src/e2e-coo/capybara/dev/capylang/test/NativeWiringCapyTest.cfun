@@ -10,11 +10,11 @@ fun tests(): Effect[TestFile] =
     ])
 
 fun native_wiring_app_is_constructible_with_host_provider_available(): Effect[Assert] =
-    let clock = system_clock()
+    let clock = system_native_clock()
     let app <- NativeWiringApp()
     assert_that(true).is_true()
 
 fun native_provider_can_be_passed_to_domain_code(): Effect[Assert] =
-    let clock = system_clock()
+    let clock = system_native_clock()
     let consumer <- NativeClockConsumer(clock)
     assert_that(true).is_true()
