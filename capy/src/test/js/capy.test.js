@@ -107,36 +107,28 @@ test('generate JS from linked input', async () => {
     assert.equal(node.stdout.trim(), '7');
 });
 
-test('compile-generate JS accepts native wiring manifest', async () => {
+test('compile-generate JS accepts native provider annotation wiring', async () => {
     const root = await tempProject();
     const sourceDir = join(root, 'src');
     const generatedDir = join(root, 'generated');
     const linkedDir = join(root, 'linked');
     const regeneratedDir = join(root, 'regenerated');
-    const nativeWiringFile = join(root, 'capy.native.json');
     await mkdir(join(sourceDir, 'foo'), { recursive: true });
     await mkdir(join(sourceDir, 'dev', 'capylang', 'test'), { recursive: true });
     await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(qualifier: "system")
+@NativeProvider(
+    qualifier: "system",
+    lifetime: "factory",
+    javascriptModule: "./nativeinterop/system_clock.js",
+    javascriptExport: "SystemClock"
+)
 interface Clock {
     def now(): String
 }
 `);
-    await writeFile(nativeWiringFile, JSON.stringify({
-        providers: [{
-            interface: '/dev/capylang/test/Clock',
-            qualifier: 'system',
-            lifetime: 'factory',
-            javascript: {
-                module: './nativeinterop/system_clock.js',
-                export: 'SystemClock',
-                factory: 'new',
-            },
-        }],
-    }, null, 2));
 
     const result = runCapy([
         'compile-generate',
@@ -144,7 +136,6 @@ interface Clock {
         '-i', sourceDir,
         '-o', generatedDir,
         '--linked-output', linkedDir,
-        '--native-wiring', nativeWiringFile,
     ]);
 
     assert.equal(result.status, 0, result.stderr);

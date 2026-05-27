@@ -6,9 +6,9 @@
 
 ## Status
 
-Accepted. The v1 slice is implemented for compile-time provider annotations,
-manifest wiring, and Java, JavaScript CommonJS, and Python provider bootstrap
-generation.
+Accepted. The v1 slice is implemented for compile-time provider annotations
+with backend wiring metadata, and Java, JavaScript CommonJS, and Python provider
+bootstrap generation.
 
 ## Context
 
@@ -35,57 +35,36 @@ CommonJS, and Python.
 Capybara adopts compile-time native provider wiring for the first native
 interop implementation slice.
 
-Capybara OO owns the interface contract. A native provider targets a Capybara
-OO interface by stable interface id and qualifier; the host implementation is
-an implementation detail selected by compiler/build metadata.
+Capybara OO owns the interface contract. A native provider targets the
+annotated Capybara OO interface plus qualifier; the stable interface id comes
+from the annotation target and is not repeated in sidecar configuration.
 
-Host implementations are wired through compile-time metadata, such as a
-provider manifest consumed by the compiler or generator. v1 must not use mutable
-runtime registration as the provider selection mechanism.
+Host implementations are wired through compile-time annotation metadata. v1
+must not use mutable runtime registration as the provider selection mechanism.
 
 After `ADR-2026-05-24: Declaration Annotations v1`, the implementation slice
 uses a standard `.cfun` annotation from `/capy/meta_prog/NativeProvider` to
 declare a typed provider symbol on the Capybara OO interface. The annotation
-names the qualifier only; the interface id comes from the annotated interface
-and the generated provider symbol is derived from the qualifier plus interface
-name. It does not name the host implementation. `.coo` code may mark an
+names the qualifier and optional backend implementation metadata; the interface
+id comes from the annotated interface and the generated provider symbol is
+derived from the qualifier plus interface name. `.coo` code may mark an
 interface as a native provider contract, but it must not import Java packages,
 CommonJS modules, npm packages, or Python modules directly:
 
 ```coo
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(qualifier: "system")
+@NativeProvider(
+    qualifier: "system",
+    lifetime: "factory",
+    javaClassName: "dev.capylang.test.nativeinterop.SystemClock",
+    javascriptModule: "../../nativeinterop/system_clock.js",
+    javascriptExport: "SystemClock",
+    pythonModule: "nativeinterop.system_clock",
+    pythonClassName: "SystemClock"
+)
 interface Clock {
     def now_millis(): long
-}
-```
-
-The corresponding provider manifest shape for v1 is:
-
-```json
-{
-  "providers": [
-    {
-      "interface": "/dev/capylang/test/Clock",
-      "qualifier": "system",
-      "lifetime": "factory",
-      "java": {
-        "className": "dev.capylang.test.nativeinterop.SystemClock",
-        "factory": "constructor"
-      },
-      "javascript": {
-        "module": "./nativeinterop/system_clock.js",
-        "export": "SystemClock",
-        "factory": "new"
-      },
-      "python": {
-        "module": "nativeinterop.system_clock",
-        "className": "SystemClock",
-        "factory": "call"
-      }
-    }
-  ]
 }
 ```
 
@@ -102,6 +81,9 @@ Provider lifetimes supported in v1 are:
 - `factory`: the generated provider table constructs or calls a provider
   factory for each lookup.
 
+Backend factories default to Java `constructor`, JavaScript `new`, and Python
+`call`. JavaScript may also use `call`.
+
 Reflection metadata remains descriptive. It may document OO shapes, but it must
 not be used as the dispatch, invocation, or host-provider validation mechanism
 for native provider wiring.
@@ -117,7 +99,7 @@ The named first implementation slice is "native provider wiring v1". Its scope
 is:
 
 - parse and link typed `@NativeProvider` annotations for `.coo` interfaces;
-- read a structured provider manifest for the selected backend;
+- read backend wiring metadata from the `@NativeProvider` annotation;
 - validate provider key uniqueness and target interface existence;
 - generate immutable provider tables or typed provider methods;
 - support Java, JavaScript CommonJS, and Python backend metadata;
@@ -141,7 +123,15 @@ Supported `.coo` syntax:
 ```coo
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(qualifier: "system")
+@NativeProvider(
+    qualifier: "system",
+    lifetime: "factory",
+    javaClassName: "dev.capylang.test.nativeinterop.SystemClock",
+    javascriptModule: "../../nativeinterop/system_clock.js",
+    javascriptExport: "SystemClock",
+    pythonModule: "nativeinterop.system_clock",
+    pythonClassName: "SystemClock"
+)
 interface Clock {
     def now_millis(): long
 }
@@ -149,37 +139,11 @@ interface Clock {
 
 The provider symbol is derived from the qualifier and interface name, so this
 example is callable as `system_clock()` and returns the annotated Capybara
-interface type. `.coo` still contains only Capybara type names and qualifiers;
-host class or module names live in the
-manifest.
-
-Implemented manifest format:
-
-```json
-{
-  "providers": [
-    {
-      "interface": "/dev/capylang/test/Clock",
-      "qualifier": "system",
-      "lifetime": "factory",
-      "java": {
-        "className": "dev.capylang.test.nativeinterop.SystemClock",
-        "factory": "constructor"
-      },
-      "javascript": {
-        "module": "./nativeinterop/system_clock.js",
-        "export": "SystemClock",
-        "factory": "new"
-      },
-      "python": {
-        "module": "nativeinterop.system_clock",
-        "className": "SystemClock",
-        "factory": "call"
-      }
-    }
-  ]
-}
-```
+interface type. The compiler derives `/dev/capylang/test/Clock` from the
+annotated interface and uses the backend metadata from the annotation. External
+native wiring manifests remain accepted as compatibility input, but e2e native
+provider wiring is represented in Capybara source annotations rather than JSON
+sidecar files.
 
 Supported lifetimes are `singleton` and `factory`.
 
@@ -202,30 +166,31 @@ resource disposal hooks, and no pure `.cfun` native lookup.
 
 ## Consequences
 
-Capybara source stays backend-neutral: domain code depends on Capybara
-interfaces and provider symbols, while host class names and module names live in
-compiler inputs or build metadata.
+Domain code depends on Capybara interfaces and provider symbols. Provider
+contract files may carry backend selector strings in `@NativeProvider`, while
+ordinary consumers still call typed provider symbols and do not import host
+runtime modules directly.
 
 Compiler and generator diagnostics can be deterministic for missing providers,
 duplicate provider keys, unknown target interfaces, unsupported backend
 metadata, and host shape mismatches where those can be checked before runtime.
 
 Java generation can wire providers with generated interface types and concrete
-class names from the manifest. `factory: "constructor"` maps to direct
+class names from annotation metadata. `factory: "constructor"` maps to direct
 construction or a generated constructor reference. Singleton providers require a
 thread-safe cached instance; factory providers create a new host object for each
 lookup.
 
-JavaScript CommonJS generation can lower manifest entries to deterministic
+JavaScript CommonJS generation can lower annotation metadata to deterministic
 `require(...)` calls for the selected backend and export name. The generated
 provider table remains immutable. Startup or lookup validation must report
 missing modules, missing exports, wrong factory shape, or incompatible objects
 against the provider key.
 
-Python generation can lower manifest entries to deterministic imports for the
-selected module and class name. The generated provider table remains immutable.
-Startup or lookup validation must report missing modules, missing classes, wrong
-factory shape, or incompatible objects against the provider key.
+Python generation can lower annotation metadata to deterministic imports for
+the selected module and class name. The generated provider table remains
+immutable. Startup or lookup validation must report missing modules, missing
+classes, wrong factory shape, or incompatible objects against the provider key.
 
 Because `.cfun` access remains effectful, functional callers cannot accidentally
 treat host-backed object lookup or invocation as a pure expression. Pure native

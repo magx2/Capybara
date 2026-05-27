@@ -256,7 +256,7 @@ public final class JavaGenerator implements Generator {
             throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
                                                + "` for interface `" + provider.interfaceId()
                                                + "` with qualifier `" + provider.qualifier()
-                                               + "` for backend `java` requires manifest field `java.className` in source `"
+                                               + "` for backend `java` requires field `java.className` in source `"
                                                + provider.sourceFile() + "`");
         }
         if (!"constructor".equals(binding.factory())) {

@@ -1,6 +1,11 @@
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 
-@NativeProvider(qualifier: "system")
+@NativeProvider(
+    qualifier: "system",
+    lifetime: "factory",
+    javascriptModule: "../../nativeinterop/system_clock.js",
+    javascriptExport: "SystemClock"
+)
 interface Clock {
     def now_millis(): long
 }

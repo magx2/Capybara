@@ -3644,17 +3644,21 @@ public class CapybaraCompiler {
                         nativeProviderSourceFile(module)
                 ));
                 var binding = manifestBindingsByKey.get(key);
-                if (binding == null) {
+                if (binding == null && provider.annotationBinding().isEmpty()) {
                     errors.add(nativeProviderError(
                             module,
                             provider,
                             "NotWired: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                            + "` with qualifier `" + provider.qualifier() + "` has no matching manifest entry"
+                            + "` with qualifier `" + provider.qualifier() + "` has no annotation backend wiring or matching manifest entry"
                     ));
                     continue;
                 }
-                usedManifestKeys.add(key);
-                var compiledBinding = compiledNativeProviderBinding(module, provider, interfaceId, binding, errors);
+                var compiledBinding = binding == null
+                        ? compiledNativeProviderBinding(module, provider, interfaceId, provider.annotationBinding(), errors)
+                        : compiledNativeProviderBinding(module, provider, interfaceId, binding, errors);
+                if (binding != null) {
+                    usedManifestKeys.add(key);
+                }
                 compiledBinding.ifPresent(bindings::add);
             }
         }
@@ -3678,14 +3682,14 @@ public class CapybaraCompiler {
         return Result.success(new NativeProviderCatalog(declarations, bindings));
     }
 
-    private List<ObjectOriented.NativeProviderDeclaration> nativeProviderDeclarations(
+    private List<NativeProviderDeclaration> nativeProviderDeclarations(
             ObjectOrientedModule module,
             TreeSet<Result.Error.SingleError> errors
     ) {
         var typeNames = module.objectOriented().definitions().stream()
                 .map(ObjectOriented.TypeDeclaration::name)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        var providers = new ArrayList<ObjectOriented.NativeProviderDeclaration>();
+        var providers = new ArrayList<NativeProviderDeclaration>();
         for (var definition : module.objectOriented().definitions()) {
             if (!(definition instanceof ObjectOriented.InterfaceDeclaration interfaceDeclaration)) {
                 continue;
@@ -3696,10 +3700,11 @@ public class CapybaraCompiler {
                 }
                 var qualifier = nativeProviderAnnotationStringArgument(annotation, "qualifier").orElse("");
                 var providerName = nativeProviderSymbolName(interfaceDeclaration.name(), qualifier);
-                var provider = new ObjectOriented.NativeProviderDeclaration(
+                var provider = new NativeProviderDeclaration(
                         providerName,
                         interfaceDeclaration.name(),
                         qualifier,
+                        nativeProviderAnnotationBinding(annotation),
                         interfaceDeclaration.comments()
                 );
                 if (!IDENTIFIER_PATTERN.matcher(providerName).matches()) {
@@ -3775,14 +3780,84 @@ public class CapybaraCompiler {
         return nextIndex < value.length() && Character.isLowerCase(value.charAt(nextIndex));
     }
 
+    private NativeProviderAnnotationBinding nativeProviderAnnotationBinding(CompiledAnnotation annotation) {
+        return new NativeProviderAnnotationBinding(
+                nativeProviderAnnotationStringArgument(annotation, "lifetime").orElse("singleton"),
+                nativeProviderJavaBinding(annotation),
+                nativeProviderJavaScriptBinding(annotation),
+                nativeProviderPythonBinding(annotation)
+        );
+    }
+
+    private NativeProviderBackendBinding nativeProviderJavaBinding(CompiledAnnotation annotation) {
+        var className = nativeProviderAnnotationStringArgument(annotation, "javaClassName").orElse("");
+        if (className.isBlank()) {
+            return null;
+        }
+        return new NativeProviderBackendBinding(
+                className,
+                null,
+                null,
+                nativeProviderAnnotationStringArgument(annotation, "javaFactory").orElse("constructor")
+        );
+    }
+
+    private NativeProviderBackendBinding nativeProviderJavaScriptBinding(CompiledAnnotation annotation) {
+        var moduleName = nativeProviderAnnotationStringArgument(annotation, "javascriptModule").orElse("");
+        var exportName = nativeProviderAnnotationStringArgument(annotation, "javascriptExport").orElse("");
+        if (moduleName.isBlank() && exportName.isBlank()) {
+            return null;
+        }
+        return new NativeProviderBackendBinding(
+                null,
+                moduleName,
+                exportName,
+                nativeProviderAnnotationStringArgument(annotation, "javascriptFactory").orElse("new")
+        );
+    }
+
+    private NativeProviderBackendBinding nativeProviderPythonBinding(CompiledAnnotation annotation) {
+        var moduleName = nativeProviderAnnotationStringArgument(annotation, "pythonModule").orElse("");
+        var className = nativeProviderAnnotationStringArgument(annotation, "pythonClassName").orElse("");
+        if (moduleName.isBlank() && className.isBlank()) {
+            return null;
+        }
+        return new NativeProviderBackendBinding(
+                className,
+                moduleName,
+                null,
+                nativeProviderAnnotationStringArgument(annotation, "pythonFactory").orElse("call")
+        );
+    }
+
+    private record NativeProviderDeclaration(
+            String name,
+            String targetType,
+            String qualifier,
+            NativeProviderAnnotationBinding annotationBinding,
+            List<String> comments
+    ) {
+    }
+
+    private record NativeProviderAnnotationBinding(
+            String lifetime,
+            NativeProviderBackendBinding javaBinding,
+            NativeProviderBackendBinding javascriptBinding,
+            NativeProviderBackendBinding pythonBinding
+    ) {
+        boolean isEmpty() {
+            return javaBinding == null && javascriptBinding == null && pythonBinding == null;
+        }
+    }
+
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            List<ObjectOriented.NativeProviderDeclaration> nativeProviders,
+            List<NativeProviderDeclaration> nativeProviders,
             TreeSet<Result.Error.SingleError> errors
     ) {
         var providersByName = nativeProviders.stream()
                 .collect(toMap(
-                        ObjectOriented.NativeProviderDeclaration::name,
+                        NativeProviderDeclaration::name,
                         identity(),
                         (first, ignored) -> first,
                         LinkedHashMap::new
@@ -3813,7 +3888,7 @@ public class CapybaraCompiler {
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.MemberDeclaration member,
             NativeProviderCallScope scope,
             TreeSet<Result.Error.SingleError> errors
@@ -3836,7 +3911,7 @@ public class CapybaraCompiler {
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.MethodBody body,
             NativeProviderCallScope scope,
             TreeSet<Result.Error.SingleError> errors
@@ -3849,7 +3924,7 @@ public class CapybaraCompiler {
 
     private NativeProviderCallScope validateNativeProviderCalls(
             ObjectOrientedModule module,
-            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.StatementBlock block,
             NativeProviderCallScope parentScope,
             TreeSet<Result.Error.SingleError> errors
@@ -3881,7 +3956,7 @@ public class CapybaraCompiler {
 
     private NativeProviderCallScope validateNativeProviderCalls(
             ObjectOrientedModule module,
-            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.Statement statement,
             NativeProviderCallScope scope,
             TreeSet<Result.Error.SingleError> errors
@@ -3937,7 +4012,7 @@ public class CapybaraCompiler {
 
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
-            Map<String, ObjectOriented.NativeProviderDeclaration> providersByName,
+            Map<String, NativeProviderDeclaration> providersByName,
             String expression,
             NativeProviderCallScope scope,
             TreeSet<Result.Error.SingleError> errors
@@ -4230,16 +4305,57 @@ public class CapybaraCompiler {
 
     private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
             ObjectOrientedModule module,
-            ObjectOriented.NativeProviderDeclaration provider,
+            NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBinding binding,
             TreeSet<Result.Error.SingleError> errors
     ) {
+        return compiledNativeProviderBinding(
+                module,
+                provider,
+                interfaceId,
+                binding.lifetime(),
+                binding.javaBinding(),
+                binding.javascriptBinding(),
+                binding.pythonBinding(),
+                errors
+        );
+    }
+
+    private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
+            ObjectOrientedModule module,
+            NativeProviderDeclaration provider,
+            String interfaceId,
+            NativeProviderAnnotationBinding binding,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        return compiledNativeProviderBinding(
+                module,
+                provider,
+                interfaceId,
+                binding.lifetime(),
+                binding.javaBinding(),
+                binding.javascriptBinding(),
+                binding.pythonBinding(),
+                errors
+        );
+    }
+
+    private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
+            ObjectOrientedModule module,
+            NativeProviderDeclaration provider,
+            String interfaceId,
+            String lifetimeValue,
+            NativeProviderBackendBinding javaBinding,
+            NativeProviderBackendBinding javascriptBinding,
+            NativeProviderBackendBinding pythonBinding,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
         var errorCount = errors.size();
-        var lifetime = parseNativeProviderLifetime(module, provider, interfaceId, binding.lifetime(), errors);
-        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.JAVA, binding.javaBinding(), errors);
-        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.JAVASCRIPT, binding.javascriptBinding(), errors);
-        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.PYTHON, binding.pythonBinding(), errors);
+        var lifetime = parseNativeProviderLifetime(module, provider, interfaceId, lifetimeValue, errors);
+        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
+        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.JAVASCRIPT, javascriptBinding, errors);
+        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.PYTHON, pythonBinding, errors);
         if (lifetime.isEmpty() || errors.size() != errorCount) {
             return Optional.empty();
         }
@@ -4247,15 +4363,15 @@ public class CapybaraCompiler {
                 interfaceId,
                 provider.qualifier(),
                 lifetime.orElseThrow(),
-                binding.javaBinding(),
-                binding.javascriptBinding(),
-                binding.pythonBinding()
+                javaBinding,
+                javascriptBinding,
+                pythonBinding
         ));
     }
 
     private Optional<NativeProviderLifetime> parseNativeProviderLifetime(
             ObjectOrientedModule module,
-            ObjectOriented.NativeProviderDeclaration provider,
+            NativeProviderDeclaration provider,
             String interfaceId,
             String lifetime,
             TreeSet<Result.Error.SingleError> errors
@@ -4276,7 +4392,7 @@ public class CapybaraCompiler {
 
     private void validateNativeProviderBackendFactory(
             ObjectOrientedModule module,
-            ObjectOriented.NativeProviderDeclaration provider,
+            NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBackend backend,
             NativeProviderBackendBinding binding,
@@ -4312,7 +4428,7 @@ public class CapybaraCompiler {
 
     private void requireNativeProviderBackendText(
             ObjectOrientedModule module,
-            ObjectOriented.NativeProviderDeclaration provider,
+            NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBackend backend,
             String fieldName,
@@ -4327,7 +4443,7 @@ public class CapybaraCompiler {
                 provider,
                 "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
                 + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue()
-                + "` requires manifest field `" + fieldName + "`"
+                + "` requires field `" + fieldName + "`"
         ));
     }
 
@@ -4369,7 +4485,7 @@ public class CapybaraCompiler {
 
     private Result.Error.SingleError nativeProviderError(
             ObjectOrientedModule module,
-            ObjectOriented.NativeProviderDeclaration provider,
+            NativeProviderDeclaration provider,
             String message
     ) {
         var sourceFile = nativeProviderSourceFile(module);
