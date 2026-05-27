@@ -508,9 +508,10 @@ public final class PythonGenerator implements Generator {
             for (var parameter : method.parameters()) {
                 scope = scope.bind(parameter.sourceName(), pyIdentifier(parameter.generatedName()));
             }
-            var body = isCapyLangRandomSeedMethod(method)
+            var nativeProviderBody = renderNativeProviderFunction(method, name);
+            var body = nativeProviderBody.orElse(isCapyLangRandomSeedMethod(method)
                     ? "capy.current_millis()"
-                    : expressions.render(method.expression(), scope);
+                    : expressions.render(method.expression(), scope));
             var code = new StringBuilder();
             if (topLevel) {
                 code.append("def ").append(name).append("(").append(String.join(", ", params)).append("):\n");
@@ -533,6 +534,19 @@ public final class PythonGenerator implements Generator {
             return code.toString();
         }
 
+        private Optional<String> renderNativeProviderFunction(JavaMethod method, String emittedName) {
+            if (!method.parameters().isEmpty() || !isNativeExpression(method)) {
+                return Optional.empty();
+            }
+            return programContext.nativeProviderInfo(method.sourceName(), emittedName)
+                    .filter(this::isCurrentModuleProvider)
+                    .map(provider -> {
+                        requiredModules.putIfAbsent(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME, NATIVE_PROVIDER_BOOTSTRAP_PATH);
+                        return "capy.delay(lambda: " + moduleVar(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME)
+                               + "." + provider.bootstrapFunctionName() + "())";
+                    });
+        }
+
         private boolean isCapyLangRandomSeedMethod(JavaMethod method) {
             return "capy.lang.Random".equals(moduleInfo.className())
                    && "seed".equals(method.sourceName())
@@ -542,6 +556,17 @@ public final class PythonGenerator implements Generator {
                    && method.expression() instanceof CompiledNothingValue nothingValue
                    && (nothingValue.message().contains("`<native>`")
                        || nothingValue.message().contains("native expression in function"));
+        }
+
+        private boolean isNativeExpression(JavaMethod method) {
+            return method.expression() instanceof CompiledNothingValue nothingValue
+                   && (nothingValue.message().contains("`<native>`")
+                       || nothingValue.message().contains("native expression in function"));
+        }
+
+        private boolean isCurrentModuleProvider(ProgramContext.NativeProviderInfo provider) {
+            return ProgramContext.moduleKey(moduleInfo.module().path(), moduleInfo.module().name())
+                    .equals(ProgramContext.moduleKey(provider.sourceModulePath(), provider.sourceModuleName()));
         }
 
         private boolean isGeneratedConstructorName(String name) {
@@ -775,7 +800,8 @@ public final class PythonGenerator implements Generator {
             return programContext.nativeProviderInfo(functionCall.name(), emittedName)
                     .map(provider -> {
                         requiredModules.putIfAbsent(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME, NATIVE_PROVIDER_BOOTSTRAP_PATH);
-                        return moduleVar(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME) + "." + provider.bootstrapFunctionName() + "()";
+                        return "capy.delay(lambda: " + moduleVar(NATIVE_PROVIDER_BOOTSTRAP_CLASS_NAME)
+                               + "." + provider.bootstrapFunctionName() + "())";
                     });
         }
 
@@ -2559,27 +2585,7 @@ public final class PythonGenerator implements Generator {
         }
 
         Map<String, NativeProviderInfo> visibleNativeProviders(ObjectOrientedModule module) {
-            if (nativeProvidersByModule.isEmpty()) {
-                return Map.of();
-            }
-            var providers = new LinkedHashMap<String, NativeProviderInfo>();
-            nativeProvidersByModule.getOrDefault(moduleKey(module.path(), module.name()), List.of())
-                    .forEach(provider -> providers.putIfAbsent(provider.providerSymbolName(), provider));
-            for (var importDeclaration : module.imports()) {
-                var importedProviders = nativeProvidersByModule.getOrDefault(importedModuleKey(module, importDeclaration.moduleName()), List.of());
-                if (importedProviders.isEmpty()) {
-                    continue;
-                }
-                for (var provider : importedProviders) {
-                    if (importDeclaration.excludedSymbols().contains(provider.providerSymbolName())) {
-                        continue;
-                    }
-                    if (importDeclaration.isStarImport() || importDeclaration.symbols().contains(provider.providerSymbolName())) {
-                        providers.putIfAbsent(provider.providerSymbolName(), provider);
-                    }
-                }
-            }
-            return Map.copyOf(providers);
+            return Map.of();
         }
 
         Optional<Path> pathForClassName(String className) {

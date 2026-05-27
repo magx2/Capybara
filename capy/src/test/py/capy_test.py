@@ -104,7 +104,14 @@ class CapyPythonCliTest(unittest.TestCase):
         (source_dir / "dev" / "capylang" / "test").mkdir(parents=True)
         (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
         (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
+            interface Clock {
+                def now(): String
+            }
+        """))
+        (source_dir / "dev" / "capylang" / "test" / "ClockProvider.cfun").write_text(textwrap.dedent("""
+            from /capy/lang/Effect import { Effect }
             from /capy/meta_prog/NativeProvider import { NativeProvider }
+            from Clock import { Clock }
 
             @NativeProvider(
                 qualifier: "system",
@@ -112,9 +119,7 @@ class CapyPythonCliTest(unittest.TestCase):
                 pythonModule: "nativeinterop.system_clock",
                 pythonClassName: "SystemClock"
             )
-            interface Clock {
-                def now(): String
-            }
+            fun system_clock(): Effect[Clock] = <native>
         """))
 
         result = run_capy([

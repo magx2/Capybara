@@ -65,18 +65,7 @@ public final class JavaGenerator implements Generator {
         var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(
                 primitiveBackedTypeInfo,
                 singletonTypeInfo,
-                nativeProviderInfos.stream()
-                        .map(info -> new ObjectOrientedJavaGenerator.NativeProviderInfo(
-                                info.providerSymbolName(),
-                                info.bootstrapMethodName(),
-                                info.targetBackendType(),
-                                info.interfaceId(),
-                                info.qualifier(),
-                                info.sourceModulePath(),
-                                info.sourceModuleName(),
-                                info.sourceFile()
-                        ))
-                        .toList()
+                List.of()
         );
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         modules.addAll(nativeProviderBootstrapModules(nativeProviderInfos));
@@ -220,6 +209,11 @@ public final class JavaGenerator implements Generator {
         return interfaceId + "\u0000" + qualifier;
     }
 
+    private String moduleKey(String path, String name) {
+        var normalizedPath = path == null ? "" : path.replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+        return normalizedPath.isBlank() ? name : normalizedPath + "/" + name;
+    }
+
     private List<GeneratedModule> nativeProviderBootstrapModules(List<NativeProviderInfo> providers) {
         if (providers.isEmpty()) {
             return List.of();
@@ -309,6 +303,7 @@ public final class JavaGenerator implements Generator {
             List<NativeProviderInfo> nativeProviderInfos
     ) {
         var javaClass = time(timings::addAstBuildNanos, () -> astBuilder.build(module));
+        var nativeProvidersByFunction = nativeProviderInfosByFunction(module, nativeProviderInfos);
         var enumValueOwnerOverrides = new java.util.LinkedHashMap<>(globalEnumValueOwnerOverrides);
         enumValueOwnerOverrides.putAll(importedEnumValueOwnerOverrides(module));
         enumValueOwnerOverrides.putAll(javaClass.enumValueOwnerOverrides());
@@ -319,7 +314,7 @@ public final class JavaGenerator implements Generator {
             if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
                 return List.of(new GeneratedModule(
                         relativePath(javaClass, javaClass.name().toString()),
-                        time(timings::addSourceRenderNanos, () -> code(javaClass, javaClass.name().toString(), true))
+                        time(timings::addSourceRenderNanos, () -> code(javaClass, javaClass.name().toString(), true, nativeProvidersByFunction))
                 ));
             }
 
@@ -329,7 +324,12 @@ public final class JavaGenerator implements Generator {
             if (ownerInterface.isPresent()) {
                 return List.of(new GeneratedModule(
                         relativePath(javaClass, javaClass.name().toString()),
-                        time(timings::addSourceRenderNanos, () -> codeNestedInOwnerInterface(javaClass, ownerInterface.get(), ownerInterface.get().name().toString()))
+                        time(timings::addSourceRenderNanos, () -> codeNestedInOwnerInterface(
+                                javaClass,
+                                ownerInterface.get(),
+                                ownerInterface.get().name().toString(),
+                                nativeProvidersByFunction
+                        ))
                 ));
             }
 
@@ -358,7 +358,7 @@ public final class JavaGenerator implements Generator {
                 );
                 compiled.add(new GeneratedModule(
                         relativePath(javaClass, utilityClass.name().toString()),
-                        time(timings::addSourceRenderNanos, () -> code(utilityClass, utilityClass.name().toString(), false))
+                        time(timings::addSourceRenderNanos, () -> code(utilityClass, utilityClass.name().toString(), false, nativeProvidersByFunction))
                 ));
             }
             return List.copyOf(compiled);
@@ -373,27 +373,24 @@ public final class JavaGenerator implements Generator {
             CompiledModule module,
             List<NativeProviderInfo> nativeProviderInfos
     ) {
+        return baseOverrides;
+    }
+
+    private Map<String, NativeProviderInfo> nativeProviderInfosByFunction(
+            CompiledModule module,
+            List<NativeProviderInfo> nativeProviderInfos
+    ) {
         if (nativeProviderInfos.isEmpty()) {
-            return baseOverrides;
+            return Map.of();
         }
-        var overrides = new java.util.LinkedHashMap<>(baseOverrides);
-        var emptyParameters = List.<dev.capylang.compiler.CompiledType>of();
-        var localZeroArgFunctions = module.functions().stream()
-                .filter(function -> function.parameters().isEmpty())
-                .map(function -> signatureKey(function.name(), emptyParameters))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var moduleKey = moduleKey(module.path(), module.name());
+        var providers = new java.util.LinkedHashMap<String, NativeProviderInfo>();
         for (var provider : nativeProviderInfos) {
-            var providerKey = signatureKey(provider.providerSymbolName(), emptyParameters);
-            if (localZeroArgFunctions.contains(providerKey)) {
-                continue;
-            }
-            overrides.putIfAbsent(providerKey, "dev.capylang.NativeProviderBootstrap." + provider.bootstrapMethodName());
-            var bootstrapKey = signatureKey(provider.bootstrapMethodName(), emptyParameters);
-            if (!localZeroArgFunctions.contains(bootstrapKey)) {
-                overrides.putIfAbsent(bootstrapKey, "dev.capylang.NativeProviderBootstrap." + provider.bootstrapMethodName());
+            if (moduleKey.equals(moduleKey(provider.sourceModulePath(), provider.sourceModuleName()))) {
+                providers.put(provider.providerSymbolName(), provider);
             }
         }
-        return java.util.Map.copyOf(overrides);
+        return Map.copyOf(providers);
     }
 
     private java.util.Map<String, String> importedEnumValueOwnerOverrides(CompiledModule module) {
@@ -1097,7 +1094,12 @@ public final class JavaGenerator implements Generator {
         return Path.of(packageName.replace('.', '/'), simpleName + ".java");
     }
 
-    private String code(JavaClass javaClass, String helperCallOwnerName, boolean allowPrivateStaticMethods) {
+    private String code(
+            JavaClass javaClass,
+            String helperCallOwnerName,
+            boolean allowPrivateStaticMethods,
+            Map<String, NativeProviderInfo> nativeProvidersByFunction
+    ) {
         var code = new StringBuilder();
 
         // package
@@ -1145,7 +1147,13 @@ public final class JavaGenerator implements Generator {
                 .forEach(code::append);
         javaClass.staticMethods()
                 .stream()
-                .map(method -> mapJavaMethod(method, allowPrivateStaticMethods, javaClass.javaPackage().toString(), javaClass.name().toString()))
+                .map(method -> mapJavaMethod(
+                        method,
+                        allowPrivateStaticMethods,
+                        javaClass.javaPackage().toString(),
+                        javaClass.name().toString(),
+                        nativeProvidersByFunction
+                ))
                 .forEach(code::append);
         if (requiresUnsupportedHelper(code)) {
             code.append('\n').append(unsupportedHelperMethod());
@@ -1157,7 +1165,12 @@ public final class JavaGenerator implements Generator {
         return code.toString();
     }
 
-    private String codeNestedInOwnerInterface(JavaClass javaClass, JavaInterface ownerInterface, String helperCallOwnerName) {
+    private String codeNestedInOwnerInterface(
+            JavaClass javaClass,
+            JavaInterface ownerInterface,
+            String helperCallOwnerName,
+            Map<String, NativeProviderInfo> nativeProvidersByFunction
+    ) {
         var code = new StringBuilder();
         code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
         appendImports(code, javaClass.staticImports());
@@ -1201,7 +1214,13 @@ public final class JavaGenerator implements Generator {
                 .map(javaConst -> mapJavaConst(javaConst, false, true, javaClass.name().toString()))
                 .forEach(code::append);
         javaClass.staticMethods().stream()
-                .map(method -> mapJavaMethod(method, true, javaClass.javaPackage().toString(), javaClass.name().toString()))
+                .map(method -> mapJavaMethod(
+                        method,
+                        true,
+                        javaClass.javaPackage().toString(),
+                        javaClass.name().toString(),
+                        nativeProvidersByFunction
+                ))
                 .forEach(code::append);
         if (requiresUnsupportedHelper(code)) {
             code.append('\n').append(unsupportedHelperMethod());
@@ -1572,6 +1591,16 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapJavaMethod(JavaMethod method, boolean allowPrivateStaticMethods, String ownerPackage, String ownerName) {
+        return mapJavaMethod(method, allowPrivateStaticMethods, ownerPackage, ownerName, Map.of());
+    }
+
+    private String mapJavaMethod(
+            JavaMethod method,
+            boolean allowPrivateStaticMethods,
+            String ownerPackage,
+            String ownerName,
+            Map<String, NativeProviderInfo> nativeProvidersByFunction
+    ) {
         if (method.programMain()) {
             return mapJavaProgramMainMethod(method);
         }
@@ -1581,6 +1610,10 @@ public final class JavaGenerator implements Generator {
         var visibility = method.isPrivate()
                 ? (allowPrivateStaticMethods ? "private " : "")
                 : "public ";
+        var nativeProvider = nativeProvidersByFunction.get(method.sourceName());
+        if (nativeProvider != null && method.parameters().isEmpty() && isNativeExpression(method)) {
+            return mapNativeProviderFunction(method, nativeProvider, visibility, methodTypeParameters);
+        }
         if (isCapyDateTimeClockNowMethod(ownerPackage, ownerName, method)) {
             return mapCapyDateTimeClockNowMethod(method, visibility, methodTypeParameters);
         }
@@ -1606,6 +1639,18 @@ public final class JavaGenerator implements Generator {
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateMethodBody(method, null)
                + "\n}\n";
+    }
+
+    private String mapNativeProviderFunction(
+            JavaMethod method,
+            NativeProviderInfo provider,
+            String visibility,
+            String methodTypeParameters
+    ) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
+               + "return capy.lang.Effect.delay(() -> dev.capylang.NativeProviderBootstrap." + provider.bootstrapMethodName() + "());\n"
+               + "}\n";
     }
 
     private boolean isCapyDateTimeClockNowMethod(String ownerPackage, String ownerName, JavaMethod method) {

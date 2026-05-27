@@ -183,8 +183,8 @@ class ObjectOrientedParserTest {
     }
 
     @Test
-    @DisplayName("should parse native provider annotations on interfaces")
-    void parseNativeProviderAnnotationOnInterface() {
+    @DisplayName("should parse object-oriented annotations for semantic validation")
+    void parseObjectOrientedAnnotationsForSemanticValidation() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
                 "App",
                 "/parser",

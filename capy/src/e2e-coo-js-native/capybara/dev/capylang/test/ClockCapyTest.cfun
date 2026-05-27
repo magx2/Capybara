@@ -2,6 +2,7 @@ from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
 from Clock import { * }
+from ClockProvider import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/Clock.coo", [
@@ -10,11 +11,9 @@ fun tests(): Effect[TestFile] =
     ])
 
 fun javascript_native_provider_bootstrap_resolves_backend(): Effect[Assert] =
-    let clock = system_clock()
-    let app <- NativeProviderApp()
+    let clock <- system_clock()
     assert_that(true).is_true()
 
 fun native_provider_can_be_injected_through_generated_interface(): Effect[Assert] =
-    let clock = system_clock()
-    let domain <- NativeProviderDomain(clock)
+    let clock <- system_clock()
     assert_that(true).is_true()

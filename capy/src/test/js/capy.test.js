@@ -117,7 +117,14 @@ test('compile-generate JS accepts native provider annotation wiring', async () =
     await mkdir(join(sourceDir, 'dev', 'capylang', 'test'), { recursive: true });
     await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
+interface Clock {
+    def now(): String
+}
+`);
+    await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'ClockProvider.cfun'), `
+from /capy/lang/Effect import { Effect }
 from /capy/meta_prog/NativeProvider import { NativeProvider }
+from Clock import { Clock }
 
 @NativeProvider(
     qualifier: "system",
@@ -125,9 +132,7 @@ from /capy/meta_prog/NativeProvider import { NativeProvider }
     javascriptModule: "./nativeinterop/system_clock.js",
     javascriptExport: "SystemClock"
 )
-interface Clock {
-    def now(): String
-}
+fun system_clock(): Effect[Clock] = <native>
 `);
 
     const result = runCapy([
