@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.NativeAnnotations;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
@@ -73,11 +74,17 @@ public final class ObjectOrientedJavaGenerator {
                         HashMap::new
                 ));
         return module.objectOriented().definitions().stream()
+                .filter(definition -> !isNativeImplementationDeclaration(definition))
                 .map(definition -> new GeneratedModule(
                         relativePath(module, definition.name()),
                         renderType(module, definition, definitionsByName)
                 ))
                 .toList();
+    }
+
+    private boolean isNativeImplementationDeclaration(ObjectOriented.TypeDeclaration definition) {
+        return definition instanceof ObjectOriented.ClassDeclaration
+               && definition.linkedAnnotations().stream().anyMatch(NativeAnnotations::isNativeImplementationAnnotation);
     }
 
     private Path relativePath(ObjectOrientedModule module, String typeName) {

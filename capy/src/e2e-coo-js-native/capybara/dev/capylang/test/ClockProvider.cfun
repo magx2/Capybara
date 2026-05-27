@@ -2,9 +2,5 @@ from /capy/lang/Effect import { Effect }
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 from Clock import { Clock }
 
-@NativeProvider(
-    qualifier: "system",
-    javascriptModule: "../../nativeinterop/system_clock.js",
-    javascriptExport: "SystemClock"
-)
+@NativeProvider(qualifier: "system")
 fun system_clock(): Effect[Clock] = <native>

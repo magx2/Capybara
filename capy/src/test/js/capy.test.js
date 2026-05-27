@@ -115,10 +115,19 @@ test('compile-generate JS accepts native provider annotation wiring', async () =
     const regeneratedDir = join(root, 'regenerated');
     await mkdir(join(sourceDir, 'foo'), { recursive: true });
     await mkdir(join(sourceDir, 'dev', 'capylang', 'test'), { recursive: true });
+    await mkdir(join(sourceDir, 'dev', 'capylang', 'test', 'nativeinterop'), { recursive: true });
     await writeFile(join(sourceDir, 'foo', 'Main.cfun'), 'fun answer(): int = 9\n');
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'Clock.coo'), `
 interface Clock {
     def now(): String
+}
+`);
+    await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'nativeinterop', 'SystemClock.coo'), `
+from /capy/meta_prog/NativeImplementation import { NativeImplementation }
+from /dev/capylang/test/Clock import { Clock }
+
+@NativeImplementation(qualifier: "system")
+class SystemClock: Clock {
 }
 `);
     await writeFile(join(sourceDir, 'dev', 'capylang', 'test', 'ClockProvider.cfun'), `
@@ -126,11 +135,7 @@ from /capy/lang/Effect import { Effect }
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 from Clock import { Clock }
 
-@NativeProvider(
-    qualifier: "system",
-    javascriptModule: "./nativeinterop/system_clock.js",
-    javascriptExport: "SystemClock"
-)
+@NativeProvider(qualifier: "system")
 fun system_clock(): Effect[Clock] = <native>
 `);
 
@@ -146,7 +151,7 @@ fun system_clock(): Effect[Clock] = <native>
     const programJson = await readFile(join(linkedDir, 'program.json'), 'utf8');
     assert.match(programJson, /nativeProviders/);
     assert.match(programJson, /nativeProviderCatalog/);
-    assert.match(programJson, /nativeinterop\/system_clock\.js/);
+    assert.match(programJson, /test\/nativeinterop\/SystemClock\.js/);
     assert.equal(await exists(join(generatedDir, 'dev', 'capylang', 'native_providers.js')), true);
 
     const generate = runCapy(['generate', 'js', '-i', linkedDir, '-o', regeneratedDir]);

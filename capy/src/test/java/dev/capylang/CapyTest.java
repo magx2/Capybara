@@ -378,10 +378,19 @@ class CapyTest {
         var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-native-source"));
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
+        Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
                 interface Clock {
                     def now(): String
+                }
+                """);
+        Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop").resolve("SystemClock.coo"), """
+                from /capy/meta_prog/NativeImplementation import { NativeImplementation }
+                from /dev/capylang/test/Clock import { Clock }
+
+                @NativeImplementation(qualifier: "system")
+                class SystemClock: Clock {
                 }
                 """);
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProvider.cfun"), """
@@ -389,14 +398,7 @@ class CapyTest {
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
                 from Clock import { Clock }
 
-                @NativeProvider(
-                    qualifier: "system",
-                    javaClassName: "dev.capylang.test.nativeinterop.SystemClock",
-                    javascriptModule: "./nativeinterop/system_clock.js",
-                    javascriptExport: "SystemClock",
-                    pythonModule: "nativeinterop.system_clock",
-                    pythonClassName: "SystemClock"
-                )
+                @NativeProvider(qualifier: "system")
                 fun system_clock(): Effect[Clock] = <native>
                 """);
         var generatedDir = tempDir.resolve("compile-generate-native-output");
@@ -426,8 +428,8 @@ class CapyTest {
         assertEquals("/dev/capylang/test/Clock", binding.interfaceId());
         assertEquals("system", binding.qualifier());
         assertEquals("dev.capylang.test.nativeinterop.SystemClock", binding.javaBinding().className());
-        assertEquals("./nativeinterop/system_clock.js", binding.javascriptBinding().moduleName());
-        assertEquals("nativeinterop.system_clock", binding.pythonBinding().moduleName());
+        assertEquals("./test/nativeinterop/SystemClock.js", binding.javascriptBinding().moduleName());
+        assertEquals("dev.capylang.test.nativeinterop.SystemClock", binding.pythonBinding().moduleName());
 
         var generateExit = Capy.execute(
                 new String[]{
