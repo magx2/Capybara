@@ -3690,6 +3690,11 @@ public final class PythonGenerator implements Generator {
                             raise _native_provider_error('TypeMismatch: Native provider ' + name + ' is required for ' + _native_provider_context(metadata) + '.', metadata)
                         return value
 
+                    def _native_required_string(value, name, metadata):
+                        if not isinstance(value, str):
+                            raise _native_provider_error('TypeMismatch: Native provider ' + name + ' is required for ' + _native_provider_context(metadata) + '.', metadata)
+                        return value
+
                     def native_factory(options=None, **kwargs):
                         if options is None:
                             options = {}
@@ -3704,7 +3709,7 @@ public final class PythonGenerator implements Generator {
                             'sourceFile': options.get('source_file') or options.get('sourceFile'),
                         }
                         interface_id = _native_required_text(metadata.get('interfaceId'), 'interface_id', metadata)
-                        qualifier = _native_required_text(metadata.get('qualifier'), 'qualifier', metadata)
+                        qualifier = _native_required_string(metadata.get('qualifier'), 'qualifier', metadata)
                         factory = options.get('factory', 'call')
                         if factory != 'call':
                             raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported Python factory `' + str(factory) + '`.', metadata)

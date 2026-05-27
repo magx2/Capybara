@@ -1,0 +1,4 @@
+/// Marks a class as the external implementation for a native provider.
+annotation NativeImplementation on class {
+    qualifier: String = ""
+}

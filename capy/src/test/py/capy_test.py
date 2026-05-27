@@ -102,10 +102,19 @@ class CapyPythonCliTest(unittest.TestCase):
         regenerated_dir = root / "regenerated"
         (source_dir / "foo").mkdir(parents=True)
         (source_dir / "dev" / "capylang" / "test").mkdir(parents=True)
+        (source_dir / "dev" / "capylang" / "test" / "nativeinterop").mkdir(parents=True)
         (source_dir / "foo" / "Main.cfun").write_text("fun answer(): int = 9\n")
         (source_dir / "dev" / "capylang" / "test" / "Clock.coo").write_text(textwrap.dedent("""
             interface Clock {
                 def now(): String
+            }
+        """))
+        (source_dir / "dev" / "capylang" / "test" / "nativeinterop" / "SystemClock.coo").write_text(textwrap.dedent("""
+            from /capy/meta_prog/NativeImplementation import { NativeImplementation }
+            from /dev/capylang/test/Clock import { Clock }
+
+            @NativeImplementation(qualifier: "system")
+            class SystemClock: Clock {
             }
         """))
         (source_dir / "dev" / "capylang" / "test" / "ClockProvider.cfun").write_text(textwrap.dedent("""
@@ -113,11 +122,7 @@ class CapyPythonCliTest(unittest.TestCase):
             from /capy/meta_prog/NativeProvider import { NativeProvider }
             from Clock import { Clock }
 
-            @NativeProvider(
-                qualifier: "system",
-                pythonModule: "nativeinterop.system_clock",
-                pythonClassName: "SystemClock"
-            )
+            @NativeProvider(qualifier: "system")
             fun system_clock(): Effect[Clock] = <native>
         """))
 
@@ -133,7 +138,7 @@ class CapyPythonCliTest(unittest.TestCase):
         program_json = (linked_dir / "program.json").read_text()
         self.assertIn("nativeProviders", program_json)
         self.assertIn("nativeProviderCatalog", program_json)
-        self.assertIn("nativeinterop.system_clock", program_json)
+        self.assertIn("dev.capylang.test.nativeinterop.SystemClock", program_json)
         self.assertTrue((generated_dir / "dev" / "capylang" / "native_providers.py").exists())
 
         generate = run_capy(["generate", "python", "-i", str(linked_dir), "-o", str(regenerated_dir)])

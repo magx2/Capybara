@@ -1,0 +1,6 @@
+from /capy/meta_prog/NativeImplementation import { NativeImplementation }
+from /dev/capylang/test/NativeWiring import { NativeClock }
+
+@NativeImplementation(qualifier: "system")
+class SystemClock: NativeClock {
+}
