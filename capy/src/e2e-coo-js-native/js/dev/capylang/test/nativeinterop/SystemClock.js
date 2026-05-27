@@ -1,9 +1,9 @@
 'use strict';
 
-const { NativeClock } = require('../NativeClock.js');
+const { Clock } = require('../Clock.js');
 
 /** @NativeImplementation(qualifier: "system") */
-class SystemClock extends NativeClock {
+class SystemClock extends Clock {
     now_millis() {
         return 12345;
     }
