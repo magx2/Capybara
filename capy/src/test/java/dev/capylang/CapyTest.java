@@ -381,7 +381,14 @@ class CapyTest {
         Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
         Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
+                interface Clock {
+                    def now(): String
+                }
+                """);
+        Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProvider.cfun"), """
+                from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
 
                 @NativeProvider(
                     qualifier: "system",
@@ -392,9 +399,7 @@ class CapyTest {
                     pythonModule: "nativeinterop.system_clock",
                     pythonClassName: "SystemClock"
                 )
-                interface Clock {
-                    def now(): String
-                }
+                fun system_clock(): Effect[Clock] = <native>
                 """);
         var generatedDir = tempDir.resolve("compile-generate-native-output");
         var linkedDir = tempDir.resolve("compile-generate-native-linked");

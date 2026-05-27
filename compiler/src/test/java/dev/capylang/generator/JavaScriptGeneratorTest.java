@@ -193,31 +193,22 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
-    void shouldLowerObjectOrientedNativeProviderCallToJavaScriptBootstrap() {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+    void shouldLowerNativeProviderFunctionToJavaScriptEffectBackedBootstrapCall() {
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def clock(): Clock = system_clock()
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javascriptProviderBinding("/Providers.Clock", "system", "singleton", "host-clock", "SystemClock", "new")));
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(javascriptProviderBinding("/Providers.Clock", "system", "singleton", "host-clock", "SystemClock", "new")));
 
         var generated = new JavaScriptGenerator().generate(program);
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(Path.of("dev", "capylang", "native_providers.js"));
-        var app = generated.modules().stream()
-                .filter(module -> module.relativePath().endsWith("App.js"))
+        var providerModule = generated.modules().stream()
+                .filter(module -> module.relativePath().endsWith("ProvidersNative.js"))
                 .findFirst()
                 .orElseThrow();
         var bootstrap = generated.modules().stream()
@@ -225,9 +216,9 @@ class JavaScriptGeneratorTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(app.code())
-                .contains("const __capy_native = require('./dev/capylang/native_providers.js');")
-                .contains("return __capy_native.system_clock();")
+        assertThat(providerModule.code())
+                .contains("const __module_dev_capylang_native_providers = require('./dev/capylang/native_providers.js');")
+                .contains("return capy.delay(() => __module_dev_capylang_native_providers.system_clock());")
                 .doesNotContain("host-clock")
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
@@ -239,30 +230,21 @@ class JavaScriptGeneratorTest {
                 .contains("create: () => new __capy_provider_system_clock_module.SystemClock()")
                 .contains("{ name: 'now_millis', arity: 0 }")
                 .contains("function system_clock()")
-                .contains("return providers.resolve('/Providers.Clock', 'system', 'system_clock', 'javascript', '/Providers.coo');")
+                .contains("return providers.resolve('/Providers.Clock', 'system', 'system_clock', 'javascript', '/ProvidersNative.cfun');")
                 .contains("module.exports = {")
                 .doesNotContain("import ");
     }
 
     @Test
     void shouldRunJavaScriptNativeProviderWithStructuralInterfaceValidation() throws Exception {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def read(): long = system_clock().now_millis()
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(javascriptProviderBinding(
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(javascriptProviderBinding(
                 "/Providers.Clock",
                 "system",
                 "factory",
@@ -286,20 +268,19 @@ class JavaScriptGeneratorTest {
                 """);
 
         var output = runNode("""
-                const { App } = require('./App.js');
                 const { Clock } = require('./Clock.js');
+                const providersNative = require('./ProvidersNative.js');
                 const nativeProviders = require('./dev/capylang/native_providers.js');
-                const first = nativeProviders.system_clock();
-                const second = nativeProviders.system_clock();
+                const first = providersNative.systemClock().unsafe_run();
+                const second = providersNative.systemClock().unsafe_run();
                 console.log([
-                    new App().read(),
                     first.now_millis(),
                     first instanceof Clock,
                     first === second
                 ].join('|'));
                 """);
 
-        assertThat(output).isEqualTo("9123|9123|true|false");
+        assertThat(output).isEqualTo("9123|true|false");
     }
 
     @Test
@@ -987,6 +968,22 @@ class JavaScriptGeneratorTest {
         return javascriptProviderBinding(interfaceId, qualifier, "singleton", "host-clock", "SystemClock", "new");
     }
 
+    private static List<RawModule> nativeProviderModules(String providerSource) {
+        return List.of(
+                new RawModule(
+                        "Providers",
+                        "",
+                        """
+                                interface Clock {
+                                    def now_millis(): long
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule("ProvidersNative", "", providerSource)
+        );
+    }
+
     private static NativeProviderBinding javascriptProviderBinding(
             String interfaceId,
             String qualifier,
@@ -1006,19 +1003,26 @@ class JavaScriptGeneratorTest {
     }
 
     private static CompiledProgram nativeProviderProgram(String methodDeclaration, NativeProviderBinding binding) {
-        return compileProgram(List.of(new RawModule(
-                "Providers",
-                "",
-                """
+        return compileProgram(List.of(
+                new RawModule(
+                        "Providers",
+                        "",
+                        """
+                                interface Clock {
+                                    %s
+                                }
+                                """.formatted(methodDeclaration),
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule("ProvidersNative", "", """
+                        from /capy/lang/Effect import { Effect }
                         from /capy/meta_prog/NativeProvider import { NativeProvider }
+                        from Providers import { Clock }
 
                         @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            %s
-                        }
-                        """.formatted(methodDeclaration),
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(binding));
+                        fun system_clock(): Effect[Clock] = <native>
+                        """)
+        ), providerManifest(binding));
     }
 
     private static List<RawModule> modulesWithNativeProviderAnnotation(List<RawModule> modules) {
@@ -1033,7 +1037,7 @@ class JavaScriptGeneratorTest {
 
     private static RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
-                annotation NativeProvider on interface {
+                annotation NativeProvider on fun {
                     qualifier: String = ""
                     lifetime: String = "singleton"
                     javaClassName: String = ""

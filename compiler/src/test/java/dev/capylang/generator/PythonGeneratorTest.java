@@ -304,31 +304,22 @@ class PythonGeneratorTest {
     }
 
     @Test
-    void shouldLowerObjectOrientedNativeProviderCallToPythonBootstrap() {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+    void shouldLowerNativeProviderFunctionToPythonEffectBackedBootstrapCall() {
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def clock(): Clock = system_clock()
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(pythonProviderBinding("/Providers.Clock", "system")));
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(pythonProviderBinding("/Providers.Clock", "system")));
 
         var generated = new PythonGenerator().generate(program);
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(Path.of("dev", "capylang", "native_providers.py"));
-        var app = generated.modules().stream()
-                .filter(module -> module.relativePath().endsWith("App.py"))
+        var providerModule = generated.modules().stream()
+                .filter(module -> module.relativePath().endsWith("ProvidersNative.py"))
                 .findFirst()
                 .orElseThrow();
         var bootstrap = generated.modules().stream()
@@ -336,10 +327,9 @@ class PythonGeneratorTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(app.code())
-                .contains("import dev.capylang.native_providers as __capy_native")
-                .contains("_App__capy_native = __capy_native")
-                .contains("return __capy_native.system_clock()")
+        assertThat(providerModule.code())
+                .contains("import dev.capylang.native_providers as capy_module_dev_capylang_native_providers")
+                .contains("return capy.delay(lambda: capy_module_dev_capylang_native_providers.system_clock())")
                 .doesNotContain("host_clock")
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
@@ -353,28 +343,19 @@ class PythonGeneratorTest {
                 .contains("create=lambda: __capy_provider_system_clock_class()")
                 .contains("{'name': 'now_millis', 'arity': 0}")
                 .contains("def system_clock():")
-                .contains("return _providers.resolve('/Providers.Clock', 'system', 'system_clock', 'python', '/Providers.coo')");
+                .contains("return _providers.resolve('/Providers.Clock', 'system', 'system_clock', 'python', '/ProvidersNative.cfun')");
     }
 
     @Test
     void shouldRunPythonNativeProviderWithStructuralInterfaceValidation() throws Exception {
-        var program = compileProgram(List.of(new RawModule(
-                "Providers",
-                "",
-                """
-                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
 
-                        @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            def now_millis(): long
-                        }
-
-                        class App {
-                            def read(): long = system_clock().now_millis()
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(pythonProviderBinding(
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(pythonProviderBinding(
                 "/Providers.Clock",
                 "system",
                 "factory",
@@ -397,18 +378,17 @@ class PythonGeneratorTest {
         var output = runPython("""
                 import dev.capylang.capybara as capy
                 import dev.capylang.native_providers as native_providers
-                from App import App
-                first = native_providers.system_clock()
-                second = native_providers.system_clock()
+                import ProvidersNative
+                first = ProvidersNative.systemClock().unsafe_run()
+                second = ProvidersNative.systemClock().unsafe_run()
                 print('|'.join([
-                    str(App().read()),
                     str(first.now_millis()),
                     str(capy.is_type(first, 'Clock')).lower(),
                     str(first is second).lower(),
                 ]))
                 """);
 
-        assertThat(output).isEqualTo("9123|9123|true|false");
+        assertThat(output).isEqualTo("9123|true|false");
     }
 
     @Test
@@ -1002,6 +982,22 @@ class PythonGeneratorTest {
         return pythonProviderBinding(interfaceId, qualifier, "singleton", "host_clock", "SystemClock", "call");
     }
 
+    private static List<RawModule> nativeProviderModules(String providerSource) {
+        return List.of(
+                new RawModule(
+                        "Providers",
+                        "",
+                        """
+                                interface Clock {
+                                    def now_millis(): long
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule("ProvidersNative", "", providerSource)
+        );
+    }
+
     private static NativeProviderBinding pythonProviderBinding(
             String interfaceId,
             String qualifier,
@@ -1021,19 +1017,26 @@ class PythonGeneratorTest {
     }
 
     private static CompiledProgram nativeProviderProgram(String methodDeclaration, NativeProviderBinding binding) {
-        return compileProgram(List.of(new RawModule(
-                "Providers",
-                "",
-                """
+        return compileProgram(List.of(
+                new RawModule(
+                        "Providers",
+                        "",
+                        """
+                                interface Clock {
+                                    %s
+                                }
+                                """.formatted(methodDeclaration),
+                        SourceKind.OBJECT_ORIENTED
+                ),
+                new RawModule("ProvidersNative", "", """
+                        from /capy/lang/Effect import { Effect }
                         from /capy/meta_prog/NativeProvider import { NativeProvider }
+                        from Providers import { Clock }
 
                         @NativeProvider(qualifier: "system")
-                        interface Clock {
-                            %s
-                        }
-                        """.formatted(methodDeclaration),
-                SourceKind.OBJECT_ORIENTED
-        )), providerManifest(binding));
+                        fun system_clock(): Effect[Clock] = <native>
+                        """)
+        ), providerManifest(binding));
     }
 
     private static List<RawModule> modulesWithNativeProviderAnnotation(List<RawModule> modules) {
@@ -1048,7 +1051,7 @@ class PythonGeneratorTest {
 
     private static RawModule nativeProviderAnnotationModule() {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
-                annotation NativeProvider on interface {
+                annotation NativeProvider on fun {
                     qualifier: String = ""
                     lifetime: String = "singleton"
                     javaClassName: String = ""

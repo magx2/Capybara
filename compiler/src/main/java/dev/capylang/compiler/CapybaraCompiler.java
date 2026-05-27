@@ -104,6 +104,7 @@ public class CapybaraCompiler {
             modulesForNativeProviders.addAll(functionalProgram.modules());
             var nativeProviderCatalog = nativeProviderCatalog(
                     functionalProgram.objectOrientedModules(),
+                    parsedProgram,
                     modulesForNativeProviders,
                     providerManifest
             );
@@ -142,6 +143,14 @@ public class CapybaraCompiler {
     private String canonicalModuleIdentity(String path, String name) {
         var normalizedPath = normalizeModulePath(path);
         if (normalizedPath.isBlank()) {
+            return name;
+        }
+        return normalizedPath + "/" + name;
+    }
+
+    private String moduleKey(String path, String name) {
+        var normalizedPath = normalizeModulePath(path);
+        if (normalizedPath.isBlank() || ".".equals(normalizedPath)) {
             return name;
         }
         return normalizedPath + "/" + name;
@@ -3533,6 +3542,7 @@ public class CapybaraCompiler {
 
     private Result<NativeProviderCatalog> nativeProviderCatalog(
             List<ObjectOrientedModule> objectOrientedModules,
+            Program functionalProgram,
             SortedSet<CompiledModule> compiledModules,
             NativeProviderManifest manifest
     ) {
@@ -3567,34 +3577,63 @@ public class CapybaraCompiler {
         var bindings = new ArrayList<CompiledNativeProviderBinding>();
         var declaredProviderKeys = new LinkedHashSet<NativeProviderKey>();
         var usedManifestKeys = new LinkedHashSet<NativeProviderKey>();
+        var parsedModulesByKey = functionalProgram.modules().stream()
+                .collect(toMap(
+                        module -> moduleKey(module.path(), module.name()),
+                        identity(),
+                        (first, ignored) -> first,
+                        LinkedHashMap::new
+                ));
 
-        for (var module : objectOrientedModules) {
-            var nativeProviders = nativeProviderDeclarations(module, errors);
+        for (var module : compiledModules) {
+            var sourceModule = parsedModulesByKey.get(moduleKey(module.path(), module.name()));
+            var nativeProviders = nativeProviderDeclarations(module);
             if (nativeProviders.isEmpty()) {
                 continue;
             }
-            validateNativeProviderCalls(module, nativeProviders, errors);
             var declaredProviderSymbols = new LinkedHashSet<String>();
-            var availableTypes = availableNativeProviderTypes(module, moduleLinkIndex, linkedTypesByModule, allModuleRefs, compileCache);
+            var availableTypes = availableNativeProviderTypes(
+                    module.name(),
+                    module.path(),
+                    sourceModule == null ? List.of() : sourceModule.imports(),
+                    moduleLinkIndex,
+                    linkedTypesByModule,
+                    allModuleRefs,
+                    compileCache
+            );
             if (availableTypes instanceof Result.Error<Map<String, NativeProviderTarget>> error) {
                 errors.addAll(error.errors());
                 continue;
             }
             var visibleTypes = ((Result.Success<Map<String, NativeProviderTarget>>) availableTypes).value();
             for (var provider : nativeProviders) {
+                if (!provider.parameters().isEmpty()) {
+                    errors.add(nativeProviderError(
+                            provider,
+                            "TypeMismatch: Native provider `" + provider.name()
+                            + "` must not declare parameters; provider functions are called as `" + provider.name() + "()`"
+                    ));
+                    continue;
+                }
+                if (!provider.effectReturnType()) {
+                    errors.add(nativeProviderError(
+                            provider,
+                            "TypeMismatch: Native provider `" + provider.name()
+                            + "` must return `Effect[Interface]`, got `" + provider.targetType() + "`"
+                    ));
+                    continue;
+                }
                 if (isBuiltinOrCompositeNativeProviderTarget(provider.targetType())) {
                     errors.add(nativeProviderError(
-                            module,
                             provider,
                             "TypeMismatch: Native provider `" + provider.name() + "` target type `" + provider.targetType()
                             + "` with qualifier `" + provider.qualifier() + "` is not an interface"
                     ));
                     continue;
                 }
-                var resolvedTarget = visibleTypes.get(provider.targetType());
+                var resolvedTarget = resolveNativeProviderTarget(provider.targetType(), visibleTypes);
                 if (resolvedTarget == null) {
                     errors.add(nativeProviderError(
-                            module,
                             provider,
                             "TypeMismatch: Native provider `" + provider.name() + "` targets unknown type `" + provider.targetType()
                             + "` with qualifier `" + provider.qualifier() + "`"
@@ -3604,7 +3643,6 @@ public class CapybaraCompiler {
                 if (!(resolvedTarget.type() instanceof CompiledObjectType objectType)
                     || objectType.kind() != CompiledObjectKind.INTERFACE) {
                     errors.add(nativeProviderError(
-                            module,
                             provider,
                             "TypeMismatch: Native provider `" + provider.name() + "` target type `" + provider.targetType()
                             + "` resolves to " + nativeProviderTargetKind(resolvedTarget.type())
@@ -3617,7 +3655,6 @@ public class CapybaraCompiler {
                 var key = new NativeProviderKey(interfaceId, provider.qualifier());
                 if (!declaredProviderKeys.add(key)) {
                     errors.add(nativeProviderError(
-                            module,
                             provider,
                             "DuplicateProvider: Duplicate native provider declaration for native provider `" + provider.name()
                             + "` and interface `" + interfaceId
@@ -3627,7 +3664,6 @@ public class CapybaraCompiler {
                 }
                 if (!declaredProviderSymbols.add(provider.name())) {
                     errors.add(nativeProviderError(
-                            module,
                             provider,
                             "DuplicateProvider: Native provider `" + provider.name() + "` duplicates another provider symbol in module `" + module.name()
                             + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
@@ -3641,12 +3677,11 @@ public class CapybaraCompiler {
                         provider.targetType(),
                         interfaceId,
                         provider.qualifier(),
-                        nativeProviderSourceFile(module)
+                        provider.sourceFile()
                 ));
                 var binding = manifestBindingsByKey.get(key);
                 if (binding == null && provider.annotationBinding().isEmpty()) {
                     errors.add(nativeProviderError(
-                            module,
                             provider,
                             "NotWired: Native provider `" + provider.name() + "` for interface `" + interfaceId
                             + "` with qualifier `" + provider.qualifier() + "` has no annotation backend wiring or matching manifest entry"
@@ -3654,8 +3689,8 @@ public class CapybaraCompiler {
                     continue;
                 }
                 var compiledBinding = binding == null
-                        ? compiledNativeProviderBinding(module, provider, interfaceId, provider.annotationBinding(), errors)
-                        : compiledNativeProviderBinding(module, provider, interfaceId, binding, errors);
+                        ? compiledNativeProviderBinding(provider, interfaceId, provider.annotationBinding(), errors)
+                        : compiledNativeProviderBinding(provider, interfaceId, binding, errors);
                 if (binding != null) {
                     usedManifestKeys.add(key);
                 }
@@ -3682,55 +3717,65 @@ public class CapybaraCompiler {
         return Result.success(new NativeProviderCatalog(declarations, bindings));
     }
 
-    private List<NativeProviderDeclaration> nativeProviderDeclarations(
-            ObjectOrientedModule module,
-            TreeSet<Result.Error.SingleError> errors
-    ) {
-        var typeNames = module.objectOriented().definitions().stream()
-                .map(ObjectOriented.TypeDeclaration::name)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    private List<NativeProviderDeclaration> nativeProviderDeclarations(CompiledModule module) {
         var providers = new ArrayList<NativeProviderDeclaration>();
-        for (var definition : module.objectOriented().definitions()) {
-            if (!(definition instanceof ObjectOriented.InterfaceDeclaration interfaceDeclaration)) {
-                continue;
-            }
-            for (var annotation : interfaceDeclaration.linkedAnnotations()) {
+        for (var function : module.functions()) {
+            for (var annotation : function.annotations()) {
                 if (!isNativeProviderAnnotation(annotation)) {
                     continue;
                 }
                 var qualifier = nativeProviderAnnotationStringArgument(annotation, "qualifier").orElse("");
-                var providerName = nativeProviderSymbolName(interfaceDeclaration.name(), qualifier);
-                var provider = new NativeProviderDeclaration(
-                        providerName,
-                        interfaceDeclaration.name(),
+                var effectTarget = nativeProviderEffectTarget(function.returnType());
+                var targetType = effectTarget.orElseGet(() -> typeDescriptor(function.returnType()));
+                providers.add(new NativeProviderDeclaration(
+                        function.name(),
+                        targetType,
                         qualifier,
                         nativeProviderAnnotationBinding(annotation),
-                        interfaceDeclaration.comments()
-                );
-                if (!IDENTIFIER_PATTERN.matcher(providerName).matches()) {
-                    errors.add(nativeProviderError(
-                            module,
-                            provider,
-                            "TypeMismatch: Native provider annotation on interface `" + interfaceDeclaration.name()
-                            + "` derives invalid provider name `" + providerName
-                            + "`; expected an identifier"
-                    ));
-                    continue;
-                }
-                if (typeNames.contains(providerName)) {
-                    errors.add(nativeProviderError(
-                            module,
-                            provider,
-                            "TypeMismatch: Native provider `" + providerName + "` collides with type name `" + providerName
-                            + "` in module `" + module.name() + "` for target `" + provider.targetType()
-                            + "` with qualifier `" + provider.qualifier() + "`"
-                    ));
-                    continue;
-                }
-                providers.add(provider);
+                        function.comments(),
+                        function.parameters(),
+                        nativeProviderSourceFile(module),
+                        effectTarget.isPresent()
+                ));
             }
         }
         return List.copyOf(providers);
+    }
+
+    private Optional<String> nativeProviderEffectTarget(CompiledType returnType) {
+        if (!(returnType instanceof CompiledDataParentType parentType) || !isNativeProviderEffectType(parentType)) {
+            return Optional.empty();
+        }
+        return parentType.typeParameters().stream().findFirst();
+    }
+
+    private boolean isNativeProviderEffectType(CompiledType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = genericDataType.name().replace('\\', '/');
+        return "Effect".equals(genericDataType.name())
+               || normalized.endsWith("/Effect.Effect")
+               || normalized.endsWith("/Effect");
+    }
+
+    private NativeProviderTarget resolveNativeProviderTarget(
+            String targetType,
+            Map<String, NativeProviderTarget> visibleTypes
+    ) {
+        var candidates = new LinkedHashSet<String>();
+        candidates.add(targetType);
+        candidates.add(targetType.replaceFirst("^/+", ""));
+        candidates.add(parseGenericTypeName(targetType).baseName());
+        candidates.add(parseGenericTypeName(targetType).baseName().replaceFirst("^/+", ""));
+        candidates.add(normalizeTypeName(targetType));
+        for (var candidate : candidates) {
+            var target = visibleTypes.get(candidate);
+            if (target != null) {
+                return target;
+            }
+        }
+        return null;
     }
 
     private String nativeProviderSymbolName(String interfaceName, String qualifier) {
@@ -3835,8 +3880,15 @@ public class CapybaraCompiler {
             String targetType,
             String qualifier,
             NativeProviderAnnotationBinding annotationBinding,
-            List<String> comments
+            List<String> comments,
+            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            String sourceFile,
+            boolean effectReturnType
     ) {
+        NativeProviderDeclaration {
+            comments = comments == null ? List.of() : List.copyOf(comments);
+            parameters = parameters == null ? List.of() : List.copyOf(parameters);
+        }
     }
 
     private record NativeProviderAnnotationBinding(
@@ -4204,29 +4256,31 @@ public class CapybaraCompiler {
     }
 
     private Result<Map<String, NativeProviderTarget>> availableNativeProviderTypes(
-            ObjectOrientedModule module,
+            String moduleName,
+            String modulePath,
+            List<ImportDeclaration> imports,
             ModuleLinkIndex moduleLinkIndex,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             List<ModuleRef> allModules,
             CompileCache compileCache
     ) {
-        var currentModule = new ModuleRef(module.name(), module.path());
+        var currentModule = new ModuleRef(moduleName, modulePath);
         var localTypes = Optional.ofNullable(getModuleEntry(linkedTypesByModule, currentModule)).orElse(new TreeMap<>());
         var all = new LinkedHashMap<String, NativeProviderTarget>();
         putNativeProviderTypes(all, currentModule, localTypes);
         addQualifiedNativeProviderTypeAliases(all, currentModule, localTypes);
-        for (var importDeclaration : module.imports()) {
+        for (var importDeclaration : imports) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
                 return new Result.Error<>(new Result.Error.SingleError(
                         0,
                         0,
-                        module.moduleFile(),
-                        "Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`"
+                        SourceKind.FUNCTIONAL.moduleFile(modulePath, moduleName),
+                        "Module `" + moduleName + "` imports unknown module `" + importDeclaration.moduleName() + "`"
                 ));
             }
             var importedTypes = visibleTypes(
-                    module.path(),
+                    modulePath,
                     importedModule,
                     Optional.ofNullable(getModuleEntry(linkedTypesByModule, importedModule)).orElse(new TreeMap<>()),
                     compileCache
@@ -4249,13 +4303,13 @@ public class CapybaraCompiler {
                 all,
                 knownModule,
                 visibleTypes(
-                        module.path(),
+                        modulePath,
                         knownModule,
                         Optional.ofNullable(getModuleEntry(linkedTypesByModule, knownModule)).orElse(new TreeMap<>()),
                         compileCache
                 )
         ));
-        for (var importDeclaration : module.imports()) {
+        for (var importDeclaration : imports) {
             if (!importDeclaration.qualifiedOnly()) {
                 continue;
             }
@@ -4267,7 +4321,7 @@ public class CapybaraCompiler {
                     all,
                     importedModule,
                     visibleTypes(
-                            module.path(),
+                            modulePath,
                             importedModule,
                             Optional.ofNullable(getModuleEntry(linkedTypesByModule, importedModule)).orElse(new TreeMap<>()),
                             compileCache
@@ -4304,14 +4358,12 @@ public class CapybaraCompiler {
     }
 
     private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
-            ObjectOrientedModule module,
             NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBinding binding,
             TreeSet<Result.Error.SingleError> errors
     ) {
         return compiledNativeProviderBinding(
-                module,
                 provider,
                 interfaceId,
                 binding.lifetime(),
@@ -4323,14 +4375,12 @@ public class CapybaraCompiler {
     }
 
     private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
-            ObjectOrientedModule module,
             NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderAnnotationBinding binding,
             TreeSet<Result.Error.SingleError> errors
     ) {
         return compiledNativeProviderBinding(
-                module,
                 provider,
                 interfaceId,
                 binding.lifetime(),
@@ -4342,7 +4392,6 @@ public class CapybaraCompiler {
     }
 
     private Optional<CompiledNativeProviderBinding> compiledNativeProviderBinding(
-            ObjectOrientedModule module,
             NativeProviderDeclaration provider,
             String interfaceId,
             String lifetimeValue,
@@ -4352,10 +4401,10 @@ public class CapybaraCompiler {
             TreeSet<Result.Error.SingleError> errors
     ) {
         var errorCount = errors.size();
-        var lifetime = parseNativeProviderLifetime(module, provider, interfaceId, lifetimeValue, errors);
-        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
-        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.JAVASCRIPT, javascriptBinding, errors);
-        validateNativeProviderBackendFactory(module, provider, interfaceId, NativeProviderBackend.PYTHON, pythonBinding, errors);
+        var lifetime = parseNativeProviderLifetime(provider, interfaceId, lifetimeValue, errors);
+        validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
+        validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVASCRIPT, javascriptBinding, errors);
+        validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.PYTHON, pythonBinding, errors);
         if (lifetime.isEmpty() || errors.size() != errorCount) {
             return Optional.empty();
         }
@@ -4370,7 +4419,6 @@ public class CapybaraCompiler {
     }
 
     private Optional<NativeProviderLifetime> parseNativeProviderLifetime(
-            ObjectOrientedModule module,
             NativeProviderDeclaration provider,
             String interfaceId,
             String lifetime,
@@ -4380,7 +4428,6 @@ public class CapybaraCompiler {
             return Optional.of(NativeProviderLifetime.fromJson(lifetime));
         } catch (IllegalArgumentException exception) {
             errors.add(nativeProviderError(
-                    module,
                     provider,
                     "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
                     + "` with qualifier `" + provider.qualifier()
@@ -4391,7 +4438,6 @@ public class CapybaraCompiler {
     }
 
     private void validateNativeProviderBackendFactory(
-            ObjectOrientedModule module,
             NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBackend backend,
@@ -4402,14 +4448,14 @@ public class CapybaraCompiler {
             return;
         }
         switch (backend) {
-            case JAVA -> requireNativeProviderBackendText(module, provider, interfaceId, backend, "java.className", binding.className(), errors);
+            case JAVA -> requireNativeProviderBackendText(provider, interfaceId, backend, "java.className", binding.className(), errors);
             case JAVASCRIPT -> {
-                requireNativeProviderBackendText(module, provider, interfaceId, backend, "javascript.module", binding.moduleName(), errors);
-                requireNativeProviderBackendText(module, provider, interfaceId, backend, "javascript.export", binding.exportName(), errors);
+                requireNativeProviderBackendText(provider, interfaceId, backend, "javascript.module", binding.moduleName(), errors);
+                requireNativeProviderBackendText(provider, interfaceId, backend, "javascript.export", binding.exportName(), errors);
             }
             case PYTHON -> {
-                requireNativeProviderBackendText(module, provider, interfaceId, backend, "python.module", binding.moduleName(), errors);
-                requireNativeProviderBackendText(module, provider, interfaceId, backend, "python.className", binding.className(), errors);
+                requireNativeProviderBackendText(provider, interfaceId, backend, "python.module", binding.moduleName(), errors);
+                requireNativeProviderBackendText(provider, interfaceId, backend, "python.className", binding.className(), errors);
             }
         }
         var allowed = supportedNativeProviderFactories(backend);
@@ -4417,7 +4463,6 @@ public class CapybaraCompiler {
             return;
         }
         errors.add(nativeProviderError(
-                module,
                 provider,
                 "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
                 + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue() + "` has unsupported "
@@ -4427,7 +4472,6 @@ public class CapybaraCompiler {
     }
 
     private void requireNativeProviderBackendText(
-            ObjectOrientedModule module,
             NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBackend backend,
@@ -4439,7 +4483,6 @@ public class CapybaraCompiler {
             return;
         }
         errors.add(nativeProviderError(
-                module,
                 provider,
                 "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
                 + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue()
@@ -4483,18 +4526,18 @@ public class CapybaraCompiler {
         return qualified.startsWith("/") ? qualified : "/" + qualified;
     }
 
-    private Result.Error.SingleError nativeProviderError(
-            ObjectOrientedModule module,
-            NativeProviderDeclaration provider,
-            String message
-    ) {
-        var sourceFile = nativeProviderSourceFile(module);
+    private Result.Error.SingleError nativeProviderError(NativeProviderDeclaration provider, String message) {
+        var sourceFile = provider.sourceFile();
         return new Result.Error.SingleError(
                 0,
                 0,
                 sourceFile,
                 message + " in source `" + sourceFile + "`"
         );
+    }
+
+    private String nativeProviderSourceFile(CompiledModule module) {
+        return SourceKind.FUNCTIONAL.moduleFile(module.path(), module.name()).replaceFirst("^/+", "/");
     }
 
     private String nativeProviderSourceFile(ObjectOrientedModule module) {

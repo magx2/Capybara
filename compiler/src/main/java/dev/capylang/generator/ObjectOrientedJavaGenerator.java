@@ -1495,27 +1495,7 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private Map<String, NativeProviderInfo> visibleNativeProviders(ObjectOrientedModule module) {
-        if (nativeProvidersByModule.isEmpty()) {
-            return Map.of();
-        }
-        var providers = new LinkedHashMap<String, NativeProviderInfo>();
-        nativeProvidersByModule.getOrDefault(moduleKey(module.path(), module.name()), List.of())
-                .forEach(provider -> providers.putIfAbsent(provider.providerSymbolName(), provider));
-        for (var importDeclaration : module.imports()) {
-            var importedProviders = nativeProvidersByModule.getOrDefault(importedModuleKey(module, importDeclaration.moduleName()), List.of());
-            if (importedProviders.isEmpty()) {
-                continue;
-            }
-            for (var provider : importedProviders) {
-                if (importDeclaration.excludedSymbols().contains(provider.providerSymbolName())) {
-                    continue;
-                }
-                if (importDeclaration.isStarImport() || importDeclaration.symbols().contains(provider.providerSymbolName())) {
-                    providers.putIfAbsent(provider.providerSymbolName(), provider);
-                }
-            }
-        }
-        return Map.copyOf(providers);
+        return Map.of();
     }
 
     private String rewriteImportedFunctionCalls(ObjectOrientedModule module, String expression) {

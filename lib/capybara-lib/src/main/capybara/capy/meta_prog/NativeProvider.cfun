@@ -1,5 +1,5 @@
-/// Marks an OO interface as a compile-time native provider contract.
-annotation NativeProvider on interface {
+/// Marks a function returning Effect[Interface] as a compile-time native provider.
+annotation NativeProvider on fun {
     qualifier: String = ""
     lifetime: String = "singleton"
     javaClassName: String = ""
