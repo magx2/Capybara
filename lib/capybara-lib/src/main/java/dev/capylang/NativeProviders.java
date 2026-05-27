@@ -68,7 +68,7 @@ public final class NativeProviders {
     }
 
     public <T> T resolve(String interfaceId, String qualifier, String providerSymbol, String backend, String sourceFile, Class<T> type) {
-        var key = new Key(requireText(interfaceId, "interfaceId"), requireText(qualifier, "qualifier"));
+        var key = new Key(requireText(interfaceId, "interfaceId"), requireString(qualifier, "qualifier"));
         Objects.requireNonNull(type, "type");
         var context = context(interfaceId, qualifier, providerSymbol, backend, sourceFile);
         var provider = providers.get(key);
@@ -91,6 +91,13 @@ public final class NativeProviders {
 
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("TypeMismatch: Native provider " + name + " is required.");
+        }
+        return value;
+    }
+
+    private static String requireString(String value, String name) {
+        if (value == null) {
             throw new IllegalArgumentException("TypeMismatch: Native provider " + name + " is required.");
         }
         return value;
@@ -127,7 +134,7 @@ public final class NativeProviders {
                 Class<T> type,
                 NativeProviderFactory<? extends T> factory
         ) {
-            this.key = new Key(requireText(interfaceId, "interfaceId"), requireText(qualifier, "qualifier"));
+            this.key = new Key(requireText(interfaceId, "interfaceId"), requireString(qualifier, "qualifier"));
             this.providerSymbol = providerSymbol;
             this.backend = backend;
             this.sourceFile = sourceFile;

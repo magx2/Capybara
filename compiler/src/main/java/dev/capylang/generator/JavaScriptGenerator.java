@@ -5424,6 +5424,13 @@ public final class JavaScriptGenerator implements Generator {
                         return value;
                     }
 
+                    function requireNativeString(value, name, metadata) {
+                        if (typeof value !== 'string') {
+                            throw nativeProviderError('TypeMismatch: Native provider ' + name + ' is required for ' + nativeProviderContext(metadata) + '.', metadata);
+                        }
+                        return value;
+                    }
+
                     function nativeFactory(options) {
                         const metadata = {
                             interfaceId: options?.interfaceId,
@@ -5433,7 +5440,7 @@ public final class JavaScriptGenerator implements Generator {
                             sourceFile: options?.sourceFile,
                         };
                         const interfaceId = requireNativeText(options?.interfaceId, 'interfaceId', metadata);
-                        const qualifier = requireNativeText(options?.qualifier, 'qualifier', metadata);
+                        const qualifier = requireNativeString(options?.qualifier, 'qualifier', metadata);
                         if (options?.factory !== 'new' && options?.factory !== 'call') {
                             throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported JavaScript factory `' + options?.factory + '`.', metadata);
                         }

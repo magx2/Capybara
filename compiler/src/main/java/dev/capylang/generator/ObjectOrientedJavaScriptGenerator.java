@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.NativeAnnotations;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
@@ -49,6 +50,7 @@ final class ObjectOrientedJavaScriptGenerator {
                         LinkedHashMap::new
                 ));
         return module.objectOriented().definitions().stream()
+                .filter(definition -> !isNativeImplementationDeclaration(definition))
                 .map(definition -> {
                     var typeName = JavaScriptGenerator.simpleTypeName(definition.name());
                     return new GeneratedModule(
@@ -57,6 +59,11 @@ final class ObjectOrientedJavaScriptGenerator {
                     );
                 })
                 .toList();
+    }
+
+    private boolean isNativeImplementationDeclaration(ObjectOriented.TypeDeclaration definition) {
+        return definition instanceof ObjectOriented.ClassDeclaration
+               && definition.linkedAnnotations().stream().anyMatch(NativeAnnotations::isNativeImplementationAnnotation);
     }
 
     static Path relativePath(ObjectOrientedModule module, String typeName) {

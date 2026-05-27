@@ -2,8 +2,5 @@ from /capy/lang/Effect import { Effect }
 from /capy/meta_prog/NativeProvider import { NativeProvider }
 from Clock import { Clock }
 
-@NativeProvider(
-    qualifier: "system",
-    javaClassName: "dev.capylang.test.nativeinterop.SystemClock"
-)
+@NativeProvider(qualifier: "system")
 fun system_clock(): Effect[Clock] = <native>

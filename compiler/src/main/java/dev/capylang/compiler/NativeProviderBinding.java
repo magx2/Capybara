@@ -33,7 +33,7 @@ public record NativeProviderBinding(
 
     public NativeProviderBinding {
         interfaceId = requireText(interfaceId, "TypeMismatch: Native provider `interface` is required.");
-        qualifier = requireText(qualifier, "TypeMismatch: Native provider `qualifier` is required.");
+        qualifier = qualifier == null ? "" : qualifier;
     }
 
     private static String requireText(String value, String message) {
