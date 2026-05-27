@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record NativeProviderBinding(
         @JsonProperty("interface") String interfaceId,
         @JsonProperty("qualifier") String qualifier,
-        @JsonProperty("lifetime") String lifetime,
         @JsonProperty("java") NativeProviderBackendBinding javaBinding,
         @JsonProperty("javascript") NativeProviderBackendBinding javascriptBinding,
         @JsonProperty("python") NativeProviderBackendBinding pythonBinding
@@ -15,7 +14,6 @@ public record NativeProviderBinding(
     public static NativeProviderBinding fromJson(
             @JsonProperty("interface") String interfaceId,
             @JsonProperty("qualifier") String qualifier,
-            @JsonProperty("lifetime") String lifetime,
             @JsonProperty("java") NativeProviderBackendBinding javaBinding,
             @JsonProperty("javascript") NativeProviderBackendBinding javascriptBinding,
             @JsonProperty("python") NativeProviderBackendBinding pythonBinding
@@ -23,40 +21,19 @@ public record NativeProviderBinding(
         var binding = new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                lifetime,
                 javaBinding,
                 javascriptBinding,
                 pythonBinding
         );
-        NativeProviderLifetime.fromJson(binding.lifetime());
         validateBackendBinding(NativeProviderBackend.JAVA, binding.javaBinding());
         validateBackendBinding(NativeProviderBackend.JAVASCRIPT, binding.javascriptBinding());
         validateBackendBinding(NativeProviderBackend.PYTHON, binding.pythonBinding());
         return binding;
     }
 
-    public NativeProviderBinding(
-            String interfaceId,
-            String qualifier,
-            NativeProviderLifetime lifetime,
-            NativeProviderBackendBinding javaBinding,
-            NativeProviderBackendBinding javascriptBinding,
-            NativeProviderBackendBinding pythonBinding
-    ) {
-        this(
-                interfaceId,
-                qualifier,
-                lifetime == null ? null : lifetime.jsonValue(),
-                javaBinding,
-                javascriptBinding,
-                pythonBinding
-        );
-    }
-
     public NativeProviderBinding {
         interfaceId = requireText(interfaceId, "TypeMismatch: Native provider `interface` is required.");
         qualifier = requireText(qualifier, "TypeMismatch: Native provider `qualifier` is required.");
-        lifetime = requireText(lifetime, "UnsupportedBackend: Native provider `lifetime` is required.");
     }
 
     private static String requireText(String value, String message) {

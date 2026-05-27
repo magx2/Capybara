@@ -115,7 +115,6 @@ class CapyPythonCliTest(unittest.TestCase):
 
             @NativeProvider(
                 qualifier: "system",
-                lifetime: "factory",
                 pythonModule: "nativeinterop.system_clock",
                 pythonClassName: "SystemClock"
             )

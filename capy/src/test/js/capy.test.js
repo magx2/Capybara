@@ -128,7 +128,6 @@ from Clock import { Clock }
 
 @NativeProvider(
     qualifier: "system",
-    lifetime: "factory",
     javascriptModule: "./nativeinterop/system_clock.js",
     javascriptExport: "SystemClock"
 )

@@ -21,7 +21,6 @@ import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.GenericDataType;
 import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.NativeProviderCatalog;
-import dev.capylang.compiler.NativeProviderLifetime;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.ObjectOriented;
@@ -171,7 +170,6 @@ public final class PythonGenerator implements Generator {
                + "        provider_symbol=" + pyString(provider.providerSymbolName()) + ",\n"
                + "        backend='python',\n"
                + "        source_file=" + pyString(provider.sourceFile()) + ",\n"
-               + "        lifetime=" + pyString(provider.lifetime().jsonValue()) + ",\n"
                + "        module_name=" + pyString(provider.binding().moduleName()) + ",\n"
                + "        class_name=" + pyString(provider.binding().className()) + ",\n"
                + "        factory=" + pyString(provider.binding().factory()) + ",\n"
@@ -2153,7 +2151,6 @@ public final class PythonGenerator implements Generator {
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
                         declaration.sourceFile(),
-                        binding.lifetime(),
                         pythonBinding,
                         interfaceType.methods()
                 ));
@@ -2566,7 +2563,6 @@ public final class PythonGenerator implements Generator {
                 String sourceModulePath,
                 String sourceModuleName,
                 String sourceFile,
-                NativeProviderLifetime lifetime,
                 NativeProviderBackendBinding binding,
                 List<NativeProviderMethodInfo> methods
         ) {
@@ -3709,9 +3705,6 @@ public final class PythonGenerator implements Generator {
                         }
                         interface_id = _native_required_text(metadata.get('interfaceId'), 'interface_id', metadata)
                         qualifier = _native_required_text(metadata.get('qualifier'), 'qualifier', metadata)
-                        lifetime = options.get('lifetime', 'factory')
-                        if lifetime not in ('singleton', 'factory'):
-                            raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported lifetime `' + str(lifetime) + '`.', metadata)
                         factory = options.get('factory', 'call')
                         if factory != 'call':
                             raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported Python factory `' + str(factory) + '`.', metadata)
@@ -3731,7 +3724,6 @@ public final class PythonGenerator implements Generator {
                             providerSymbol=metadata.get('providerSymbol'),
                             backend=metadata.get('backend'),
                             sourceFile=metadata.get('sourceFile'),
-                            lifetime=lifetime,
                             metadata={
                                 'interfaceId': interface_id,
                                 'qualifier': qualifier,
@@ -3768,7 +3760,7 @@ public final class PythonGenerator implements Generator {
                                 raise _native_provider_error('TypeMismatch: Native provider table key `' + str(key) + '` does not match ' + _native_provider_context(metadata) + '.', metadata)
                             if key in providers:
                                 raise _native_provider_error('DuplicateProvider: Duplicate native provider for ' + _native_provider_context(metadata) + '.', metadata)
-                            providers[key] = {'provider': provider, 'singleton_set': False, 'singleton_value': None}
+                            providers[key] = provider
                         return _NativeProviderResolver(providers)
 
                     def resolve_native_implementation(interface_id, qualifier, provider_table=None, provider_symbol=None, backend=None, source_file=None):
@@ -3783,15 +3775,9 @@ public final class PythonGenerator implements Generator {
                         if not isinstance(providers, dict):
                             raise _native_provider_error('NotWired: No native provider table is bound for ' + _native_provider_context(metadata) + '.', metadata)
                         key = _native_provider_key(interface_id, qualifier)
-                        entry = providers.get(key)
-                        if entry is None:
+                        provider = providers.get(key)
+                        if provider is None:
                             raise _native_provider_error('NotWired: No native provider registered for ' + _native_provider_context(metadata) + '.', metadata)
-                        provider = entry['provider']
-                        if provider.lifetime == 'singleton':
-                            if not entry['singleton_set']:
-                                entry['singleton_value'] = _create_native_implementation(provider)
-                                entry['singleton_set'] = True
-                            return entry['singleton_value']
                         return _create_native_implementation(provider)
 
                     def _create_native_implementation(provider):

@@ -201,7 +201,7 @@ class JavaScriptGeneratorTest {
 
                 @NativeProvider(qualifier: "system")
                 fun system_clock(): Effect[Clock] = <native>
-                """), providerManifest(javascriptProviderBinding("/Providers.Clock", "system", "singleton", "host-clock", "SystemClock", "new")));
+                """), providerManifest(javascriptProviderBinding("/Providers.Clock", "system", "host-clock", "SystemClock", "new")));
 
         var generated = new JavaScriptGenerator().generate(program);
         assertThat(generated.modules())
@@ -247,7 +247,6 @@ class JavaScriptGeneratorTest {
                 """), providerManifest(javascriptProviderBinding(
                 "/Providers.Clock",
                 "system",
-                "factory",
                 "../../nativeinterop/system_clock.js",
                 "SystemClock",
                 "new"
@@ -284,13 +283,12 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
-    void shouldCacheJavaScriptNativeProviderSingleton() throws Exception {
+    void shouldCreateNewJavaScriptNativeProviderInstance() throws Exception {
         var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
                 "def now_millis(): long",
                 javascriptProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "singleton",
                         "../../nativeinterop/system_clock.js",
                         "SystemClock",
                         "new"
@@ -311,7 +309,7 @@ class JavaScriptGeneratorTest {
                 console.log(nativeProviders.system_clock() === nativeProviders.system_clock());
                 """);
 
-        assertThat(output).isEqualTo("true");
+        assertThat(output).isEqualTo("false");
     }
 
     @Test
@@ -321,7 +319,6 @@ class JavaScriptGeneratorTest {
                 javascriptProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "../../nativeinterop/system_clock.js",
                         "SystemClock",
                         "new"
@@ -347,7 +344,6 @@ class JavaScriptGeneratorTest {
                 javascriptProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "../../nativeinterop/system_clock.js",
                         "SystemClock",
                         "new"
@@ -375,7 +371,6 @@ class JavaScriptGeneratorTest {
                 javascriptProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "../../nativeinterop/system_clock.js",
                         "SystemClock",
                         "new"
@@ -407,7 +402,6 @@ class JavaScriptGeneratorTest {
                 javascriptProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "../../nativeinterop/system_clock.js",
                         "makeClock",
                         "call"
@@ -437,7 +431,6 @@ class JavaScriptGeneratorTest {
                 javascriptProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "../../nativeinterop/system_clock.js",
                         "SystemClock",
                         "new"
@@ -965,7 +958,7 @@ class JavaScriptGeneratorTest {
     }
 
     private static NativeProviderBinding javascriptProviderBinding(String interfaceId, String qualifier) {
-        return javascriptProviderBinding(interfaceId, qualifier, "singleton", "host-clock", "SystemClock", "new");
+        return javascriptProviderBinding(interfaceId, qualifier, "host-clock", "SystemClock", "new");
     }
 
     private static List<RawModule> nativeProviderModules(String providerSource) {
@@ -987,7 +980,6 @@ class JavaScriptGeneratorTest {
     private static NativeProviderBinding javascriptProviderBinding(
             String interfaceId,
             String qualifier,
-            String lifetime,
             String moduleName,
             String exportName,
             String factory
@@ -995,7 +987,6 @@ class JavaScriptGeneratorTest {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                lifetime,
                 null,
                 new NativeProviderBackendBinding(null, moduleName, exportName, factory),
                 null
@@ -1039,7 +1030,6 @@ class JavaScriptGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
-                    lifetime: String = "singleton"
                     javaClassName: String = ""
                     javaFactory: String = "constructor"
                     javascriptModule: String = ""
