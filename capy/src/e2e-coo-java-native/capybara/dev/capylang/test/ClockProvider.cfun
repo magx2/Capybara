@@ -4,7 +4,6 @@ from Clock import { Clock }
 
 @NativeProvider(
     qualifier: "system",
-    lifetime: "factory",
     javaClassName: "dev.capylang.test.nativeinterop.SystemClock"
 )
 fun system_clock(): Effect[Clock] = <native>

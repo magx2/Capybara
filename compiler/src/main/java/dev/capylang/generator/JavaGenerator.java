@@ -8,7 +8,6 @@ import dev.capylang.compiler.CompiledObjectKind;
 import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.NativeProviderBackendBinding;
-import dev.capylang.compiler.NativeProviderLifetime;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledVariable;
@@ -128,7 +127,6 @@ public final class JavaGenerator implements Generator {
                     declaration.sourceModulePath(),
                     declaration.sourceModuleName(),
                     declaration.sourceFile(),
-                    binding.lifetime(),
                     javaBinding
             ));
         }
@@ -261,8 +259,7 @@ public final class JavaGenerator implements Generator {
                                                + " has unsupported java factory `" + binding.factory()
                                                + "`. Supported values: constructor. Source `" + provider.sourceFile() + "`");
         }
-        var lifetimeMethod = provider.lifetime() == NativeProviderLifetime.FACTORY ? "factory" : "singleton";
-        return "            NativeProviders." + lifetimeMethod + "(\n"
+        return "            NativeProviders.factory(\n"
                + "                    " + javaString(provider.interfaceId()) + ",\n"
                + "                    " + javaString(provider.qualifier()) + ",\n"
                + "                    " + javaString(provider.providerSymbolName()) + ",\n"
@@ -1377,7 +1374,6 @@ public final class JavaGenerator implements Generator {
             String sourceModulePath,
             String sourceModuleName,
             String sourceFile,
-            NativeProviderLifetime lifetime,
             NativeProviderBackendBinding binding
     ) {
     }

@@ -21,7 +21,6 @@ import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.GenericDataType;
 import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.NativeProviderCatalog;
-import dev.capylang.compiler.NativeProviderLifetime;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
@@ -168,7 +167,6 @@ public final class JavaScriptGenerator implements Generator {
                + "        providerSymbol: " + jsString(provider.providerSymbolName()) + ",\n"
                + "        backend: 'javascript',\n"
                + "        sourceFile: " + jsString(provider.sourceFile()) + ",\n"
-               + "        lifetime: " + jsString(provider.lifetime().jsonValue()) + ",\n"
                + "        moduleName: " + jsString(provider.binding().moduleName()) + ",\n"
                + "        exportName: " + jsString(provider.binding().exportName()) + ",\n"
                + "        exportExists: Object.prototype.hasOwnProperty.call(" + moduleVariable + ", " + jsString(provider.binding().exportName()) + "),\n"
@@ -2215,7 +2213,6 @@ public final class JavaScriptGenerator implements Generator {
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
                         declaration.sourceFile(),
-                        binding.lifetime(),
                         javascriptBinding,
                         interfaceType.methods()
                 ));
@@ -2628,7 +2625,6 @@ public final class JavaScriptGenerator implements Generator {
                 String sourceModulePath,
                 String sourceModuleName,
                 String sourceFile,
-                NativeProviderLifetime lifetime,
                 NativeProviderBackendBinding binding,
                 List<NativeProviderMethodInfo> methods
         ) {
@@ -5438,10 +5434,6 @@ public final class JavaScriptGenerator implements Generator {
                         };
                         const interfaceId = requireNativeText(options?.interfaceId, 'interfaceId', metadata);
                         const qualifier = requireNativeText(options?.qualifier, 'qualifier', metadata);
-                        const lifetime = options?.lifetime ?? 'factory';
-                        if (lifetime !== 'singleton' && lifetime !== 'factory') {
-                            throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported lifetime `' + lifetime + '`.', metadata);
-                        }
                         if (options?.factory !== 'new' && options?.factory !== 'call') {
                             throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported JavaScript factory `' + options?.factory + '`.', metadata);
                         }
@@ -5457,7 +5449,6 @@ public final class JavaScriptGenerator implements Generator {
                             providerSymbol: options?.providerSymbol,
                             backend: options?.backend,
                             sourceFile: options?.sourceFile,
-                            lifetime,
                             metadata: Object.freeze({
                                 interfaceId,
                                 qualifier,
@@ -5489,7 +5480,7 @@ public final class JavaScriptGenerator implements Generator {
                             if (providers.has(key)) {
                                 throw nativeProviderError('DuplicateProvider: Duplicate native provider for ' + nativeProviderContext(provider) + '.', provider);
                             }
-                            providers.set(key, { provider, singletonSet: false, singletonValue: undefined });
+                            providers.set(key, provider);
                         }
                         const table = Object.freeze({ __capybaraNativeProviders: providers });
                         return Object.freeze({
@@ -5504,18 +5495,11 @@ public final class JavaScriptGenerator implements Generator {
                             throw nativeProviderError('NotWired: No native provider table is bound for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
                         const key = nativeProviderKey(interfaceId, qualifier);
-                        const entry = providers.get(key);
-                        if (!entry) {
+                        const provider = providers.get(key);
+                        if (!provider) {
                             throw nativeProviderError('NotWired: No native provider registered for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
-                        if (entry.provider.lifetime === 'singleton') {
-                            if (!entry.singletonSet) {
-                                entry.singletonValue = createNativeImplementation(entry.provider);
-                                entry.singletonSet = true;
-                            }
-                            return entry.singletonValue;
-                        }
-                        return createNativeImplementation(entry.provider);
+                        return createNativeImplementation(provider);
                     }
 
                     function createNativeImplementation(provider) {

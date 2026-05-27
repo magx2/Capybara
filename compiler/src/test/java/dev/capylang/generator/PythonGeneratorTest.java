@@ -338,7 +338,6 @@ class PythonGeneratorTest {
                 .contains("_providers = capy.define_native_providers({")
                 .contains("interface_id='/Providers.Clock'")
                 .contains("qualifier='system'")
-                .contains("lifetime='singleton'")
                 .contains("factory='call'")
                 .contains("create=lambda: __capy_provider_system_clock_class()")
                 .contains("{'name': 'now_millis', 'arity': 0}")
@@ -358,7 +357,6 @@ class PythonGeneratorTest {
                 """), providerManifest(pythonProviderBinding(
                 "/Providers.Clock",
                 "system",
-                "factory",
                 "nativeinterop.system_clock",
                 "SystemClock",
                 "call"
@@ -392,13 +390,12 @@ class PythonGeneratorTest {
     }
 
     @Test
-    void shouldCachePythonNativeProviderSingleton() throws Exception {
+    void shouldCreateNewPythonNativeProviderInstance() throws Exception {
         var generated = new PythonGenerator().generate(nativeProviderProgram(
                 "def now_millis(): long",
                 pythonProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "singleton",
                         "nativeinterop.system_clock",
                         "SystemClock",
                         "call"
@@ -416,7 +413,7 @@ class PythonGeneratorTest {
                 print(str(native_providers.system_clock() is native_providers.system_clock()).lower())
                 """);
 
-        assertThat(output).isEqualTo("true");
+        assertThat(output).isEqualTo("false");
     }
 
     @Test
@@ -426,7 +423,6 @@ class PythonGeneratorTest {
                 pythonProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "nativeinterop.system_clock",
                         "SystemClock",
                         "call"
@@ -454,7 +450,6 @@ class PythonGeneratorTest {
                 pythonProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "nativeinterop.system_clock",
                         "SystemClock",
                         "call"
@@ -482,7 +477,6 @@ class PythonGeneratorTest {
                 pythonProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "nativeinterop.system_clock",
                         "SystemClock",
                         "call"
@@ -510,7 +504,6 @@ class PythonGeneratorTest {
                 pythonProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "nativeinterop.system_clock",
                         "SystemClock",
                         "call"
@@ -539,7 +532,6 @@ class PythonGeneratorTest {
                 pythonProviderBinding(
                         "/Providers.Clock",
                         "system",
-                        "factory",
                         "nativeinterop.system_clock",
                         "make_clock",
                         "call"
@@ -979,7 +971,7 @@ class PythonGeneratorTest {
     }
 
     private static NativeProviderBinding pythonProviderBinding(String interfaceId, String qualifier) {
-        return pythonProviderBinding(interfaceId, qualifier, "singleton", "host_clock", "SystemClock", "call");
+        return pythonProviderBinding(interfaceId, qualifier, "host_clock", "SystemClock", "call");
     }
 
     private static List<RawModule> nativeProviderModules(String providerSource) {
@@ -1001,7 +993,6 @@ class PythonGeneratorTest {
     private static NativeProviderBinding pythonProviderBinding(
             String interfaceId,
             String qualifier,
-            String lifetime,
             String moduleName,
             String className,
             String factory
@@ -1009,7 +1000,6 @@ class PythonGeneratorTest {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                lifetime,
                 null,
                 null,
                 new NativeProviderBackendBinding(className, moduleName, null, factory)
@@ -1053,7 +1043,6 @@ class PythonGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
-                    lifetime: String = "singleton"
                     javaClassName: String = ""
                     javaFactory: String = "constructor"
                     javascriptModule: String = ""

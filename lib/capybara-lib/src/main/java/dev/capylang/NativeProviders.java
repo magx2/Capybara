@@ -27,38 +27,6 @@ public final class NativeProviders {
         return new NativeProviders(table);
     }
 
-    public static <T> Provider singleton(
-            String interfaceId,
-            String qualifier,
-            Class<T> type,
-            NativeProviderFactory<? extends T> factory
-    ) {
-        return singleton(interfaceId, qualifier, null, null, type, factory);
-    }
-
-    public static <T> Provider singleton(
-            String interfaceId,
-            String qualifier,
-            String providerSymbol,
-            String backend,
-            Class<T> type,
-            NativeProviderFactory<? extends T> factory
-    ) {
-        return singleton(interfaceId, qualifier, providerSymbol, backend, null, type, factory);
-    }
-
-    public static <T> Provider singleton(
-            String interfaceId,
-            String qualifier,
-            String providerSymbol,
-            String backend,
-            String sourceFile,
-            Class<T> type,
-            NativeProviderFactory<? extends T> factory
-    ) {
-        return new Provider(interfaceId, qualifier, providerSymbol, backend, sourceFile, type, factory, Lifetime.SINGLETON);
-    }
-
     public static <T> Provider factory(
             String interfaceId,
             String qualifier,
@@ -88,7 +56,7 @@ public final class NativeProviders {
             Class<T> type,
             NativeProviderFactory<? extends T> factory
     ) {
-        return new Provider(interfaceId, qualifier, providerSymbol, backend, sourceFile, type, factory, Lifetime.FACTORY);
+        return new Provider(interfaceId, qualifier, providerSymbol, backend, sourceFile, type, factory);
     }
 
     public <T> T resolve(String interfaceId, String qualifier, Class<T> type) {
@@ -139,25 +107,16 @@ public final class NativeProviders {
                + (sourceFile == null || sourceFile.isBlank() ? "" : " in source `" + sourceFile + "`");
     }
 
-    private enum Lifetime {
-        SINGLETON,
-        FACTORY
-    }
-
     private record Key(String interfaceId, String qualifier) {
     }
 
     public static final class Provider {
-        private static final Object UNINITIALIZED = new Object();
-
         private final Key key;
         private final String providerSymbol;
         private final String backend;
         private final String sourceFile;
         private final Class<?> type;
         private final NativeProviderFactory<?> factory;
-        private final Lifetime lifetime;
-        private volatile Object singleton = UNINITIALIZED;
 
         private <T> Provider(
                 String interfaceId,
@@ -166,8 +125,7 @@ public final class NativeProviders {
                 String backend,
                 String sourceFile,
                 Class<T> type,
-                NativeProviderFactory<? extends T> factory,
-                Lifetime lifetime
+                NativeProviderFactory<? extends T> factory
         ) {
             this.key = new Key(requireText(interfaceId, "interfaceId"), requireText(qualifier, "qualifier"));
             this.providerSymbol = providerSymbol;
@@ -175,7 +133,6 @@ public final class NativeProviders {
             this.sourceFile = sourceFile;
             this.type = Objects.requireNonNull(type, "type");
             this.factory = Objects.requireNonNull(factory, "factory");
-            this.lifetime = Objects.requireNonNull(lifetime, "lifetime");
         }
 
         private String interfaceId() {
@@ -199,20 +156,7 @@ public final class NativeProviders {
         }
 
         private Object resolve() {
-            if (lifetime == Lifetime.FACTORY) {
-                return create();
-            }
-            var value = singleton;
-            if (value == UNINITIALIZED) {
-                synchronized (this) {
-                    value = singleton;
-                    if (value == UNINITIALIZED) {
-                        value = create();
-                        singleton = value;
-                    }
-                }
-            }
-            return value;
+            return create();
         }
 
         private Object create() {

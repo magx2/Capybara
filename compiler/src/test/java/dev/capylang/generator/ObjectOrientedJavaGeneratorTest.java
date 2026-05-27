@@ -67,7 +67,7 @@ class ObjectOrientedJavaGeneratorTest {
         assertThat(bootstrapModule.code())
                 .contains("public static foo.boo.Clock system_clock()")
                 .contains("private static final NativeProviders PROVIDERS = NativeProviders.of(")
-                .contains("NativeProviders.singleton(")
+                .contains("NativeProviders.factory(")
                 .contains("\"/foo/boo/Providers.Clock\",")
                 .contains("\"system\",")
                 .contains("foo.boo.Clock.class,")
@@ -87,7 +87,6 @@ class ObjectOrientedJavaGeneratorTest {
                 """), providerManifest(javaProviderBinding(
                 "/foo/boo/Providers.Clock",
                 "system",
-                "factory",
                 "dev.capylang.test.nativeinterop.SystemClock"
         )));
 
@@ -151,7 +150,6 @@ class ObjectOrientedJavaGeneratorTest {
                 """), providerManifest(javaProviderBinding(
                 "/foo/boo/Providers.Clock",
                 "system",
-                "factory",
                 "dev.capylang.test.nativeinterop.WrongClock"
         )));
 
@@ -1023,14 +1021,13 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier) {
-        return javaProviderBinding(interfaceId, qualifier, "singleton", "dev.capylang.test.SystemClock");
+        return javaProviderBinding(interfaceId, qualifier, "dev.capylang.test.SystemClock");
     }
 
-    private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier, String lifetime, String className) {
+    private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier, String className) {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                lifetime,
                 new NativeProviderBackendBinding(className, null, null, "constructor"),
                 null,
                 null
@@ -1041,7 +1038,6 @@ class ObjectOrientedJavaGeneratorTest {
         return new NativeProviderBinding(
                 interfaceId,
                 qualifier,
-                "singleton",
                 null,
                 null,
                 null
@@ -1062,7 +1058,6 @@ class ObjectOrientedJavaGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
-                    lifetime: String = "singleton"
                     javaClassName: String = ""
                     javaFactory: String = "constructor"
                     javascriptModule: String = ""
