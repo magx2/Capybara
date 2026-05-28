@@ -902,6 +902,78 @@ class CapyTest {
     }
 
     @Test
+    void shouldReuseMainNativeImplementationsWhenCompilingTestsInOneCommand() throws IOException {
+        var mainSourceDir = Files.createDirectories(tempDir.resolve("native-main").resolve("src").resolve("main").resolve("capybara"));
+        Files.createDirectories(mainSourceDir.resolve("dev").resolve("capylang").resolve("test"));
+        Files.writeString(mainSourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
+                interface Clock {
+                    def now_millis(): long
+                }
+                """);
+        Files.writeString(mainSourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProvider.cfun"), """
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
+
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """);
+        var nativeSourceDir = Files.createDirectories(tempDir.resolve("native-main").resolve("src").resolve("main").resolve("java")
+                .resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop"));
+        Files.writeString(nativeSourceDir.resolve("SystemClock.java"), """
+                package dev.capylang.test.nativeinterop;
+
+                import dev.capylang.NativeImplementation;
+                import dev.capylang.test.Clock;
+
+                @NativeImplementation(qualifier = "system")
+                public final class SystemClock implements Clock {
+                    @Override
+                    public long now_millis() {
+                        return 12345L;
+                    }
+                }
+                """);
+
+        var testSourceDir = Files.createDirectories(tempDir.resolve("native-main").resolve("src").resolve("test").resolve("capybara"));
+        Files.createDirectories(testSourceDir.resolve("dev").resolve("capylang").resolve("test"));
+        Files.writeString(testSourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProviderCapyTest.cfun"), """
+                from /capy/lang/Effect import { Effect }
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { TestFile, test_file, test }
+
+                fun provider_wiring_exists(): Assert =
+                    assert_that(true).is_true()
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/dev/capylang/test/ClockProviderCapyTest.cfun", [
+                        test("provider wiring exists", () => provider_wiring_exists())
+                    ])
+                """);
+
+        var generatedMainDir = tempDir.resolve("native-main-output");
+        var generatedTestDir = tempDir.resolve("native-test-output");
+        var stderr = new ByteArrayOutputStream();
+
+        assertEquals(0, Capy.execute(
+                new String[]{
+                        "compile-generate",
+                        "java",
+                        "--skip-java-lib",
+                        "-i", mainSourceDir.toString(),
+                        "-o", generatedMainDir.toString(),
+                        "--test-input", testSourceDir.toString(),
+                        "--test-output", generatedTestDir.toString()
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(stderr)
+        ), stderr.toString());
+
+        assertTrue(Files.exists(generatedMainDir.resolve("dev").resolve("capylang").resolve("NativeProviderBootstrap.java")));
+        assertTrue(Files.exists(generatedTestDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProviderCapyTest.java")));
+    }
+
+    @Test
     void shouldCompileGenerateMainAndTestsIntoSharedOutputDirectory() throws IOException {
         var mainSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-shared-main-source"));
         Files.createDirectories(mainSourceDir.resolve("foo"));

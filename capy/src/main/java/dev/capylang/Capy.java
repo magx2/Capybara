@@ -703,13 +703,20 @@ public class Capy {
         validateOutputDirectory(generatedOutputDir, "Generated output path");
         var mainGenerationInput = selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources);
         if (testInput != null) {
-            var testCompilation = compileSources(testInput, mergeLibraries(libraries, compilation), true, nativeProviders, err);
+            var testCompilation = compileSources(
+                    testInput,
+                    mergeLibraries(libraries, compilation),
+                    true,
+                    withoutCatalogBindings(nativeProviders, compilation.program().nativeProviderCatalog()),
+                    err
+            );
             if (testCompilation == null) {
                 return EXIT_COMPILATION_ERROR;
             }
             validateOutputDirectory(testGeneratedOutputDir, "Generated test output path");
+            var mergedTestProgram = mergePrograms(compilation.program(), testCompilation.program());
             var testGenerationInput = outputType == OutputType.JAVASCRIPT || outputType == OutputType.PYTHON
-                    ? new GenerationInput(mergePrograms(compilation.program(), testCompilation.program()), includeJavaLibResources)
+                    ? new GenerationInput(mergedTestProgram, includeJavaLibResources)
                     : selectGenerationInput(
                             testCompilation.program(),
                             testCompilation.sourceModules(),
@@ -756,6 +763,25 @@ public class Capy {
         var bindings = new ArrayList<>(first.bindings());
         bindings.addAll(second.bindings());
         return new NativeProviderCatalog(declarations, bindings);
+    }
+
+    private static NativeProviderManifest withoutCatalogBindings(NativeProviderManifest manifest, NativeProviderCatalog catalog) {
+        if (manifest == null || manifest.isEmpty() || catalog == null || catalog.isEmpty()) {
+            return manifest == null ? NativeProviderManifest.empty() : manifest;
+        }
+        var catalogKeys = catalog.bindings().stream()
+                .map(binding -> new NativeProviderBindingKey(binding.interfaceId(), binding.qualifier()))
+                .collect(java.util.stream.Collectors.toSet());
+        var providers = manifest.providers().stream()
+                .filter(binding -> !catalogKeys.contains(new NativeProviderBindingKey(binding.interfaceId(), binding.qualifier())))
+                .toList();
+        if (providers.size() == manifest.providers().size()) {
+            return manifest;
+        }
+        if (providers.isEmpty()) {
+            return NativeProviderManifest.empty();
+        }
+        return new NativeProviderManifest(providers, manifest.sourceFile());
     }
 
     static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
@@ -2012,6 +2038,9 @@ public class Capy {
     }
 
     private record TestFunctionRef(CompiledModule module, CompiledFunction function) {
+    }
+
+    private record NativeProviderBindingKey(String interfaceId, String qualifier) {
     }
 
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
