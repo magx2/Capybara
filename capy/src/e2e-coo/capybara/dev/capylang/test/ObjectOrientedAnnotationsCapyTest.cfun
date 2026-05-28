@@ -6,12 +6,13 @@ from /capy/lang/Seq import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/meta_prog/Reflection import { * }
-from ObjectOrientedAnnotations import { AnnotatedContract, AnnotatedNaming, AnnotatedWidget }
+from ObjectOrientedAnnotations import { AnnotatedContract, AnnotatedNaming, AnnotatedWidget, RepeatableAnnotatedWidget }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/ObjectOrientedAnnotations.coo", [
         test("reflects interface and trait annotations", () => ooa_reflects_interface_and_trait_annotations()),
         test("reflects class field and method annotations", () => ooa_reflects_class_field_and_method_annotations()),
+        test("reflects repeated object-oriented annotations", () => ooa_reflects_repeated_object_oriented_annotations()),
     ])
 
 fun ooa_reflects_interface_and_trait_annotations(): Assert =
@@ -55,6 +56,20 @@ fun ooa_reflects_class_field_and_method_annotations(): Assert =
         assert_that(ooa_method_annotation_string(widget.methods, 0, 0, "value")).is_equal_to("render"),
         assert_that(ooa_method_annotation_string(widget.methods, 0, 1, "message")).is_equal_to("use render_label"),
         assert_that(ooa_method_annotation_string(widget.methods, 0, 1, "since")).is_equal_to("3.1"),
+    ])
+
+fun ooa_reflects_repeated_object_oriented_annotations(): Assert =
+    let widget = RepeatableAnnotatedWidget.type()
+    assert_all([
+        assert_that(ooa_annotation_names(widget.annotations)).is_equal_to(["OoRepeatableLabel", "OoRepeatableLabel"]),
+        assert_that(ooa_annotation_string(widget.annotations[0], "value")).is_equal_to("class-primary"),
+        assert_that(ooa_annotation_string(widget.annotations[1], "value")).is_equal_to("class-secondary"),
+        assert_that(ooa_field_annotation_names(widget.fields, 0)).is_equal_to(["OoRepeatableLabel", "OoRepeatableLabel"]),
+        assert_that(ooa_field_annotation_string(widget.fields, 0, 0, "value")).is_equal_to("field-primary"),
+        assert_that(ooa_field_annotation_string(widget.fields, 0, 1, "value")).is_equal_to("field-secondary"),
+        assert_that(ooa_method_annotation_names(widget.methods, 0)).is_equal_to(["OoRepeatableLabel", "OoRepeatableLabel"]),
+        assert_that(ooa_method_annotation_string(widget.methods, 0, 0, "value")).is_equal_to("method-primary"),
+        assert_that(ooa_method_annotation_string(widget.methods, 0, 1, "value")).is_equal_to("method-secondary"),
     ])
 
 private fun ooa_annotation_names(annotations: List[AnnotationInfo]): List[String] =

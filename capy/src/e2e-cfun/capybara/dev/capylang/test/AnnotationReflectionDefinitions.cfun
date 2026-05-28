@@ -6,6 +6,10 @@ annotation ImportedDataLabel on data {
     active: bool = true
 }
 
+multiple annotation ImportedRepeatableLabel on data, field {
+    value: String
+}
+
 annotation ImportedFieldName on field {
     value: String
 }
