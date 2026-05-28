@@ -1,0 +1,15 @@
+{
+  "format": "capybara.linked.program",
+  "schemaVersion": 999,
+  "program": {
+    "modules": [],
+    "objectOrientedModules": [],
+    "nativeProviders": {
+      "providers": []
+    },
+    "nativeProviderCatalog": {
+      "declarations": [],
+      "bindings": []
+    }
+  }
+}

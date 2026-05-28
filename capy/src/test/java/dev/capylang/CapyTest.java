@@ -347,6 +347,37 @@ class CapyTest {
     }
 
     @Test
+    void shouldRejectUnsupportedLinkedSchemaVersionOnGenerate() throws IOException {
+        var linkedDir = Files.createDirectories(tempDir.resolve("unsupported-linked-schema"));
+        Files.writeString(linkedDir.resolve("program.json"), """
+                {
+                  "format": "capybara.linked.program",
+                  "schemaVersion": 999,
+                  "program": {
+                    "modules": [],
+                    "objectOrientedModules": [],
+                    "nativeProviders": { "providers": [] },
+                    "nativeProviderCatalog": { "declarations": [], "bindings": [] }
+                  }
+                }
+                """);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.execute(
+                new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", tempDir.resolve("generated").toString()},
+                new PrintStream(stdout),
+                new PrintStream(stderr)
+        );
+
+        assertEquals(2, exitCode);
+        assertEquals("", stdout.toString().trim());
+        assertTrue(stderr.toString().contains(
+                "Unsupported linked artifact schema version `999` for `capybara.linked.program`. Supported versions: 1."
+        ));
+    }
+
+    @Test
     void shouldCompileGenerateObjectOrientedFilesToJava() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("oo-source-input"));
         Files.createDirectories(sourceDir.resolve("foo"));

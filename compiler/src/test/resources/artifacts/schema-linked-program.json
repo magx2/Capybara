@@ -1,0 +1,45 @@
+{
+  "format": "capybara.linked.program",
+  "schemaVersion": 1,
+  "program": {
+    "modules": [
+      {
+        "name": "Main",
+        "path": "foo",
+        "types": {},
+        "visiblePrimitiveBackedTypes": {},
+        "functions": [
+          {
+            "name": "answer",
+            "returnType": {
+              "primitive": "INT"
+            },
+            "parameters": [],
+            "expression": {
+              "int": {
+                "intValue": "7"
+              }
+            },
+            "comments": [],
+            "visibility": null,
+            "programMain": false,
+            "recursive": false,
+            "tailRecursive": false,
+            "annotations": []
+          }
+        ],
+        "derivers": {},
+        "annotations": {},
+        "staticImports": []
+      }
+    ],
+    "objectOrientedModules": [],
+    "nativeProviders": {
+      "providers": []
+    },
+    "nativeProviderCatalog": {
+      "declarations": [],
+      "bindings": []
+    }
+  }
+}

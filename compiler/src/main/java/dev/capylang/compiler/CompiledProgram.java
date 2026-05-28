@@ -3,6 +3,7 @@ package dev.capylang.compiler;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -40,7 +41,9 @@ public record CompiledProgram(
 
     public CompiledProgram {
         modules = new TreeSet<>(modules);
-        objectOrientedModules = List.copyOf(objectOrientedModules);
+        objectOrientedModules = objectOrientedModules == null ? List.of() : objectOrientedModules.stream()
+                .sorted(Comparator.comparing(ObjectOrientedModule::path).thenComparing(ObjectOrientedModule::name))
+                .toList();
         nativeProviders = nativeProviders == null ? NativeProviderManifest.empty() : nativeProviders;
         nativeProviderCatalog = nativeProviderCatalog == null ? NativeProviderCatalog.empty() : nativeProviderCatalog;
     }

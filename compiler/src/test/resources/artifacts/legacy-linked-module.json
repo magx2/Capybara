@@ -1,0 +1,52 @@
+{
+  "name": "Main",
+  "path": "foo",
+  "types": {
+    "@class": "java.util.TreeMap"
+  },
+  "visiblePrimitiveBackedTypes": {
+    "@class": "java.util.TreeMap"
+  },
+  "functions": [
+    "java.util.TreeSet",
+    [
+      {
+        "name": "answer",
+        "returnType": [
+          "dev.capylang.compiler.PrimitiveLinkedType",
+          "INT"
+        ],
+        "parameters": [
+          "java.util.ImmutableCollections$ListN",
+          []
+        ],
+        "expression": {
+          "@class": "dev.capylang.compiler.expression.CompiledIntValue",
+          "intValue": "7"
+        },
+        "comments": [
+          "java.util.ImmutableCollections$ListN",
+          []
+        ],
+        "visibility": null,
+        "programMain": false,
+        "recursive": false,
+        "tailRecursive": false,
+        "annotations": [
+          "java.util.ImmutableCollections$ListN",
+          []
+        ]
+      }
+    ]
+  ],
+  "derivers": {
+    "@class": "java.util.TreeMap"
+  },
+  "annotations": {
+    "@class": "java.util.TreeMap"
+  },
+  "staticImports": [
+    "java.util.TreeSet",
+    []
+  ]
+}

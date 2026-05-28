@@ -1,10 +1,7 @@
 package dev.capylang.compiler;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter;
+import dev.capylang.compiler.artifact.LinkedArtifactCodec;
 import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.*;
@@ -46,7 +43,6 @@ public class CapybaraCompiler {
     );
     private static final java.util.regex.Pattern PRIMITIVE_BACKED_TYPE_NAME_PATTERN = java.util.regex.Pattern.compile("[a-z][a-z_]*");
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
-    private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
     private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
     private static volatile SortedSet<CompiledModule> bundledLibrariesCache;
@@ -295,26 +291,12 @@ public class CapybaraCompiler {
 
     private static CompiledModule readBundledLibrary(Path path) {
         try (var input = Files.newInputStream(path)) {
-            return OBJECT_MAPPER.readValue(input, CompiledModule.class);
+            return LinkedArtifactCodec.readModule(input);
         } catch (IOException e) {
             throw new IllegalStateException("Unable to read bundled Capybara library `" + path + "`", e);
         }
     }
 
-    private static ObjectMapper objectMapper() {
-        var mapper = new ObjectMapper();
-        mapper.registerModule(new Jdk8Module());
-        var validator = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType("dev.capylang")
-                .allowIfSubType("java.util")
-                .build();
-        mapper.activateDefaultTyping(
-                validator,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-        return mapper;
-    }
     private Result<CompiledProgram> compile(
             Program program,
             SortedSet<CompiledModule> libraries,

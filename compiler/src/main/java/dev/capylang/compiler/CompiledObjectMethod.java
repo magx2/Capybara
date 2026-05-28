@@ -1,7 +1,9 @@
 package dev.capylang.compiler;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public record CompiledObjectMethod(
         String name,
@@ -11,6 +13,6 @@ public record CompiledObjectMethod(
 ) {
     public CompiledObjectMethod {
         parameters = parameters == null ? List.of() : List.copyOf(parameters);
-        backendMethodNames = backendMethodNames == null ? Map.of() : Map.copyOf(backendMethodNames);
+        backendMethodNames = backendMethodNames == null ? Map.of() : Collections.unmodifiableSortedMap(new TreeMap<>(backendMethodNames));
     }
 }

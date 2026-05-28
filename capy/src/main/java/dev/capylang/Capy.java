@@ -18,6 +18,7 @@ import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.NativeImplementationScanner;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.Result;
+import dev.capylang.compiler.artifact.LinkedArtifactCodec;
 import dev.capylang.compiler.expression.CompiledExpression;
 import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledInfixExpression;
@@ -89,8 +90,9 @@ public class Capy {
     private static final int EXIT_FAILURE = 2;
     private static final int EXIT_COMPILATION_ERROR = 100;
     private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+    private static final ObjectMapper METADATA_OBJECT_MAPPER = createMetadataObjectMapper();
     private static final ObjectMapper NATIVE_MANIFEST_OBJECT_MAPPER = createNativeManifestObjectMapper();
-    private static final ObjectWriter PRETTY_JSON_WRITER = OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
+    private static final ObjectWriter PRETTY_JSON_WRITER = METADATA_OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
 
     public static void main(String[] args) {
         System.exit(execute(args, System.out, System.err));
@@ -1404,7 +1406,7 @@ public class Capy {
             var programFile = outputDir.resolve(PROGRAM_FILE);
             log.info("Writing linked program to file: " + programFile);
             var programStartedAt = System.nanoTime();
-            writeJsonIfChanged(programFile, program);
+            writeLinkedProgramIfChanged(programFile, program);
             log.info("Wrote linked program to file: " + programFile + " in " + Duration.ofNanos(System.nanoTime() - programStartedAt));
             writtenFiles.add(Path.of(PROGRAM_FILE));
             for (var module : program.modules()) {
@@ -1415,7 +1417,7 @@ public class Capy {
                 Files.createDirectories(moduleJson.getParent());
                 log.info("Writing linked module to file: " + moduleJson);
                 var startedAt = System.nanoTime();
-                writeJsonIfChanged(moduleJson, module);
+                writeLinkedModuleIfChanged(moduleJson, module);
                 var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                 log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
                 writtenFiles.add(outputDir.relativize(moduleJson).normalize());
@@ -1696,6 +1698,18 @@ public class Capy {
     }
 
     private static void writeJsonIfChanged(Path outputFile, Object value) throws IOException {
+        writeBytesIfChanged(outputFile, output -> PRETTY_JSON_WRITER.writeValue(output, value));
+    }
+
+    private static void writeLinkedProgramIfChanged(Path outputFile, CompiledProgram program) throws IOException {
+        writeBytesIfChanged(outputFile, output -> LinkedArtifactCodec.writeProgram(output, program));
+    }
+
+    private static void writeLinkedModuleIfChanged(Path outputFile, CompiledModule module) throws IOException {
+        writeBytesIfChanged(outputFile, output -> LinkedArtifactCodec.writeModule(output, module));
+    }
+
+    private static void writeBytesIfChanged(Path outputFile, OutputWriter writer) throws IOException {
         var parent = outputFile.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
@@ -1710,7 +1724,7 @@ public class Capy {
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE
             )) {
-                PRETTY_JSON_WRITER.writeValue(output, value);
+                writer.write(output);
             }
 
             if (Files.isRegularFile(outputFile)
@@ -1749,6 +1763,11 @@ public class Capy {
         );
     }
 
+    @FunctionalInterface
+    private interface OutputWriter {
+        void write(java.io.OutputStream output) throws IOException;
+    }
+
     private static void copyFileIfChanged(Path source, Path target) throws IOException {
         if (Files.isRegularFile(target) && Files.size(source) == Files.size(target) && Files.mismatch(source, target) == -1) {
             return;
@@ -1763,9 +1782,13 @@ public class Capy {
         }
 
         try (var input = Files.newInputStream(buildInfoFile)) {
-            return objectMapper().readValue(input, BuildInfo.class);
+            return METADATA_OBJECT_MAPPER.readValue(input, BuildInfo.class);
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to read build info JSON: " + buildInfoFile, e);
+            try (var input = Files.newInputStream(buildInfoFile)) {
+                return objectMapper().readValue(input, BuildInfo.class);
+            } catch (IOException legacyError) {
+                throw new UncheckedIOException("Unable to read build info JSON: " + buildInfoFile, legacyError);
+            }
         }
     }
 
@@ -1804,7 +1827,13 @@ public class Capy {
     }
 
     private static ObjectMapper createNativeManifestObjectMapper() {
-        return createObjectMapper().deactivateDefaultTyping();
+        return createMetadataObjectMapper();
+    }
+
+    private static ObjectMapper createMetadataObjectMapper() {
+        var mapper = new ObjectMapper();
+        mapper.registerModule(new Jdk8Module());
+        return mapper;
     }
 
     private static ObjectMapper createObjectMapper() {
@@ -1893,7 +1922,7 @@ public class Capy {
 
     private static CompiledProgram readLinkedProgramFile(Path linkedProgramFile) {
         try (var input = Files.newInputStream(linkedProgramFile)) {
-            return objectMapper().readValue(input, CompiledProgram.class);
+            return LinkedArtifactCodec.readProgram(input);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
         }
@@ -1937,7 +1966,7 @@ public class Capy {
 
     private static CompiledModule readLinkedModule(Path linkedModuleFile) {
         try (var input = Files.newInputStream(linkedModuleFile)) {
-            return objectMapper().readValue(input, CompiledModule.class);
+            return LinkedArtifactCodec.readModule(input);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked module JSON: " + linkedModuleFile, e);
         }
