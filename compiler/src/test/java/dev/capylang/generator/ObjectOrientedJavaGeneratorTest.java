@@ -654,15 +654,24 @@ class ObjectOrientedJavaGeneratorTest {
 
     @Test
     void shouldRejectTraitStateInJavaBackendV1() {
-        var program = compileProgram("""
-                trait Named {
-                    field name: String = "Capy"
-                }
-                """);
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "User",
+                        "/foo/boo",
+                        """
+                                trait Named {
+                                    field name: String = "Capy"
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
 
-        assertThatThrownBy(() -> new JavaGenerator().generate(program))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Trait fields are not supported");
+        assertThat(result).isInstanceOf(Result.Error.class);
+        var error = (Result.Error<?>) result;
+        assertThat(error.errors())
+                .anySatisfy(compilationError -> assertThat(compilationError.message())
+                        .contains("Trait `Named` cannot declare fields"));
     }
 
     @Test

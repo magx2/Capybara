@@ -13,6 +13,54 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ObjectOrientedMethodReturnCompilationErrorTest {
     @Test
+    void shouldRejectObjectOrientedMethodMissingReturnOnSomePath() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "MissingReturn",
+                        "/foo/boo",
+                        """
+                                class MissingReturn {
+                                    def broken(flag: bool): int {
+                                        if flag {
+                                            return 1
+                                        }
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Method `MissingReturn.broken` must return `int` on every path"));
+    }
+
+    @Test
+    void shouldRejectObjectOrientedVoidMethodReturningValueFromBlock() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "VoidReturn",
+                        "/foo/boo",
+                        """
+                                class VoidReturn {
+                                    def broken(): void {
+                                        return 1
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Method `VoidReturn.broken` returns a value but declares return type `void`"));
+    }
+
+    @Test
     void shouldReportParserErrorForInvalidReturnSyntax() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(

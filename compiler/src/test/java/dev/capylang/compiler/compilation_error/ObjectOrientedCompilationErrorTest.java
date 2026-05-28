@@ -409,6 +409,108 @@ class ObjectOrientedCompilationErrorTest {
     }
 
     @Test
+    void shouldRejectUninitializedObjectOrientedField() {
+        var errors = compileObjectOrientedSource(
+                "User",
+                """
+                        class User {
+                            field name: String
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Field `User.name` must be initialized"));
+    }
+
+    @Test
+    void shouldRejectInvalidObjectOrientedVisibility() {
+        var errors = compileObjectOrientedSource(
+                "Printable",
+                """
+                        interface Printable {
+                            private def print(): String
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Interface method `Printable.print` must be public"));
+    }
+
+    @Test
+    void shouldRejectInvalidObjectOrientedOverride() {
+        var errors = compileObjectOrientedSource(
+                "Child",
+                """
+                        open class Parent {
+                            final def label(): String = "parent"
+                        }
+
+                        class Child: Parent {
+                            override def label(): String = "child"
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("cannot override final method `Parent.label`"));
+    }
+
+    @Test
+    void shouldRejectObjectOrientedMethodOverrideWithoutParentMethod() {
+        var errors = compileObjectOrientedSource(
+                "Child",
+                """
+                        class Child {
+                            override def label(): String = "child"
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("declares `override` but no matching parent method exists"));
+    }
+
+    @Test
+    void shouldRejectObjectOrientedInitReturn() {
+        var errors = compileObjectOrientedSource(
+                "User",
+                """
+                        class User {
+                            init {
+                                return 1
+                            }
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Init block `User.init` cannot return a value"));
+    }
+
+    @Test
+    void shouldRejectObjectOrientedTraitLimitations() {
+        var errors = compileObjectOrientedSource(
+                "Named",
+                """
+                        trait Named {
+                            field name: String = "Capy"
+                        }
+                        """
+        );
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Trait `Named` cannot declare fields"));
+    }
+
+    @Test
     void shouldRejectUnimportedObjectOrientedAnnotation() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule("Annotations", "/foo/meta", "annotation Entity on class {}"),
