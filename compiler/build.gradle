@@ -7,6 +7,7 @@ plugins {
 }
 
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
+def capybaraStdlibClassesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('classes/java/main')
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def antlrGeneratedMainDir = layout.buildDirectory.dir('generated-src/antlr/main')
@@ -29,7 +30,10 @@ test {
 
 sourceSets {
     bootstrap {
-        java.srcDir file('src/main/java')
+        java {
+            srcDir file('src/main/java')
+            exclude 'dev/capylang/compiler/ir/**'
+        }
         java.srcDir antlrGeneratedMainDir
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
@@ -42,6 +46,10 @@ sourceSets {
         resources.srcDir file('src/integrationTest/resources')
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
+    }
+    test {
+        compileClasspath += files(capybaraStdlibClassesDir)
+        runtimeClasspath += files(capybaraStdlibClassesDir)
     }
 }
 
@@ -84,6 +92,19 @@ tasks.register('compileCapybara', JavaExec) {
 
 tasks.named('compileJava') {
     dependsOn tasks.named('compileCapybara')
+    exclude { element ->
+        def generatedIrDir = capybaraGeneratedMainDir.get().asFile.toPath()
+                .resolve('dev/capylang/compiler/ir')
+        element.file.toPath().startsWith(generatedIrDir)
+    }
+}
+
+tasks.named('compileTestJava') {
+    dependsOn tasks.named('compileCapybara')
+    dependsOn ':lib:capybara-lib:classes'
+    source(fileTree(capybaraGeneratedMainDir) {
+        include 'dev/capylang/compiler/ir/**'
+    })
 }
 
 check {
