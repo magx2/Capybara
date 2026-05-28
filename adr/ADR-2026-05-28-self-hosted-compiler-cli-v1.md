@@ -121,6 +121,11 @@ The self-hosting bootstrap is staged:
 - Stage 2: the Stage 1 compiler rebuilds the same sources again.
 - Stage 1 and Stage 2 outputs are compared.
 
+The repository gate for these stages is `./gradlew
+:compiler:selfHostedBootstrapParity`. It writes stage outputs under
+`compiler/build/self-hosting` and compares Stage 1 and Stage 2 through
+normalized Gradle comparison tasks.
+
 The comparison must cover normalized linked artifacts, generated Java sources,
 compiler diagnostics on the baseline invalid-program suite, native provider
 catalog/bootstrap output, and CLI-observable behavior. Differences must be

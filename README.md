@@ -42,6 +42,31 @@ Useful options:
 Generated output directories are reusable. The CLI records generated files in
 `.capy-output-manifest` and prunes stale generated files automatically.
 
+## Self-Hosted Compiler Bootstrap
+
+The production compiler and CLI path is generated from Capybara sources before
+Java compilation:
+
+- `compiler:compileCapybara` generates the Capybara-owned compiler passes under
+  `compiler/build/generated/sources/capybara/java/main`.
+- `capy:compileCapybara` generates the Capybara-owned CLI entrypoint
+  `dev.capylang.Capy`.
+- Production Gradle compile, e2e, package, and native-image tasks use those
+  generated Java classes. The hand-written Java compiler and generator code that
+  remains is bootstrap glue, parser/host infrastructure, and explicit parity
+  fallback code.
+
+The deterministic bootstrap gate is:
+
+```bash
+./gradlew :compiler:selfHostedBootstrapParity
+```
+
+It runs Stage 0 with the Java bootstrap compiler, then runs Stage 1 and Stage 2
+through the generated CLI/compiler path. Stage 1 and Stage 2 compare normalized
+linked outputs, generated Java/JavaScript/Python, invalid-fixture diagnostics,
+CLI command contracts, package summaries, and native-provider bootstrap output.
+
 ## Source Files, Modules, And Imports
 
 Only `.cfun` and `.coo` files are Capybara sources; source discovery ignores

@@ -1712,6 +1712,10 @@ public final class JavaScriptGenerator implements Generator {
             if (programContext.localTypeNames(moduleInfo.className()).contains(typeName)) {
                 return typeName;
             }
+            var runtimeOptionConstructor = runtimeOptionConstructorReference(typeName);
+            if (runtimeOptionConstructor.isPresent()) {
+                return runtimeOptionConstructor.orElseThrow();
+            }
             var owner = programContext.importedMemberOwner(moduleInfo.className(), typeName);
             if (owner.isPresent()) {
                 var className = programContext.resolveClassName(owner.orElseThrow()).orElse(owner.orElseThrow());
@@ -1731,6 +1735,15 @@ public final class JavaScriptGenerator implements Generator {
                 return moduleVar(className) + "." + typeName;
             }
             return typeName;
+        }
+
+        private Optional<String> runtimeOptionConstructorReference(String typeName) {
+            if (!"Some".equals(typeName) && !"None".equals(typeName)) {
+                return Optional.empty();
+            }
+            var className = "capy.lang.Option";
+            require(className);
+            return Optional.of(moduleVar(className) + "." + typeName);
         }
 
         private Optional<String> dottedTypeOwnerClassName(String typeName) {

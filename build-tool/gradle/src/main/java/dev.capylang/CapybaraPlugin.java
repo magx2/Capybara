@@ -299,9 +299,9 @@ public class CapybaraPlugin implements Plugin<Project> {
 
     static String capybaraCompileLogLevel(LogLevel gradleLogLevel) {
         return switch (gradleLogLevel) {
-            case DEBUG -> "FINE";
+            case DEBUG -> "DEBUG";
             case INFO -> "INFO";
-            default -> "WARNING";
+            default -> "WARN";
         };
     }
 

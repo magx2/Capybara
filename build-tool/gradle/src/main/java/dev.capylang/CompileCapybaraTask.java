@@ -13,17 +13,14 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
-import dev.capylang.compiler.OutputType;
-import dev.capylang.compiler.CompiledModule;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
-import java.util.Collection;
-import java.util.TreeSet;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
     @InputDirectory
@@ -86,11 +83,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         var generatedTestOutput = compileTestSourcesWithMainCompilation && getGeneratedTestOutputDir().isPresent()
                 ? getGeneratedTestOutputDir().get().getAsFile().toPath()
                 : null;
-        var libraries = readLibraryModules(getLibraryProgramFiles().getFiles().stream()
-                .map(java.io.File::toPath)
-                .map(java.nio.file.Path::getParent)
-                .filter(java.util.Objects::nonNull)
-                .toList());
+        var libraries = readLibraryDirectories();
 
         if (output != null) {
             Files.createDirectories(output);
@@ -102,41 +95,18 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             Files.createDirectories(generatedTestOutput);
         }
         var errors = new ByteArrayOutputStream();
-        var exitCode = withJulLogLevel(
-                Level.parse(getLogLevel().getOrElse("WARNING")),
-                () -> compileAndGenerate(
-                        input,
-                        writeLinkedOutput ? output : null,
-                        generatedOutput,
-                        testInput,
-                        generatedTestOutput,
-                        libraries,
-                        new PrintStream(errors)
-                )
+        var exitCode = compileAndGenerate(
+                input,
+                writeLinkedOutput ? output : null,
+                generatedOutput,
+                testInput,
+                generatedTestOutput,
+                libraries,
+                new PrintStream(errors)
         );
         if (exitCode != 0) {
             var message = errors.toString().trim();
             throw new GradleException(message.isEmpty() ? "Capybara compile failed with exit code " + exitCode : message);
-        }
-    }
-
-    private static int withJulLogLevel(Level level, IntIoSupplier action) throws IOException {
-        var rootLogger = Logger.getLogger("");
-        var previousRootLevel = rootLogger.getLevel();
-        var handlers = rootLogger.getHandlers();
-        var previousHandlerLevels = new Level[handlers.length];
-        for (int i = 0; i < handlers.length; i++) {
-            previousHandlerLevels[i] = handlers[i].getLevel();
-            handlers[i].setLevel(level);
-        }
-        rootLogger.setLevel(level);
-        try {
-            return action.getAsInt();
-        } finally {
-            rootLogger.setLevel(previousRootLevel);
-            for (int i = 0; i < handlers.length; i++) {
-                handlers[i].setLevel(previousHandlerLevels[i]);
-            }
         }
     }
 
@@ -146,59 +116,67 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             java.nio.file.Path generatedOutput,
             java.nio.file.Path testInput,
             java.nio.file.Path generatedTestOutput,
-            TreeSet<CompiledModule> libraries,
+            List<java.nio.file.Path> libraries,
             PrintStream errors
     ) throws IOException {
-        var compilation = Capy.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
-        if (compilation == null) {
-            return 100;
+        if (generatedOutput == null && output == null) {
+            throw new GradleException("At least one Capybara compile output directory must be configured for " + getName());
         }
 
-        if (output != null) {
-            Capy.writeCompilationOutput(output, compilation, getCompilerVersion().get());
-        }
         if (generatedOutput != null) {
-            Capy.generateCompiledProgram(
-                    OutputType.JAVA,
-                    generatedOutput,
-                    compilation,
-                    getIncludeJavaLibResources().getOrElse(true)
-            );
-        }
-        if (testInput != null && generatedTestOutput != null) {
-            var testCompilation = Capy.compileSources(testInput, mergeLibraries(libraries, compilation), true, errors);
-            if (testCompilation == null) {
-                return 100;
+            var args = new ArrayList<String>();
+            args.add("compile-generate");
+            args.add("java");
+            args.add("-i");
+            args.add(input.toString());
+            args.add("-o");
+            args.add(generatedOutput.toString());
+            if (output != null) {
+                args.add("--linked-output");
+                args.add(output.toString());
             }
-            Capy.generateCompiledProgram(
-                    OutputType.JAVA,
-                    generatedTestOutput,
-                    testCompilation,
-                    getIncludeJavaLibResourcesInTestOutput().getOrElse(false)
-            );
-        }
-        return 0;
-    }
-
-    private TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, Capy.CompilationArtifacts compilation) {
-        var mergedLibraries = new TreeSet<>(libraries);
-        mergedLibraries.addAll(compilation.program().modules());
-        return mergedLibraries;
-    }
-
-    private TreeSet<CompiledModule> readLibraryModules(Collection<java.nio.file.Path> directories) throws IOException {
-        var modules = new TreeSet<CompiledModule>();
-        for (var directory : directories) {
-            if (Files.notExists(directory) || !Files.isDirectory(directory)) {
-                continue;
+            if (testInput != null && generatedTestOutput != null) {
+                args.add("--test-input");
+                args.add(testInput.toString());
+                args.add("--test-output");
+                args.add(generatedTestOutput.toString());
             }
-            modules.addAll(Capy.readLinkedProgram(directory, false).modules());
+            if (!getIncludeJavaLibResources().getOrElse(true)) {
+                args.add("--skip-java-lib");
+            }
+            appendCompileOptions(args, libraries);
+            return CapybaraCliExecutor.execute(args, new PrintStream(new ByteArrayOutputStream()), errors);
         }
-        return modules;
+
+        var args = new ArrayList<String>();
+        args.add("compile");
+        args.add("-i");
+        args.add(input.toString());
+        args.add("-o");
+        args.add(output.toString());
+        appendCompileOptions(args, libraries);
+        return CapybaraCliExecutor.execute(args, new PrintStream(new ByteArrayOutputStream()), errors);
     }
 
-    @FunctionalInterface
-    private interface IntIoSupplier {
-        int getAsInt() throws IOException;
+    private void appendCompileOptions(List<String> args, List<java.nio.file.Path> libraries) {
+        if (!libraries.isEmpty()) {
+            args.add("-l");
+            args.add(String.join(",", libraries.stream().map(java.nio.file.Path::toString).toList()));
+        }
+        if (getCompileTests().getOrElse(false)) {
+            args.add("--compile-tests");
+        }
+        args.add("--log");
+        args.add(getLogLevel().getOrElse("WARN"));
+    }
+
+    private List<java.nio.file.Path> readLibraryDirectories() {
+        return getLibraryProgramFiles().getFiles().stream()
+                .map(java.io.File::toPath)
+                .map(java.nio.file.Path::getParent)
+                .filter(Objects::nonNull)
+                .filter(directory -> Files.exists(directory) && Files.isDirectory(directory))
+                .distinct()
+                .toList();
     }
 }

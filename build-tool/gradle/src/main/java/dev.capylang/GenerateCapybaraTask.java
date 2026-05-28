@@ -13,6 +13,7 @@ import dev.capylang.compiler.OutputType;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Locale;
 
 public abstract class GenerateCapybaraTask extends DefaultTask {
@@ -40,7 +41,14 @@ public abstract class GenerateCapybaraTask extends DefaultTask {
             var outputDir = outputRoot.resolve(outputType.name().toLowerCase(Locale.ROOT));
             Files.createDirectories(outputDir);
             var errors = new ByteArrayOutputStream();
-            var exitCode = Capy.generate(outputType, input, outputDir, new PrintStream(errors));
+            var args = new ArrayList<String>();
+            args.add("generate");
+            args.add(outputType.name().toLowerCase(Locale.ROOT));
+            args.add("-i");
+            args.add(input.toString());
+            args.add("-o");
+            args.add(outputDir.toString());
+            var exitCode = CapybaraCliExecutor.execute(args, new PrintStream(new ByteArrayOutputStream()), new PrintStream(errors));
             if (exitCode != 0) {
                 var message = errors.toString().trim();
                 throw new GradleException(message.isEmpty() ? "Capybara generate failed with exit code " + exitCode : message);

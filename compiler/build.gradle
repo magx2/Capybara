@@ -1,3 +1,14 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id 'antlr'
 }
@@ -11,6 +22,77 @@ def capybaraStdlibClassesDir = project(':lib:capybara-lib').layout.buildDirector
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def antlrGeneratedMainDir = layout.buildDirectory.dir('generated-src/antlr/main')
+def selfHostingDir = layout.buildDirectory.dir('self-hosting')
+def selfHostingStage0Dir = selfHostingDir.map { it.dir('stage0') }
+def selfHostingStage1Dir = selfHostingDir.map { it.dir('stage1') }
+def selfHostingStage2Dir = selfHostingDir.map { it.dir('stage2') }
+def selfHostingStage1GeneratedJavaDir = selfHostingStage1Dir.map { it.dir('bootstrap/java/generated') }
+def selfHostingStage1ClassesDir = selfHostingStage1Dir.map { it.dir('classes') }
+def selfHostingInvalidFixtureDir = layout.projectDirectory.dir('src/bootstrap/fixtures/invalid')
+def repositoryRootPath = rootProject.layout.projectDirectory.asFile.absolutePath
+
+abstract class NormalizedDirectoryCompareTask extends DefaultTask {
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getExpectedDir()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getActualDir()
+
+    @Input
+    abstract ListProperty<String> getIgnoredRelativePaths()
+
+    @TaskAction
+    void compareDirectories() {
+        def expectedRoot = expectedDir.get().asFile.toPath()
+        def actualRoot = actualDir.get().asFile.toPath()
+        def ignored = ignoredRelativePaths.getOrElse([]) as Set<String>
+        def expectedFiles = regularFiles(expectedRoot, ignored)
+        def actualFiles = regularFiles(actualRoot, ignored)
+        if (expectedFiles != actualFiles) {
+            def missing = expectedFiles - actualFiles
+            def unexpected = actualFiles - expectedFiles
+            throw new GradleException("Directory file lists differ for ${name}."
+                    + (missing.isEmpty() ? "" : "\nMissing from actual: ${missing}")
+                    + (unexpected.isEmpty() ? "" : "\nUnexpected in actual: ${unexpected}"))
+        }
+
+        for (def relativePath : expectedFiles) {
+            def expected = normalizedContent(expectedRoot.resolve(relativePath), relativePath)
+            def actual = normalizedContent(actualRoot.resolve(relativePath), relativePath)
+            if (expected != actual) {
+                throw new GradleException("Normalized file differs for ${name}: ${relativePath}")
+            }
+        }
+    }
+
+    private static SortedSet<String> regularFiles(java.nio.file.Path root, Set<String> ignored) {
+        def files = new TreeSet<String>()
+        if (java.nio.file.Files.notExists(root)) {
+            return files
+        }
+        java.nio.file.Files.walk(root).withCloseable { stream ->
+            stream
+                    .filter { path -> java.nio.file.Files.isRegularFile(path) }
+                    .forEach { path ->
+                        def relativePath = root.relativize(path).toString().replace(File.separatorChar, '/' as char)
+                        if (!ignored.contains(relativePath)) {
+                            files.add(relativePath)
+                        }
+                    }
+        }
+        files
+    }
+
+    private static String normalizedContent(java.nio.file.Path path, String relativePath) {
+        def content = java.nio.file.Files.readString(path).replace("\r\n", "\n")
+        if (relativePath.endsWith('build-info.json')) {
+            return content.replaceAll('"build_date_time"\\s*:\\s*"[^"]*"', '"build_date_time":"<normalized>"')
+        }
+        content
+    }
+}
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
@@ -63,6 +145,7 @@ tasks.register('integrationTest', Test) {
     group = 'verification'
     testClassesDirs = sourceSets.integrationTest.output.classesDirs
     classpath = sourceSets.integrationTest.runtimeClasspath
+    dependsOn 'selfHostedBootstrapParity'
     shouldRunAfter test
     useJUnitPlatform()
 }
@@ -73,7 +156,7 @@ tasks.named('compileBootstrapJava') {
 
 tasks.register('compileCapybara', JavaExec) {
     group = 'build'
-    description = 'Compiles compiler Capybara sources to generated Java for self-hosting smoke coverage.'
+    description = 'Compiles compiler Capybara sources to generated Java for the production self-hosted path.'
     dependsOn tasks.named('bootstrapClasses')
 
     classpath = sourceSets.bootstrap.runtimeClasspath
@@ -88,6 +171,141 @@ tasks.register('compileCapybara', JavaExec) {
                 capybaraGeneratedMainDir.get().asFile.absolutePath
         ]
     }
+}
+
+tasks.register('selfHostedCompilerStage0', JavaExec) {
+    group = 'verification'
+    description = 'Stage 0 bootstrap: the Java bootstrap compiler builds compiler Capybara sources to Java.'
+    dependsOn tasks.named('bootstrapClasses')
+
+    classpath = sourceSets.bootstrap.runtimeClasspath
+    mainClass.set('dev.capylang.bootstrap.CapybaraBootstrapCompiler')
+    inputs.dir(capybaraMainSourceDir)
+            .withPropertyName('capybaraMainSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(selfHostingStage0Dir)
+    doFirst {
+        args = [
+                capybaraMainSourceDir.asFile.absolutePath,
+                selfHostingStage0Dir.get().dir('bootstrap/java/generated').asFile.absolutePath
+        ]
+    }
+}
+
+def capyRuntimeClasspath = files({ project(':capy').sourceSets.main.runtimeClasspath })
+
+tasks.register('selfHostedCompilerStage1', JavaExec) {
+    group = 'verification'
+    description = 'Stage 1 bootstrap: the generated production compiler rebuilds compiler Capybara sources.'
+    dependsOn tasks.named('bootstrapClasses')
+    dependsOn ':capy:classes'
+
+    classpath = files(capyRuntimeClasspath, sourceSets.bootstrap.output)
+    mainClass.set('dev.capylang.bootstrap.SelfHostingBootstrapRunner')
+    inputs.dir(capybaraMainSourceDir)
+            .withPropertyName('capybaraMainSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(selfHostingInvalidFixtureDir)
+            .withPropertyName('invalidFixtures')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(selfHostingStage1Dir)
+    doFirst {
+        args = [
+                repositoryRootPath,
+                capybaraMainSourceDir.asFile.absolutePath,
+                selfHostingInvalidFixtureDir.asFile.absolutePath,
+                selfHostingStage1Dir.get().asFile.absolutePath
+        ]
+    }
+}
+
+tasks.register('compileSelfHostedCompilerStage1Java', JavaCompile) {
+    group = 'verification'
+    description = 'Compiles Stage 1 generated compiler Java classes for the Stage 2 bootstrap.'
+    dependsOn tasks.named('selfHostedCompilerStage1')
+    dependsOn ':capy:classes'
+    dependsOn ':lib:capybara-lib:classes'
+
+    source(selfHostingStage1GeneratedJavaDir)
+    classpath = files(
+            { project(':capy').sourceSets.main.runtimeClasspath },
+            { project(':lib:capybara-lib').sourceSets.main.output }
+    )
+    destinationDirectory.set(selfHostingStage1ClassesDir)
+    options.release.set(21)
+    options.compilerArgs.add('-proc:none')
+}
+
+tasks.register('selfHostedCompilerStage2', JavaExec) {
+    group = 'verification'
+    description = 'Stage 2 bootstrap: the Stage 1 compiler rebuilds compiler Capybara sources again.'
+    dependsOn tasks.named('compileSelfHostedCompilerStage1Java')
+    dependsOn tasks.named('bootstrapClasses')
+    dependsOn ':capy:classes'
+
+    classpath = files(selfHostingStage1ClassesDir, capyRuntimeClasspath, sourceSets.bootstrap.output)
+    mainClass.set('dev.capylang.bootstrap.SelfHostingBootstrapRunner')
+    inputs.dir(capybaraMainSourceDir)
+            .withPropertyName('capybaraMainSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(selfHostingInvalidFixtureDir)
+            .withPropertyName('invalidFixtures')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(selfHostingStage1ClassesDir)
+            .withPropertyName('stage1CompilerClasses')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(selfHostingStage2Dir)
+    doFirst {
+        args = [
+                repositoryRootPath,
+                capybaraMainSourceDir.asFile.absolutePath,
+                selfHostingInvalidFixtureDir.asFile.absolutePath,
+                selfHostingStage2Dir.get().asFile.absolutePath
+        ]
+    }
+}
+
+def registerSelfHostingCompareTask = { String taskName, String taskDescription, String relativePath ->
+    tasks.register(taskName, NormalizedDirectoryCompareTask) {
+        group = 'verification'
+        description = taskDescription
+        dependsOn tasks.named('selfHostedCompilerStage1')
+        dependsOn tasks.named('selfHostedCompilerStage2')
+        expectedDir.set(selfHostingStage1Dir.map { it.dir(relativePath) })
+        actualDir.set(selfHostingStage2Dir.map { it.dir(relativePath) })
+        ignoredRelativePaths.convention([])
+    }
+}
+
+def compareSelfHostedLinkedOutputs = registerSelfHostingCompareTask(
+        'compareSelfHostedLinkedOutputs',
+        'Compares normalized Stage 1 and Stage 2 linked compiler outputs.',
+        'bootstrap/java/linked'
+)
+def compareSelfHostedGeneratedOutputs = registerSelfHostingCompareTask(
+        'compareSelfHostedGeneratedOutputs',
+        'Compares normalized Stage 1 and Stage 2 generated compiler outputs.',
+        'bootstrap'
+)
+def compareSelfHostedCliContractOutputs = registerSelfHostingCompareTask(
+        'compareSelfHostedCliContractOutputs',
+        'Compares normalized Stage 1 and Stage 2 CLI contract and native-provider outputs.',
+        'cli-contract/observed'
+)
+def compareSelfHostedDiagnostics = registerSelfHostingCompareTask(
+        'compareSelfHostedDiagnostics',
+        'Compares normalized Stage 1 and Stage 2 diagnostics for invalid fixtures.',
+        'diagnostics'
+)
+
+tasks.register('selfHostedBootstrapParity') {
+    group = 'verification'
+    description = 'Runs Stage 0/1/2 self-hosting bootstrap and compares Stage 1 and Stage 2 outputs.'
+    dependsOn tasks.named('selfHostedCompilerStage0')
+    dependsOn compareSelfHostedLinkedOutputs
+    dependsOn compareSelfHostedGeneratedOutputs
+    dependsOn compareSelfHostedCliContractOutputs
+    dependsOn compareSelfHostedDiagnostics
 }
 
 tasks.named('compileJava') {

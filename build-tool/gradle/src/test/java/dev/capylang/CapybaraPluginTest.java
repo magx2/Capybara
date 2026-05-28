@@ -605,8 +605,8 @@ class CapybaraPluginTest {
         var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
         var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
 
-        assertEquals("WARNING", compileCapybara.getLogLevel().get());
-        assertEquals("WARNING", compileTestCapybara.getLogLevel().get());
+        assertEquals("WARN", compileCapybara.getLogLevel().get());
+        assertEquals("WARN", compileTestCapybara.getLogLevel().get());
     }
 
     @Test
@@ -837,12 +837,12 @@ class CapybaraPluginTest {
 
     private static Stream<org.junit.jupiter.params.provider.Arguments> gradleCompileLogLevels() {
         return Stream.of(
-                arguments(LogLevel.DEBUG, "FINE"),
+                arguments(LogLevel.DEBUG, "DEBUG"),
                 arguments(LogLevel.INFO, "INFO"),
-                arguments(LogLevel.LIFECYCLE, "WARNING"),
-                arguments(LogLevel.WARN, "WARNING"),
-                arguments(LogLevel.QUIET, "WARNING"),
-                arguments(LogLevel.ERROR, "WARNING")
+                arguments(LogLevel.LIFECYCLE, "WARN"),
+                arguments(LogLevel.WARN, "WARN"),
+                arguments(LogLevel.QUIET, "WARN"),
+                arguments(LogLevel.ERROR, "WARN")
         );
     }
 
