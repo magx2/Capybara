@@ -2172,6 +2172,7 @@ public class CapybaraCompiler {
             String normalizedFile,
             TreeSet<Result.Error.SingleError> errors
     ) {
+        var recursiveUsages = new ArrayList<AnnotationUsage>();
         for (var usage : usages) {
             var availableAnnotation = availableAnnotations.get(usage.name());
             if (availableAnnotation == null) {
@@ -2186,15 +2187,16 @@ public class CapybaraCompiler {
                 ));
                 continue;
             }
-            validateAnnotationUsageList(
-                    List.of(usage),
-                    Optional.of(AnnotationSemanticTarget.FUNCTION),
-                    AnnotationSemanticTarget.FUNCTION.displayName,
-                    availableAnnotations,
-                    normalizedFile,
-                    errors
-            );
+            recursiveUsages.add(usage);
         }
+        validateAnnotationUsageList(
+                recursiveUsages,
+                Optional.of(AnnotationSemanticTarget.FUNCTION),
+                AnnotationSemanticTarget.FUNCTION.displayName,
+                availableAnnotations,
+                normalizedFile,
+                errors
+        );
     }
 
     private void validateObjectOrientedAnnotationUsages(
@@ -2269,6 +2271,7 @@ public class CapybaraCompiler {
             String normalizedFile,
             TreeSet<Result.Error.SingleError> errors
     ) {
+        var singleUseAnnotations = new HashMap<String, AnnotationUsage>();
         for (var usage : usages) {
             var availableAnnotation = availableAnnotations.get(usage.name());
             if (availableAnnotation == null) {
@@ -2298,8 +2301,24 @@ public class CapybaraCompiler {
                 ));
                 continue;
             }
+            if (!annotation.multiple()) {
+                var previous = singleUseAnnotations.putIfAbsent(annotationUsageKey(availableAnnotation), usage);
+                if (previous != null) {
+                    errors.add(errorAt(
+                            "Annotation " + annotation.name() + " cannot be applied multiple times",
+                            usage.position(),
+                            normalizedFile
+                    ));
+                }
+            }
             validateAnnotationArguments(usage, annotation, normalizedFile, errors);
         }
+    }
+
+    private String annotationUsageKey(AvailableAnnotation annotation) {
+        return normalizedAnnotationModulePath(annotation.ownerModule().path())
+               + "/" + annotation.ownerModule().name()
+               + "." + annotation.annotation().name();
     }
 
     private String unknownAnnotationMessage(String name) {
