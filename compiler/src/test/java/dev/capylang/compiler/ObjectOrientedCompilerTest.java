@@ -327,6 +327,25 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldRejectNativeProviderFunctionWithoutNativeBody() {
+        var result = compileProviders("""
+                from /capy/lang/Effect import { Effect, delay }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
+
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] =
+                    delay(() => ???)
+                """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("Native provider `system_clock`")
+                        .contains("must use `<native>` as its function body")
+                        .contains("/dev/capylang/test/ClockProvider.cfun"));
+    }
+
+    @Test
     void shouldRejectNativeProviderFunctionReturningEffectOfNonInterface() {
         var result = compileProviders("""
                 from /capy/lang/Effect import { Effect }

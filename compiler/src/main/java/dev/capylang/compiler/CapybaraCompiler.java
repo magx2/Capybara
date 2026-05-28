@@ -3690,6 +3690,14 @@ public class CapybaraCompiler {
                     ));
                     continue;
                 }
+                if (!provider.nativeBody()) {
+                    errors.add(nativeProviderError(
+                            provider,
+                            "TypeMismatch: Native provider `" + provider.name()
+                            + "` must use `<native>` as its function body"
+                    ));
+                    continue;
+                }
                 if (isBuiltinOrCompositeNativeProviderTarget(provider.targetType())) {
                     errors.add(nativeProviderError(
                             provider,
@@ -3847,11 +3855,18 @@ public class CapybaraCompiler {
                         function.comments(),
                         function.parameters(),
                         nativeProviderSourceFile(module),
-                        effectTarget.isPresent()
+                        effectTarget.isPresent(),
+                        isNativeProviderNativeBody(function)
                 ));
             }
         }
         return List.copyOf(providers);
+    }
+
+    private boolean isNativeProviderNativeBody(CompiledFunction function) {
+        return function.expression() instanceof CompiledNothingValue value
+               && (value.message().contains("`<native>`")
+                   || value.message().contains("native expression in function"));
     }
 
     private Optional<String> nativeProviderEffectTarget(CompiledType returnType) {
@@ -3944,7 +3959,8 @@ public class CapybaraCompiler {
             List<String> comments,
             List<CompiledFunction.CompiledFunctionParameter> parameters,
             String sourceFile,
-            boolean effectReturnType
+            boolean effectReturnType,
+            boolean nativeBody
     ) {
         NativeProviderDeclaration {
             comments = comments == null ? List.of() : List.copyOf(comments);
