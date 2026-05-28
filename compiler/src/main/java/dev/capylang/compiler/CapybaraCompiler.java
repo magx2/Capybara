@@ -3649,6 +3649,9 @@ public class CapybaraCompiler {
 
         for (var module : compiledModules) {
             var sourceModule = parsedModulesByKey.get(moduleKey(module.path(), module.name()));
+            if (sourceModule == null) {
+                continue;
+            }
             var nativeProviders = nativeProviderDeclarations(module);
             if (nativeProviders.isEmpty()) {
                 continue;
