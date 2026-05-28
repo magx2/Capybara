@@ -1,4 +1,4 @@
-package dev.capylang;
+package dev.capylang.cli;
 
 public class CliException extends IllegalArgumentException {
     public CliException(String message) {

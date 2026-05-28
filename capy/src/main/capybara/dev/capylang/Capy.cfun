@@ -1,0 +1,536 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Program import { * }
+
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].size(): int = <native>
+fun List[T].get(idx: int): Option[T] = <native>
+fun List[T].get(from: int, to: int): List[T] = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+
+union Option[T] = Some[T] | None
+data Some[T] { value: T }
+data None {}
+
+union Command =
+    VersionCommand
+    | HelpCommand
+    | CompileCommand
+    | GenerateCommand
+    | CompileGenerateCommand
+    | PackageCommand
+    | InvalidCommand
+
+data VersionCommand {}
+data HelpCommand {}
+data CompileCommand { request: CompileRequest }
+data GenerateCommand { request: GenerateRequest }
+data CompileGenerateCommand { request: CompileGenerateRequest }
+data PackageCommand { request: PackageRequest }
+data InvalidCommand { result: CommandResult }
+
+data CommandArgs { args: List[String] }
+data CommandRouter {}
+
+data CommandResult {
+    exit_code: int,
+    stdout: String,
+    stderr: String
+}
+
+data CommandArgsResult {
+    command: Command,
+    result: CommandResult
+}
+
+data NamedOptions {
+    input: String,
+    output: String,
+    libs: String,
+    linked_output: String,
+    test_input: String,
+    test_output: String,
+    native_wiring: String,
+    log_level: String,
+    compile_tests: bool,
+    skip_java_lib: bool,
+    error: String
+}
+
+data PackageOptions {
+    compiled_input: String,
+    input: String,
+    module: String,
+    capy_override_keys: List[String],
+    capy_override_values: List[String],
+    log_level: String,
+    error: String
+}
+
+data CompileRequest {
+    input: String,
+    output: String,
+    libs: String,
+    compile_tests: bool,
+    native_wiring: String,
+    log_level: String,
+    compiler_version: String
+}
+
+data GenerateRequest {
+    output_type: String,
+    input: String,
+    output: String,
+    include_java_lib_resources: bool,
+    log_level: String
+}
+
+data CompileGenerateRequest {
+    output_type: String,
+    input: String,
+    output: String,
+    linked_output: String,
+    test_input: String,
+    test_output: String,
+    libs: String,
+    compile_tests: bool,
+    include_java_lib_resources: bool,
+    native_wiring: String,
+    log_level: String,
+    compiler_version: String
+}
+
+data PackageRequest {
+    compiled_input: String,
+    input: String,
+    module: String,
+    capy_override_keys: List[String],
+    capy_override_values: List[String],
+    log_level: String
+}
+
+data BuildInfo {
+    build_date_time: String,
+    capybara_compiler_version: String,
+    source_modules: List[String]
+}
+
+data OutputManifest {
+    expected_files: List[String],
+    stale_files: List[String]
+}
+
+data CliDiagnostic {
+    exit_code: int,
+    message: String
+}
+
+union OutputTypeResult = OutputTypeValue | OutputTypeError
+data OutputTypeValue { output_type: String }
+data OutputTypeError { message: String }
+
+union LogLevelResult = LogLevelValue | LogLevelError
+data LogLevelValue { log_level: String }
+data LogLevelError { message: String }
+
+fun main(args: List[String]): Effect[Program] =
+    execute(args)
+
+fun execute(args: List[String]): Effect[Program] =
+    let result <- route(CommandRouter {}, CommandArgs { args })
+    emit_result(result)
+
+fun route(router: CommandRouter, command_args: CommandArgs): Effect[CommandResult] =
+    match command_args.args[0] with
+    case None -> pure(usage(help_text()))
+    case Some { value } ->
+        match select_command(router, value, command_args.args[1, command_args.args.size()]) with
+        case VersionCommand -> pure(success_stdout(version_text() + nl()))
+        case HelpCommand -> pure(success_stdout(version_text() + nl() + nl() + help_text() + nl()))
+        case CompileCommand { request } -> handle_compile(request)
+        case GenerateCommand { request } -> handle_generate(request)
+        case CompileGenerateCommand { request } -> handle_compile_generate(request)
+        case PackageCommand { request } -> handle_package(request)
+        case InvalidCommand { result } -> pure(result)
+
+fun select_command(router: CommandRouter, command_text: String, args: List[String]): Command =
+    let command = host_normalize_token(command_text)
+    if command == "-v" | command == "--version"
+    then VersionCommand {}
+    else if command == "-h" | command == "--help"
+    then HelpCommand {}
+    else if command == "compile"
+    then compile_command(args)
+    else if command == "generate"
+    then generate_command(args)
+    else if command == "compile-generate"
+    then compile_generate_command(args)
+    else if command == "package"
+    then package_command(args)
+    else InvalidCommand { result: usage("Unknown command `" + command_text + "`." + nl() + nl() + help_text()) }
+
+fun compile_command(args: List[String]): Command =
+    let options = parse_named_options(args, 0, empty_named_options(), true, false, false, false)
+    if options.error != ""
+    then InvalidCommand { result: usage(options.error) }
+    else
+        match normalize_log_level(options.log_level) with
+        case LogLevelError { message } -> InvalidCommand { result: usage(message) }
+        case LogLevelValue { log_level } ->
+            if host_is_blank(options.input)
+            then InvalidCommand { result: usage(missing_required("input", "compile")) }
+            else if host_is_blank(options.output)
+            then InvalidCommand { result: usage(missing_required("output", "compile")) }
+            else CompileCommand {
+                request: CompileRequest {
+                    input: options.input,
+                    output: options.output,
+                    libs: options.libs,
+                    compile_tests: options.compile_tests,
+                    native_wiring: options.native_wiring,
+                    log_level,
+                    compiler_version: host_read_compiler_version()
+                }
+            }
+
+fun generate_command(args: List[String]): Command =
+    match args[0] with
+    case None -> InvalidCommand { result: usage("Missing output type for `generate`." + nl() + nl() + help_text()) }
+    case Some { output_type_text } ->
+        match parse_output_type(output_type_text) with
+        case OutputTypeError { message } -> InvalidCommand { result: usage(message) }
+        case OutputTypeValue { output_type } ->
+            let options = parse_named_options(args[1, args.size()], 0, empty_named_options(), false, true, false, false)
+            if options.error != ""
+            then InvalidCommand { result: usage(options.error) }
+            else
+                match normalize_log_level(options.log_level) with
+                case LogLevelError { message } -> InvalidCommand { result: usage(message) }
+                case LogLevelValue { log_level } ->
+                    if host_is_blank(options.output)
+                    then InvalidCommand { result: usage(missing_required("output", "generate")) }
+                    else GenerateCommand {
+                        request: GenerateRequest {
+                            output_type,
+                            input: if host_is_blank(options.input) then "." else options.input,
+                            output: options.output,
+                            include_java_lib_resources: !options.skip_java_lib,
+                            log_level
+                        }
+                    }
+
+fun compile_generate_command(args: List[String]): Command =
+    match args[0] with
+    case None -> InvalidCommand { result: usage("Missing output type for `compile-generate`." + nl() + nl() + help_text()) }
+    case Some { output_type_text } ->
+        match parse_output_type(output_type_text) with
+        case OutputTypeError { message } -> InvalidCommand { result: usage(message) }
+        case OutputTypeValue { output_type } ->
+            let options = parse_named_options(args[1, args.size()], 0, empty_named_options(), true, true, true, true)
+            if options.error != ""
+            then InvalidCommand { result: usage(options.error) }
+            else
+                match normalize_log_level(options.log_level) with
+                case LogLevelError { message } -> InvalidCommand { result: usage(message) }
+                case LogLevelValue { log_level } ->
+                    if host_is_blank(options.input)
+                    then InvalidCommand { result: usage(missing_required("input", "compile-generate")) }
+                    else if host_is_blank(options.output)
+                    then InvalidCommand { result: usage(missing_required("output", "compile-generate")) }
+                    else if host_is_blank(options.test_input) != host_is_blank(options.test_output)
+                    then InvalidCommand { result: usage("`compile-generate` requires both `--test-input` and `--test-output` when either is provided.") }
+                    else CompileGenerateCommand {
+                        request: CompileGenerateRequest {
+                            output_type,
+                            input: options.input,
+                            output: options.output,
+                            linked_output: options.linked_output,
+                            test_input: options.test_input,
+                            test_output: options.test_output,
+                            libs: options.libs,
+                            compile_tests: options.compile_tests,
+                            include_java_lib_resources: !options.skip_java_lib,
+                            native_wiring: options.native_wiring,
+                            log_level,
+                            compiler_version: host_read_compiler_version()
+                        }
+                    }
+
+fun package_command(args: List[String]): Command =
+    let options = parse_package_options(args, 0, empty_package_options())
+    if options.error != ""
+    then InvalidCommand { result: usage(options.error) }
+    else
+        match normalize_log_level(options.log_level) with
+        case LogLevelError { message } -> InvalidCommand { result: usage(message) }
+        case LogLevelValue { log_level } ->
+            if host_is_blank(options.module)
+            then InvalidCommand { result: usage(missing_required("module", "package")) }
+            else if host_is_blank(options.compiled_input) & host_is_blank(options.input)
+            then InvalidCommand { result: usage("Package requires either `--compiled-input` or `--input`." + nl() + nl() + help_text()) }
+            else if !host_is_blank(options.compiled_input) & !host_is_blank(options.input)
+            then InvalidCommand { result: usage("Package accepts only one of `--compiled-input` or `--input`." + nl() + nl() + help_text()) }
+            else PackageCommand {
+                request: PackageRequest {
+                    compiled_input: options.compiled_input,
+                    input: options.input,
+                    module: options.module,
+                    capy_override_keys: options.capy_override_keys,
+                    capy_override_values: options.capy_override_values,
+                    log_level
+                }
+            }
+
+fun parse_named_options(
+    args: List[String],
+    idx: int,
+    options: NamedOptions,
+    allow_libs: bool,
+    allow_skip_java_lib: bool,
+    allow_linked_output: bool,
+    allow_test_outputs: bool
+): NamedOptions =
+    if options.error != ""
+    then options
+    else
+        match args[idx] with
+        case None -> options
+        case Some { arg } ->
+            if arg == "--log"
+            then parse_option_with_value(args, idx, options, arg, value =>
+                parse_named_options(args, idx + 2, options.with(log_level: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+            )
+            else if arg == "-i" | arg == "--input"
+            then parse_option_with_value(args, idx, options, arg, value =>
+                parse_named_options(args, idx + 2, options.with(input: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+            )
+            else if arg == "-o" | arg == "--output"
+            then parse_option_with_value(args, idx, options, arg, value =>
+                parse_named_options(args, idx + 2, options.with(output: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+            )
+            else if arg == "--linked-output"
+            then
+                if !allow_linked_output
+                then options.with(error: "Option `" + arg + "` is supported only for `compile-generate`.")
+                else parse_option_with_value(args, idx, options, arg, value =>
+                    parse_named_options(args, idx + 2, options.with(linked_output: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+                )
+            else if arg == "--test-input"
+            then
+                if !allow_test_outputs
+                then options.with(error: "Option `" + arg + "` is supported only for `compile-generate`.")
+                else parse_option_with_value(args, idx, options, arg, value =>
+                    parse_named_options(args, idx + 2, options.with(test_input: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+                )
+            else if arg == "--test-output"
+            then
+                if !allow_test_outputs
+                then options.with(error: "Option `" + arg + "` is supported only for `compile-generate`.")
+                else parse_option_with_value(args, idx, options, arg, value =>
+                    parse_named_options(args, idx + 2, options.with(test_output: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+                )
+            else if arg == "--type" | arg == "--runtime"
+            then parse_option_with_value(args, idx, options, arg, _ =>
+                parse_named_options(args, idx + 2, options, allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+            )
+            else if arg == "-l" | arg == "--libs"
+            then
+                if !allow_libs
+                then options.with(error: "Option `" + arg + "` is supported only for `compile` and `compile-generate`.")
+                else parse_option_with_value(args, idx, options, arg, value =>
+                    parse_named_options(args, idx + 2, options.with(libs: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+                )
+            else if arg == "--native-wiring"
+            then
+                if !allow_libs
+                then options.with(error: "Option `" + arg + "` is supported only for `compile` and `compile-generate`.")
+                else parse_option_with_value(args, idx, options, arg, value =>
+                    parse_named_options(args, idx + 2, options.with(native_wiring: value), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+                )
+            else if arg == "--compile-tests"
+            then
+                if !allow_libs
+                then options.with(error: "Option `" + arg + "` is supported only for `compile` and `compile-generate`.")
+                else parse_named_options(args, idx + 1, options.with(compile_tests: true), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+            else if arg == "--skip-java-lib"
+            then
+                if !allow_skip_java_lib
+                then options.with(error: "Option `" + arg + "` is supported only for `generate` and `compile-generate`.")
+                else parse_named_options(args, idx + 1, options.with(skip_java_lib: true), allow_libs, allow_skip_java_lib, allow_linked_output, allow_test_outputs)
+            else options.with(error: "Unknown option `" + arg + "`." + nl() + nl() + help_text())
+
+fun parse_option_with_value(
+    args: List[String],
+    idx: int,
+    options: NamedOptions,
+    option: String,
+    next: String => NamedOptions
+): NamedOptions =
+    match args[idx + 1] with
+    case None -> options.with(error: "Missing value for `" + option + "`.")
+    case Some { value } -> next(value)
+
+fun parse_package_options(args: List[String], idx: int, options: PackageOptions): PackageOptions =
+    if options.error != ""
+    then options
+    else
+        match args[idx] with
+        case None -> options
+        case Some { arg } ->
+            if arg == "--log"
+            then parse_package_option_with_value(args, idx, options, arg, value =>
+                parse_package_options(args, idx + 2, options.with(log_level: value))
+            )
+            else if arg == "-ci" | arg == "--compiled-input"
+            then parse_package_option_with_value(args, idx, options, arg, value =>
+                parse_package_options(args, idx + 2, options.with(compiled_input: value))
+            )
+            else if arg == "-i" | arg == "--input"
+            then parse_package_option_with_value(args, idx, options, arg, value =>
+                parse_package_options(args, idx + 2, options.with(input: value))
+            )
+            else if arg == "-m" | arg == "--module"
+            then parse_package_option_with_value(args, idx, options, arg, value =>
+                parse_package_options(args, idx + 2, options.with(module: value))
+            )
+            else if host_starts_with(arg, "--capy.")
+            then parse_package_option_with_value(args, idx, options, arg, value =>
+                parse_package_options(
+                    args,
+                    idx + 2,
+                    options.with(
+                        capy_override_keys: options.capy_override_keys + host_drop_prefix(arg, "--capy."),
+                        capy_override_values: options.capy_override_values + value
+                    )
+                )
+            )
+            else options.with(error: "Unknown option `" + arg + "`." + nl() + nl() + help_text())
+
+fun parse_package_option_with_value(
+    args: List[String],
+    idx: int,
+    options: PackageOptions,
+    option: String,
+    next: String => PackageOptions
+): PackageOptions =
+    match args[idx + 1] with
+    case None -> options.with(error: "Missing value for `" + option + "`.")
+    case Some { value } -> next(value)
+
+fun handle_compile(request: CompileRequest): Effect[CommandResult] =
+    host_compile(request)
+
+fun handle_generate(request: GenerateRequest): Effect[CommandResult] =
+    host_generate(request)
+
+fun handle_compile_generate(request: CompileGenerateRequest): Effect[CommandResult] =
+    host_compile_generate(request)
+
+fun handle_package(request: PackageRequest): Effect[CommandResult] =
+    host_package(request)
+
+fun emit_result(result: CommandResult): Effect[Program] =
+    let stdout <- if result.stdout == "" then pure("") else host_write_stdout(result.stdout)
+    let stderr <- if result.stderr == "" then pure("") else host_write_stderr(result.stderr)
+    pure(program_for_exit_code(result.exit_code))
+
+fun program_for_exit_code(exit_code: int): Program =
+    if exit_code == 0
+    then Success {}
+    else Failed { exit_code: failed_exit_code_from_int(exit_code) }
+
+fun empty_named_options(): NamedOptions =
+    NamedOptions {
+        input: "",
+        output: "",
+        libs: "",
+        linked_output: "",
+        test_input: "",
+        test_output: "",
+        native_wiring: "",
+        log_level: "INFO",
+        compile_tests: false,
+        skip_java_lib: false,
+        error: ""
+    }
+
+fun empty_package_options(): PackageOptions =
+    PackageOptions {
+        compiled_input: "",
+        input: "",
+        module: "",
+        capy_override_keys: [],
+        capy_override_values: [],
+        log_level: "INFO",
+        error: ""
+    }
+
+fun parse_output_type(value: String): OutputTypeResult =
+    let normalized = host_normalize_token(value)
+    if normalized == "java"
+    then OutputTypeValue { output_type: "JAVA" }
+    else if normalized == "python" | normalized == "py"
+    then OutputTypeValue { output_type: "PYTHON" }
+    else if normalized == "javascript" | normalized == "js"
+    then OutputTypeValue { output_type: "JAVASCRIPT" }
+    else OutputTypeError { message: "Unknown output type `" + value + "`. Use java, python, py, javascript, or js." }
+
+fun normalize_log_level(value: String): LogLevelResult =
+    let normalized = host_normalize_token(value)
+    if normalized == "debug"
+    then LogLevelValue { log_level: "DEBUG" }
+    else if normalized == "info"
+    then LogLevelValue { log_level: "INFO" }
+    else if normalized == "warn"
+    then LogLevelValue { log_level: "WARN" }
+    else if normalized == "error"
+    then LogLevelValue { log_level: "ERROR" }
+    else LogLevelError { message: "Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR." }
+
+fun success_stdout(stdout: String): CommandResult =
+    CommandResult { exit_code: 0, stdout, stderr: "" }
+
+fun usage(message: String): CommandResult =
+    CommandResult { exit_code: 1, stdout: "", stderr: message + nl() }
+
+fun missing_required(key: String, command: String): String =
+    "Missing required option `--" + key + "` for `" + command + "`." + nl() + nl() + help_text()
+
+fun version_text(): String =
+    "Capybara compiler version: " + host_read_compiler_version()
+
+fun help_text(): String =
+    "Usage:" + nl()
+    + "  capy -v | --version" + nl()
+    + "  capy -h | --help" + nl()
+    + "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]" + nl()
+    + "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--linked-output <dir>] [--test-input <dir> --test-output <dir>] [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]" + nl()
+    + "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]" + nl()
+    + "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]" + nl()
+    + nl()
+    + "Notes:" + nl()
+    + "  compile output directory may be reused; stale generated files are pruned automatically." + nl()
+    + "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided." + nl()
+    + "  --native-wiring <file> is supported by compile and compile-generate; it reads native provider bindings from a JSON manifest and stores them in linked program output." + nl()
+    + "  compile-generate --test-input/--test-output also compiles test Capybara sources against the freshly compiled main program in the same invocation." + nl()
+    + "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/List[TestFile] producers into capy/test/CapyTestRuntime.gather_tests." + nl()
+    + "  generate input directory defaults to the current directory." + nl()
+    + "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath." + nl()
+    + "  package writes `capy.cbin` next to the provided `capy.yml`."
+
+fun nl(): String = host_new_line()
+
+private fun host_read_compiler_version(): String = <native>
+private fun host_normalize_token(value: String): String = <native>
+private fun host_starts_with(value: String, prefix: String): bool = <native>
+private fun host_drop_prefix(value: String, prefix: String): String = <native>
+private fun host_is_blank(value: String): bool = <native>
+private fun host_new_line(): String = <native>
+private fun host_write_stdout(text: String): Effect[String] = <native>
+private fun host_write_stderr(text: String): Effect[String] = <native>
+private fun host_compile(request: CompileRequest): Effect[CommandResult] = <native>
+private fun host_generate(request: GenerateRequest): Effect[CommandResult] = <native>
+private fun host_compile_generate(request: CompileGenerateRequest): Effect[CommandResult] = <native>
+private fun host_package(request: PackageRequest): Effect[CommandResult] = <native>

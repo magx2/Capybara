@@ -1719,6 +1719,9 @@ public final class JavaGenerator implements Generator {
         if (nativeProvider != null && method.parameters().isEmpty() && isNativeExpression(method)) {
             return mapNativeProviderFunction(method, nativeProvider, visibility, methodTypeParameters);
         }
+        if (isCapyCliHostMethod(ownerPackage, ownerName, method)) {
+            return mapCapyCliHostMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyDateTimeClockNowMethod(ownerPackage, ownerName, method)) {
             return mapCapyDateTimeClockNowMethod(method, visibility, methodTypeParameters);
         }
@@ -1755,6 +1758,42 @@ public final class JavaGenerator implements Generator {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(() -> dev.capylang.NativeProviderBootstrap." + provider.bootstrapMethodName() + "());\n"
+               + "}\n";
+    }
+
+    private boolean isCapyCliHostMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        if (!"dev.capylang".equals(ownerPackage) || !"Capy".equals(ownerName) || !isNativeExpression(method)) {
+            return false;
+        }
+        return switch (method.sourceName()) {
+            case "host_read_compiler_version",
+                 "host_normalize_token",
+                 "host_starts_with",
+                 "host_drop_prefix",
+                 "host_is_blank",
+                 "host_new_line",
+                 "host_write_stdout",
+                 "host_write_stderr",
+                 "host_compile",
+                 "host_generate",
+                 "host_compile_generate",
+                 "host_package" -> true;
+            default -> false;
+        };
+    }
+
+    private String mapCapyCliHostMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        var methodName = mapMethodName(method.name());
+        var arguments = method.parameters().stream()
+                .map(JavaMethod.JavaFunctionParameter::generatedName)
+                .collect(joining(", "));
+        var runtimeCall = "dev.capylang.cli.CapyCliHost." + methodName + "(" + arguments + ")";
+        var body = isEffectTypeReference(method.returnType().toString())
+                ? "return capy.lang.Effect.delay(() -> " + runtimeCall + ");\n"
+                : "return " + runtimeCall + ";\n";
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + body
                + "}\n";
     }
 

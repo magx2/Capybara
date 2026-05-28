@@ -1,5 +1,7 @@
 package dev.capylang;
 
+import capy.lang.Program;
+import dev.capylang.cli.CapyCliHost;
 import dev.capylang.compiler.OutputType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -11,6 +13,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.TreeSet;
 import java.util.zip.ZipFile;
 import javax.tools.ToolProvider;
@@ -27,16 +30,36 @@ class CapyTest {
     @TempDir
     Path tempDir;
 
+    private static int execute(String[] args, PrintStream out, PrintStream err) {
+        var originalOut = System.out;
+        var originalErr = System.err;
+        try {
+            System.setOut(out);
+            System.setErr(err);
+            return exitCode(Capy.execute(Arrays.asList(args)).unsafeRun());
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
+    }
+
+    private static int exitCode(Program program) {
+        if (program instanceof Program.Failed failed) {
+            return failed.exit_code();
+        }
+        return 0;
+    }
+
     @Test
     void shouldPrintVersion() {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(new String[]{"--version"}, new PrintStream(stdout), new PrintStream(stderr));
+        var exitCode = execute(new String[]{"--version"}, new PrintStream(stdout), new PrintStream(stderr));
 
         assertEquals(0, exitCode, stderr.toString());
         assertEquals("", stderr.toString().trim());
-        assertEquals("Capybara compiler version: " + Capy.readCompilerVersion(), stdout.toString().trim());
+        assertEquals("Capybara compiler version: " + CapyCliHost.readCompilerVersion(), stdout.toString().trim());
     }
 
     @Test
@@ -44,12 +67,12 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(new String[]{"--help"}, new PrintStream(stdout), new PrintStream(stderr));
+        var exitCode = execute(new String[]{"--help"}, new PrintStream(stdout), new PrintStream(stderr));
 
         assertEquals(0, exitCode);
         assertEquals("", stderr.toString().trim());
         var text = stdout.toString();
-        assertTrue(text.startsWith("Capybara compiler version: " + Capy.readCompilerVersion()));
+        assertTrue(text.startsWith("Capybara compiler version: " + CapyCliHost.readCompilerVersion()));
         assertTrue(text.contains("capy compile"));
         assertTrue(text.contains("capy compile-generate"));
         assertTrue(text.contains("capy generate"));
@@ -66,7 +89,7 @@ class CapyTest {
         Files.writeString(libSourceDir.resolve("lib").resolve("Lib.cfun"), "fun value(): int = 41\n");
         var libOutputDir = Files.createDirectories(tempDir.resolve("lib-linked"));
 
-        var compileLibs = Capy.execute(
+        var compileLibs = execute(
                 new String[]{"compile", "-i", libSourceDir.toString(), "-o", libOutputDir.toString(), "--log", "debug"},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -81,7 +104,7 @@ class CapyTest {
         );
         var appOutputDir = Files.createDirectories(tempDir.resolve("app-linked"));
 
-        var compileApp = Capy.execute(
+        var compileApp = execute(
                 new String[]{
                         "compile",
                         "-i", appSourceDir.toString(),
@@ -108,7 +131,7 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("foo").resolve("notes.txt"), "ignored\n");
         var outputDir = Files.createDirectories(tempDir.resolve("mixed-source-output"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", outputDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -137,7 +160,7 @@ class CapyTest {
                 """);
         var linkedDir = Files.createDirectories(tempDir.resolve("annotation-linked-output"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -150,7 +173,7 @@ class CapyTest {
         assertTrue(first.contains("\"packageName\" : \"Main\""));
         assertTrue(first.contains("\"packagePath\" : \"foo\""));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -168,7 +191,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "compile",
                         "-i", sourceDir.toString(),
@@ -195,7 +218,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -237,7 +260,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "compile",
                         "-i", sourceDir.toString(),
@@ -280,7 +303,7 @@ class CapyTest {
                 }
                 """);
 
-        var manifest = Capy.readNativeProviderManifest(manifestFile);
+        var manifest = CapyCliHost.readNativeProviderManifest(manifestFile);
         var provider = manifest.providers().getFirst();
 
         assertEquals("constructor", provider.javaBinding().factory());
@@ -312,7 +335,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", tempDir.resolve("native-duplicate-output").toString()},
                 new PrintStream(stdout),
                 new PrintStream(stderr)
@@ -330,7 +353,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "generate",
                         "java",
@@ -364,7 +387,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", tempDir.resolve("generated").toString()},
                 new PrintStream(stdout),
                 new PrintStream(stderr)
@@ -390,7 +413,7 @@ class CapyTest {
         var linkedDir = tempDir.resolve("oo-source-linked");
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.compileGenerate(
+        var exitCode = CapyCliHost.compileGenerate(
                 OutputType.JAVA,
                 sourceDir,
                 generatedDir,
@@ -428,7 +451,7 @@ class CapyTest {
         var linkedDir = tempDir.resolve("mixed-oo-functional-linked");
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.compileGenerate(
+        var exitCode = CapyCliHost.compileGenerate(
                 OutputType.JAVA,
                 sourceDir,
                 generatedDir,
@@ -456,7 +479,7 @@ class CapyTest {
         var generatedDir = tempDir.resolve("compile-generate-direct-output");
         var linkedDir = tempDir.resolve("compile-generate-direct-linked");
 
-        var exitCode = Capy.compileGenerate(
+        var exitCode = CapyCliHost.compileGenerate(
                 OutputType.JAVA,
                 sourceDir,
                 generatedDir,
@@ -513,7 +536,7 @@ class CapyTest {
         var linkedDir = tempDir.resolve("compile-generate-native-linked");
         var regeneratedDir = tempDir.resolve("compile-generate-native-regenerated");
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -528,7 +551,7 @@ class CapyTest {
 
         assertEquals(0, exitCode);
         assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
-        var program = Capy.readLinkedProgram(linkedDir, true);
+        var program = CapyCliHost.readLinkedProgram(linkedDir, true);
         assertTrue(program.nativeProviders().providers().isEmpty());
         assertEquals(1, program.nativeProviderCatalog().declarations().size());
         assertEquals(1, program.nativeProviderCatalog().bindings().size());
@@ -539,7 +562,7 @@ class CapyTest {
         assertNull(binding.javascriptBinding());
         assertNull(binding.pythonBinding());
 
-        var generateExit = Capy.execute(
+        var generateExit = execute(
                 new String[]{
                         "generate",
                         "java",
@@ -566,7 +589,7 @@ class CapyTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", outputDir.toString()},
                 new PrintStream(stdout),
                 new PrintStream(stderr)
@@ -586,7 +609,7 @@ class CapyTest {
         var staleFile = Files.createDirectories(linkedDir.resolve("stale")).resolve("Old.json");
         Files.writeString(staleFile, "{}");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -606,7 +629,7 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("foo").resolve("Extra.cfun"), "fun extra(): int = 2\n");
         var linkedDir = Files.createDirectories(tempDir.resolve("manifest-linked-output"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -618,7 +641,7 @@ class CapyTest {
         Files.delete(sourceDir.resolve("foo").resolve("Extra.cfun"));
         Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -636,7 +659,7 @@ class CapyTest {
         Files.writeString(libSourceDir.resolve("lib").resolve("Lib.cfun"), "fun value(): int = 41\n");
         var libOutputDir = Files.createDirectories(tempDir.resolve("aggregated-lib-linked"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", libSourceDir.toString(), "-o", libOutputDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -653,7 +676,7 @@ class CapyTest {
         );
         var appOutputDir = Files.createDirectories(tempDir.resolve("aggregated-app-linked"));
 
-        var compileApp = Capy.execute(
+        var compileApp = execute(
                 new String[]{
                         "compile",
                         "-i", appSourceDir.toString(),
@@ -675,7 +698,7 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
         var linkedDir = Files.createDirectories(tempDir.resolve("stable-linked-output"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -692,7 +715,7 @@ class CapyTest {
 
         Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -712,7 +735,7 @@ class CapyTest {
         Files.writeString(sourceFile, "fun main(): int = 1\n");
         var linkedDir = Files.createDirectories(tempDir.resolve("changed-linked-output"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -724,7 +747,7 @@ class CapyTest {
         Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
         Files.writeString(sourceFile, "fun main(): int = 1000\n");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -741,14 +764,14 @@ class CapyTest {
         var linkedDir = Files.createDirectories(tempDir.resolve("linked"));
         var generatedDir = tempDir.resolve("generated");
 
-        var compileExit = Capy.execute(
+        var compileExit = execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
         );
         assertEquals(0, compileExit);
 
-        var generateExit = Capy.execute(
+        var generateExit = execute(
                 new String[]{"generate", "Js", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -764,13 +787,13 @@ class CapyTest {
         var linkedDir = Files.createDirectories(tempDir.resolve("default-generate-linked"));
         var generatedDir = tempDir.resolve("default-generate-output");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
         ));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -786,13 +809,13 @@ class CapyTest {
         var linkedDir = Files.createDirectories(tempDir.resolve("skip-java-lib-linked"));
         var generatedDir = tempDir.resolve("skip-java-lib-output");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
         ));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"generate", "java", "--skip-java-lib", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -810,13 +833,13 @@ class CapyTest {
         var staleFile = Files.createDirectories(generatedDir.resolve("stale")).resolve("Old.java");
         Files.writeString(staleFile, "class Old {}");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
         ));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"generate", "java", "--skip-java-lib", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -835,13 +858,13 @@ class CapyTest {
         var linkedDir = Files.createDirectories(tempDir.resolve("stable-generate-linked"));
         var generatedDir = Files.createDirectories(tempDir.resolve("stable-generate-output"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
         ));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -856,7 +879,7 @@ class CapyTest {
 
         Thread.sleep(FILE_TIMESTAMP_TICK_MILLIS);
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -876,7 +899,7 @@ class CapyTest {
                 """);
         var libLinkedDir = Files.createDirectories(tempDir.resolve("compile-generate-lib-linked"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", libSourceDir.toString(), "-o", libLinkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -900,7 +923,7 @@ class CapyTest {
                 """);
         var generatedDir = tempDir.resolve("compile-generate-test-output");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -930,7 +953,7 @@ class CapyTest {
         var generatedDir = tempDir.resolve("compile-generate-output");
         var linkedDir = Files.createDirectories(tempDir.resolve("compile-generate-linked"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -979,7 +1002,7 @@ class CapyTest {
         var linkedMainDir = Files.createDirectories(tempDir.resolve("compile-generate-main-linked"));
         var generatedTestDir = tempDir.resolve("compile-generate-main-test-output");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -1056,7 +1079,7 @@ class CapyTest {
         var generatedTestDir = tempDir.resolve("native-test-output");
         var stderr = new ByteArrayOutputStream();
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -1101,7 +1124,7 @@ class CapyTest {
 
         var generatedDir = tempDir.resolve("compile-generate-shared-output");
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{
                         "compile-generate",
                         "java",
@@ -1140,7 +1163,7 @@ class CapyTest {
                 """);
         var linkedDir = Files.createDirectories(tempDir.resolve("test-linked"));
 
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "--compile-tests", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -1157,7 +1180,7 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
         var linkedDir = Files.createDirectories(tempDir.resolve("no-tests-linked"));
         var stderr = new ByteArrayOutputStream();
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{"compile", "--compile-tests", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(stderr)
@@ -1242,7 +1265,7 @@ class CapyTest {
     }
 
     private static boolean isTestMethod(java.lang.reflect.Method method) throws Exception {
-        var isTestMethod = Capy.class.getDeclaredMethod("isTestMethod", java.lang.reflect.Method.class);
+        var isTestMethod = CapyCliHost.class.getDeclaredMethod("isTestMethod", java.lang.reflect.Method.class);
         isTestMethod.setAccessible(true);
         return (Boolean) isTestMethod.invoke(null, method);
     }
@@ -1264,7 +1287,7 @@ class CapyTest {
         var sourceDir = Files.createDirectories(tempDir.resolve("source"));
         Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
         var linkedDir = Files.createDirectories(tempDir.resolve("linked"));
-        assertEquals(0, Capy.execute(
+        assertEquals(0, execute(
                 new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
                 new PrintStream(new ByteArrayOutputStream()),
                 new PrintStream(new ByteArrayOutputStream())
@@ -1281,7 +1304,7 @@ class CapyTest {
                 license: Apache-2.0
                 """);
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "package",
                         "-ci", linkedDir.toString(),
@@ -1302,8 +1325,8 @@ class CapyTest {
             var moduleYaml = new String(zip.getInputStream(zip.getEntry("capy.yml")).readAllBytes());
             assertTrue(moduleYaml.contains("version: 1.2.3"));
             assertTrue(moduleYaml.contains("license: GPLv2"));
-            assertTrue(moduleYaml.contains("capybara_compiler_version: '" + Capy.readCompilerVersion() + "'")
-                    || moduleYaml.contains("capybara_compiler_version: " + Capy.readCompilerVersion()));
+            assertTrue(moduleYaml.contains("capybara_compiler_version: '" + CapyCliHost.readCompilerVersion() + "'")
+                    || moduleYaml.contains("capybara_compiler_version: " + CapyCliHost.readCompilerVersion()));
             assertTrue(moduleYaml.contains("build_date_time:"));
             assertTrue(moduleYaml.contains("os:"));
         }
@@ -1319,7 +1342,7 @@ class CapyTest {
         var moduleFile = moduleDir.resolve("capy.yml");
         Files.writeString(moduleFile, "version: 1.0.0\nlicense: MIT\n");
 
-        var exitCode = Capy.execute(
+        var exitCode = execute(
                 new String[]{
                         "package",
                         "-i", sourceDir.toString(),

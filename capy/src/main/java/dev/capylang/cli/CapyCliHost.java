@@ -1,4 +1,4 @@
-package dev.capylang;
+package dev.capylang.cli;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,7 +54,6 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -73,8 +72,8 @@ import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
 
-public class Capy {
-    private static final Logger log = Logger.getLogger(Capy.class.getName());
+public final class CapyCliHost {
+    private static final Logger log = Logger.getLogger(CapyCliHost.class.getName());
 
     private static final String BUILD_INFO_FILE = "build-info.json";
     private static final String OUTPUT_MANIFEST_FILE = ".capy-output-manifest";
@@ -94,22 +93,123 @@ public class Capy {
     private static final ObjectMapper NATIVE_MANIFEST_OBJECT_MAPPER = createNativeManifestObjectMapper();
     private static final ObjectWriter PRETTY_JSON_WRITER = METADATA_OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
 
-    public static void main(String[] args) {
-        System.exit(execute(args, System.out, System.err));
+    public static String hostReadCompilerVersion() {
+        return readCompilerVersion();
     }
 
-    static int execute(String[] args, PrintStream out, PrintStream err) {
-        try {
-            return executeOrThrow(args, out, err);
+    public static String hostNormalizeToken(String value) {
+        return value.toLowerCase(Locale.ROOT);
+    }
+
+    public static boolean hostStartsWith(String value, String prefix) {
+        return value.startsWith(prefix);
+    }
+
+    public static String hostDropPrefix(String value, String prefix) {
+        return value.startsWith(prefix) ? value.substring(prefix.length()) : value;
+    }
+
+    public static boolean hostIsBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    public static String hostNewLine() {
+        return System.lineSeparator();
+    }
+
+    public static String hostWriteStdout(String text) {
+        System.out.print(text);
+        return text;
+    }
+
+    public static String hostWriteStderr(String text) {
+        System.err.print(text);
+        return text;
+    }
+
+    public static dev.capylang.Capy.CommandResult hostCompile(dev.capylang.Capy.CompileRequest request) {
+        return runHostWorkflow(request.log_level(), err -> compile(
+                Path.of(request.input()),
+                Path.of(request.output()),
+                readLibraryModules(request.libs()),
+                request.compile_tests(),
+                readNativeProviderManifest(optionalHostPath(request.native_wiring())),
+                err,
+                request.compiler_version()
+        ));
+    }
+
+    public static dev.capylang.Capy.CommandResult hostGenerate(dev.capylang.Capy.GenerateRequest request) {
+        return runHostWorkflow(request.log_level(), err -> generate(
+                parseOutputType(request.output_type()),
+                Path.of(request.input()),
+                Path.of(request.output()),
+                request.include_java_lib_resources(),
+                err
+        ));
+    }
+
+    public static dev.capylang.Capy.CommandResult hostCompileGenerate(dev.capylang.Capy.CompileGenerateRequest request) {
+        return runHostWorkflow(request.log_level(), err -> compileGenerate(
+                parseOutputType(request.output_type()),
+                Path.of(request.input()),
+                Path.of(request.output()),
+                optionalHostPath(request.linked_output()),
+                optionalHostPath(request.test_input()),
+                optionalHostPath(request.test_output()),
+                readLibraryModules(request.libs()),
+                request.compile_tests(),
+                request.include_java_lib_resources(),
+                readNativeProviderManifest(optionalHostPath(request.native_wiring())),
+                request.compiler_version(),
+                err
+        ));
+    }
+
+    public static dev.capylang.Capy.CommandResult hostPackage(dev.capylang.Capy.PackageRequest request) {
+        return runHostWorkflow(request.log_level(), err -> packageCode(
+                new PackageOptions(
+                        optionalHostPath(request.compiled_input()),
+                        optionalHostPath(request.input()),
+                        Path.of(request.module()),
+                        capyOverrides(request.capy_override_keys(), request.capy_override_values()),
+                        parseLogLevel(request.log_level())
+                ),
+                err
+        ));
+    }
+
+    private static dev.capylang.Capy.CommandResult runHostWorkflow(String logLevel, HostWorkflow workflow) {
+        var stderr = new java.io.ByteArrayOutputStream();
+        try (var err = new PrintStream(stderr)) {
+            configureLogging(parseLogLevel(logLevel));
+            var exitCode = workflow.run(err);
+            return new dev.capylang.Capy.CommandResult(exitCode, "", stderr.toString());
         } catch (CliException e) {
-            err.println(e.getMessage());
-            return EXIT_USAGE;
+            return new dev.capylang.Capy.CommandResult(EXIT_USAGE, "", e.getMessage() + System.lineSeparator());
         } catch (Exception e) {
             var message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
-            err.println(message);
             log.log(Level.SEVERE, message, e);
-            return EXIT_FAILURE;
+            return new dev.capylang.Capy.CommandResult(EXIT_FAILURE, "", message + System.lineSeparator());
         }
+    }
+
+    private static Path optionalHostPath(String value) {
+        return value == null || value.isBlank() ? null : Path.of(value);
+    }
+
+    private static Map<String, String> capyOverrides(List<String> keys, List<String> values) {
+        var overrides = new LinkedHashMap<String, String>();
+        for (var i = 0; i < keys.size(); i++) {
+            var value = i < values.size() ? values.get(i) : "";
+            overrides.put(keys.get(i), value);
+        }
+        return overrides;
+    }
+
+    @FunctionalInterface
+    private interface HostWorkflow {
+        int run(PrintStream err) throws Exception;
     }
 
     public static int compile(Path input, Path linkedOutputDir, TreeSet<CompiledModule> libraries, PrintStream err) {
@@ -299,281 +399,7 @@ public class Capy {
         }
     }
 
-    private static int executeOrThrow(String[] args, PrintStream out, PrintStream err) throws IOException {
-        if (args.length == 0) {
-            throw new CliException(helpText());
-        }
-
-        if (isVersionCommand(args[0])) {
-            out.println(versionText());
-            return EXIT_SUCCESS;
-        }
-        if (isHelpCommand(args[0])) {
-            out.println(versionText());
-            out.println();
-            out.println(helpText());
-            return EXIT_SUCCESS;
-        }
-
-        var command = args[0].toLowerCase(Locale.ROOT);
-        return switch (command) {
-            case "compile" -> executeCompile(Arrays.copyOfRange(args, 1, args.length), err);
-            case "compile-generate" -> executeCompileGenerate(Arrays.copyOfRange(args, 1, args.length), err);
-            case "generate" -> executeGenerate(Arrays.copyOfRange(args, 1, args.length), err);
-            case "package" -> executePackage(Arrays.copyOfRange(args, 1, args.length), err);
-            default -> throw new CliException("Unknown command `" + args[0] + "`.\n\n" + helpText());
-        };
-    }
-
-    private static boolean isVersionCommand(String arg) {
-        return "-v".equals(arg) || "--version".equals(arg);
-    }
-
-    private static boolean isHelpCommand(String arg) {
-        return "-h".equals(arg) || "--help".equals(arg);
-    }
-
-    private static int executeCompile(String[] args, PrintStream err) {
-        var options = parseNamedOptions(args, true, false, false, false);
-        configureLogging(options.logLevel());
-
-        var input = requiredPath(options.values(), "input", "compile");
-        var output = requiredPath(options.values(), "output", "compile");
-        var libraries = readLibraryModules(options.values().get("libs"));
-        var compileTests = options.values().containsKey("compile-tests");
-        var nativeProviders = readNativeProviderManifest(optionalPath(options.values(), "native-wiring"));
-
-        return compile(input, output, libraries, compileTests, nativeProviders, err, readCompilerVersion());
-    }
-
-    private static int executeCompileGenerate(String[] args, PrintStream err) {
-        if (args.length == 0) {
-            throw new CliException("Missing output type for `compile-generate`.\n\n" + helpText());
-        }
-
-        var outputType = parseOutputType(args[0]);
-        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), true, true, true, true);
-        configureLogging(options.logLevel());
-
-        var input = requiredPath(options.values(), "input", "compile-generate");
-        var output = requiredPath(options.values(), "output", "compile-generate");
-        var linkedOutput = optionalPath(options.values(), "linked-output");
-        var testInput = optionalPath(options.values(), "test-input");
-        var testOutput = optionalPath(options.values(), "test-output");
-        var libraries = readLibraryModules(options.values().get("libs"));
-        var compileTests = options.values().containsKey("compile-tests");
-        var includeJavaLibResources = !options.values().containsKey("skip-java-lib");
-        var nativeProviders = readNativeProviderManifest(optionalPath(options.values(), "native-wiring"));
-
-        return compileGenerate(
-                outputType,
-                input,
-                output,
-                linkedOutput,
-                testInput,
-                testOutput,
-                libraries,
-                compileTests,
-                includeJavaLibResources,
-                nativeProviders,
-                readCompilerVersion(),
-                err
-        );
-    }
-
-    private static int executeGenerate(String[] args, PrintStream err) {
-        if (args.length == 0) {
-            throw new CliException("Missing output type for `generate`.\n\n" + helpText());
-        }
-
-        var outputType = parseOutputType(args[0]);
-        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), false, true, false, false);
-        configureLogging(options.logLevel());
-
-        var input = options.values().containsKey("input") ? Path.of(options.values().get("input")) : Path.of(".");
-        var output = requiredPath(options.values(), "output", "generate");
-        var includeJavaLibResources = !options.values().containsKey("skip-java-lib");
-        return generate(outputType, input, output, includeJavaLibResources, err);
-    }
-
-    private static int executePackage(String[] args, PrintStream err) {
-        var options = parsePackageOptions(args);
-        configureLogging(options.logLevel());
-        return packageCode(options, err);
-    }
-
-    private static NamedOptions parseNamedOptions(
-            String[] args,
-            boolean allowLibs,
-            boolean allowSkipJavaLib,
-            boolean allowLinkedOutput,
-            boolean allowTestOutputs
-    ) {
-        var values = new LinkedHashMap<String, String>();
-        var logLevel = Level.INFO;
-
-        for (int i = 0; i < args.length; i++) {
-            var arg = args[i];
-            switch (arg) {
-                case "--log" -> {
-                    var value = nextValue(args, i, arg);
-                    logLevel = parseLogLevel(value);
-                    i++;
-                }
-                case "-i", "--input" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("input", value);
-                    i++;
-                }
-                case "-o", "--output" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("output", value);
-                    i++;
-                }
-                case "--linked-output" -> {
-                    if (!allowLinkedOutput) {
-                        throw new CliException("Option `" + arg + "` is supported only for `compile-generate`.");
-                    }
-                    var value = nextValue(args, i, arg);
-                    values.put("linked-output", value);
-                    i++;
-                }
-                case "--test-input", "--test-output" -> {
-                    if (!allowTestOutputs) {
-                        throw new CliException("Option `" + arg + "` is supported only for `compile-generate`.");
-                    }
-                    var value = nextValue(args, i, arg);
-                    values.put(arg.substring(2), value);
-                    i++;
-                }
-                case "--type" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("type", value);
-                    i++;
-                }
-                case "--runtime" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("runtime", value);
-                    i++;
-                }
-                case "-l", "--libs" -> {
-                    if (!allowLibs) {
-                        throw new CliException("Option `" + arg + "` is supported only for `compile` and `compile-generate`.");
-                    }
-                    var value = nextValue(args, i, arg);
-                    values.put("libs", value);
-                    i++;
-                }
-                case "--native-wiring" -> {
-                    if (!allowLibs) {
-                        throw new CliException("Option `" + arg + "` is supported only for `compile` and `compile-generate`.");
-                    }
-                    var value = nextValue(args, i, arg);
-                    values.put("native-wiring", value);
-                    i++;
-                }
-                case "--compile-tests" -> {
-                    if (!allowLibs) {
-                        throw new CliException("Option `" + arg + "` is supported only for `compile` and `compile-generate`.");
-                    }
-                    values.put("compile-tests", "true");
-                }
-                case "--skip-java-lib" -> {
-                    if (!allowSkipJavaLib) {
-                        throw new CliException("Option `" + arg + "` is supported only for `generate` and `compile-generate`.");
-                    }
-                    values.put("skip-java-lib", "true");
-                }
-                default -> throw new CliException("Unknown option `" + arg + "`.\n\n" + helpText());
-            }
-        }
-
-        return new NamedOptions(values, logLevel);
-    }
-
-    private static PackageOptions parsePackageOptions(String[] args) {
-        var values = new LinkedHashMap<String, String>();
-        var capyOverrides = new LinkedHashMap<String, String>();
-        var logLevel = Level.INFO;
-
-        for (int i = 0; i < args.length; i++) {
-            var arg = args[i];
-            switch (arg) {
-                case "--log" -> {
-                    var value = nextValue(args, i, arg);
-                    logLevel = parseLogLevel(value);
-                    i++;
-                }
-                case "-ci", "--compiled-input" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("compiled-input", value);
-                    i++;
-                }
-                case "-i", "--input" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("input", value);
-                    i++;
-                }
-                case "-m", "--module" -> {
-                    var value = nextValue(args, i, arg);
-                    values.put("module", value);
-                    i++;
-                }
-                default -> {
-                    if (!arg.startsWith("--capy.")) {
-                        throw new CliException("Unknown option `" + arg + "`.\n\n" + helpText());
-                    }
-                    var value = nextValue(args, i, arg);
-                    capyOverrides.put(arg.substring("--capy.".length()), value);
-                    i++;
-                }
-            }
-        }
-
-        var compiledInput = values.containsKey("compiled-input") ? Path.of(values.get("compiled-input")) : null;
-        var input = values.containsKey("input") ? Path.of(values.get("input")) : null;
-        var module = requiredPath(values, "module", "package");
-        if (compiledInput == null && input == null) {
-            throw new CliException("Package requires either `--compiled-input` or `--input`.\n\n" + helpText());
-        }
-        if (compiledInput != null && input != null) {
-            throw new CliException("Package accepts only one of `--compiled-input` or `--input`.\n\n" + helpText());
-        }
-        return new PackageOptions(compiledInput, input, module, capyOverrides, logLevel);
-    }
-
-    private static String nextValue(String[] args, int index, String option) {
-        if (index + 1 >= args.length) {
-            throw new CliException("Missing value for `" + option + "`.");
-        }
-        return args[index + 1];
-    }
-
-    private static Path requiredPath(Map<String, String> values, String key, String command) {
-        var value = values.get(key);
-        if (value == null || value.isBlank()) {
-            throw new CliException("Missing required option `--" + key + "` for `" + command + "`.\n\n" + helpText());
-        }
-        return Path.of(value);
-    }
-
-    private static String requiredValue(Map<String, String> values, String key, String command) {
-        var value = values.get(key);
-        if (value == null || value.isBlank()) {
-            throw new CliException("Missing required option `--" + key + "` for `" + command + "`.\n\n" + helpText());
-        }
-        return value;
-    }
-
-    private static Path optionalPath(Map<String, String> values, String key) {
-        var value = values.get(key);
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return Path.of(value);
-    }
-
-    static NativeProviderManifest readNativeProviderManifest(Path manifestFile) {
+    public static NativeProviderManifest readNativeProviderManifest(Path manifestFile) {
         if (manifestFile == null) {
             return NativeProviderManifest.empty();
         }
@@ -786,11 +612,11 @@ public class Capy {
         return new NativeProviderManifest(providers, manifest.sourceFile());
     }
 
-    static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
+    public static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
         return compileSources(input, libraries, compileTests, NativeProviderManifest.empty(), err);
     }
 
-    static CompilationArtifacts compileSources(
+    public static CompilationArtifacts compileSources(
             Path input,
             TreeSet<CompiledModule> libraries,
             boolean compileTests,
@@ -802,13 +628,17 @@ public class Capy {
         log.info("Compiling files from: " + input);
         var rawModuleBuildStartedAt = System.nanoTime();
         var rawModules = listSourceFiles(input).stream()
-                .map(Capy::buildModule)
+                .map(CapyCliHost::buildModule)
                 .toList();
         log.info("Built " + rawModules.size() + " raw modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - rawModuleBuildStartedAt));
 
+        var sourceModules = rawModules.stream()
+                .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
+                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
+        var compilerLibraries = mergeBundledLibraries(libraries, sourceModules);
         var nativeImplementationProviders = NativeImplementationScanner.scan(input);
         var linkingStartedAt = System.nanoTime();
-        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries, nativeProviders, nativeImplementationProviders);
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, compilerLibraries, nativeProviders, nativeImplementationProviders);
         log.info("Linked " + rawModules.size() + " modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - linkingStartedAt));
         if (linking instanceof Result.Error<CompiledProgram> error) {
             err.println("Compilation failed with " + error.errors().size() + " error(s):");
@@ -822,25 +652,36 @@ public class Capy {
         if (compileTests) {
             log.info("Prepared compiled tests for " + input + " in " + Duration.ofNanos(System.nanoTime() - testAugmentationStartedAt));
         }
-        var sourceModules = rawModules.stream()
-                .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
-                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
         if (compileTests) {
             sourceModules.add(CAP_TEST_RUNTIME_MODULE);
         }
         return new CompilationArtifacts(outputProgram, List.copyOf(sourceModules));
     }
 
-    static void writeCompilationOutput(Path outputDir, CompilationArtifacts compilation, String compilerVersion) {
+    private static TreeSet<CompiledModule> mergeBundledLibraries(TreeSet<CompiledModule> libraries, Set<ModuleRef> sourceModules) {
+        var merged = new TreeSet<>(libraries);
+        var explicitLibraries = libraries.stream()
+                .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
+                .collect(java.util.stream.Collectors.toSet());
+        for (var module : readBundledLinkedModules()) {
+            var ref = new ModuleRef(module.name(), normalizeModulePath(module.path()));
+            if (!sourceModules.contains(ref) && !explicitLibraries.contains(ref)) {
+                merged.add(module);
+            }
+        }
+        return merged;
+    }
+
+    public static void writeCompilationOutput(Path outputDir, CompilationArtifacts compilation, String compilerVersion) {
         writeLinkedModules(outputDir, compilation.program());
         writeBuildInfo(outputDir, compilerVersion, compilation.sourceModules());
     }
 
-    static void generateCompiledProgram(OutputType outputType, Path generatedOutputDir, CompilationArtifacts compilation) throws IOException {
+    public static void generateCompiledProgram(OutputType outputType, Path generatedOutputDir, CompilationArtifacts compilation) throws IOException {
         generateCompiledProgram(outputType, generatedOutputDir, compilation, true);
     }
 
-    static void generateCompiledProgram(
+    public static void generateCompiledProgram(
             OutputType outputType,
             Path generatedOutputDir,
             CompilationArtifacts compilation,
@@ -866,7 +707,7 @@ public class Capy {
         log.info("Copying bundled java-lib sources to: " + generatedOutputDir);
         var startedAt = System.nanoTime();
         try {
-            var resourceUri = Capy.class.getResource(JAVA_LIB_RESOURCE_DIR).toURI();
+            var resourceUri = CapyCliHost.class.getResource(JAVA_LIB_RESOURCE_DIR).toURI();
             if ("jar".equals(resourceUri.getScheme())) {
                 try (var openedFileSystem = openJarResourceFileSystem(resourceUri)) {
                     var copiedFiles = copyDirectoryContents(openedFileSystem.fileSystem().getPath(JAVA_LIB_RESOURCE_DIR), generatedOutputDir);
@@ -1015,7 +856,7 @@ public class Capy {
                 .distinct()
                 .toList();
 
-        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()}, Capy.class.getClassLoader())) {
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()}, CapyCliHost.class.getClassLoader())) {
             var results = new java.util.ArrayList<SuiteResult>();
             for (var className : classNames) {
                 var type = classLoader.loadClass(className);
@@ -1153,7 +994,7 @@ public class Capy {
     private static SuiteResult toSuiteResult(Object suiteResult) {
         var suite = (String) invokeAccessor(suiteResult, "suite");
         var testResults = ((List<?>) invokeAccessor(suiteResult, "results")).stream()
-                .map(Capy::toTestResult)
+                .map(CapyCliHost::toTestResult)
                 .toList();
         return new SuiteResult(suite, testResults);
     }
@@ -1169,8 +1010,8 @@ public class Capy {
     private static List<SuiteResult> toSuiteResultsFromSuites(Object testSuites) {
         var modules = (List<?>) invokeAccessor(testSuites, "modules");
         return modules.stream()
-                .filter(Capy::isTestFileObject)
-                .map(Capy::toSuiteResultFromTestFile)
+                .filter(CapyCliHost::isTestFileObject)
+                .map(CapyCliHost::toSuiteResultFromTestFile)
                 .toList();
     }
 
@@ -1257,7 +1098,7 @@ public class Capy {
     private static String renderJUnitSuite(SuiteResult suiteResult) {
         var failures = suiteResult.results().stream().filter(test -> !test.passed()).count();
         var testcases = suiteResult.results().stream()
-                .map(Capy::renderJUnitTestCase)
+                .map(CapyCliHost::renderJUnitTestCase)
                 .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                + "<testsuite name=\"" + xmlEscape(suiteResult.suite()) + "\" tests=\"" + suiteResult.results().size()
@@ -1451,7 +1292,7 @@ public class Capy {
                         .map(String::trim)
                         .filter(line -> !line.isEmpty())
                         .map(Path::of)
-                        .map(Capy::normalizeRelativeOutputPath)
+                        .map(CapyCliHost::normalizeRelativeOutputPath)
                         .filter(path -> !expectedFiles.contains(path))
                         .map(outputDir::resolve)
                         .toList();
@@ -1475,8 +1316,8 @@ public class Capy {
             Files.createDirectories(parent);
         }
         var manifestContents = expectedFiles.stream()
-                .map(Capy::normalizeRelativeOutputPath)
-                .map(Capy::normalizeRelativeOutputPathString)
+                .map(CapyCliHost::normalizeRelativeOutputPath)
+                .map(CapyCliHost::normalizeRelativeOutputPathString)
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
         writeStringIfChanged(
@@ -1637,7 +1478,7 @@ public class Capy {
 
     private static CompiledExpression buildGatherTestsExpression(List<TestFunctionRef> testFunctions) {
         return testFunctions.stream()
-                .map(Capy::toGatherTestsExpression)
+                .map(CapyCliHost::toGatherTestsExpression)
                 .reduce((left, right) -> new CompiledInfixExpression(left, InfixOperator.PLUS, right, gatheredTestValuesType()))
                 .orElseGet(() -> new CompiledNewList(List.of(), gatheredTestValuesType()));
     }
@@ -1850,8 +1691,8 @@ public class Capy {
         return mapper;
     }
 
-    static String readCompilerVersion() {
-        try (InputStream stream = Capy.class.getResourceAsStream(VERSION_RESOURCE)) {
+    public static String readCompilerVersion() {
+        try (InputStream stream = CapyCliHost.class.getResourceAsStream(VERSION_RESOURCE)) {
             if (stream == null) {
                 throw new IllegalStateException("Missing version resource: " + VERSION_RESOURCE);
             }
@@ -1895,7 +1736,7 @@ public class Capy {
         return new Yaml(loaderOptions, dumperOptions);
     }
 
-    static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
+    public static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
         var programFile = linkedInputDir.resolve(PROGRAM_FILE);
         if (Files.isRegularFile(programFile)) {
             var program = readLinkedProgramFile(programFile);
@@ -1909,7 +1750,7 @@ public class Capy {
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
                     .filter(path -> !path.getFileName().toString().equals(BUILD_INFO_FILE))
-                    .map(Capy::readLinkedModule)
+                    .map(CapyCliHost::readLinkedModule)
                     .toList();
             if (requireModules && modules.isEmpty()) {
                 throw new CliException("Missing linked module files in directory: " + linkedInputDir);
@@ -1930,27 +1771,24 @@ public class Capy {
 
     private static List<CompiledModule> readBundledLinkedModules() {
         try {
-            var resource = Capy.class.getResource("/capy");
-            if (resource == null) {
-                return List.of();
-            }
-            var resourceUri = resource.toURI();
-            if ("jar".equals(resourceUri.getScheme())) {
-                try (var fileSystem = findOrCreateFileSystem(resourceUri)) {
-                    return readBundledLinkedModules(fileSystem.getPath("/capy"));
+            var modules = new TreeSet<CompiledModule>();
+            var classLoader = CapyCliHost.class.getClassLoader();
+            var resources = classLoader == null
+                    ? ClassLoader.getSystemResources("capy")
+                    : classLoader.getResources("capy");
+            while (resources.hasMoreElements()) {
+                var resourceUri = resources.nextElement().toURI();
+                if ("jar".equals(resourceUri.getScheme())) {
+                    try (var fileSystem = openJarResourceFileSystem(resourceUri)) {
+                        modules.addAll(readBundledLinkedModules(fileSystem.fileSystem().getPath("/capy")));
+                    }
+                } else {
+                    modules.addAll(readBundledLinkedModules(Path.of(resourceUri)));
                 }
             }
-            return readBundledLinkedModules(Path.of(resourceUri));
+            return List.copyOf(modules);
         } catch (URISyntaxException | IOException e) {
             throw new UncheckedIOException("Unable to read bundled linked Capybara libraries", e instanceof IOException io ? io : new IOException(e));
-        }
-    }
-
-    private static java.nio.file.FileSystem findOrCreateFileSystem(java.net.URI resourceUri) throws IOException {
-        try {
-            return FileSystems.newFileSystem(resourceUri, Map.of());
-        } catch (java.nio.file.FileSystemAlreadyExistsException ignored) {
-            return FileSystems.getFileSystem(resourceUri);
         }
     }
 
@@ -1959,7 +1797,7 @@ public class Capy {
             return files
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
-                    .map(Capy::readLinkedModule)
+                    .map(CapyCliHost::readLinkedModule)
                     .toList();
         }
     }
@@ -1994,7 +1832,7 @@ public class Capy {
         try (var stream = Files.walk(directory)) {
             return stream
                     .filter(Files::isRegularFile)
-                    .filter(Capy::isCapybaraSourceFile)
+                    .filter(CapyCliHost::isCapybaraSourceFile)
                     .map(path -> new SourceFile(directory, path))
                     .toList();
         } catch (IOException e) {
@@ -2030,9 +1868,6 @@ public class Capy {
     private record SourceFile(Path rootPath, Path path) {
     }
 
-    private record NamedOptions(Map<String, String> values, Level logLevel) {
-    }
-
     private record PackageOptions(
             Path compiledInput,
             Path input,
@@ -2049,7 +1884,7 @@ public class Capy {
     ) {
     }
 
-    private record ModuleRef(String name, String path) implements Comparable<ModuleRef> {
+    public record ModuleRef(String name, String path) implements Comparable<ModuleRef> {
         @Override
         public int compareTo(ModuleRef other) {
             var byPath = path.compareTo(other.path);
@@ -2072,6 +1907,6 @@ public class Capy {
     private record NativeProviderBindingKey(String interfaceId, String qualifier) {
     }
 
-    record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
+    public record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }

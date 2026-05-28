@@ -119,10 +119,7 @@ dependencies {
 
 class CapyRuntimeBridge implements Closeable {
     private final URLClassLoader classLoader
-    private final def readLinkedProgramMethod
-    private final def compileMethod
-    private final def compileGenerateMethod
-    private final Class outputTypeClass
+    private final def executeMethod
     private def parseArgumentsMethod
     private def runTestsMethod
 
@@ -131,46 +128,14 @@ class CapyRuntimeBridge implements Closeable {
         classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
 
         def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
-        readLinkedProgramMethod = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
-        readLinkedProgramMethod.accessible = true
-        compileMethod = capyClass.getMethod(
-                'compile',
-                Path,
-                Path,
-                TreeSet,
-                Boolean.TYPE,
-                PrintStream,
-                String
-        )
-
-        outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-        compileGenerateMethod = capyClass.getMethod(
-                'compileGenerate',
-                outputTypeClass,
-                Path,
-                Path,
-                Path,
-                Path,
-                Path,
-                TreeSet,
-                Boolean.TYPE,
-                Boolean.TYPE,
-                String,
-                PrintStream
-        )
+        executeMethod = capyClass.getMethod('execute', List)
     }
 
-    TreeSet readLibraryModules(Set<File> libraryDirs) {
-        def modules = new TreeSet()
-        libraryDirs.each { libraryDir ->
+    Set<File> readLibraryModules(Set<File> libraryDirs) {
+        libraryDirs.findAll { libraryDir ->
             Path libraryPath = libraryDir.toPath()
-            if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
-                return
-            }
-            def program = readLinkedProgramMethod.invoke(null, libraryPath, false)
-            modules.addAll(program.modules())
-        }
-        modules
+            Files.exists(libraryPath) && Files.isDirectory(libraryPath)
+        } as Set<File>
     }
 
     int compile(
@@ -179,42 +144,63 @@ class CapyRuntimeBridge implements Closeable {
             Path generatedOutputPath,
             Path testInputPath,
             Path testGeneratedOutputPath,
-            TreeSet libraries,
+            Set<File> libraries,
             boolean compileTests,
             boolean includeJavaLibResources,
             String outputTypeName,
             String compilerVersion,
             PrintStream errors
     ) {
+        def args = []
         if (generatedOutputPath == null && testInputPath == null && testGeneratedOutputPath == null) {
-            return compileMethod.invoke(
-                    null,
-                    inputPath,
-                    linkedOutputPath,
-                    libraries,
-                    compileTests,
-                    errors,
-                    compilerVersion
-            ) as Integer
+            args.addAll([
+                    'compile',
+                    '-i', inputPath.toFile().absolutePath,
+                    '-o', linkedOutputPath.toFile().absolutePath
+            ])
+        } else {
+            args.addAll([
+                    'compile-generate',
+                    outputTypeName,
+                    '-i', inputPath.toFile().absolutePath,
+                    '-o', generatedOutputPath.toFile().absolutePath
+            ])
+            if (linkedOutputPath != null) {
+                args.addAll(['--linked-output', linkedOutputPath.toFile().absolutePath])
+            }
+            if (testInputPath != null && testGeneratedOutputPath != null) {
+                args.addAll(['--test-input', testInputPath.toFile().absolutePath])
+                args.addAll(['--test-output', testGeneratedOutputPath.toFile().absolutePath])
+            }
+            if (!includeJavaLibResources) {
+                args.add('--skip-java-lib')
+            }
         }
-        def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName }
-        if (outputType == null) {
-            throw new GradleException("Unknown Capybara output type: ${outputTypeName}")
+        if (!libraries.isEmpty()) {
+            args.addAll(['-l', libraries.collect { it.absolutePath }.join(',')])
         }
-        return compileGenerateMethod.invoke(
-                null,
-                outputType,
-                inputPath,
-                generatedOutputPath,
-                linkedOutputPath,
-                testInputPath,
-                testGeneratedOutputPath,
-                libraries,
-                compileTests,
-                includeJavaLibResources,
-                compilerVersion,
-                errors
-        ) as Integer
+        if (compileTests) {
+            args.add('--compile-tests')
+        }
+        runCapy(args, errors)
+    }
+
+    private int runCapy(List<String> args, PrintStream errors) {
+        def originalOut = System.out
+        def originalErr = System.err
+        def output = new ByteArrayOutputStream()
+        try {
+            System.setOut(new PrintStream(output))
+            System.setErr(errors)
+            def effect = executeMethod.invoke(null, [args] as Object[])
+            def program = effect.getClass().getMethod('unsafeRun').invoke(effect)
+            return program.getClass().simpleName == 'Failed'
+                    ? program.getClass().getMethod('exit_code').invoke(program) as Integer
+                    : 0
+        } finally {
+            System.setOut(originalOut)
+            System.setErr(originalErr)
+        }
     }
 
     int runTests(Path outputPath, String reportType, String logType, List<String> tests, boolean availableTests) {
@@ -445,7 +431,7 @@ def capyRuntimeDependencies = capyProject.configurations.runtimeClasspath.incomi
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
 def capyRuntimeClasspath = files(
-        capyProject.sourceSets.main.output.classesDirs,
+        capyProject.sourceSets.main.output,
         compilerProject.sourceSets.main.output.classesDirs,
         capyRuntimeDependencies
 )

@@ -126,95 +126,52 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @TaskAction
     void compileCapybara() {
         def errors = new ByteArrayOutputStream()
+        def output = new ByteArrayOutputStream()
         def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
         URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
+        def originalOut = System.out
+        def originalErr = System.err
         try {
             def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
-            def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
-            readLinkedProgram.accessible = true
-            def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-            def nativeProviderManifestClass = Class.forName('dev.capylang.compiler.NativeProviderManifest', true, classLoader)
-            def readNativeProviderManifest = capyClass.getDeclaredMethod('readNativeProviderManifest', Path)
-            readNativeProviderManifest.accessible = true
-            def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName.get() }
-            def compileGenerate = capyClass.getMethod(
-                    'compileGenerate',
-                    outputTypeClass,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    TreeSet,
-                    Boolean.TYPE,
-                    Boolean.TYPE,
-                    String,
-                    PrintStream
-            )
-            def compileGenerateWithNativeWiring = capyClass.getMethod(
-                    'compileGenerate',
-                    outputTypeClass,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    TreeSet,
-                    Boolean.TYPE,
-                    Boolean.TYPE,
-                    nativeProviderManifestClass,
-                    String,
-                    PrintStream
-            )
-
-            def libraries = new TreeSet()
-            additionalInputDirs.files.each { libraryDir ->
+            def execute = capyClass.getMethod('execute', List)
+            def args = [
+                    'compile-generate',
+                    outputTypeName.get(),
+                    '-i', inputDir.get().asFile.absolutePath,
+                    '-o', generatedOutputDir.get().asFile.absolutePath,
+                    '--linked-output', linkedOutputDir.get().asFile.absolutePath
+            ]
+            def libraryDirs = additionalInputDirs.files.findAll { libraryDir ->
                 Path libraryPath = libraryDir.toPath()
-                if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
-                    return
-                }
-                def program = readLinkedProgram.invoke(null, libraryPath, false)
-                libraries.addAll(program.modules())
+                Files.exists(libraryPath) && Files.isDirectory(libraryPath)
+            }
+            if (!libraryDirs.isEmpty()) {
+                args.addAll(['-l', libraryDirs.collect { it.absolutePath }.join(',')])
+            }
+            if (compileTests.getOrElse(false)) {
+                args.add('--compile-tests')
+            }
+            if (!includeJavaLibResources.getOrElse(true)) {
+                args.add('--skip-java-lib')
+            }
+            if (nativeWiringFile.present) {
+                args.addAll(['--native-wiring', nativeWiringFile.get().asFile.absolutePath])
             }
 
-            def nativeProviders = nativeWiringFile.present
-                    ? readNativeProviderManifest.invoke(null, nativeWiringFile.get().asFile.toPath())
-                    : null
-            def exitCode = nativeProviders == null
-                    ? compileGenerate.invoke(
-                            null,
-                            outputType,
-                            inputDir.get().asFile.toPath(),
-                            generatedOutputDir.get().asFile.toPath(),
-                            linkedOutputDir.get().asFile.toPath(),
-                            null,
-                            null,
-                            libraries,
-                            compileTests.getOrElse(false),
-                            includeJavaLibResources.getOrElse(true),
-                            compilerVersion.get(),
-                            new PrintStream(errors)
-                    ) as Integer
-                    : compileGenerateWithNativeWiring.invoke(
-                            null,
-                            outputType,
-                            inputDir.get().asFile.toPath(),
-                            generatedOutputDir.get().asFile.toPath(),
-                            linkedOutputDir.get().asFile.toPath(),
-                            null,
-                            null,
-                            libraries,
-                            compileTests.getOrElse(false),
-                            includeJavaLibResources.getOrElse(true),
-                            nativeProviders,
-                            compilerVersion.get(),
-                            new PrintStream(errors)
-                    ) as Integer
+            System.setOut(new PrintStream(output))
+            System.setErr(new PrintStream(errors))
+            def effect = execute.invoke(null, [args] as Object[])
+            def program = effect.getClass().getMethod('unsafeRun').invoke(effect)
+            def exitCode = program.getClass().simpleName == 'Failed'
+                    ? program.getClass().getMethod('exit_code').invoke(program) as Integer
+                    : 0
             if (exitCode != 0) {
                 def message = errors.toString().trim()
                 throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
             }
         } finally {
+            System.setOut(originalOut)
+            System.setErr(originalErr)
             classLoader.close()
         }
     }
