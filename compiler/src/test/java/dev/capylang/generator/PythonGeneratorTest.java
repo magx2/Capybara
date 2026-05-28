@@ -334,7 +334,7 @@ class PythonGeneratorTest {
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
                 .contains("import dev.capylang.capybara as capy")
-                .contains("from host_clock import SystemClock as __capy_provider_system_clock_class")
+                .contains("__capy_provider_system_clock_class = capy.require_native_provider_class(module_name='host_clock', class_name='SystemClock', metadata={")
                 .contains("_providers = capy.define_native_providers({")
                 .contains("interface_id='/Providers.Clock'")
                 .contains("qualifier='system'")
@@ -343,6 +343,32 @@ class PythonGeneratorTest {
                 .contains("{'name': 'now_millis', 'arity': 0}")
                 .contains("def system_clock():")
                 .contains("return _providers.resolve('/Providers.Clock', 'system', 'system_clock', 'python', '/ProvidersNative.cfun')");
+    }
+
+    @Test
+    void shouldFailPythonNativeProviderStartupWhenModuleIsMissing() throws Exception {
+        var generated = new PythonGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                pythonProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "nativeinterop.missing_clock",
+                        "SystemClock",
+                        "call"
+                )
+        ));
+        writeGenerated(generated);
+
+        var result = runPythonCommand("-c", "import dev.capylang.native_providers");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("NativeProviderError")
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("system_clock")
+                .contains("python")
+                .contains("nativeinterop.missing_clock");
     }
 
     @Test
@@ -470,7 +496,11 @@ class PythonGeneratorTest {
 
         assertThat(result.exitCode()).isNotZero();
         assertThat(result.stderr())
-                .contains("ImportError")
+                .contains("NativeProviderError")
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("system_clock")
+                .contains("python")
                 .contains("SystemClock")
                 .contains("nativeinterop.system_clock");
     }

@@ -223,7 +223,7 @@ class JavaScriptGeneratorTest {
                 .doesNotContain("SystemClock");
         assertThat(bootstrap.code())
                 .contains("const capy = require('./capybara.js');")
-                .contains("const __capy_provider_system_clock_module = capy.requireNativeProviderModule('host-clock', __filename);")
+                .contains("const __capy_provider_system_clock_module = capy.requireNativeProviderModule('host-clock', __filename, {")
                 .contains("const providers = capy.defineNativeProviders({")
                 .contains("exportExists: Object.prototype.hasOwnProperty.call(__capy_provider_system_clock_module, 'SystemClock')")
                 .contains("exportValue: __capy_provider_system_clock_module.SystemClock")
@@ -233,6 +233,32 @@ class JavaScriptGeneratorTest {
                 .contains("return providers.resolve('/Providers.Clock', 'system', 'system_clock', 'javascript', '/ProvidersNative.cfun');")
                 .contains("module.exports = {")
                 .doesNotContain("import ");
+    }
+
+    @Test
+    void shouldFailJavaScriptNativeProviderStartupWhenModuleIsMissing() throws Exception {
+        var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
+                "def now_millis(): long",
+                javascriptProviderBinding(
+                        "/Providers.Clock",
+                        "system",
+                        "../../nativeinterop/missing_clock.js",
+                        "SystemClock",
+                        "new"
+                )
+        ));
+        writeGenerated(generated);
+
+        var result = runNodeCommand("-e", "require('./dev/capylang/native_providers.js')");
+
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr())
+                .contains("NativeProviderError")
+                .contains("/Providers.Clock")
+                .contains("system")
+                .contains("system_clock")
+                .contains("javascript")
+                .contains("../../nativeinterop/missing_clock.js");
     }
 
     @Test

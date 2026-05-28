@@ -139,7 +139,9 @@ public final class JavaScriptGenerator implements Generator {
                     .append(nativeProviderModuleVariable(provider))
                     .append(" = capy.requireNativeProviderModule(")
                     .append(jsString(provider.binding().moduleName()))
-                    .append(", __filename);\n");
+                    .append(", __filename, ")
+                    .append(renderNativeProviderLoadMetadata(provider))
+                    .append(");\n");
         }
         code.append("\n");
         code.append("const providers = capy.defineNativeProviders({\n");
@@ -177,6 +179,18 @@ public final class JavaScriptGenerator implements Generator {
                + "        },\n"
                + "        create: () => " + renderNativeProviderFactory(provider, exportAccess) + "\n"
                + "    }),\n";
+    }
+
+    private String renderNativeProviderLoadMetadata(ProgramContext.NativeProviderInfo provider) {
+        return "{"
+               + " interfaceId: " + jsString(provider.interfaceId())
+               + ", qualifier: " + jsString(provider.qualifier())
+               + ", providerSymbol: " + jsString(provider.providerSymbolName())
+               + ", backend: 'javascript'"
+               + ", sourceFile: " + jsString(provider.sourceFile())
+               + ", moduleName: " + jsString(provider.binding().moduleName())
+               + ", exportName: " + jsString(provider.binding().exportName())
+               + " }";
     }
 
     private String renderNativeProviderFunction(ProgramContext.NativeProviderInfo provider) {
@@ -5470,19 +5484,34 @@ public final class JavaScriptGenerator implements Generator {
                         return source.replace(/^[ \\t]*@NativeImplementation(?:\\([^\\r\\n)]*\\))?[ \\t]*(?:\\r?\\n)/gm, '');
                     }
 
-                    function requireNativeProviderModule(moduleName, parentFilename) {
+                    function nativeProviderModuleLoadError(moduleName, error, metadata) {
+                        const detail = error && error.message ? ': ' + error.message : '';
+                        return nativeProviderError('UnsupportedBackend: Native provider module `' + moduleName + '` failed to load for ' + nativeProviderContext(metadata) + detail, metadata);
+                    }
+
+                    function requireNativeProviderModule(moduleName, parentFilename, metadata = {}) {
                         const Module = require('node:module');
                         const fs = require('node:fs');
                         const path = require('node:path');
                         const parentRequire = Module.createRequire(parentFilename);
-                        const resolved = parentRequire.resolve(moduleName);
+                        let resolved;
+                        try {
+                            resolved = parentRequire.resolve(moduleName);
+                        } catch (error) {
+                            throw nativeProviderModuleLoadError(moduleName, error, metadata);
+                        }
                         const cached = Module._cache[resolved];
                         if (cached) {
                             return cached.exports;
                         }
-                        const source = fs.readFileSync(resolved, 'utf8');
-                        if (!/(^|\\r?\\n)[ \\t]*@NativeImplementation\\b/m.test(source)) {
-                            return parentRequire(moduleName);
+                        let source;
+                        try {
+                            source = fs.readFileSync(resolved, 'utf8');
+                            if (!/(^|\\r?\\n)[ \\t]*@NativeImplementation\\b/m.test(source)) {
+                                return parentRequire(moduleName);
+                            }
+                        } catch (error) {
+                            throw nativeProviderModuleLoadError(moduleName, error, metadata);
                         }
                         const nativeModule = new Module(resolved, module.parent);
                         nativeModule.filename = resolved;
@@ -5493,7 +5522,7 @@ public final class JavaScriptGenerator implements Generator {
                             return nativeModule.exports;
                         } catch (error) {
                             delete Module._cache[resolved];
-                            throw error;
+                            throw nativeProviderModuleLoadError(moduleName, error, metadata);
                         }
                     }
 
