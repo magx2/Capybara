@@ -83,6 +83,8 @@ class CapybaraParserTest {
                     unknown: String = ???
                 }
 
+                multiple annotation Repeatable on fun {}
+
                 @Benchmark
                 fun ping(): int = 1
 
@@ -100,6 +102,7 @@ class CapybaraParserTest {
                 """));
 
         var annotation = findDefinition(AnnotationDeclaration.class, "Deprecated", module.functional());
+        assertThat(annotation.multiple()).isFalse();
         assertThat(annotation.annotations()).extracting(AnnotationUsage::name).containsExactly("Meta");
         assertThat(annotation.targets()).extracting(AnnotationTarget::name)
                 .containsExactly("fun", "method", "data", "class");
@@ -110,6 +113,8 @@ class CapybaraParserTest {
                 .hasValueSatisfying(value -> assertThat(((AnnotationValue.StringValue) value).value()).isEqualTo("\"\""));
         assertThat(annotation.fields().get(2).defaultValue())
                 .hasValueSatisfying(value -> assertThat(((AnnotationValue.TypeNameValue) value).name()).isEqualTo("User"));
+
+        assertThat(findDefinition(AnnotationDeclaration.class, "Repeatable", module.functional()).multiple()).isTrue();
 
         var markerFunction = findFunction("ping", module.functional());
         assertThat(markerFunction.annotations()).extracting(AnnotationUsage::name).containsExactly("Benchmark");

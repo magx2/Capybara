@@ -401,6 +401,22 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectRepeatedSingleUseAnnotation() {
+        var errors = compileProgram("""
+                        annotation Deprecated on fun {}
+
+                        @Deprecated
+                        @Deprecated
+                        fun should_run(): bool = true
+                        """,
+                "annotation_repeated_single_use");
+
+        assertThat(errors)
+                .anySatisfy(error -> assertThat(error.message())
+                        .contains("Annotation Deprecated cannot be applied multiple times"));
+    }
+
+    @Test
     void shouldRejectUnknownFunctionalAnnotation() {
         var errors = compileProgram("""
                         @Missing()

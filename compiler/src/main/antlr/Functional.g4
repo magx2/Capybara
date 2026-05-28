@@ -92,7 +92,10 @@ annotationTypeReference
     | lowerQualifiedType
     ;
 annotationDeclaration
-    : docComment* annotationBlock* VISIBILITY? annotationKeyword TYPE annotationTargetClause annotationBody
+    : docComment* annotationBlock* VISIBILITY? multipleModifier? annotationKeyword TYPE annotationTargetClause annotationBody
+    ;
+multipleModifier
+    : { "multiple".equals(_input.LT(1).getText()) }? NAME
     ;
 annotationKeyword
     : { "annotation".equals(_input.LT(1).getText()) }? NAME

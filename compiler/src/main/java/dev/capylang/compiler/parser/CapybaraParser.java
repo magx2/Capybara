@@ -558,6 +558,7 @@ public class CapybaraParser {
                 context.annotationBody().annotationFieldDeclaration().stream()
                         .map(this::annotationFieldDeclaration)
                         .toList(),
+                context.multipleModifier() != null,
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),

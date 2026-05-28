@@ -9,6 +9,7 @@ public record AnnotationDeclaration(
         String name,
         List<AnnotationTarget> targets,
         List<AnnotationFieldDeclaration> fields,
+        boolean multiple,
         List<String> comments,
         Visibility visibility,
         Optional<SourcePosition> position,
@@ -22,6 +23,6 @@ public record AnnotationDeclaration(
             Visibility visibility,
             Optional<SourcePosition> position
     ) {
-        this(name, targets, fields, comments, visibility, position, List.of());
+        this(name, targets, fields, false, comments, visibility, position, List.of());
     }
 }

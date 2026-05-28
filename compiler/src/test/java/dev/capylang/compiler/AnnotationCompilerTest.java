@@ -120,6 +120,36 @@ class AnnotationCompilerTest {
     }
 
     @Test
+    void shouldRejectRepeatedSingleUseAnnotation() {
+        var error = compileFailure(new RawModule("Tests", "/foo/app", """
+                annotation Deprecated on fun {}
+
+                @Deprecated
+                @Deprecated
+                fun should_run(): bool = true
+                """));
+
+        assertThat(error.message()).contains("Annotation Deprecated cannot be applied multiple times");
+    }
+
+    @Test
+    void shouldAllowRepeatedMultipleAnnotation() {
+        var compiled = compileSuccess(new RawModule("Tests", "/foo/app", """
+                multiple annotation Tag on fun {
+                    value: String
+                }
+
+                @Tag(value: "slow")
+                @Tag(value: "integration")
+                fun should_run(): bool = true
+                """));
+
+        assertThat(function(compiled, "Tests", "should_run").annotations())
+                .extracting(CompiledAnnotation::name)
+                .containsExactly("Tag", "Tag");
+    }
+
+    @Test
     void shouldRejectMissingRequiredAnnotationArgument() {
         var error = compileFailure(new RawModule("Tests", "/foo/app", """
                 annotation Test on fun {
