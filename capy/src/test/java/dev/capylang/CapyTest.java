@@ -256,6 +256,39 @@ class CapyTest {
     }
 
     @Test
+    void shouldDefaultOmittedNativeWiringFactoriesWhileReadingManifest() throws IOException {
+        var manifestFile = tempDir.resolve("capy.native.default-factory.json");
+        Files.writeString(manifestFile, """
+                {
+                  "providers": [
+                    {
+                      "interface": "/dev/capylang/test/Clock",
+                      "qualifier": "system",
+                      "java": {
+                        "className": "dev.capylang.test.nativeinterop.SystemClock"
+                      },
+                      "javascript": {
+                        "module": "../../nativeinterop/system_clock.js",
+                        "export": "SystemClock"
+                      },
+                      "python": {
+                        "module": "nativeinterop.system_clock",
+                        "className": "SystemClock"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        var manifest = Capy.readNativeProviderManifest(manifestFile);
+        var provider = manifest.providers().getFirst();
+
+        assertEquals("constructor", provider.javaBinding().factory());
+        assertEquals("new", provider.javascriptBinding().factory());
+        assertEquals("call", provider.pythonBinding().factory());
+    }
+
+    @Test
     void shouldRejectNativeWiringOnGenerate() {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();

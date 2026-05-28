@@ -34,6 +34,9 @@ public record NativeProviderBinding(
     public NativeProviderBinding {
         interfaceId = requireText(interfaceId, "TypeMismatch: Native provider `interface` is required.");
         qualifier = qualifier == null ? "" : qualifier;
+        javaBinding = withDefaultFactory(NativeProviderBackend.JAVA, javaBinding);
+        javascriptBinding = withDefaultFactory(NativeProviderBackend.JAVASCRIPT, javascriptBinding);
+        pythonBinding = withDefaultFactory(NativeProviderBackend.PYTHON, pythonBinding);
     }
 
     private static String requireText(String value, String message) {
@@ -41,6 +44,26 @@ public record NativeProviderBinding(
             throw new IllegalArgumentException(message);
         }
         return value;
+    }
+
+    private static NativeProviderBackendBinding withDefaultFactory(NativeProviderBackend backend, NativeProviderBackendBinding binding) {
+        if (binding == null || binding.factory() != null) {
+            return binding;
+        }
+        return new NativeProviderBackendBinding(
+                binding.className(),
+                binding.moduleName(),
+                binding.exportName(),
+                defaultFactory(backend)
+        );
+    }
+
+    private static String defaultFactory(NativeProviderBackend backend) {
+        return switch (backend) {
+            case JAVA -> "constructor";
+            case JAVASCRIPT -> "new";
+            case PYTHON -> "call";
+        };
     }
 
     private static void validateBackendBinding(NativeProviderBackend backend, NativeProviderBackendBinding binding) {
