@@ -122,19 +122,17 @@ public final class NativeImplementationScanner {
         var matcher = JAVA_NATIVE_IMPLEMENTATION.matcher(source);
         while (matcher.find()) {
             var className = matcher.group(2);
-            var interfaceName = firstType(matcher.group(3)).orElse(null);
-            if (interfaceName == null) {
-                continue;
-            }
             var qualifier = qualifier(matcher.group(1));
             var implementationClassName = packageName.isBlank() ? className : packageName + "." + className;
-            var interfaceClassName = resolveJavaType(interfaceName, packageName, imports);
-            candidates.add(new NativeImplementationCandidate(
-                    new ImplementationKey(javaInterfaceId(interfaceClassName), qualifier),
-                    NativeProviderBackend.JAVA,
-                    new NativeProviderBackendBinding(implementationClassName, null, null, "constructor"),
-                    file
-            ));
+            for (var interfaceName : types(matcher.group(3))) {
+                var interfaceClassName = resolveJavaType(interfaceName, packageName, imports);
+                candidates.add(new NativeImplementationCandidate(
+                        new ImplementationKey(javaInterfaceId(interfaceClassName), qualifier),
+                        NativeProviderBackend.JAVA,
+                        new NativeProviderBackendBinding(implementationClassName, null, null, "constructor"),
+                        file
+                ));
+            }
         }
         return candidates;
     }
@@ -245,21 +243,20 @@ public final class NativeImplementationScanner {
         var matcher = PY_NATIVE_IMPLEMENTATION.matcher(source);
         while (matcher.find()) {
             var className = matcher.group(2);
-            var interfaceName = firstType(matcher.group(3)).map(NativeImplementationScanner::simpleName).orElse(null);
-            if (interfaceName == null) {
-                continue;
+            for (var baseType : types(matcher.group(3))) {
+                var interfaceName = simpleName(baseType);
+                var interfaceId = imports.get(interfaceName);
+                if (interfaceId == null) {
+                    interfaceId = pythonSiblingInterfaceId(relativeFile, interfaceName);
+                }
+                var qualifier = qualifier(matcher.group(1));
+                candidates.add(new NativeImplementationCandidate(
+                        new ImplementationKey(interfaceId, qualifier),
+                        NativeProviderBackend.PYTHON,
+                        new NativeProviderBackendBinding(className, pythonModuleName(relativeFile), null, "call"),
+                        file
+                ));
             }
-            var interfaceId = imports.get(interfaceName);
-            if (interfaceId == null) {
-                interfaceId = pythonSiblingInterfaceId(relativeFile, interfaceName);
-            }
-            var qualifier = qualifier(matcher.group(1));
-            candidates.add(new NativeImplementationCandidate(
-                    new ImplementationKey(interfaceId, qualifier),
-                    NativeProviderBackend.PYTHON,
-                    new NativeProviderBackendBinding(className, pythonModuleName(relativeFile), null, "call"),
-                    file
-            ));
         }
         return candidates;
     }
@@ -319,11 +316,33 @@ public final class NativeImplementationScanner {
         return matcher.find() ? Optional.ofNullable(matcher.group(1)) : Optional.empty();
     }
 
-    private static Optional<String> firstType(String types) {
+    private static List<String> types(String types) {
         if (types == null || types.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
-        return Optional.of(eraseGenericType(types.split(",")[0].trim()));
+        var result = new ArrayList<String>();
+        var depth = 0;
+        var start = 0;
+        for (var index = 0; index < types.length(); index++) {
+            var current = types.charAt(index);
+            if (current == '<' || current == '[' || current == '(') {
+                depth++;
+            } else if ((current == '>' || current == ']' || current == ')') && depth > 0) {
+                depth--;
+            } else if (current == ',' && depth == 0) {
+                addType(result, types.substring(start, index));
+                start = index + 1;
+            }
+        }
+        addType(result, types.substring(start));
+        return List.copyOf(result);
+    }
+
+    private static void addType(List<String> result, String type) {
+        var erased = eraseGenericType(type);
+        if (!erased.isBlank()) {
+            result.add(erased);
+        }
     }
 
     private static String qualifier(String arguments) {

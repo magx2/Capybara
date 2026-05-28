@@ -67,4 +67,57 @@ class NativeImplementationScannerTest {
                     assertThat(binding.pythonBinding().factory()).isEqualTo("call");
                 });
     }
+
+    @Test
+    void shouldScanJavaImplementationWhenProviderInterfaceIsNotFirst() throws IOException {
+        var capybaraDir = Files.createDirectories(tempDir.resolve("capybara"));
+        var javaDir = Files.createDirectories(tempDir.resolve("java").resolve("dev").resolve("example").resolve("nativeinterop"));
+
+        Files.writeString(javaDir.resolve("SystemClock.java"), """
+                package dev.example.nativeinterop;
+
+                import dev.capylang.NativeImplementation;
+                import dev.example.Clock;
+                import dev.example.SupportsClock;
+
+                @NativeImplementation(qualifier = "system")
+                public final class SystemClock implements SupportsClock, Clock {
+                }
+                """);
+
+        var manifest = NativeImplementationScanner.scan(capybaraDir);
+
+        assertThat(manifest.providers())
+                .anySatisfy(binding -> {
+                    assertThat(binding.interfaceId()).isEqualTo("/dev/example/Clock");
+                    assertThat(binding.qualifier()).isEqualTo("system");
+                    assertThat(binding.javaBinding().className()).isEqualTo("dev.example.nativeinterop.SystemClock");
+                });
+    }
+
+    @Test
+    void shouldScanPythonImplementationWhenProviderBaseIsNotFirst() throws IOException {
+        var capybaraDir = Files.createDirectories(tempDir.resolve("capybara"));
+        var pyDir = Files.createDirectories(tempDir.resolve("py").resolve("dev").resolve("example").resolve("nativeinterop"));
+
+        Files.writeString(pyDir.resolve("system_clock.py"), """
+                from dev.capylang.capybara import NativeImplementation
+                from dev.example.Clock import Clock
+                from dev.example.SupportsClock import SupportsClock
+
+                @NativeImplementation(qualifier="system")
+                class SystemClock(SupportsClock, Clock):
+                    pass
+                """);
+
+        var manifest = NativeImplementationScanner.scan(capybaraDir);
+
+        assertThat(manifest.providers())
+                .anySatisfy(binding -> {
+                    assertThat(binding.interfaceId()).isEqualTo("/dev/example/Clock");
+                    assertThat(binding.qualifier()).isEqualTo("system");
+                    assertThat(binding.pythonBinding().moduleName()).isEqualTo("dev.example.nativeinterop.system_clock");
+                    assertThat(binding.pythonBinding().className()).isEqualTo("SystemClock");
+                });
+    }
 }
