@@ -2584,7 +2584,36 @@ public final class PythonGenerator implements Generator {
         }
 
         Map<String, NativeProviderInfo> visibleNativeProviders(ObjectOrientedModule module) {
-            return Map.of();
+            var providers = new LinkedHashMap<String, NativeProviderInfo>();
+            putVisibleNativeProviders(providers, nativeProvidersByModule.get(moduleKey(module.path(), module.name())));
+            for (var importDeclaration : module.imports()) {
+                if (importDeclaration.qualifiedOnly()) {
+                    continue;
+                }
+                var importedProviders = nativeProvidersByModule.get(importedModuleKey(module, importDeclaration.moduleName()));
+                if (importedProviders == null || importedProviders.isEmpty()) {
+                    continue;
+                }
+                for (var provider : importedProviders) {
+                    if (importDeclaration.excludedSymbols().contains(provider.providerSymbolName())) {
+                        continue;
+                    }
+                    if (importDeclaration.isStarImport() || importDeclaration.symbols().contains(provider.providerSymbolName())) {
+                        providers.putIfAbsent(provider.providerSymbolName(), provider);
+                    }
+                }
+            }
+            return Map.copyOf(providers);
+        }
+
+        private static void putVisibleNativeProviders(
+                Map<String, NativeProviderInfo> providers,
+                List<NativeProviderInfo> moduleProviders
+        ) {
+            if (moduleProviders == null) {
+                return;
+            }
+            moduleProviders.forEach(provider -> providers.putIfAbsent(provider.providerSymbolName(), provider));
         }
 
         Optional<Path> pathForClassName(String className) {

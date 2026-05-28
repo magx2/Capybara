@@ -118,6 +118,37 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
+    void shouldRewriteObjectOrientedNativeProviderCallsToJavaBootstrap() {
+        var modules = new java.util.ArrayList<>(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
+
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """));
+        modules.add(new RawModule("ClockConsumer", "/foo/boo", """
+                from Providers import { Clock }
+                from ProvidersNative import { system_clock }
+
+                class ClockConsumer {
+                    def current(): Clock = system_clock()
+                }
+                """, SourceKind.OBJECT_ORIENTED));
+        var program = compileProgram(modules, providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "boo", "ClockConsumer.java")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("return dev.capylang.NativeProviderBootstrap.system_clock();")
+                .doesNotContain("ProvidersNative.system_clock()");
+    }
+
+    @Test
     void shouldRejectNativeProviderWithoutJavaBindingDuringGeneration() {
         var program = compileProgram(nativeProviderModules("""
                 from /capy/lang/Effect import { Effect }

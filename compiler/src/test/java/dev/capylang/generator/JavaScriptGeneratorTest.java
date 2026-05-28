@@ -236,6 +236,38 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldRewriteObjectOrientedNativeProviderCallsToJavaScriptBootstrap() {
+        var modules = new java.util.ArrayList<>(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
+
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """));
+        modules.add(new RawModule("ClockConsumer", "", """
+                from Providers import { Clock }
+                from ProvidersNative import { system_clock }
+
+                class ClockConsumer {
+                    def current(): Clock = system_clock()
+                }
+                """, SourceKind.OBJECT_ORIENTED));
+        var program = compileProgram(modules, providerManifest(javascriptProviderBinding("/Providers.Clock", "system")));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        var consumerModule = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("ClockConsumer.js")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("const __capy_native = require('./dev/capylang/native_providers.js');")
+                .contains("return __capy_native.system_clock();")
+                .doesNotContain("ProvidersNative.system_clock()");
+    }
+
+    @Test
     void shouldRunJavaScriptNativeProviderWithStructuralInterfaceValidation() throws Exception {
         var program = compileProgram(nativeProviderModules("""
                 from /capy/lang/Effect import { Effect }
