@@ -1,5 +1,5 @@
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
-from AnnotationReflectionDefinitions import { ImportedAnnotationMarker, ImportedDataLabel, ImportedFieldName, ImportedFunctionLabel, ImportedMethodLabel }
+from AnnotationReflectionDefinitions import { ImportedAnnotationMarker, ImportedDataLabel, ImportedFieldName, ImportedFunctionLabel, ImportedMethodLabel, ImportedRepeatableLabel }
 
 annotation LocalDataLabel on data {
     label: String
@@ -18,6 +18,14 @@ data AnnotatedCustomer {
     display: String
 }
 
+@ImportedRepeatableLabel(value: "data-primary")
+@ImportedRepeatableLabel(value: "data-secondary")
+data RepeatableAnnotatedCustomer {
+    @ImportedRepeatableLabel(value: "field-primary")
+    @ImportedRepeatableLabel(value: "field-secondary")
+    id: String
+}
+
 @ImportedFunctionLabel(value: "factory")
 fun make_annotated_customer(id: String, display: String): AnnotatedCustomer =
     AnnotatedCustomer { id, display }
@@ -30,3 +38,6 @@ fun annotation_reflection_sample(): DataValueInfo =
 
 fun annotation_reflection_data(customer: AnnotatedCustomer): DataValueInfo =
     reflection(customer)
+
+fun repeatable_annotation_reflection_sample(): DataValueInfo =
+    reflection(RepeatableAnnotatedCustomer { id: "R-1" })

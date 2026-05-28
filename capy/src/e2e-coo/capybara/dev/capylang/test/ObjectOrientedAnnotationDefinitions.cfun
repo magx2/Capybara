@@ -4,6 +4,10 @@ annotation OoTypeLabel on class, interface, trait {
     label: String
 }
 
+multiple annotation OoRepeatableLabel on class, interface, trait, field, method {
+    value: String
+}
+
 annotation OoFieldName on field {
     value: String
 }

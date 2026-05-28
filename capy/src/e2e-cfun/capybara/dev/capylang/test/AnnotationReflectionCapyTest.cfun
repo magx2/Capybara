@@ -10,6 +10,7 @@ fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/AnnotationReflection.cfun", [
         test("reflects functional declaration annotations", () => reflects_functional_declaration_annotations()),
         test("reflects functional field annotations", () => reflects_functional_field_annotations()),
+        test("reflects repeated functional annotations", () => reflects_repeated_functional_annotations()),
     ])
 
 fun reflects_functional_declaration_annotations(): Assert =
@@ -41,6 +42,18 @@ fun reflects_functional_field_annotations(): Assert =
         assert_that(ar_field_string_value(info, 1)).is_equal_to("Bea"),
     ])
 
+fun reflects_repeated_functional_annotations(): Assert =
+    let info = repeatable_annotation_reflection_sample()
+    assert_all([
+        assert_that(info.name).is_equal_to("RepeatableAnnotatedCustomer"),
+        assert_that(ar_annotation_names(info.annotations)).is_equal_to(["ImportedRepeatableLabel", "ImportedRepeatableLabel"]),
+        assert_that(ar_annotation_string(info.annotations[0], "value")).is_equal_to("data-primary"),
+        assert_that(ar_annotation_string(info.annotations[1], "value")).is_equal_to("data-secondary"),
+        assert_that(ar_field_annotation_names(info, 0)).is_equal_to(["ImportedRepeatableLabel", "ImportedRepeatableLabel"]),
+        assert_that(ar_field_annotation_string(info, 0, 0, "value")).is_equal_to("field-primary"),
+        assert_that(ar_field_annotation_string(info, 0, 1, "value")).is_equal_to("field-secondary"),
+    ])
+
 private fun ar_field_names(info: DataValueInfo): List[String] =
     ar_field_names_at(info.fields, 0, [])
 
@@ -68,6 +81,9 @@ private fun ar_field_string_value(info: DataValueInfo, field_idx: int): String =
             case _ -> ""
         }
     case None -> ""
+
+private fun ar_field_annotation_string(info: DataValueInfo, field_idx: int, annotation_idx: int, name: String): String =
+    ar_annotation_string(ar_field_annotation(info, field_idx, annotation_idx), name)
 
 private fun ar_annotation_names(annotations: List[AnnotationInfo]): List[String] =
     ar_annotation_names_at(annotations, 0, [])

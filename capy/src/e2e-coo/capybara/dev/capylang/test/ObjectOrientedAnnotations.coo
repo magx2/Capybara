@@ -1,4 +1,4 @@
-from /dev/capylang/test/ObjectOrientedAnnotationDefinitions import { OoAnnotationMarker, OoTypeLabel, OoFieldName, OoMethodName }
+from /dev/capylang/test/ObjectOrientedAnnotationDefinitions import { OoAnnotationMarker, OoTypeLabel, OoFieldName, OoMethodName, OoRepeatableLabel }
 from /capy/meta_prog/Annotations import { Deprecated }
 
 @OoAnnotationMarker
@@ -29,4 +29,16 @@ class AnnotatedWidget(name: String): AnnotatedContract, AnnotatedNaming {
     @OoMethodName(value: "render")
     @Deprecated(message: "use render_label", since: "3.1")
     override def render(): String = this.prefix(this.name)
+}
+
+@OoRepeatableLabel(value: "class-primary")
+@OoRepeatableLabel(value: "class-secondary")
+class RepeatableAnnotatedWidget(name: String) {
+    @OoRepeatableLabel(value: "field-primary")
+    @OoRepeatableLabel(value: "field-secondary")
+    field name: String = name
+
+    @OoRepeatableLabel(value: "method-primary")
+    @OoRepeatableLabel(value: "method-secondary")
+    def render(): String = this.name
 }
