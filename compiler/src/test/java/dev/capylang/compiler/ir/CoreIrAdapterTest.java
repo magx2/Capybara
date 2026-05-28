@@ -284,6 +284,7 @@ class CoreIrAdapterTest {
                         "Clock",
                         "dev.example.ClockProvider",
                         "system",
+                        "factory",
                         "Clock.coo"
                 )),
                 List.of(new CompiledNativeProviderBinding("dev.example.ClockProvider", "system", javaBinding, javascriptBinding, pythonBinding))

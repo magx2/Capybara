@@ -626,6 +626,7 @@ data CompiledNativeProviderDeclaration {
     target_type_name: String,
     interface_id: String,
     qualifier: String,
+    lifetime: String,
     source_file: String
 }
 data CompiledNativeProviderBinding { interface_id: String, qualifier: String, bindings: List[NativeProviderBackendBinding] }

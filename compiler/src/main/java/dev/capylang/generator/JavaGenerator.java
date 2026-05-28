@@ -157,6 +157,7 @@ public final class JavaGenerator implements Generator {
                     bootstrapName,
                     declaration.interfaceId(),
                     declaration.qualifier(),
+                    declaration.lifetime(),
                     interfaceType.backendClassName(),
                     declaration.sourceModulePath(),
                     declaration.sourceModuleName(),
@@ -265,6 +266,7 @@ public final class JavaGenerator implements Generator {
                     String.class,
                     String.class,
                     String.class,
+                    String.class,
                     String.class
             );
             var files = renderedModules.stream()
@@ -283,6 +285,7 @@ public final class JavaGenerator implements Generator {
                                 provider.bootstrapMethodName(),
                                 provider.interfaceId(),
                                 provider.qualifier(),
+                                provider.lifetime(),
                                 provider.targetBackendType(),
                                 provider.sourceFile(),
                                 provider.binding().className(),
@@ -374,6 +377,7 @@ public final class JavaGenerator implements Generator {
                + "                    " + javaString(provider.providerSymbolName()) + ",\n"
                + "                    \"java\",\n"
                + "                    " + javaString(provider.sourceFile()) + ",\n"
+               + "                    " + javaString(provider.lifetime()) + ",\n"
                + "                    " + provider.targetBackendType() + ".class,\n"
                + "                    " + binding.className() + "::new\n"
                + "            )";
@@ -1479,6 +1483,7 @@ public final class JavaGenerator implements Generator {
             String bootstrapMethodName,
             String interfaceId,
             String qualifier,
+            String lifetime,
             String targetBackendType,
             String sourceModulePath,
             String sourceModuleName,

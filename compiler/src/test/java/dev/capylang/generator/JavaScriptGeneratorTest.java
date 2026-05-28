@@ -371,6 +371,47 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldReuseJavaScriptNativeProviderSingletonInstance() throws Exception {
+        var generated = new JavaScriptGenerator().generate(compileProgram(List.of(
+                new RawModule("Providers", "", """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                new RawModule("ProvidersNative", "", """
+                        from /capy/lang/Effect import { Effect }
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+                        from Providers import { Clock }
+
+                        @NativeProvider(qualifier: "system", lifetime: "singleton")
+                        fun system_clock(): Effect[Clock] = <native>
+                        """)
+        ), providerManifest(javascriptProviderBinding(
+                "/Providers.Clock",
+                "system",
+                "../../nativeinterop/system_clock.js",
+                "SystemClock",
+                "new"
+        ))));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.js", """
+                class SystemClock {
+                    now_millis() {
+                        return 1n;
+                    }
+                }
+                module.exports = { SystemClock };
+                """);
+
+        var output = runNode("""
+                const nativeProviders = require('./dev/capylang/native_providers.js');
+                console.log(nativeProviders.system_clock() === nativeProviders.system_clock());
+                """);
+
+        assertThat(output).isEqualTo("true");
+    }
+
+    @Test
     void shouldFailJavaScriptNativeProviderStartupWhenExportIsMissing() throws Exception {
         var generated = new JavaScriptGenerator().generate(nativeProviderProgram(
                 "def now_millis(): long",
@@ -1088,6 +1129,7 @@ class JavaScriptGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """);
     }

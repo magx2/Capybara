@@ -27,6 +27,7 @@ class PythonGenerationPassTest {
                 "system_clock",
                 "/Providers.Clock",
                 "system",
+                "factory",
                 "/ProvidersNative.cfun",
                 "host_clock",
                 "SystemClock",
@@ -54,6 +55,7 @@ class PythonGenerationPassTest {
                         module_name='host_clock',
                         class_name='SystemClock',
                         factory='call',
+                        lifetime='factory',
                         metadata={'methods': [{'name': 'now_millis', 'arity': 0}]},
                         create=lambda: __capy_provider_system_clock_class(),
                     ),
@@ -121,6 +123,7 @@ class PythonGenerationPassTest {
         allModules.add(new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """));
         allModules.addAll(modules);

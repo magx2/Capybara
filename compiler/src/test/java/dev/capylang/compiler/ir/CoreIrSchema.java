@@ -362,6 +362,7 @@ public final class CoreIrSchema {
             String targetTypeName,
             String interfaceId,
             String qualifier,
+            String lifetime,
             String sourceFile
     ) {
     }

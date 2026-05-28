@@ -26,6 +26,7 @@ class JavaGenerationPassTest {
                 "system_clock",
                 "/foo/Clock",
                 "system",
+                "factory",
                 "foo.Clock",
                 "/foo/Providers.cfun",
                 "dev.capylang.test.SystemClock",
@@ -49,6 +50,7 @@ class JavaGenerationPassTest {
                                     "system_clock",
                                     "java",
                                     "/foo/Providers.cfun",
+                                    "factory",
                                     foo.Clock.class,
                                     dev.capylang.test.SystemClock::new
                             )
@@ -125,6 +127,7 @@ class JavaGenerationPassTest {
         allModules.add(new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """));
         allModules.addAll(modules);

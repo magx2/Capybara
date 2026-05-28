@@ -47,6 +47,18 @@ from /dev/capylang/test/Clock import { Clock }
 fun system_clock(): Effect[Clock] = <native>
 ```
 
+Provider declarations may choose a lifetime:
+
+- `factory` (default): each lookup constructs a fresh host implementation.
+- `singleton`: the generated immutable provider table constructs once and
+  reuses that host implementation for later lookups.
+
+Use `factory` for stateful, request-like, or caller-owned objects. Use
+`singleton` only for deterministic process services whose configuration is fixed
+by the selected backend/source set, such as self-hosting filesystem, environment,
+console, clock, JSON/YAML, ZIP/package, Java compiler, and test-execution
+providers.
+
 Host implementations are wired through backend source annotations. The native
 class implements or extends the generated Capybara interface and carries a
 `NativeImplementation` annotation with the same qualifier:
@@ -80,10 +92,12 @@ class SystemClock(Clock):
 The v1 provider key is `(interfaceId, qualifier)`. The first implementation
 slice supports exactly one provider for each key and backend in the selected
 compile/generate input set. Duplicate providers for the same key and backend
-fail deterministically.
+fail deterministically. Lifetime is declaration metadata and is not part of the
+provider key.
 
-Provider lookups always create a fresh host implementation object. There is no
-provider caching mode in this slice.
+Provider lookups default to creating a fresh host implementation object. A
+provider declaration may opt into `singleton` lifetime when sharing one host
+object is the deterministic contract.
 
 Backend factories default to Java constructors, JavaScript `new`, and Python
 class calls. The backend location is derived from the annotated implementation

@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class NativeProviders {
+    private static final String LIFETIME_FACTORY = "factory";
+    private static final String LIFETIME_SINGLETON = "singleton";
+
     private final Map<Key, Provider> providers;
 
     private NativeProviders(Map<Key, Provider> providers) {
@@ -56,7 +59,20 @@ public final class NativeProviders {
             Class<T> type,
             NativeProviderFactory<? extends T> factory
     ) {
-        return new Provider(interfaceId, qualifier, providerSymbol, backend, sourceFile, type, factory);
+        return factory(interfaceId, qualifier, providerSymbol, backend, sourceFile, LIFETIME_FACTORY, type, factory);
+    }
+
+    public static <T> Provider factory(
+            String interfaceId,
+            String qualifier,
+            String providerSymbol,
+            String backend,
+            String sourceFile,
+            String lifetime,
+            Class<T> type,
+            NativeProviderFactory<? extends T> factory
+    ) {
+        return new Provider(interfaceId, qualifier, providerSymbol, backend, sourceFile, lifetime, type, factory);
     }
 
     public <T> T resolve(String interfaceId, String qualifier, Class<T> type) {
@@ -103,6 +119,24 @@ public final class NativeProviders {
         return value;
     }
 
+    private static String requireLifetime(
+            String value,
+            String interfaceId,
+            String qualifier,
+            String providerSymbol,
+            String backend,
+            String sourceFile
+    ) {
+        var lifetime = value == null || value.isBlank() ? LIFETIME_FACTORY : value;
+        if (LIFETIME_FACTORY.equals(lifetime) || LIFETIME_SINGLETON.equals(lifetime)) {
+            return lifetime;
+        }
+        throw new NativeProviderException("UnsupportedBackend: Native provider for "
+                                          + context(interfaceId, qualifier, providerSymbol, backend, sourceFile)
+                                          + " has unsupported lifetime `" + lifetime
+                                          + "`. Supported values: factory, singleton.");
+    }
+
     private static String providerSymbolSegment(String value) {
         return value == null || value.isBlank() ? "" : "provider symbol `" + value + "`, ";
     }
@@ -122,8 +156,10 @@ public final class NativeProviders {
         private final String providerSymbol;
         private final String backend;
         private final String sourceFile;
+        private final String lifetime;
         private final Class<?> type;
         private final NativeProviderFactory<?> factory;
+        private volatile Object singletonValue;
 
         private <T> Provider(
                 String interfaceId,
@@ -131,6 +167,7 @@ public final class NativeProviders {
                 String providerSymbol,
                 String backend,
                 String sourceFile,
+                String lifetime,
                 Class<T> type,
                 NativeProviderFactory<? extends T> factory
         ) {
@@ -138,6 +175,7 @@ public final class NativeProviders {
             this.providerSymbol = providerSymbol;
             this.backend = backend;
             this.sourceFile = sourceFile;
+            this.lifetime = requireLifetime(lifetime, interfaceId, qualifier, providerSymbol, backend, sourceFile);
             this.type = Objects.requireNonNull(type, "type");
             this.factory = Objects.requireNonNull(factory, "factory");
         }
@@ -163,6 +201,18 @@ public final class NativeProviders {
         }
 
         private Object resolve() {
+            if (LIFETIME_SINGLETON.equals(lifetime)) {
+                var existing = singletonValue;
+                if (existing != null) {
+                    return existing;
+                }
+                synchronized (this) {
+                    if (singletonValue == null) {
+                        singletonValue = create();
+                    }
+                    return singletonValue;
+                }
+            }
             return create();
         }
 

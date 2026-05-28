@@ -27,6 +27,7 @@ class JavaScriptGenerationPassTest {
                 "system_clock",
                 "/Providers.Clock",
                 "system",
+                "factory",
                 "/ProvidersNative.cfun",
                 "host-clock",
                 "SystemClock",
@@ -57,6 +58,7 @@ class JavaScriptGenerationPassTest {
                         exportExists: Object.prototype.hasOwnProperty.call(__capy_provider_system_clock_module, 'SystemClock'),
                         exportValue: __capy_provider_system_clock_module.SystemClock,
                         factory: 'new',
+                        lifetime: 'factory',
                         metadata: {
                             methods: [{ name: 'now_millis', arity: 0 }]
                         },
@@ -130,6 +132,7 @@ class JavaScriptGenerationPassTest {
         allModules.add(new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """));
         allModules.addAll(modules);

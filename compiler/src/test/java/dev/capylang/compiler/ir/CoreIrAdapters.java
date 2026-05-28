@@ -1596,6 +1596,7 @@ final class CoreIrAdapters {
                 declaration.targetTypeName(),
                 declaration.interfaceId(),
                 declaration.qualifier(),
+                declaration.lifetime(),
                 declaration.sourceFile()
         );
     }
@@ -1608,6 +1609,7 @@ final class CoreIrAdapters {
                 declaration.target_type_name(),
                 declaration.interface_id(),
                 declaration.qualifier(),
+                declaration.lifetime(),
                 declaration.source_file()
         );
     }
@@ -1620,6 +1622,7 @@ final class CoreIrAdapters {
                 declaration.targetTypeName(),
                 declaration.interfaceId(),
                 declaration.qualifier(),
+                declaration.lifetime(),
                 declaration.sourceFile()
         );
     }

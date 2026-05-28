@@ -26,17 +26,19 @@ fun javascript_native_provider_info(
     bootstrap_function_name: String,
     interface_id: String,
     qualifier: String,
+    lifetime: String,
     source_file: String,
     module_name: String,
     export_name: String,
     factory: String,
     methods: List[Tuple[String, int]]
-): Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]] =
+): Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]] =
     (
         provider_symbol_name,
         bootstrap_function_name,
         interface_id,
         qualifier,
+        lifetime,
         source_file,
         module_name,
         export_name,
@@ -46,7 +48,7 @@ fun javascript_native_provider_info(
 
 fun plan_javascript_generation(
     rendered_files: List[Tuple[String, String]],
-    native_providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
+    native_providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
 ): List[Tuple[String, String]] =
     generated_file_order(rendered_files + native_provider_bootstrap_files(native_providers))
 
@@ -54,14 +56,14 @@ fun generated_file_order(files: List[Tuple[String, String]]): List[Tuple[String,
     files
 
 fun native_provider_bootstrap_files(
-    providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
 ): List[Tuple[String, String]] =
     match providers[0] with
     case Some _ -> [generated_javascript_file("dev/capylang/native_providers.js", render_native_provider_bootstrap(providers))]
     case _ -> []
 
 fun render_native_provider_bootstrap(
-    providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
 ): String =
     "'use strict';" + js_nl() + js_nl()
     + "const capy = require('./capybara.js');" + js_nl()
@@ -76,7 +78,7 @@ fun render_native_provider_bootstrap(
     + "};" + js_nl()
 
 private fun render_native_provider_requires(
-    providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
     idx: int
 ): String =
     match providers[idx] with
@@ -91,7 +93,7 @@ private fun render_native_provider_requires(
     case _ -> ""
 
 private fun render_native_provider_load_metadata(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     "{"
     + " interfaceId: " + js_string(native_provider_interface_id(provider))
@@ -104,7 +106,7 @@ private fun render_native_provider_load_metadata(
     + " }"
 
 private fun render_native_provider_entries(
-    providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
     idx: int
 ): String =
     match providers[idx] with
@@ -114,7 +116,7 @@ private fun render_native_provider_entries(
     case _ -> ""
 
 private fun render_native_provider_entry(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     let module_variable = native_provider_module_variable(provider)
     let export_access = render_property_access(module_variable, native_provider_export_name(provider))
@@ -129,6 +131,7 @@ private fun render_native_provider_entry(
     + "        exportExists: Object.prototype.hasOwnProperty.call(" + module_variable + ", " + js_string(native_provider_export_name(provider)) + ")," + js_nl()
     + "        exportValue: " + export_access + "," + js_nl()
     + "        factory: " + js_string(native_provider_factory(provider)) + "," + js_nl()
+    + "        lifetime: " + js_string(native_provider_lifetime(provider)) + "," + js_nl()
     + "        metadata: {" + js_nl()
     + "            methods: " + render_native_provider_methods(native_provider_methods(provider), 0) + js_nl()
     + "        }," + js_nl()
@@ -153,7 +156,7 @@ private fun render_native_provider_method(method: Tuple[String, int]): String =
     "{ name: " + js_string(native_provider_method_name(method)) + ", arity: " + native_provider_method_arity(method) + " }"
 
 private fun render_native_provider_functions(
-    providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
     idx: int
 ): String =
     match providers[idx] with
@@ -163,7 +166,7 @@ private fun render_native_provider_functions(
     case _ -> ""
 
 private fun render_native_provider_function(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     "function " + native_provider_bootstrap_function_name(provider) + "() {" + js_nl()
     + "    return providers.resolve(" + js_string(native_provider_interface_id(provider))
@@ -173,7 +176,7 @@ private fun render_native_provider_function(
     + "}" + js_nl()
 
 private fun render_native_provider_exports(
-    providers: List[Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
     idx: int
 ): String =
     match providers[idx] with
@@ -183,7 +186,7 @@ private fun render_native_provider_exports(
     case _ -> ""
 
 private fun render_native_provider_factory(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]],
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]],
     factory: String
 ): String =
     if native_provider_factory(provider) == "new"
@@ -191,12 +194,12 @@ private fun render_native_provider_factory(
     else factory + "()"
 
 private fun native_provider_module_variable(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     "__capy_provider_" + native_provider_bootstrap_function_name(provider) + "_module"
 
 private fun native_provider_bootstrap_key(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     native_provider_interface_id(provider) + "#" + native_provider_qualifier(provider)
 
@@ -206,49 +209,54 @@ private fun render_property_access(target: String, property_name: String): Strin
     else target + "[" + js_string(property_name) + "]"
 
 private fun native_provider_symbol_name(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[0]
 
 private fun native_provider_bootstrap_function_name(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[1]
 
 private fun native_provider_interface_id(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[2]
 
 private fun native_provider_qualifier(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[3]
 
-private fun native_provider_source_file(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+private fun native_provider_lifetime(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[4]
 
-private fun native_provider_module_name(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+private fun native_provider_source_file(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[5]
 
-private fun native_provider_export_name(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+private fun native_provider_module_name(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[6]
 
-private fun native_provider_factory(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+private fun native_provider_export_name(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
 ): String =
     provider[7]
 
-private fun native_provider_methods(
-    provider: Tuple[String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
-): List[Tuple[String, int]] =
+private fun native_provider_factory(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
     provider[8]
+
+private fun native_provider_methods(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): List[Tuple[String, int]] =
+    provider[9]
 
 private fun native_provider_method_name(method: Tuple[String, int]): String =
     method[0]

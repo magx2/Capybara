@@ -475,6 +475,44 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldReusePythonNativeProviderSingletonInstance() throws Exception {
+        var generated = new PythonGenerator().generate(compileProgram(List.of(
+                new RawModule("Providers", "", """
+                        interface Clock {
+                            def now_millis(): long
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                new RawModule("ProvidersNative", "", """
+                        from /capy/lang/Effect import { Effect }
+                        from /capy/meta_prog/NativeProvider import { NativeProvider }
+                        from Providers import { Clock }
+
+                        @NativeProvider(qualifier: "system", lifetime: "singleton")
+                        fun system_clock(): Effect[Clock] = <native>
+                        """)
+        ), providerManifest(pythonProviderBinding(
+                "/Providers.Clock",
+                "system",
+                "nativeinterop.system_clock",
+                "SystemClock",
+                "call"
+        ))));
+        writeGenerated(generated);
+        writeHostModule("nativeinterop/system_clock.py", """
+                class SystemClock:
+                    def now_millis(self):
+                        return 1
+                """);
+
+        var output = runPython("""
+                import dev.capylang.native_providers as native_providers
+                print(str(native_providers.system_clock() is native_providers.system_clock()).lower())
+                """);
+
+        assertThat(output).isEqualTo("true");
+    }
+
+    @Test
     void shouldFailPythonNativeProviderStartupWhenClassIsMissing() throws Exception {
         var generated = new PythonGenerator().generate(nativeProviderProgram(
                 "def now_millis(): long",
@@ -1105,6 +1143,7 @@ class PythonGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """);
     }

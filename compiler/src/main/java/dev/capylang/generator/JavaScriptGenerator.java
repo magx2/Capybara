@@ -165,6 +165,7 @@ public final class JavaScriptGenerator implements Generator {
                     String.class,
                     String.class,
                     String.class,
+                    String.class,
                     List.class
             );
             var files = renderedModules.stream()
@@ -181,6 +182,7 @@ public final class JavaScriptGenerator implements Generator {
                             provider.bootstrapFunctionName(),
                             provider.interfaceId(),
                             provider.qualifier(),
+                            provider.lifetime(),
                             provider.sourceFile(),
                             provider.binding().moduleName(),
                             provider.binding().exportName(),
@@ -267,6 +269,7 @@ public final class JavaScriptGenerator implements Generator {
                + "        exportExists: Object.prototype.hasOwnProperty.call(" + moduleVariable + ", " + jsString(provider.binding().exportName()) + "),\n"
                + "        exportValue: " + exportAccess + ",\n"
                + "        factory: " + jsString(provider.binding().factory()) + ",\n"
+               + "        lifetime: " + jsString(provider.lifetime()) + ",\n"
                + "        metadata: {\n"
                + "            methods: " + renderNativeProviderMethods(provider.methods()) + "\n"
                + "        },\n"
@@ -2323,6 +2326,7 @@ public final class JavaScriptGenerator implements Generator {
                         interfaceType.backendClassName(),
                         declaration.interfaceId(),
                         declaration.qualifier(),
+                        declaration.lifetime(),
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
                         declaration.sourceFile(),
@@ -2735,6 +2739,7 @@ public final class JavaScriptGenerator implements Generator {
                 String targetBackendType,
                 String interfaceId,
                 String qualifier,
+                String lifetime,
                 String sourceModulePath,
                 String sourceModuleName,
                 String sourceFile,
@@ -5632,18 +5637,25 @@ public final class JavaScriptGenerator implements Generator {
                         if (options?.factory !== 'new' && options?.factory !== 'call') {
                             throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported JavaScript factory `' + options?.factory + '`.', metadata);
                         }
+                        const lifetime = options?.lifetime ?? 'factory';
+                        if (lifetime !== 'factory' && lifetime !== 'singleton') {
+                            throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' has unsupported lifetime `' + lifetime + '`. Supported values: factory, singleton.', metadata);
+                        }
                         if (options?.exportExists !== true || typeof options?.exportValue !== 'function') {
                             throw nativeProviderError('UnsupportedBackend: Native provider for ' + nativeProviderContext(metadata) + ' requires export `' + options?.exportName + '` from module `' + options?.moduleName + '`.', metadata);
                         }
                         if (typeof options?.create !== 'function') {
                             throw nativeProviderError('UnsupportedBackend: Native provider factory is required for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
+                        let singletonValue;
+                        let singletonInitialized = false;
                         return Object.freeze({
                             interfaceId,
                             qualifier,
                             providerSymbol: options?.providerSymbol,
                             backend: options?.backend,
                             sourceFile: options?.sourceFile,
+                            lifetime,
                             metadata: Object.freeze({
                                 interfaceId,
                                 qualifier,
@@ -5656,6 +5668,13 @@ public final class JavaScriptGenerator implements Generator {
                                 }))),
                             }),
                             create: options.create,
+                            singletonInitialized: () => singletonInitialized,
+                            singletonValue: () => singletonValue,
+                            cacheSingleton: value => {
+                                singletonValue = value;
+                                singletonInitialized = true;
+                                return value;
+                            },
                         });
                     }
 
@@ -5694,6 +5713,9 @@ public final class JavaScriptGenerator implements Generator {
                         if (!provider) {
                             throw nativeProviderError('NotWired: No native provider registered for ' + nativeProviderContext(metadata) + '.', metadata);
                         }
+                        if (provider.lifetime === 'singleton' && provider.singletonInitialized()) {
+                            return provider.singletonValue();
+                        }
                         return createNativeImplementation(provider);
                     }
 
@@ -5707,7 +5729,11 @@ public final class JavaScriptGenerator implements Generator {
                             }
                             throw nativeProviderError('InvocationFailure: Native provider for ' + nativeProviderContext(provider) + ' failed during construction: ' + (error?.message ?? String(error)), provider);
                         }
-                        return validateNativeImplementation(provider.metadata, value);
+                        const implementation = validateNativeImplementation(provider.metadata, value);
+                        if (provider.lifetime === 'singleton') {
+                            return provider.cacheSingleton(implementation);
+                        }
+                        return implementation;
                     }
 
                     function validateNativeImplementation(interfaceMetadata, value) {

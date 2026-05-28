@@ -70,6 +70,7 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("NativeProviders.factory(")
                 .contains("\"/foo/boo/Providers.Clock\",")
                 .contains("\"system\",")
+                .contains("\"factory\",")
                 .contains("foo.boo.Clock.class,")
                 .contains("dev.capylang.test.SystemClock::new")
                 .contains("return PROVIDERS.resolve(\"/foo/boo/Providers.Clock\", \"system\", \"system_clock\", \"java\", \"/foo/boo/ProvidersNative.cfun\", foo.boo.Clock.class);");
@@ -115,6 +116,66 @@ class ObjectOrientedJavaGeneratorTest {
             var second = bootstrapType.getMethod("system_clock").invoke(null);
             assertThat(first).isNotSameAs(second);
         }
+    }
+
+    @Test
+    void shouldReuseJavaNativeProviderSingletonLifetime() throws Exception {
+        var program = compileProgram(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
+
+                @NativeProvider(qualifier: "system", lifetime: "singleton")
+                fun system_clock(): Effect[Clock] = <native>
+                """), providerManifest(javaProviderBinding(
+                "/foo/boo/Providers.Clock",
+                "system",
+                "dev.capylang.test.nativeinterop.SystemClock"
+        )));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var classesDir = compileGeneratedJava(generatedProgram, new JavaSource(
+                Path.of("dev", "capylang", "test", "nativeinterop", "SystemClock.java"),
+                """
+                        package dev.capylang.test.nativeinterop;
+
+                        public final class SystemClock implements foo.boo.Clock {
+                            public long now_millis() {
+                                return 4242L;
+                            }
+                        }
+                        """
+        ));
+        var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL(), capybaraLibClasses.toUri().toURL()})) {
+            var bootstrapType = classLoader.loadClass("dev.capylang.NativeProviderBootstrap");
+            var first = bootstrapType.getMethod("system_clock").invoke(null);
+            var second = bootstrapType.getMethod("system_clock").invoke(null);
+            assertThat(first).isSameAs(second);
+        }
+    }
+
+    @Test
+    void shouldRejectUnsupportedNativeProviderLifetime() {
+        var result = CapybaraCompiler.INSTANCE.compile(modulesWithNativeProviderAnnotation(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
+
+                @NativeProvider(qualifier: "system", lifetime: "request")
+                fun system_clock(): Effect[Clock] = <native>
+                """)), new TreeSet<>(), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<CompiledProgram>) result).errors())
+                .extracting(Result.Error.SingleError::message)
+                .anySatisfy(message -> assertThat(message)
+                        .contains("UnsupportedBackend")
+                        .contains("Native provider `system_clock`")
+                        .contains("interface `/foo/boo/Providers.Clock`")
+                        .contains("qualifier `system`")
+                        .contains("unsupported lifetime `request`")
+                        .contains("/foo/boo/ProvidersNative.cfun"));
     }
 
     @Test
@@ -1098,6 +1159,7 @@ class ObjectOrientedJavaGeneratorTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """);
     }

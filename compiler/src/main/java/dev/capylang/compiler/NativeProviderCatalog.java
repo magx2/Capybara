@@ -18,6 +18,7 @@ public record NativeProviderCatalog(
                         .thenComparing(CompiledNativeProviderDeclaration::sourceModuleName)
                         .thenComparing(CompiledNativeProviderDeclaration::providerName)
                         .thenComparing(CompiledNativeProviderDeclaration::targetTypeName)
+                        .thenComparing(CompiledNativeProviderDeclaration::lifetime)
                         .thenComparing(declaration -> Objects.toString(declaration.sourceFile(), "")))
                 .toList();
         bindings = bindings == null ? List.of() : bindings.stream()

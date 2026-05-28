@@ -24,6 +24,47 @@ class NativeProvidersTest {
     }
 
     @Test
+    void singletonProvidersReuseInstance() {
+        var creations = new AtomicInteger();
+        var providers = NativeProviders.of(NativeProviders.factory(
+                "/test/Clock",
+                "system",
+                "system_clock",
+                "java",
+                "/Providers.cfun",
+                "singleton",
+                Clock.class,
+                () -> new TestClock(creations.incrementAndGet())
+        ));
+
+        assertThat(providers.resolve("/test/Clock", "system", Clock.class).now()).isEqualTo(1);
+        assertThat(providers.resolve("/test/Clock", "system", Clock.class).now()).isEqualTo(1);
+        assertThat(creations).hasValue(1);
+    }
+
+    @Test
+    void unsupportedLifetimesFailWithProviderContext() {
+        assertThatThrownBy(() -> NativeProviders.factory(
+                "/test/Clock",
+                "system",
+                "system_clock",
+                "java",
+                "/Providers.cfun",
+                "request",
+                Clock.class,
+                () -> new TestClock(1)
+        ))
+                .isInstanceOf(NativeProviderException.class)
+                .hasMessageContaining("UnsupportedBackend")
+                .hasMessageContaining("system_clock")
+                .hasMessageContaining("/test/Clock")
+                .hasMessageContaining("system")
+                .hasMessageContaining("java")
+                .hasMessageContaining("/Providers.cfun")
+                .hasMessageContaining("request");
+    }
+
+    @Test
     void missingProvidersFailWithProviderKey() {
         var providers = NativeProviders.of();
 

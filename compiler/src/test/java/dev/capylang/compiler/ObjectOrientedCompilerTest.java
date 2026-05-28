@@ -106,6 +106,7 @@ class ObjectOrientedCompilerTest {
                     assertThat(declaration.targetTypeName()).isEqualTo("Clock");
                     assertThat(declaration.interfaceId()).isEqualTo("/dev/capylang/test/Clock");
                     assertThat(declaration.qualifier()).isEqualTo("system");
+                    assertThat(declaration.lifetime()).isEqualTo("factory");
                     assertThat(declaration.sourceFile()).isEqualTo("/dev/capylang/test/ClockProvider.cfun");
                 });
         assertThat(program.nativeProviderCatalog().bindings())
@@ -292,7 +293,7 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldRejectNativeProviderLifetimeArgument() {
+    void shouldCompileNativeProviderSingletonLifetimeArgument() {
         var result = compileProviders("""
                 from /capy/lang/Effect import { Effect }
                 from /capy/meta_prog/NativeProvider import { NativeProvider }
@@ -302,9 +303,11 @@ class ObjectOrientedCompilerTest {
                 fun system_clock(): Effect[Clock] = <native>
                 """, providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
 
-        assertThat(errorMessages(result))
-                .anySatisfy(message -> assertThat(message)
-                        .contains("Unknown annotation argument lifetime for NativeProvider"));
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+        assertThat(program.nativeProviderCatalog().declarations())
+                .singleElement()
+                .satisfies(declaration -> assertThat(declaration.lifetime()).isEqualTo("singleton"));
     }
 
     @Test
@@ -740,6 +743,7 @@ class ObjectOrientedCompilerTest {
         return new RawModule("NativeProvider", "/capy/meta_prog", """
                 annotation NativeProvider on fun {
                     qualifier: String = ""
+                    lifetime: String = "factory"
                 }
                 """);
     }

@@ -1,4 +1,5 @@
 /// Marks a function returning Effect[Interface] as a compile-time native provider.
 annotation NativeProvider on fun {
     qualifier: String = ""
+    lifetime: String = "factory"
 }

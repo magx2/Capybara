@@ -163,6 +163,7 @@ public final class PythonGenerator implements Generator {
                     String.class,
                     String.class,
                     String.class,
+                    String.class,
                     List.class
             );
             var files = renderedModules.stream()
@@ -181,6 +182,7 @@ public final class PythonGenerator implements Generator {
                                 provider.bootstrapFunctionName(),
                                 provider.interfaceId(),
                                 provider.qualifier(),
+                                provider.lifetime(),
                                 provider.sourceFile(),
                                 provider.binding().moduleName(),
                                 provider.binding().className(),
@@ -272,6 +274,7 @@ public final class PythonGenerator implements Generator {
                + "        module_name=" + pyString(provider.binding().moduleName()) + ",\n"
                + "        class_name=" + pyString(provider.binding().className()) + ",\n"
                + "        factory=" + pyString(provider.binding().factory()) + ",\n"
+               + "        lifetime=" + pyString(provider.lifetime()) + ",\n"
                + "        metadata={'methods': " + renderNativeProviderMethods(provider.methods()) + "},\n"
                + "        create=lambda: " + renderNativeProviderFactory(provider) + ",\n"
                + "    ),\n";
@@ -2240,6 +2243,7 @@ public final class PythonGenerator implements Generator {
                         interfaceType.backendClassName(),
                         declaration.interfaceId(),
                         declaration.qualifier(),
+                        declaration.lifetime(),
                         declaration.sourceModulePath(),
                         declaration.sourceModuleName(),
                         declaration.sourceFile(),
@@ -2652,6 +2656,7 @@ public final class PythonGenerator implements Generator {
                 String targetBackendType,
                 String interfaceId,
                 String qualifier,
+                String lifetime,
                 String sourceModulePath,
                 String sourceModuleName,
                 String sourceFile,
@@ -3852,6 +3857,9 @@ public final class PythonGenerator implements Generator {
                         factory = options.get('factory', 'call')
                         if factory != 'call':
                             raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported Python factory `' + str(factory) + '`.', metadata)
+                        lifetime = options.get('lifetime', 'factory')
+                        if lifetime not in ('factory', 'singleton'):
+                            raise _native_provider_error('UnsupportedBackend: Native provider for ' + _native_provider_context(metadata) + ' has unsupported lifetime `' + str(lifetime) + '`. Supported values: factory, singleton.', metadata)
                         create = options.get('create')
                         if not callable(create):
                             raise _native_provider_error('UnsupportedBackend: Native provider factory is required for ' + _native_provider_context(metadata) + '.', metadata)
@@ -3868,6 +3876,7 @@ public final class PythonGenerator implements Generator {
                             providerSymbol=metadata.get('providerSymbol'),
                             backend=metadata.get('backend'),
                             sourceFile=metadata.get('sourceFile'),
+                            lifetime=lifetime,
                             metadata={
                                 'interfaceId': interface_id,
                                 'qualifier': qualifier,
@@ -3877,6 +3886,8 @@ public final class PythonGenerator implements Generator {
                                 'methods': tuple(methods),
                             },
                             create=create,
+                            singleton_initialized=False,
+                            singleton_value=None,
                         )
 
                     class _NativeProviderResolver:
@@ -3922,6 +3933,8 @@ public final class PythonGenerator implements Generator {
                         provider = providers.get(key)
                         if provider is None:
                             raise _native_provider_error('NotWired: No native provider registered for ' + _native_provider_context(metadata) + '.', metadata)
+                        if getattr(provider, 'lifetime', 'factory') == 'singleton' and getattr(provider, 'singleton_initialized', False):
+                            return getattr(provider, 'singleton_value')
                         return _create_native_implementation(provider)
 
                     def _create_native_implementation(provider):
@@ -3931,7 +3944,11 @@ public final class PythonGenerator implements Generator {
                             raise
                         except Exception as error:
                             raise _native_provider_error('InvocationFailure: Native provider for ' + _native_provider_context(provider.metadata) + ' failed during construction: ' + str(error), provider.metadata) from error
-                        return validate_native_implementation(provider.metadata, value)
+                        implementation = validate_native_implementation(provider.metadata, value)
+                        if getattr(provider, 'lifetime', 'factory') == 'singleton':
+                            provider.singleton_value = implementation
+                            provider.singleton_initialized = True
+                        return implementation
 
                     def _native_callable_arity(fn):
                         try:

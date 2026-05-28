@@ -4134,6 +4134,9 @@ public class CapybaraCompiler {
                     }
                     var validatedProvider = providerValidation.orElseThrow();
                     var interfaceId = validatedProvider.interfaceId();
+                    if (!validateNativeProviderLifetime(provider, interfaceId, errors)) {
+                        continue;
+                    }
                     var key = validatedProvider.key();
                     declaredProviderKeys.add(key);
                     declaredProviderSymbols.add(provider.name());
@@ -4144,6 +4147,7 @@ public class CapybaraCompiler {
                             provider.targetType(),
                             interfaceId,
                             provider.qualifier(),
+                            provider.lifetime(),
                             provider.sourceFile()
                     ));
                     var manifestBinding = manifestBindingsByKey.get(key);
@@ -4212,6 +4216,9 @@ public class CapybaraCompiler {
                 }
 
                 var interfaceId = nativeProviderInterfaceId(resolvedTarget.ownerModule(), objectType.name());
+                if (!validateNativeProviderLifetime(provider, interfaceId, errors)) {
+                    continue;
+                }
                 var key = new NativeProviderKey(interfaceId, provider.qualifier());
                 if (!declaredProviderKeys.add(key)) {
                     errors.add(nativeProviderError(
@@ -4237,6 +4244,7 @@ public class CapybaraCompiler {
                         provider.targetType(),
                         interfaceId,
                         provider.qualifier(),
+                        provider.lifetime(),
                         provider.sourceFile()
                 ));
                 var manifestBinding = manifestBindingsByKey.get(key);
@@ -4338,12 +4346,14 @@ public class CapybaraCompiler {
                     continue;
                 }
                 var qualifier = NativeAnnotations.stringArgument(annotation, "qualifier").orElse("");
+                var lifetime = NativeAnnotations.stringArgument(annotation, "lifetime").orElse("factory");
                 var effectTarget = nativeProviderEffectTarget(function.returnType());
                 var targetType = effectTarget.orElseGet(() -> typeDescriptor(function.returnType()));
                 providers.add(new NativeProviderDeclaration(
                         function.name(),
                         targetType,
                         qualifier,
+                        lifetime,
                         function.comments(),
                         function.parameters(),
                         nativeProviderSourceFile(module),
@@ -4701,6 +4711,7 @@ public class CapybaraCompiler {
             String name,
             String targetType,
             String qualifier,
+            String lifetime,
             List<String> comments,
             List<CompiledFunction.CompiledFunctionParameter> parameters,
             String sourceFile,
@@ -4708,6 +4719,7 @@ public class CapybaraCompiler {
             boolean nativeBody
     ) {
         NativeProviderDeclaration {
+            lifetime = lifetime == null || lifetime.isBlank() ? "factory" : lifetime;
             comments = comments == null ? List.of() : List.copyOf(comments);
             parameters = parameters == null ? List.of() : List.copyOf(parameters);
         }
@@ -5322,6 +5334,24 @@ public class CapybaraCompiler {
                 + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue()
                 + "` requires field `" + fieldName + "`"
         ));
+    }
+
+    private boolean validateNativeProviderLifetime(
+            NativeProviderDeclaration provider,
+            String interfaceId,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        if ("factory".equals(provider.lifetime()) || "singleton".equals(provider.lifetime())) {
+            return true;
+        }
+        errors.add(nativeProviderError(
+                provider,
+                "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
+                + "` with qualifier `" + provider.qualifier()
+                + "` has unsupported lifetime `" + provider.lifetime()
+                + "`. Supported values: factory, singleton. Source `" + provider.sourceFile() + "`"
+        ));
+        return false;
     }
 
     private List<String> supportedNativeProviderFactories(NativeProviderBackend backend) {
