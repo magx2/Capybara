@@ -14,9 +14,7 @@ public record NativeProviderBackendBinding(
         className = blankToNull(className);
         moduleName = blankToNull(moduleName);
         exportName = blankToNull(exportName);
-        if (factory == null || factory.isBlank()) {
-            throw new IllegalArgumentException("UnsupportedBackend: Native provider backend `factory` is required.");
-        }
+        factory = blankToNull(factory);
     }
 
     private static String blankToNull(String value) {
