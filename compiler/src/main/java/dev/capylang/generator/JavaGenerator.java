@@ -64,7 +64,9 @@ public final class JavaGenerator implements Generator {
         var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(
                 primitiveBackedTypeInfo,
                 singletonTypeInfo,
-                List.of()
+                nativeProviderInfos.stream()
+                        .map(JavaGenerator::objectOrientedNativeProviderInfo)
+                        .toList()
         );
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         modules.addAll(nativeProviderBootstrapModules(nativeProviderInfos));
@@ -81,6 +83,19 @@ public final class JavaGenerator implements Generator {
         var result = new java.util.LinkedHashMap<String, PrimitiveLinkedType>();
         primitiveBackedTypes.forEach((alias, info) -> result.put(alias, info.backingType()));
         return java.util.Map.copyOf(result);
+    }
+
+    private static ObjectOrientedJavaGenerator.NativeProviderInfo objectOrientedNativeProviderInfo(NativeProviderInfo provider) {
+        return new ObjectOrientedJavaGenerator.NativeProviderInfo(
+                provider.providerSymbolName(),
+                provider.bootstrapMethodName(),
+                provider.targetBackendType(),
+                provider.interfaceId(),
+                provider.qualifier(),
+                provider.sourceModulePath(),
+                provider.sourceModuleName(),
+                provider.sourceFile()
+        );
     }
 
     private List<NativeProviderInfo> nativeProviderInfos(CompiledProgram program) {

@@ -221,6 +221,29 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldRejectNativeProviderCallsWithArgumentsFromObjectOrientedCode() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                nativeProviderAnnotationModule(),
+                clockObjectInterfaceModule(),
+                clockProviderModule(),
+                new RawModule("ClockConsumer", "/dev/capylang/test", """
+                        from ClockProvider import { system_clock }
+
+                        class ClockConsumer {
+                            def value(): String = system_clock("utc")
+                        }
+                        """, SourceKind.OBJECT_ORIENTED)
+        ), new TreeSet<>(), providerManifest(providerBinding("/dev/capylang/test/Clock", "system")));
+
+        assertThat(errorMessages(result))
+                .anySatisfy(message -> assertThat(message)
+                        .contains("TypeMismatch")
+                        .contains("Native provider `system_clock`")
+                        .contains("does not accept arguments")
+                        .contains("/dev/capylang/test/ClockConsumer.coo"));
+    }
+
+    @Test
     void shouldRejectDuplicateNativeProviderDeclarationsForSameInterfaceAndQualifier() {
         var result = compileProviders("""
                 from /capy/lang/Effect import { Effect }

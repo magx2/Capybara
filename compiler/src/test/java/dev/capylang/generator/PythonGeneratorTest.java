@@ -346,6 +346,38 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldRewriteObjectOrientedNativeProviderCallsToPythonBootstrap() {
+        var modules = new java.util.ArrayList<>(nativeProviderModules("""
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Providers import { Clock }
+
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """));
+        modules.add(new RawModule("ClockConsumer", "", """
+                from Providers import { Clock }
+                from ProvidersNative import { system_clock }
+
+                class ClockConsumer {
+                    def current(): Clock = system_clock()
+                }
+                """, SourceKind.OBJECT_ORIENTED));
+        var program = compileProgram(modules, providerManifest(pythonProviderBinding("/Providers.Clock", "system")));
+
+        var generated = new PythonGenerator().generate(program);
+        var consumerModule = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("ClockConsumer.py")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("import dev.capylang.native_providers as __capy_native")
+                .contains("return __capy_native.system_clock()")
+                .doesNotContain("ProvidersNative.system_clock()");
+    }
+
+    @Test
     void shouldRunPythonNativeProviderWithStructuralInterfaceValidation() throws Exception {
         var program = compileProgram(nativeProviderModules("""
                 from /capy/lang/Effect import { Effect }

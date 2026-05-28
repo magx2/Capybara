@@ -3639,6 +3639,7 @@ public class CapybaraCompiler {
         var bindings = new ArrayList<CompiledNativeProviderBinding>();
         var declaredProviderKeys = new LinkedHashSet<NativeProviderKey>();
         var usedManifestKeys = new LinkedHashSet<NativeProviderKey>();
+        var nativeProvidersByModule = new LinkedHashMap<String, List<NativeProviderDeclaration>>();
         var parsedModulesByKey = functionalProgram.modules().stream()
                 .collect(toMap(
                         module -> moduleKey(module.path(), module.name()),
@@ -3656,6 +3657,7 @@ public class CapybaraCompiler {
             if (nativeProviders.isEmpty()) {
                 continue;
             }
+            nativeProvidersByModule.put(moduleKey(module.path(), module.name()), nativeProviders);
             var declaredProviderSymbols = new LinkedHashSet<String>();
             var availableTypes = availableNativeProviderTypes(
                     module.name(),
@@ -3760,6 +3762,14 @@ public class CapybaraCompiler {
             }
         }
 
+        for (var module : objectOrientedModules) {
+            validateNativeProviderCalls(
+                    module,
+                    visibleNativeProviderDeclarations(module, nativeProvidersByModule, moduleLinkIndex),
+                    errors
+            );
+        }
+
         manifestBindingsByKey.forEach((key, binding) -> {
             if (!usedManifestKeys.contains(key)) {
                 errors.add(new Result.Error.SingleError(
@@ -3777,6 +3787,47 @@ public class CapybaraCompiler {
             return new Result.Error<>(errors);
         }
         return Result.success(new NativeProviderCatalog(declarations, bindings));
+    }
+
+    private List<NativeProviderDeclaration> visibleNativeProviderDeclarations(
+            ObjectOrientedModule module,
+            Map<String, List<NativeProviderDeclaration>> nativeProvidersByModule,
+            ModuleLinkIndex moduleLinkIndex
+    ) {
+        var providers = new LinkedHashMap<String, NativeProviderDeclaration>();
+        putVisibleNativeProviderDeclarations(providers, nativeProvidersByModule.get(moduleKey(module.path(), module.name())));
+        for (var importDeclaration : module.imports()) {
+            if (importDeclaration.qualifiedOnly()) {
+                continue;
+            }
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
+            if (importedModule == null) {
+                continue;
+            }
+            var importedProviders = nativeProvidersByModule.get(moduleKey(importedModule.path(), importedModule.name()));
+            if (importedProviders == null || importedProviders.isEmpty()) {
+                continue;
+            }
+            for (var provider : importedProviders) {
+                if (importDeclaration.excludedSymbols().contains(provider.name())) {
+                    continue;
+                }
+                if (importDeclaration.isStarImport() || importDeclaration.symbols().contains(provider.name())) {
+                    providers.putIfAbsent(provider.name(), provider);
+                }
+            }
+        }
+        return List.copyOf(providers.values());
+    }
+
+    private void putVisibleNativeProviderDeclarations(
+            Map<String, NativeProviderDeclaration> providers,
+            List<NativeProviderDeclaration> moduleProviders
+    ) {
+        if (moduleProviders == null) {
+            return;
+        }
+        moduleProviders.forEach(provider -> providers.putIfAbsent(provider.name(), provider));
     }
 
     private List<NativeProviderDeclaration> nativeProviderDeclarations(CompiledModule module) {
