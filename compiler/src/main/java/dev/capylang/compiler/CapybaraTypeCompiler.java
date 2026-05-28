@@ -71,6 +71,38 @@ public class CapybaraTypeCompiler {
     }
 
     private static Result<CompiledType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes, LinkCache linkCache) {
+        if (useCapybaraTypeLinkingPass()) {
+            return linkDataTypeWithCapybaraPass(dataType, dataTypes, linkCache);
+        }
+        return linkDataTypeLegacy(dataType, dataTypes, linkCache);
+    }
+
+    private static Result<CompiledType> linkDataTypeWithCapybaraPass(
+            DataType dataType,
+            Map<String, GenericDataType> dataTypes,
+            LinkCache linkCache
+    ) {
+        var resolution = typeLinkingPassList(
+                "resolveDataType",
+                new Class<?>[]{String.class, List.class, List.class},
+                dataType.name(),
+                List.copyOf(dataTypes.keySet()),
+                dataTypes.keySet().stream().sorted().toList()
+        );
+        if (!(Boolean) resolution.get(0)) {
+            return Result.error((String) resolution.get(4));
+        }
+        var matchedKey = (String) resolution.get(1);
+        var requestedName = (String) resolution.get(2);
+        return instantiateTypeArgumentsIfNeeded(
+                withQualifiedNameIfNeeded(dataTypes.get(matchedKey), requestedName),
+                stringList(resolution.get(3)),
+                dataTypes,
+                linkCache
+        );
+    }
+
+    private static Result<CompiledType> linkDataTypeLegacy(DataType dataType, Map<String, GenericDataType> dataTypes, LinkCache linkCache) {
         var parsedName = parseDataTypeName(dataType.name(), linkCache);
         var baseName = parsedName.baseName();
         if (dataTypes.containsKey(baseName)) {
@@ -123,8 +155,24 @@ public class CapybaraTypeCompiler {
         if (cached != null) {
             return cached;
         }
+        if (useCapybaraTypeLinkingPass()) {
+            var descriptor = (String) typeLinkingPassObject(
+                    "parseTypeArgument",
+                    new Class<?>[]{String.class},
+                    raw
+            );
+            var parsed = parseTypeArgumentLegacy(descriptor, linkCache);
+            linkCache.parsedTypeArguments.put(raw, parsed);
+            return parsed;
+        }
+        var parsed = parseTypeArgumentLegacy(raw, linkCache);
+        linkCache.parsedTypeArguments.put(raw, parsed);
+        return parsed;
+    }
+
+    private static Type parseTypeArgumentLegacy(String raw, LinkCache linkCache) {
         var trimmed = raw.trim();
-        var parsed = PrimitiveType.find(trimmed)
+        return PrimitiveType.find(trimmed)
                 .map(Type.class::cast)
                 .orElseGet(() -> {
                     if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
@@ -157,8 +205,6 @@ public class CapybaraTypeCompiler {
                     }
                     return new DataType(trimmed);
                 });
-        linkCache.parsedTypeArguments.put(raw, parsed);
-        return parsed;
     }
 
     private static int indexOfTopLevelArrow(String value, String arrow) {
@@ -387,6 +433,25 @@ public class CapybaraTypeCompiler {
     }
 
     private static String substituteTypeDescriptor(String descriptor, Map<String, CompiledType> substitutions) {
+        if (useCapybaraTypeLinkingPass()) {
+            return substituteTypeDescriptorWithCapybaraPass(descriptor, substitutions);
+        }
+        return substituteTypeDescriptorLegacy(descriptor, substitutions);
+    }
+
+    private static String substituteTypeDescriptorWithCapybaraPass(String descriptor, Map<String, CompiledType> substitutions) {
+        var substitutionTuples = substitutions.entrySet().stream()
+                .map(entry -> List.of(entry.getKey(), typeDescriptor(entry.getValue())))
+                .toList();
+        return (String) typeLinkingPassObject(
+                "substituteTypeDescriptor",
+                new Class<?>[]{String.class, List.class},
+                descriptor,
+                substitutionTuples
+        );
+    }
+
+    private static String substituteTypeDescriptorLegacy(String descriptor, Map<String, CompiledType> substitutions) {
         if (descriptor == null || descriptor.isBlank()) {
             return descriptor;
         }
@@ -426,6 +491,39 @@ public class CapybaraTypeCompiler {
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         }
         return trimmed;
+    }
+
+    private static boolean useCapybaraTypeLinkingPass() {
+        return Boolean.parseBoolean(System.getProperty("capybara.compiler.useCapybaraTypeLinkingPass", "true"))
+               && typeLinkingPassAvailable();
+    }
+
+    private static boolean typeLinkingPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.linking.TypeLinkingPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> stringList(Object value) {
+        return (List<String>) value;
+    }
+
+    private static List<?> typeLinkingPassList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (List<?>) typeLinkingPassObject(methodName, parameterTypes, args);
+    }
+
+    private static Object typeLinkingPassObject(String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.linking.TypeLinkingPass");
+            var method = passClass.getMethod(methodName, parameterTypes);
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara type linking pass method `" + methodName + "`", e);
+        }
     }
 
     private static ParsedDataTypeName parseDataTypeName(String rawName, LinkCache linkCache) {

@@ -680,6 +680,9 @@ public class CapybaraCompiler {
     private record NativeProviderTarget(ModuleRef ownerModule, GenericDataType type) {
     }
 
+    private record NativeProviderDeclarationValidation(String interfaceId, NativeProviderKey key, List<?> providerDto) {
+    }
+
     private ModuleLinkIndex buildModuleLinkIndex(
             List<ModuleRef> allModuleRefs,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
@@ -835,6 +838,10 @@ public class CapybaraCompiler {
 
     private String stringElement(List<?> tuple, int index) {
         return (String) tuple.get(index);
+    }
+
+    private int intElement(List<?> tuple, int index) {
+        return (Integer) tuple.get(index);
     }
 
     @SuppressWarnings("unchecked")
@@ -2309,6 +2316,22 @@ public class CapybaraCompiler {
             String normalizedFile,
             TreeSet<Result.Error.SingleError> errors
     ) {
+        if (useCapybaraAnnotationValidationPass()) {
+            addAnnotationValidationPassErrors(
+                    annotationValidationPassValidateAnnotationDefinition(annotationDeclarationDto(annotation, new ModuleRef("", ""))),
+                    normalizedFile,
+                    errors
+            );
+            return;
+        }
+        validateAnnotationDefinitionLegacy(annotation, normalizedFile, errors);
+    }
+
+    private void validateAnnotationDefinitionLegacy(
+            AnnotationDeclaration annotation,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
         for (var target : annotation.targets()) {
             if (AnnotationSemanticTarget.fromSourceName(target.name()).isEmpty()) {
                 errors.add(errorAt(
@@ -2604,6 +2627,30 @@ public class CapybaraCompiler {
             String normalizedFile,
             TreeSet<Result.Error.SingleError> errors
     ) {
+        if (useCapybaraAnnotationValidationPass()) {
+            addAnnotationValidationPassErrors(
+                    annotationValidationPassValidateAnnotationUsageList(
+                            usages.stream().map(this::annotationUsageDto).toList(),
+                            availableAnnotationDtos(availableAnnotations),
+                            target.map(Enum::name).orElse(""),
+                            targetDisplayName
+                    ),
+                    normalizedFile,
+                    errors
+            );
+            return;
+        }
+        validateAnnotationUsageListLegacy(usages, target, targetDisplayName, availableAnnotations, normalizedFile, errors);
+    }
+
+    private void validateAnnotationUsageListLegacy(
+            List<AnnotationUsage> usages,
+            Optional<AnnotationSemanticTarget> target,
+            String targetDisplayName,
+            Map<String, AvailableAnnotation> availableAnnotations,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
         var singleUseAnnotations = new HashMap<String, AnnotationUsage>();
         for (var usage : usages) {
             var availableAnnotation = availableAnnotations.get(usage.name());
@@ -2645,6 +2692,181 @@ public class CapybaraCompiler {
                 }
             }
             validateAnnotationArguments(usage, annotation, normalizedFile, errors);
+        }
+    }
+
+    private boolean useCapybaraAnnotationValidationPass() {
+        return Boolean.parseBoolean(System.getProperty("capybara.compiler.useCapybaraAnnotationValidationPass", "true"))
+               && annotationValidationPassAvailable();
+    }
+
+    private boolean annotationValidationPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.linking.AnnotationValidationPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    private void addAnnotationValidationPassErrors(
+            List<java.util.List<?>> passErrors,
+            String normalizedFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var passError : passErrors) {
+            errors.add(new Result.Error.SingleError(
+                    intElement(passError, 0),
+                    intElement(passError, 1),
+                    normalizedFile,
+                    stringElement(passError, 2)
+            ));
+        }
+    }
+
+    private List<?> annotationDeclarationDto(AnnotationDeclaration annotation, ModuleRef ownerModule) {
+        return annotationValidationPassList(
+                "annotationDeclaration",
+                new Class<?>[]{String.class, List.class, List.class, boolean.class, String.class, String.class},
+                annotation.name(),
+                annotation.targets().stream().map(this::annotationTargetDto).toList(),
+                annotation.fields().stream().map(this::annotationFieldDto).toList(),
+                annotation.multiple(),
+                ownerModule.name(),
+                ownerModule.path()
+        );
+    }
+
+    private List<?> annotationTargetDto(AnnotationTarget target) {
+        return annotationValidationPassList(
+                "annotationTarget",
+                new Class<?>[]{String.class, int.class, int.class},
+                target.name(),
+                sourceLine(target.position()),
+                sourceColumn(target.position())
+        );
+    }
+
+    private List<?> annotationFieldDto(AnnotationFieldDeclaration field) {
+        var defaultPosition = field.defaultValue()
+                .flatMap(AnnotationValue::position)
+                .or(field::position);
+        return annotationValidationPassList(
+                "annotationField",
+                new Class<?>[]{String.class, String.class, boolean.class, String.class, int.class, int.class, int.class, int.class},
+                field.name(),
+                field.type(),
+                field.defaultValue().isPresent(),
+                field.defaultValue().map(this::annotationValueKind).orElse(""),
+                sourceLine(field.position()),
+                sourceColumn(field.position()),
+                sourceLine(defaultPosition),
+                sourceColumn(defaultPosition)
+        );
+    }
+
+    private List<?> annotationUsageDto(AnnotationUsage usage) {
+        return annotationValidationPassList(
+                "annotationUsage",
+                new Class<?>[]{String.class, List.class, int.class, int.class},
+                usage.name(),
+                usage.arguments().stream().map(this::annotationArgumentDto).toList(),
+                sourceLine(usage.position()),
+                sourceColumn(usage.position())
+        );
+    }
+
+    private List<?> annotationArgumentDto(AnnotationArgument argument) {
+        var valuePosition = argument.value().position().or(argument::position);
+        return annotationValidationPassList(
+                "annotationArgument",
+                new Class<?>[]{String.class, String.class, int.class, int.class, int.class, int.class},
+                argument.name(),
+                annotationValueKind(argument.value()),
+                sourceLine(argument.position()),
+                sourceColumn(argument.position()),
+                sourceLine(valuePosition),
+                sourceColumn(valuePosition)
+        );
+    }
+
+    private List<?> availableAnnotationDtos(Map<String, AvailableAnnotation> availableAnnotations) {
+        return availableAnnotations.entrySet().stream()
+                .map(entry -> {
+                    var available = entry.getValue();
+                    return annotationValidationPassList(
+                            "availableAnnotation",
+                            new Class<?>[]{String.class, String.class, String.class, List.class},
+                            entry.getKey(),
+                            available.ownerModule().name(),
+                            available.ownerModule().path(),
+                            annotationDeclarationDto(available.annotation(), available.ownerModule())
+                    );
+                })
+                .toList();
+    }
+
+    private String annotationValueKind(AnnotationValue value) {
+        return switch (value) {
+            case AnnotationValue.StringValue ignored -> "STRING";
+            case AnnotationValue.IntValue ignored -> "INT";
+            case AnnotationValue.LongValue ignored -> "LONG";
+            case AnnotationValue.FloatValue ignored -> "FLOAT";
+            case AnnotationValue.DoubleValue ignored -> "DOUBLE";
+            case AnnotationValue.BoolValue ignored -> "BOOL";
+            case AnnotationValue.NothingValue ignored -> "NOTHING";
+            case AnnotationValue.TypeNameValue ignored -> "TYPE_NAME";
+        };
+    }
+
+    private int sourceLine(Optional<SourcePosition> position) {
+        return position.orElse(SourcePosition.EMPTY).line();
+    }
+
+    private int sourceColumn(Optional<SourcePosition> position) {
+        return position.orElse(SourcePosition.EMPTY).column();
+    }
+
+    private List<java.util.List<?>> annotationValidationPassValidateAnnotationDefinition(List<?> annotation) {
+        return annotationValidationPassErrorList(
+                "validateAnnotationDefinition",
+                new Class<?>[]{List.class},
+                annotation
+        );
+    }
+
+    private List<java.util.List<?>> annotationValidationPassValidateAnnotationUsageList(
+            List<?> usages,
+            List<?> availableAnnotations,
+            String targetName,
+            String targetDisplayName
+    ) {
+        return annotationValidationPassErrorList(
+                "validateAnnotationUsageList",
+                new Class<?>[]{List.class, List.class, String.class, String.class},
+                usages,
+                availableAnnotations,
+                targetName,
+                targetDisplayName
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<java.util.List<?>> annotationValidationPassErrorList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (List<java.util.List<?>>) annotationValidationPassObject(methodName, parameterTypes, args);
+    }
+
+    private List<?> annotationValidationPassList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (List<?>) annotationValidationPassObject(methodName, parameterTypes, args);
+    }
+
+    private Object annotationValidationPassObject(String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.linking.AnnotationValidationPass");
+            var method = passClass.getMethod(methodName, parameterTypes);
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara annotation validation pass method `" + methodName + "`", e);
         }
     }
 
@@ -3894,6 +4116,45 @@ public class CapybaraCompiler {
             }
             var visibleTypes = ((Result.Success<Map<String, NativeProviderTarget>>) availableTypes).value();
             for (var provider : nativeProviders) {
+                if (useCapybaraNativeProviderValidationPass()) {
+                    var providerValidation = validateNativeProviderDeclarationWithCapybaraPass(
+                            provider,
+                            new ModuleRef(module.name(), module.path()),
+                            visibleTypes,
+                            declaredProviderKeys,
+                            declaredProviderSymbols,
+                            errors
+                    );
+                    if (providerValidation.isEmpty()) {
+                        continue;
+                    }
+                    var validatedProvider = providerValidation.orElseThrow();
+                    var interfaceId = validatedProvider.interfaceId();
+                    var key = validatedProvider.key();
+                    declaredProviderKeys.add(key);
+                    declaredProviderSymbols.add(provider.name());
+                    declarations.add(new CompiledNativeProviderDeclaration(
+                            provider.name(),
+                            module.path(),
+                            module.name(),
+                            provider.targetType(),
+                            interfaceId,
+                            provider.qualifier(),
+                            provider.sourceFile()
+                    ));
+                    var manifestBinding = manifestBindingsByKey.get(key);
+                    if (manifestBinding == null) {
+                        errors.add(nativeProviderError(
+                                provider,
+                                nativeProviderValidationPassNotWiredError(validatedProvider.providerDto())
+                        ));
+                        continue;
+                    }
+                    var compiledBinding = compiledNativeProviderBinding(provider, interfaceId, manifestBinding, errors);
+                    usedManifestKeys.add(key);
+                    compiledBinding.ifPresent(bindings::add);
+                    continue;
+                }
                 if (!provider.parameters().isEmpty()) {
                     errors.add(nativeProviderError(
                             provider,
@@ -4000,13 +4261,20 @@ public class CapybaraCompiler {
 
         manifestBindingsByKey.forEach((key, binding) -> {
             if (!usedManifestKeys.contains(key)) {
+                var message = useCapybaraNativeProviderValidationPass()
+                        ? nativeProviderValidationPassUnusedManifestEntryError(
+                                key.interfaceId(),
+                                key.qualifier(),
+                                nativeProviderManifestSource(manifest)
+                        )
+                        : "NotWired: Native provider manifest entry for interface `" + key.interfaceId()
+                          + "` with qualifier `" + key.qualifier()
+                          + "` has no matching provider declaration" + nativeProviderManifestSourceSuffix(manifest);
                 errors.add(new Result.Error.SingleError(
                         0,
                         0,
                         nativeProviderManifestSource(manifest),
-                        "NotWired: Native provider manifest entry for interface `" + key.interfaceId()
-                        + "` with qualifier `" + key.qualifier()
-                        + "` has no matching provider declaration" + nativeProviderManifestSourceSuffix(manifest)
+                        message
                 ));
             }
         });
@@ -4123,6 +4391,259 @@ public class CapybaraCompiler {
             }
         }
         return null;
+    }
+
+    private Optional<NativeProviderDeclarationValidation> validateNativeProviderDeclarationWithCapybaraPass(
+            NativeProviderDeclaration provider,
+            ModuleRef module,
+            Map<String, NativeProviderTarget> visibleTypes,
+            Set<NativeProviderKey> declaredProviderKeys,
+            Set<String> declaredProviderSymbols,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var interfaceId = "";
+        var targetKind = "UNKNOWN";
+        if (isBuiltinOrCompositeNativeProviderTarget(provider.targetType())) {
+            targetKind = "BUILTIN_OR_COMPOSITE";
+        } else {
+            var resolvedTarget = resolveNativeProviderTarget(provider.targetType(), visibleTypes);
+            if (resolvedTarget != null) {
+                if (resolvedTarget.type() instanceof CompiledObjectType objectType
+                    && objectType.kind() == CompiledObjectKind.INTERFACE) {
+                    targetKind = "INTERFACE";
+                    interfaceId = nativeProviderInterfaceId(resolvedTarget.ownerModule(), objectType.name());
+                } else {
+                    targetKind = nativeProviderTargetKind(resolvedTarget.type());
+                }
+            }
+        }
+
+        var providerDto = nativeProviderValidationPassProviderDeclaration(provider, interfaceId, targetKind, module.name());
+        var result = nativeProviderValidationPassValidateProviderDeclaration(
+                providerDto,
+                declaredProviderKeys.stream()
+                        .map(this::nativeProviderValidationPassProviderKey)
+                        .toList(),
+                List.copyOf(declaredProviderSymbols)
+        );
+        if (!(Boolean) result.get(0)) {
+            errors.add(nativeProviderError(provider, stringElement(result, 1)));
+            return Optional.empty();
+        }
+        return Optional.of(new NativeProviderDeclarationValidation(
+                interfaceId,
+                new NativeProviderKey(interfaceId, provider.qualifier()),
+                providerDto
+        ));
+    }
+
+    private boolean useCapybaraNativeProviderValidationPass() {
+        return Boolean.parseBoolean(System.getProperty("capybara.compiler.useCapybaraNativeProviderValidationPass", "true"))
+               && nativeProviderValidationPassAvailable();
+    }
+
+    private boolean nativeProviderValidationPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.linking.NativeProviderValidationPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    private void addNativeProviderValidationPassErrors(
+            List<java.util.List<?>> passErrors,
+            String sourceFile,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        for (var passError : passErrors) {
+            errors.add(new Result.Error.SingleError(
+                    intElement(passError, 0),
+                    intElement(passError, 1),
+                    sourceFile,
+                    stringElement(passError, 2)
+            ));
+        }
+    }
+
+    private List<?> nativeProviderValidationPassProviderDeclaration(
+            NativeProviderDeclaration provider,
+            String interfaceId,
+            String targetKind,
+            String moduleName
+    ) {
+        return nativeProviderValidationPassList(
+                "providerDeclaration",
+                new Class<?>[]{
+                        String.class,
+                        String.class,
+                        String.class,
+                        String.class,
+                        int.class,
+                        boolean.class,
+                        boolean.class,
+                        String.class,
+                        String.class,
+                        String.class
+                },
+                provider.name(),
+                provider.targetType(),
+                provider.qualifier(),
+                provider.sourceFile(),
+                provider.parameters().size(),
+                provider.effectReturnType(),
+                provider.nativeBody(),
+                interfaceId,
+                targetKind,
+                moduleName
+        );
+    }
+
+    private List<?> nativeProviderValidationPassProviderKey(NativeProviderKey key) {
+        return nativeProviderValidationPassList(
+                "providerKey",
+                new Class<?>[]{String.class, String.class},
+                key.interfaceId(),
+                key.qualifier()
+        );
+    }
+
+    private List<?> nativeProviderValidationPassValidateProviderDeclaration(
+            List<?> providerDto,
+            List<?> declaredProviderKeys,
+            List<String> declaredProviderSymbols
+    ) {
+        return nativeProviderValidationPassList(
+                "validateProviderDeclaration",
+                new Class<?>[]{List.class, List.class, List.class},
+                providerDto,
+                declaredProviderKeys,
+                declaredProviderSymbols
+        );
+    }
+
+    private List<java.util.List<?>> nativeProviderValidationPassValidateManifestEntries(NativeProviderManifest manifest) {
+        return nativeProviderValidationPassErrorList(
+                "validateManifestEntries",
+                new Class<?>[]{List.class, String.class},
+                manifest.providers().stream().map(this::nativeProviderValidationPassManifestEntry).toList(),
+                nativeProviderManifestSource(manifest)
+        );
+    }
+
+    private List<?> nativeProviderValidationPassManifestEntry(NativeProviderBinding binding) {
+        return nativeProviderValidationPassList(
+                "manifestEntry",
+                new Class<?>[]{String.class, String.class, List.class, List.class, List.class},
+                binding.interfaceId(),
+                binding.qualifier(),
+                nativeProviderValidationPassOptionalBackendBinding(binding.javaBinding()),
+                nativeProviderValidationPassOptionalBackendBinding(binding.javascriptBinding()),
+                nativeProviderValidationPassOptionalBackendBinding(binding.pythonBinding())
+        );
+    }
+
+    private List<?> nativeProviderValidationPassOptionalBackendBinding(NativeProviderBackendBinding binding) {
+        if (binding == null) {
+            return nativeProviderValidationPassList("noBackendBinding", new Class<?>[]{});
+        }
+        return nativeProviderValidationPassList(
+                "someBackendBinding",
+                new Class<?>[]{List.class},
+                nativeProviderValidationPassBackendBinding(binding)
+        );
+    }
+
+    private List<?> nativeProviderValidationPassBackendBinding(NativeProviderBackendBinding binding) {
+        return nativeProviderValidationPassBackendBinding(
+                textOrEmpty(binding.className()),
+                textOrEmpty(binding.moduleName()),
+                textOrEmpty(binding.exportName()),
+                textOrEmpty(binding.factory())
+        );
+    }
+
+    private List<?> nativeProviderValidationPassBackendBinding(
+            String className,
+            String moduleName,
+            String exportName,
+            String factory
+    ) {
+        return nativeProviderValidationPassList(
+                "backendBinding",
+                new Class<?>[]{String.class, String.class, String.class, String.class},
+                className,
+                moduleName,
+                exportName,
+                factory
+        );
+    }
+
+    private List<?> nativeProviderValidationPassValidateBackendBinding(
+            NativeProviderDeclaration provider,
+            String interfaceId,
+            NativeProviderBackend backend,
+            NativeProviderBackendBinding binding
+    ) {
+        return nativeProviderValidationPassList(
+                "validateBackendBinding",
+                new Class<?>[]{List.class, String.class, boolean.class, List.class},
+                nativeProviderValidationPassProviderDeclaration(provider, interfaceId, "INTERFACE", ""),
+                backend.jsonValue(),
+                binding != null,
+                binding == null
+                        ? nativeProviderValidationPassBackendBinding("", "", "", "")
+                        : nativeProviderValidationPassBackendBinding(binding)
+        );
+    }
+
+    private String nativeProviderValidationPassNotWiredError(List<?> providerDto) {
+        return (String) nativeProviderValidationPassObject(
+                "notWiredError",
+                new Class<?>[]{List.class},
+                providerDto
+        );
+    }
+
+    private String nativeProviderValidationPassUnusedManifestEntryError(
+            String interfaceId,
+            String qualifier,
+            String manifestSourceFile
+    ) {
+        return (String) nativeProviderValidationPassObject(
+                "unusedManifestEntryError",
+                new Class<?>[]{String.class, String.class, String.class},
+                interfaceId,
+                qualifier,
+                manifestSourceFile
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<java.util.List<?>> nativeProviderValidationPassErrorList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (List<java.util.List<?>>) nativeProviderValidationPassObject(methodName, parameterTypes, args);
+    }
+
+    private boolean nativeProviderValidationPassBoolean(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (Boolean) nativeProviderValidationPassObject(methodName, parameterTypes, args);
+    }
+
+    private List<?> nativeProviderValidationPassList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (List<?>) nativeProviderValidationPassObject(methodName, parameterTypes, args);
+    }
+
+    private Object nativeProviderValidationPassObject(String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.linking.NativeProviderValidationPass");
+            var method = passClass.getMethod(methodName, parameterTypes);
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara native provider validation pass method `" + methodName + "`", e);
+        }
+    }
+
+    private String textOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private String nativeProviderSymbolName(String interfaceName, String qualifier) {
@@ -4373,6 +4894,14 @@ public class CapybaraCompiler {
     }
 
     private boolean callsProviderWithArguments(String expression, String providerName) {
+        if (useCapybaraNativeProviderValidationPass()) {
+            return nativeProviderValidationPassBoolean(
+                    "callsProviderWithArguments",
+                    new Class<?>[]{String.class, String.class},
+                    expression,
+                    providerName
+            );
+        }
         var index = 0;
         while (index < expression.length()) {
             var current = expression.charAt(index);
@@ -4492,6 +5021,17 @@ public class CapybaraCompiler {
             TreeSet<Result.Error.SingleError> errors
     ) {
         var bindingsByKey = new LinkedHashMap<NativeProviderKey, NativeProviderBinding>();
+        if (useCapybaraNativeProviderValidationPass()) {
+            addNativeProviderValidationPassErrors(
+                    nativeProviderValidationPassValidateManifestEntries(manifest),
+                    nativeProviderManifestSource(manifest),
+                    errors
+            );
+            for (var binding : manifest.providers()) {
+                bindingsByKey.putIfAbsent(new NativeProviderKey(binding.interfaceId(), binding.qualifier()), binding);
+            }
+            return Map.copyOf(bindingsByKey);
+        }
         for (var binding : manifest.providers()) {
             var key = new NativeProviderKey(binding.interfaceId(), binding.qualifier());
             var existing = bindingsByKey.putIfAbsent(key, binding);
@@ -4722,6 +5262,18 @@ public class CapybaraCompiler {
             NativeProviderBackendBinding binding,
             TreeSet<Result.Error.SingleError> errors
     ) {
+        if (useCapybaraNativeProviderValidationPass()) {
+            var result = nativeProviderValidationPassValidateBackendBinding(
+                    provider,
+                    interfaceId,
+                    backend,
+                    binding
+            );
+            if (!(Boolean) result.get(0)) {
+                errors.add(nativeProviderError(provider, stringElement(result, 1)));
+            }
+            return;
+        }
         if (binding == null) {
             return;
         }
@@ -4777,6 +5329,13 @@ public class CapybaraCompiler {
     }
 
     private boolean isBuiltinOrCompositeNativeProviderTarget(String targetType) {
+        if (useCapybaraNativeProviderValidationPass()) {
+            return nativeProviderValidationPassBoolean(
+                    "isBuiltinOrCompositeNativeProviderTarget",
+                    new Class<?>[]{String.class},
+                    targetType
+            );
+        }
         var trimmed = targetType.trim();
         if (trimmed.contains("=>") || trimmed.contains("[") || trimmed.endsWith("[]")) {
             return true;
