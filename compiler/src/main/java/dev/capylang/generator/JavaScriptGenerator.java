@@ -52,6 +52,7 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.joining;
 
 public final class JavaScriptGenerator implements Generator {
+    private static final String CAPYBARA_JAVASCRIPT_GENERATION_PASS = "dev.capylang.compiler.generator.JavaScriptGenerationPass";
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
@@ -92,6 +93,19 @@ public final class JavaScriptGenerator implements Generator {
             "switch", "static", "this", "throw", "try", "true", "typeof", "var", "void",
             "while", "with", "yield"
     );
+    private final boolean useCapybaraGenerationPass;
+
+    public JavaScriptGenerator() {
+        this(true);
+    }
+
+    private JavaScriptGenerator(boolean useCapybaraGenerationPass) {
+        this.useCapybaraGenerationPass = useCapybaraGenerationPass;
+    }
+
+    static JavaScriptGenerator legacyParityMode() {
+        return new JavaScriptGenerator(false);
+    }
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -118,9 +132,88 @@ public final class JavaScriptGenerator implements Generator {
             modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
         }
         modules.addAll(new ObjectOrientedJavaScriptGenerator(context).generate(program.objectOrientedModules()));
-        modules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
+        var renderedModules = List.copyOf(modules);
+        var plannedModules = planJavaScriptGeneration(renderedModules, context.nativeProviderInfos())
+                .orElseGet(() -> {
+                    var legacyModules = new ArrayList<>(renderedModules);
+                    legacyModules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
+                    return List.copyOf(legacyModules);
+                });
+        modules = new ArrayList<>(plannedModules);
         modules.addAll(RuntimeModules.modules());
         return new GeneratedProgram(List.copyOf(modules));
+    }
+
+    private Optional<List<GeneratedModule>> planJavaScriptGeneration(
+            List<GeneratedModule> renderedModules,
+            List<ProgramContext.NativeProviderInfo> nativeProviderInfos
+    ) {
+        if (!useCapybaraGenerationPass) {
+            return Optional.empty();
+        }
+        try {
+            var passClass = Class.forName(CAPYBARA_JAVASCRIPT_GENERATION_PASS);
+            var fileMethod = passClass.getMethod("generatedJavascriptFile", String.class, String.class);
+            var methodInfoMethod = passClass.getMethod("javascriptNativeProviderMethodInfo", String.class, int.class);
+            var providerMethod = passClass.getMethod(
+                    "javascriptNativeProviderInfo",
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    List.class
+            );
+            var files = renderedModules.stream()
+                    .map(module -> invoke(
+                            fileMethod,
+                            module.relativePath().toString().replace('\\', '/'),
+                            module.code()
+                    ))
+                    .toList();
+            var providers = nativeProviderInfos.stream()
+                    .map(provider -> invoke(
+                            providerMethod,
+                            provider.providerSymbolName(),
+                            provider.bootstrapFunctionName(),
+                            provider.interfaceId(),
+                            provider.qualifier(),
+                            provider.sourceFile(),
+                            provider.binding().moduleName(),
+                            provider.binding().exportName(),
+                            provider.binding().factory(),
+                            provider.methods().stream()
+                                    .map(method -> invoke(methodInfoMethod, method.name(), method.arity()))
+                                    .toList()
+                    ))
+                    .toList();
+            var planMethod = passClass.getMethod("planJavascriptGeneration", List.class, List.class);
+            var planFiles = (List<?>) planMethod.invoke(null, files, providers);
+            var modules = new ArrayList<GeneratedModule>();
+            for (var file : planFiles) {
+                var generatedFile = (List<?>) file;
+                modules.add(new GeneratedModule(
+                        Path.of((String) generatedFile.get(0)),
+                        (String) generatedFile.get(1)
+                ));
+            }
+            return Optional.of(List.copyOf(modules));
+        } catch (ClassNotFoundException ignored) {
+            return Optional.empty();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara JavaScript generation pass", e);
+        }
+    }
+
+    private Object invoke(java.lang.reflect.Method method, Object... args) {
+        try {
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara JavaScript generation pass DTO factory", e);
+        }
     }
 
     private List<GeneratedModule> nativeProviderBootstrapModules(List<ProgramContext.NativeProviderInfo> providers) {
