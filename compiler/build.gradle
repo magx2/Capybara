@@ -7,6 +7,9 @@ plugins {
 }
 
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
+def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
+def antlrGeneratedMainDir = layout.buildDirectory.dir('generated-src/antlr/main')
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
@@ -25,6 +28,15 @@ test {
 }
 
 sourceSets {
+    bootstrap {
+        java.srcDir file('src/main/java')
+        java.srcDir antlrGeneratedMainDir
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+    main {
+        java.srcDir capybaraGeneratedMainDir
+    }
     integrationTest {
         java.srcDir file('src/integrationTest/java')
         resources.srcDir file('src/integrationTest/resources')
@@ -45,6 +57,33 @@ tasks.register('integrationTest', Test) {
     classpath = sourceSets.integrationTest.runtimeClasspath
     shouldRunAfter test
     useJUnitPlatform()
+}
+
+tasks.named('compileBootstrapJava') {
+    dependsOn tasks.named('generateGrammarSource')
+}
+
+tasks.register('compileCapybara', JavaExec) {
+    group = 'build'
+    description = 'Compiles compiler Capybara sources to generated Java for self-hosting smoke coverage.'
+    dependsOn tasks.named('bootstrapClasses')
+
+    classpath = sourceSets.bootstrap.runtimeClasspath
+    mainClass.set('dev.capylang.bootstrap.CapybaraBootstrapCompiler')
+    inputs.dir(capybaraMainSourceDir)
+            .withPropertyName('capybaraMainSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(capybaraGeneratedMainDir)
+    doFirst {
+        args = [
+                capybaraMainSourceDir.asFile.absolutePath,
+                capybaraGeneratedMainDir.get().asFile.absolutePath
+        ]
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('compileCapybara')
 }
 
 check {

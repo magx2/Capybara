@@ -405,8 +405,13 @@ def capyRuntimeClasspath = files(
         compilerResourcesDir,
         capyRuntimeDependencies
 )
+def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 
 sourceSets {
+    main {
+        java.srcDir capybaraGeneratedMainDir
+    }
     e2eCfun {
         java.srcDir e2eCfunGeneratedJavaDir
         resources.srcDir file('src/e2e-cfun/resources')
@@ -476,6 +481,29 @@ test {
             compilerResourcesDir,
             testRuntimeDependencies
     )
+}
+
+tasks.register('compileCapybara', JavaExec) {
+    group = 'build'
+    description = 'Compiles CLI Capybara sources to generated Java for self-hosting smoke coverage.'
+    dependsOn ':compiler:bootstrapClasses'
+
+    classpath = files({ project(':compiler').sourceSets.bootstrap.runtimeClasspath })
+    mainClass.set('dev.capylang.bootstrap.CapybaraBootstrapCompiler')
+    inputs.dir(capybaraMainSourceDir)
+            .withPropertyName('capybaraMainSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(capybaraGeneratedMainDir)
+    doFirst {
+        args = [
+                capybaraMainSourceDir.asFile.absolutePath,
+                capybaraGeneratedMainDir.get().asFile.absolutePath
+        ]
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('compileCapybara')
 }
 
 def registerE2eTestTask = { String taskName, String taskDescription, sourceSet, runtimeDependencies, String compileJavaTaskName, testResultsDir ->
