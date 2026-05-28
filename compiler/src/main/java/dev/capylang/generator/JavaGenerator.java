@@ -32,6 +32,7 @@ import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateTailRe
 
 public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
+    private static final String CAPYBARA_JAVA_GENERATION_PASS = "dev.capylang.compiler.generator.JavaGenerationPass";
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final Set<String> JAVA_KEYWORDS = Set.of(
@@ -43,6 +44,19 @@ public final class JavaGenerator implements Generator {
             "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
             "null", "record", "sealed", "permits", "var", "yield"
     );
+    private final boolean useCapybaraGenerationPass;
+
+    public JavaGenerator() {
+        this(true);
+    }
+
+    private JavaGenerator(boolean useCapybaraGenerationPass) {
+        this.useCapybaraGenerationPass = useCapybaraGenerationPass;
+    }
+
+    static JavaGenerator legacyParityMode() {
+        return new JavaGenerator(false);
+    }
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -69,12 +83,17 @@ public final class JavaGenerator implements Generator {
                         .toList()
         );
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
-        modules.addAll(nativeProviderBootstrapModules(nativeProviderInfos));
+        var plannedModules = planJavaGeneration(modules, nativeProviderInfos)
+                .orElseGet(() -> {
+                    var legacyModules = new ArrayList<>(modules);
+                    legacyModules.addAll(nativeProviderBootstrapModules(nativeProviderInfos));
+                    return List.copyOf(legacyModules);
+                });
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
                        + ", Java source rendering="
                        + Duration.ofNanos(timings.sourceRenderNanos()));
-        return new GeneratedProgram(modules);
+        return new GeneratedProgram(plannedModules);
     }
 
     private java.util.Map<String, PrimitiveLinkedType> primitiveBackedEvaluatorTypes(
@@ -227,6 +246,95 @@ public final class JavaGenerator implements Generator {
         return normalizedPath.isBlank() ? name : normalizedPath + "/" + name;
     }
 
+    private java.util.Optional<List<GeneratedModule>> planJavaGeneration(
+            List<GeneratedModule> renderedModules,
+            List<NativeProviderInfo> nativeProviderInfos
+    ) {
+        if (!useCapybaraGenerationPass) {
+            return java.util.Optional.empty();
+        }
+        try {
+            var passClass = Class.forName(CAPYBARA_JAVA_GENERATION_PASS);
+            var fileMethod = passClass.getMethod("generatedJavaFile", String.class, String.class);
+            var providerMethod = passClass.getMethod(
+                    "javaNativeProviderInfo",
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class
+            );
+            var files = renderedModules.stream()
+                    .map(module -> invoke(
+                            fileMethod,
+                            module.relativePath().toString().replace('\\', '/'),
+                            module.code()
+                    ))
+                    .toList();
+            var providers = nativeProviderInfos.stream()
+                    .map(provider -> {
+                        validateNativeProviderBootstrapProvider(provider);
+                        return invoke(
+                                providerMethod,
+                                provider.providerSymbolName(),
+                                provider.bootstrapMethodName(),
+                                provider.interfaceId(),
+                                provider.qualifier(),
+                                provider.targetBackendType(),
+                                provider.sourceFile(),
+                                provider.binding().className(),
+                                provider.binding().factory()
+                        );
+                    })
+                    .toList();
+            var method = passClass.getMethod("planJavaGeneration", List.class, List.class);
+            var planFiles = (List<?>) method.invoke(null, files, providers);
+            var modules = new ArrayList<GeneratedModule>();
+            for (var file : planFiles) {
+                var generatedFile = (List<?>) file;
+                modules.add(new GeneratedModule(
+                        Path.of((String) generatedFile.get(0)),
+                        (String) generatedFile.get(1)
+                ));
+            }
+            return java.util.Optional.of(List.copyOf(modules));
+        } catch (ClassNotFoundException ignored) {
+            return java.util.Optional.empty();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara Java generation pass", e);
+        }
+    }
+
+    private Object invoke(java.lang.reflect.Method method, Object... args) {
+        try {
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara Java generation pass DTO factory", e);
+        }
+    }
+
+    private void validateNativeProviderBootstrapProvider(NativeProviderInfo provider) {
+        var binding = provider.binding();
+        if (binding.className() == null || binding.className().isBlank()) {
+            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
+                                               + "` for interface `" + provider.interfaceId()
+                                               + "` with qualifier `" + provider.qualifier()
+                                               + "` for backend `java` requires field `java.className` in source `"
+                                               + provider.sourceFile() + "`");
+        }
+        if (!"constructor".equals(binding.factory())) {
+            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
+                                               + "` for interface `" + provider.interfaceId()
+                                               + "` with qualifier `" + provider.qualifier()
+                                               + "` for backend `java`"
+                                               + " has unsupported java factory `" + binding.factory()
+                                               + "`. Supported values: constructor. Source `" + provider.sourceFile() + "`");
+        }
+    }
+
     private List<GeneratedModule> nativeProviderBootstrapModules(List<NativeProviderInfo> providers) {
         if (providers.isEmpty()) {
             return List.of();
@@ -258,22 +366,8 @@ public final class JavaGenerator implements Generator {
     }
 
     private String renderNativeProviderRegistration(NativeProviderInfo provider) {
+        validateNativeProviderBootstrapProvider(provider);
         var binding = provider.binding();
-        if (binding.className() == null || binding.className().isBlank()) {
-            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
-                                               + "` for interface `" + provider.interfaceId()
-                                               + "` with qualifier `" + provider.qualifier()
-                                               + "` for backend `java` requires field `java.className` in source `"
-                                               + provider.sourceFile() + "`");
-        }
-        if (!"constructor".equals(binding.factory())) {
-            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
-                                               + "` for interface `" + provider.interfaceId()
-                                               + "` with qualifier `" + provider.qualifier()
-                                               + "` for backend `java`"
-                                               + " has unsupported java factory `" + binding.factory()
-                                               + "`. Supported values: constructor. Source `" + provider.sourceFile() + "`");
-        }
         return "            NativeProviders.factory(\n"
                + "                    " + javaString(provider.interfaceId()) + ",\n"
                + "                    " + javaString(provider.qualifier()) + ",\n"
