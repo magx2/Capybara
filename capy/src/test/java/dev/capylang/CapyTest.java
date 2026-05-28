@@ -289,6 +289,43 @@ class CapyTest {
     }
 
     @Test
+    void shouldReportDuplicateNativeImplementationAnnotationsAsCompilationErrors() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("native-duplicate-annotations").resolve("capybara"));
+        Files.createDirectories(sourceDir.resolve("dev").resolve("capylang").resolve("test"));
+        Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("Clock.coo"), """
+                interface Clock {
+                    def now_millis(): long
+                }
+                """);
+        Files.writeString(sourceDir.resolve("dev").resolve("capylang").resolve("test").resolve("ClockProvider.cfun"), """
+                from /capy/lang/Effect import { Effect }
+                from /capy/meta_prog/NativeProvider import { NativeProvider }
+                from Clock import { Clock }
+
+                @NativeProvider(qualifier: "system")
+                fun system_clock(): Effect[Clock] = <native>
+                """);
+        var nativeSourceDir = Files.createDirectories(tempDir.resolve("native-duplicate-annotations").resolve("java")
+                .resolve("dev").resolve("capylang").resolve("test").resolve("nativeinterop"));
+        Files.writeString(nativeSourceDir.resolve("SystemClock.java"), nativeImplementationSource("SystemClock"));
+        Files.writeString(nativeSourceDir.resolve("AlternateClock.java"), nativeImplementationSource("AlternateClock"));
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", tempDir.resolve("native-duplicate-output").toString()},
+                new PrintStream(stdout),
+                new PrintStream(stderr)
+        );
+
+        assertEquals(100, exitCode);
+        assertEquals("", stdout.toString().trim());
+        assertTrue(stderr.toString().contains("Compilation failed with"));
+        assertTrue(stderr.toString().contains("Duplicate @NativeImplementation"));
+        assertTrue(stderr.toString().contains("/dev/capylang/test/Clock"));
+    }
+
+    @Test
     void shouldRejectNativeWiringOnGenerate() {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
@@ -1269,5 +1306,18 @@ class CapyTest {
             assertTrue(zip.getEntry("foo/Main.json") != null);
             assertTrue(zip.getEntry("capy.yml") != null);
         }
+    }
+
+    private String nativeImplementationSource(String className) {
+        return """
+                package dev.capylang.test.nativeinterop;
+
+                import dev.capylang.NativeImplementation;
+                import dev.capylang.test.Clock;
+
+                @NativeImplementation(qualifier = "system")
+                public final class %s implements Clock {
+                }
+                """.formatted(className);
     }
 }

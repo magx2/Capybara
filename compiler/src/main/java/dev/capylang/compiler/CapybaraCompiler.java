@@ -4280,12 +4280,20 @@ public class CapybaraCompiler {
                         0,
                         0,
                         nativeProviderManifestSource(manifest),
-                        "DuplicateProvider: Duplicate native provider manifest entry for interface `" + binding.interfaceId()
-                        + "` with qualifier `" + binding.qualifier() + "`" + nativeProviderManifestSourceSuffix(manifest)
+                        duplicateNativeProviderManifestMessage(manifest, binding)
                 ));
             }
         }
         return Map.copyOf(bindingsByKey);
+    }
+
+    private String duplicateNativeProviderManifestMessage(NativeProviderManifest manifest, NativeProviderBinding binding) {
+        if ("native source annotations".equals(nativeProviderManifestSource(manifest))) {
+            return "DuplicateProvider: Duplicate @NativeImplementation for interface `" + binding.interfaceId()
+                   + "` with qualifier `" + binding.qualifier() + "`" + nativeProviderManifestSourceSuffix(manifest);
+        }
+        return "DuplicateProvider: Duplicate native provider manifest entry for interface `" + binding.interfaceId()
+               + "` with qualifier `" + binding.qualifier() + "`" + nativeProviderManifestSourceSuffix(manifest);
     }
 
     private Map<NativeProviderKey, NativeProviderBinding> aliasedNativeProviderManifestBindings(

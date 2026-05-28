@@ -296,11 +296,14 @@ public final class NativeImplementationScanner {
 
     private static NativeProviderManifest toManifest(List<NativeImplementationCandidate> candidates) {
         var bindings = new LinkedHashMap<ImplementationKey, BackendBindings>();
+        var duplicates = new ArrayList<NativeProviderBinding>();
         for (var candidate : candidates) {
             var backendBindings = bindings.computeIfAbsent(candidate.key(), ignored -> new BackendBindings());
-            backendBindings.put(candidate);
+            if (!backendBindings.put(candidate)) {
+                duplicates.add(nativeProviderBinding(candidate));
+            }
         }
-        return new NativeProviderManifest(bindings.entrySet().stream()
+        var providers = new ArrayList<>(bindings.entrySet().stream()
                 .map(entry -> new NativeProviderBinding(
                         entry.getKey().interfaceId(),
                         entry.getKey().qualifier(),
@@ -308,7 +311,35 @@ public final class NativeImplementationScanner {
                         entry.getValue().javascriptBinding,
                         entry.getValue().pythonBinding
                 ))
-                .toList(), "native source annotations");
+                .toList());
+        providers.addAll(duplicates);
+        return new NativeProviderManifest(providers, "native source annotations");
+    }
+
+    private static NativeProviderBinding nativeProviderBinding(NativeImplementationCandidate candidate) {
+        return switch (candidate.backend()) {
+            case JAVA -> new NativeProviderBinding(
+                    candidate.key().interfaceId(),
+                    candidate.key().qualifier(),
+                    candidate.binding(),
+                    null,
+                    null
+            );
+            case JAVASCRIPT -> new NativeProviderBinding(
+                    candidate.key().interfaceId(),
+                    candidate.key().qualifier(),
+                    null,
+                    candidate.binding(),
+                    null
+            );
+            case PYTHON -> new NativeProviderBinding(
+                    candidate.key().interfaceId(),
+                    candidate.key().qualifier(),
+                    null,
+                    null,
+                    candidate.binding()
+            );
+        };
     }
 
     private static Optional<String> firstGroup(Pattern pattern, String source) {
@@ -414,35 +445,28 @@ public final class NativeImplementationScanner {
         private NativeProviderBackendBinding javascriptBinding;
         private NativeProviderBackendBinding pythonBinding;
 
-        void put(NativeImplementationCandidate candidate) {
+        boolean put(NativeImplementationCandidate candidate) {
             switch (candidate.backend()) {
                 case JAVA -> {
                     if (javaBinding != null) {
-                        throw duplicate(candidate);
+                        return false;
                     }
                     javaBinding = candidate.binding();
                 }
                 case JAVASCRIPT -> {
                     if (javascriptBinding != null) {
-                        throw duplicate(candidate);
+                        return false;
                     }
                     javascriptBinding = candidate.binding();
                 }
                 case PYTHON -> {
                     if (pythonBinding != null) {
-                        throw duplicate(candidate);
+                        return false;
                     }
                     pythonBinding = candidate.binding();
                 }
             }
-        }
-
-        private IllegalArgumentException duplicate(NativeImplementationCandidate candidate) {
-            return new IllegalArgumentException(
-                    "DuplicateProvider: Duplicate @NativeImplementation for interface `"
-                    + candidate.key().interfaceId() + "` with qualifier `" + candidate.key().qualifier()
-                    + "` and backend `" + candidate.backend().jsonValue() + "` in source `" + candidate.sourceFile() + "`"
-            );
+            return true;
         }
     }
 }
