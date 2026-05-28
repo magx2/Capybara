@@ -14,18 +14,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 public final class ObjectOrientedParser {
     public static final ObjectOrientedParser INSTANCE = new ObjectOrientedParser();
-    private static final String MODULE_NAME_PATTERN = "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+";
-    private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+(" + MODULE_NAME_PATTERN + ")\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
-    );
-    private static final Pattern QUALIFIED_IMPORT_PATTERN = Pattern.compile(
-            "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
-    );
 
     public Result<ObjectOrientedModule> parseModule(RawModule module) {
         try {
@@ -87,33 +78,8 @@ public final class ObjectOrientedParser {
     }
 
     private ParsedSource parseSource(String source) {
-        var imports = new ArrayList<ImportDeclaration>();
-        var bodyLines = new ArrayList<String>();
-        for (var line : source.split("\\R", -1)) {
-            var matcher = FROM_IMPORT_PATTERN.matcher(line);
-            var qualifiedMatcher = QUALIFIED_IMPORT_PATTERN.matcher(line);
-            if (matcher.matches()) {
-                var module = matcher.group(1);
-                var symbols = Stream.of(matcher.group(2).split(","))
-                        .map(String::trim)
-                        .filter(symbol -> !symbol.isBlank())
-                        .toList();
-                var excludedSymbols = matcher.group(3) == null
-                        ? List.<String>of()
-                        : Stream.of(matcher.group(3).split(","))
-                                .map(String::trim)
-                                .filter(symbol -> !symbol.isBlank())
-                                .toList();
-                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
-                bodyLines.add("");
-            } else if (qualifiedMatcher.matches()) {
-                imports.add(ImportDeclaration.qualified(qualifiedMatcher.group(1)));
-                bodyLines.add("");
-            } else {
-                bodyLines.add(line);
-            }
-        }
-        return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
+        var extracted = ParserImportPreprocessor.extract(source);
+        return new ParsedSource(extracted.source(), extracted.imports());
     }
 
     private Result.Error.SingleError formatSyntaxError(RawModule module, SyntaxError syntaxError) {
