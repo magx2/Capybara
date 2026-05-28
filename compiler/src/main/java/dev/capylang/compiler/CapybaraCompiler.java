@@ -844,6 +844,10 @@ public class CapybaraCompiler {
         return (Integer) tuple.get(index);
     }
 
+    private boolean booleanElement(List<?> tuple, int index) {
+        return (Boolean) tuple.get(index);
+    }
+
     @SuppressWarnings("unchecked")
     private List<String> stringList(Object value) {
         return (List<String>) value;
@@ -6388,6 +6392,9 @@ public class CapybaraCompiler {
             CompiledExpression expression,
             boolean tailPosition
     ) {
+        if (useCapybaraExpressionCompilationPass()) {
+            return analyzeTailRecursionWithCapybaraPass(selfCallNames, parameters, expression);
+        }
         return switch (expression) {
             case CompiledFunctionCall functionCall -> {
                 var result = TailRecursionAnalysis.empty();
@@ -6503,6 +6510,34 @@ public class CapybaraCompiler {
         };
     }
 
+    private TailRecursionAnalysis analyzeTailRecursionWithCapybaraPass(
+            Set<String> selfCallNames,
+            List<CompiledFunctionParameter> parameters,
+            CompiledExpression expression
+    ) {
+        var nodeBuilder = new TailRecursionNodeBuilder();
+        var rootId = nodeBuilder.add(expression);
+        var parameterTypes = parameters.stream()
+                .map(CompiledFunctionParameter::type)
+                .map(this::expressionPassTypeDescriptor)
+                .toList();
+        var analysis = expressionCompilationPassList(
+                "analyzeTailRecursion",
+                new Class<?>[]{List.class, int.class, List.class, List.class},
+                nodeBuilder.nodes(),
+                rootId,
+                List.copyOf(selfCallNames),
+                parameterTypes
+        );
+        var firstNonTailId = intElement(analysis, 1);
+        return new TailRecursionAnalysis(
+                booleanElement(analysis, 0),
+                firstNonTailId >= 0
+                        ? Optional.ofNullable(nodeBuilder.functionCallsByNodeId().get(firstNonTailId))
+                        : Optional.empty()
+        );
+    }
+
     private TailRecursionAnalysis analyzeAll(
             Set<String> selfCallNames,
             List<CompiledFunctionParameter> parameters,
@@ -6585,6 +6620,177 @@ public class CapybaraCompiler {
 
         private static TailRecursionAnalysis nonTailCall(CompiledFunctionCall call) {
             return new TailRecursionAnalysis(true, Optional.of(call));
+        }
+    }
+
+    private final class TailRecursionNodeBuilder {
+        private final List<List<?>> nodes = new ArrayList<>();
+        private final Map<Integer, CompiledFunctionCall> functionCallsByNodeId = new LinkedHashMap<>();
+
+        private int add(CompiledExpression expression) {
+            return switch (expression) {
+                case CompiledFunctionCall functionCall -> {
+                    var childIds = addAll(functionCall.arguments());
+                    var argumentTypes = functionCall.arguments().stream()
+                            .map(CompiledExpression::type)
+                            .map(CapybaraCompiler.this::expressionPassTypeDescriptor)
+                            .toList();
+                    var id = addNode("CALL", functionCall.name(), argumentTypes, childIds);
+                    functionCallsByNodeId.put(id, functionCall);
+                    yield id;
+                }
+                case CompiledIfExpression ifExpression -> addNode(
+                        "IF",
+                        "",
+                        List.of(),
+                        List.of(
+                                add(ifExpression.condition()),
+                                add(ifExpression.thenBranch()),
+                                add(ifExpression.elseBranch())
+                        )
+                );
+                case CompiledLetExpression letExpression -> addNode(
+                        "LET",
+                        letExpression.name(),
+                        List.of(),
+                        List.of(add(letExpression.value()), add(letExpression.rest()))
+                );
+                case CompiledMatchExpression matchExpression -> {
+                    var childIds = new ArrayList<Integer>();
+                    childIds.add(add(matchExpression.matchWith()));
+                    matchExpression.cases().forEach(matchCase -> childIds.add(addMatchCase(matchCase)));
+                    yield addNode("MATCH", "", List.of(), childIds);
+                }
+                case CompiledFunctionInvoke functionInvoke -> {
+                    var childIds = new ArrayList<Integer>();
+                    childIds.add(add(functionInvoke.function()));
+                    childIds.addAll(addAll(functionInvoke.arguments()));
+                    yield addNode("INVOKE", "", List.of(), childIds);
+                }
+                case CompiledObjectConstruction objectConstruction ->
+                        addNode("OBJECT_CONSTRUCTION", "", List.of(), addAll(objectConstruction.arguments()));
+                case CompiledInfixExpression infixExpression -> addNode(
+                        "INFIX",
+                        infixExpression.operator().symbol(),
+                        List.of(),
+                        List.of(add(infixExpression.left()), add(infixExpression.right()))
+                );
+                case CompiledFieldAccess fieldAccess ->
+                        addNode("FIELD_ACCESS", fieldAccess.field(), List.of(), List.of(add(fieldAccess.source())));
+                case CompiledIndexExpression indexExpression -> addNode(
+                        "INDEX",
+                        "",
+                        List.of(),
+                        List.of(add(indexExpression.source()), add(indexExpression.index()))
+                );
+                case CompiledSliceExpression sliceExpression -> {
+                    var childIds = new ArrayList<Integer>();
+                    childIds.add(add(sliceExpression.source()));
+                    sliceExpression.start().ifPresent(start -> childIds.add(add(start)));
+                    sliceExpression.end().ifPresent(end -> childIds.add(add(end)));
+                    yield addNode("SLICE", "", List.of(), childIds);
+                }
+                case CompiledLambdaExpression lambdaExpression ->
+                        addNode("LAMBDA", lambdaExpression.argumentName(), List.of(), List.of(add(lambdaExpression.expression())));
+                case CompiledEffectExpression effectExpression ->
+                        addNode("EFFECT", "", List.of(), List.of(add(effectExpression.body())));
+                case CompiledEffectBindExpression effectBindExpression -> addNode(
+                        "EFFECT_BIND",
+                        effectBindExpression.name(),
+                        List.of(),
+                        List.of(add(effectBindExpression.source()), add(effectBindExpression.rest()))
+                );
+                case CompiledPipeExpression pipeExpression -> addNode(
+                        "PIPE",
+                        pipeExpression.argumentName(),
+                        List.of(),
+                        List.of(add(pipeExpression.source()), add(pipeExpression.mapper()))
+                );
+                case CompiledPipeFlatMapExpression pipeFlatMapExpression -> addNode(
+                        "PIPE_FLAT_MAP",
+                        pipeFlatMapExpression.argumentName(),
+                        List.of(),
+                        List.of(add(pipeFlatMapExpression.source()), add(pipeFlatMapExpression.mapper()))
+                );
+                case CompiledPipeFilterOutExpression pipeFilterOutExpression -> addNode(
+                        "PIPE_FILTER_OUT",
+                        pipeFilterOutExpression.argumentName(),
+                        List.of(),
+                        List.of(add(pipeFilterOutExpression.source()), add(pipeFilterOutExpression.predicate()))
+                );
+                case CompiledPipeReduceExpression pipeReduceExpression -> addNode(
+                        "PIPE_REDUCE",
+                        pipeReduceExpression.valueName(),
+                        List.of(),
+                        List.of(
+                                add(pipeReduceExpression.source()),
+                                add(pipeReduceExpression.initialValue()),
+                                add(pipeReduceExpression.reducerExpression())
+                        )
+                );
+                case CompiledReflectionValue reflectionValue ->
+                        addNode("REFLECTION", reflectionValue.name(), List.of(), List.of(add(reflectionValue.target())));
+                case CompiledNumericWidening numericWidening ->
+                        addNode("NUMERIC_WIDENING", "", List.of(), List.of(add(numericWidening.expression())));
+                case CompiledNewData newData -> addNode(
+                        "NEW_DATA",
+                        "",
+                        List.of(),
+                        addAll(newData.assignments().stream().map(CompiledNewData.FieldAssignment::value).toList())
+                );
+                case CompiledNewList newList -> addNode("NEW_LIST", "", List.of(), addAll(newList.values()));
+                case CompiledNewSet newSet -> addNode("NEW_SET", "", List.of(), addAll(newSet.values()));
+                case CompiledNewDict newDict -> {
+                    var childIds = new ArrayList<Integer>();
+                    newDict.entries().forEach(entry -> {
+                        childIds.add(add(entry.key()));
+                        childIds.add(add(entry.value()));
+                    });
+                    yield addNode("NEW_DICT", "", List.of(), childIds);
+                }
+                case CompiledTupleExpression tupleExpression ->
+                        addNode("TUPLE", "", List.of(), addAll(tupleExpression.values()));
+                case CompiledUnwrapExpression unwrapExpression ->
+                        addNode("UNWRAP", "", List.of(), List.of(add(unwrapExpression.expression())));
+                case CompiledBooleanValue ignored -> addLeaf();
+                case CompiledByteValue ignored -> addLeaf();
+                case CompiledDoubleValue ignored -> addLeaf();
+                case CompiledFloatValue ignored -> addLeaf();
+                case CompiledIntValue ignored -> addLeaf();
+                case CompiledLongValue ignored -> addLeaf();
+                case CompiledNothingValue ignored -> addLeaf();
+                case CompiledStringValue ignored -> addLeaf();
+                case CompiledVariable ignored -> addLeaf();
+            };
+        }
+
+        private int addMatchCase(CompiledMatchExpression.MatchCase matchCase) {
+            var childIds = new ArrayList<Integer>();
+            matchCase.guard().ifPresent(guard -> childIds.add(add(guard)));
+            childIds.add(add(matchCase.expression()));
+            return addNode(matchCase.guard().isPresent() ? "MATCH_CASE_GUARD" : "MATCH_CASE", "", List.of(), childIds);
+        }
+
+        private List<Integer> addAll(List<CompiledExpression> expressions) {
+            return expressions.stream().map(this::add).toList();
+        }
+
+        private int addLeaf() {
+            return addNode("LEAF", "", List.of(), List.of());
+        }
+
+        private int addNode(String kind, String name, List<String> argumentTypes, List<Integer> childIds) {
+            var id = nodes.size();
+            nodes.add(List.of(id, kind, name, argumentTypes, childIds));
+            return id;
+        }
+
+        private List<List<?>> nodes() {
+            return nodes;
+        }
+
+        private Map<Integer, CompiledFunctionCall> functionCallsByNodeId() {
+            return functionCallsByNodeId;
         }
     }
 
@@ -7982,6 +8188,16 @@ public class CapybaraCompiler {
     }
 
     private boolean isProgramMainSignature(String name, CompiledType returnType, List<CompiledType> parameterTypes) {
+        if (useCapybaraExpressionCompilationPass()) {
+            return expressionCompilationPassBoolean(
+                    "isProgramMainSignature",
+                    new Class<?>[]{String.class, String.class, List.class, List.class},
+                    name,
+                    returnType instanceof GenericDataType genericDataType ? genericDataType.name() : "",
+                    returnType instanceof GenericDataType genericDataType ? typeParameters(genericDataType) : List.of(),
+                    parameterTypes.stream().map(this::expressionPassTypeDescriptor).toList()
+            );
+        }
         if (!"main".equals(name)) {
             return false;
         }
@@ -8049,6 +8265,91 @@ public class CapybaraCompiler {
             normalized = "/" + normalized;
         }
         return normalized;
+    }
+
+    private boolean useCapybaraExpressionCompilationPass() {
+        return Boolean.parseBoolean(System.getProperty("capybara.compiler.useCapybaraExpressionCompilationPass", "true"))
+               && expressionCompilationPassAvailable();
+    }
+
+    private boolean expressionCompilationPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<?> expressionCompilationPassList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (List<?>) expressionCompilationPassObject(methodName, parameterTypes, args);
+    }
+
+    private boolean expressionCompilationPassBoolean(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return (Boolean) expressionCompilationPassObject(methodName, parameterTypes, args);
+    }
+
+    private Object expressionCompilationPassObject(String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            var method = passClass.getMethod(methodName, parameterTypes);
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            var cause = e instanceof java.lang.reflect.InvocationTargetException invocationTargetException
+                    && invocationTargetException.getCause() != null
+                    ? invocationTargetException.getCause()
+                    : e;
+            throw new IllegalStateException(
+                    "Unable to call Capybara expression compilation pass method `" + methodName + "`: "
+                    + cause.getClass().getSimpleName() + ": " + Objects.toString(cause.getMessage(), ""),
+                    cause
+            );
+        }
+    }
+
+    private String expressionPassTypeDescriptor(CompiledType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> expressionPassPrimitiveDescriptor(primitive);
+            case CollectionLinkedType.CompiledList listType ->
+                    "List[" + expressionPassTypeDescriptor(listType.elementType()) + "]";
+            case CollectionLinkedType.CompiledSet setType ->
+                    "Set[" + expressionPassTypeDescriptor(setType.elementType()) + "]";
+            case CollectionLinkedType.CompiledDict dictType ->
+                    "Dict[" + expressionPassTypeDescriptor(dictType.valueType()) + "]";
+            case CompiledFunctionType functionType ->
+                    "(" + expressionPassTypeDescriptor(functionType.argumentType()) + " => "
+                    + expressionPassTypeDescriptor(functionType.returnType()) + ")";
+            case CompiledTupleType tupleType -> "Tuple["
+                                             + String.join(", ", tupleType.elementTypes().stream()
+                                                     .map(this::expressionPassTypeDescriptor)
+                                                     .toList())
+                                             + "]";
+            case CompiledGenericTypeParameter genericTypeParameter -> genericTypeParameter.name();
+            case GenericDataType genericDataType -> {
+                var typeParameters = typeParameters(genericDataType);
+                if (typeParameters.isEmpty()) {
+                    yield genericDataType.name();
+                }
+                yield genericDataType.name() + "[" + String.join(", ", typeParameters) + "]";
+            }
+        };
+    }
+
+    private String expressionPassPrimitiveDescriptor(PrimitiveLinkedType primitive) {
+        return switch (primitive) {
+            case BYTE -> "byte";
+            case INT -> "int";
+            case LONG -> "long";
+            case FLOAT -> "float";
+            case DOUBLE -> "double";
+            case STRING -> "String";
+            case BOOL -> "bool";
+            case NOTHING -> "nothing";
+            case ANY -> "any";
+            case DATA -> "data";
+            case ENUM -> "enum";
+        };
     }
 
     private String moduleSourceFile(Module module) {
