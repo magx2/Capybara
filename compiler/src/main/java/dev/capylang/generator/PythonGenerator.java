@@ -52,6 +52,7 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.joining;
 
 public final class PythonGenerator implements Generator {
+    private static final String CAPYBARA_PYTHON_GENERATION_PASS = "dev.capylang.compiler.generator.PythonGenerationPass";
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
@@ -90,6 +91,19 @@ public final class PythonGenerator implements Generator {
             "global", "if", "import", "in", "is", "lambda", "match", "nonlocal", "not",
             "or", "pass", "raise", "return", "try", "while", "with", "yield"
     );
+    private final boolean useCapybaraGenerationPass;
+
+    public PythonGenerator() {
+        this(true);
+    }
+
+    private PythonGenerator(boolean useCapybaraGenerationPass) {
+        this.useCapybaraGenerationPass = useCapybaraGenerationPass;
+    }
+
+    static PythonGenerator legacyParityMode() {
+        return new PythonGenerator(false);
+    }
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -116,9 +130,101 @@ public final class PythonGenerator implements Generator {
             modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
         }
         modules.addAll(new ObjectOrientedPythonGenerator(context).generate(program.objectOrientedModules()));
-        modules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
+        var renderedModules = List.copyOf(modules);
+        var plannedModules = planPythonGeneration(renderedModules, context.nativeProviderInfos())
+                .orElseGet(() -> {
+                    var legacyModules = new ArrayList<>(renderedModules);
+                    legacyModules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
+                    return List.copyOf(legacyModules);
+                });
+        modules = new ArrayList<>(plannedModules);
         modules.addAll(RuntimeModules.modules());
         return new GeneratedProgram(List.copyOf(modules));
+    }
+
+    private Optional<List<GeneratedModule>> planPythonGeneration(
+            List<GeneratedModule> renderedModules,
+            List<ProgramContext.NativeProviderInfo> nativeProviderInfos
+    ) {
+        if (!useCapybaraGenerationPass) {
+            return Optional.empty();
+        }
+        try {
+            var passClass = Class.forName(CAPYBARA_PYTHON_GENERATION_PASS);
+            var fileMethod = passClass.getMethod("generatedPythonFile", String.class, String.class);
+            var methodInfoMethod = passClass.getMethod("pythonNativeProviderMethodInfo", String.class, int.class);
+            var providerMethod = passClass.getMethod(
+                    "pythonNativeProviderInfo",
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    String.class,
+                    List.class
+            );
+            var files = renderedModules.stream()
+                    .map(module -> invoke(
+                            fileMethod,
+                            module.relativePath().toString().replace('\\', '/'),
+                            module.code()
+                    ))
+                    .toList();
+            var providers = nativeProviderInfos.stream()
+                    .map(provider -> {
+                        validateNativeProviderBootstrapProvider(provider);
+                        return invoke(
+                                providerMethod,
+                                provider.providerSymbolName(),
+                                provider.bootstrapFunctionName(),
+                                provider.interfaceId(),
+                                provider.qualifier(),
+                                provider.sourceFile(),
+                                provider.binding().moduleName(),
+                                provider.binding().className(),
+                                provider.binding().factory(),
+                                provider.methods().stream()
+                                        .map(method -> invoke(methodInfoMethod, method.name(), method.arity()))
+                                        .toList()
+                        );
+                    })
+                    .toList();
+            var planMethod = passClass.getMethod("planPythonGeneration", List.class, List.class);
+            var planFiles = (List<?>) planMethod.invoke(null, files, providers);
+            var modules = new ArrayList<GeneratedModule>();
+            for (var file : planFiles) {
+                var generatedFile = (List<?>) file;
+                modules.add(new GeneratedModule(
+                        Path.of((String) generatedFile.get(0)),
+                        (String) generatedFile.get(1)
+                ));
+            }
+            return Optional.of(List.copyOf(modules));
+        } catch (ClassNotFoundException ignored) {
+            return Optional.empty();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara Python generation pass", e);
+        }
+    }
+
+    private Object invoke(java.lang.reflect.Method method, Object... args) {
+        try {
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara Python generation pass DTO factory", e);
+        }
+    }
+
+    private void validateNativeProviderBootstrapProvider(ProgramContext.NativeProviderInfo provider) {
+        if (!"call".equals(provider.binding().factory())) {
+            throw new IllegalArgumentException("UnsupportedBackend: Native provider `" + provider.providerSymbolName()
+                                               + "` for interface `" + provider.interfaceId()
+                                               + "` with qualifier `" + provider.qualifier()
+                                               + "` for backend `python` has unsupported Python factory `"
+                                               + provider.binding().factory() + "` in source `" + provider.sourceFile() + "`");
+        }
     }
 
     private List<GeneratedModule> nativeProviderBootstrapModules(List<ProgramContext.NativeProviderInfo> providers) {
