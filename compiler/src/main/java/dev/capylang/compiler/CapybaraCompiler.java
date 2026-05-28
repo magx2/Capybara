@@ -685,6 +685,26 @@ public class CapybaraCompiler {
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Boolean> moduleHelperClassRequiredByModule
     ) {
+        if (useCapybaraModuleLinkingPass()) {
+            return buildModuleLinkIndexWithCapybaraPass(
+                    allModuleRefs,
+                    linkedTypesByModule,
+                    moduleHelperClassRequiredByModule
+            );
+        }
+        return buildModuleLinkIndexLegacy(allModuleRefs, linkedTypesByModule, moduleHelperClassRequiredByModule);
+    }
+
+    private boolean useCapybaraModuleLinkingPass() {
+        return Boolean.parseBoolean(System.getProperty("capybara.compiler.useCapybaraModuleLinkingPass", "true"))
+               && moduleLinkingPassAvailable();
+    }
+
+    private ModuleLinkIndex buildModuleLinkIndexLegacy(
+            List<ModuleRef> allModuleRefs,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Boolean> moduleHelperClassRequiredByModule
+    ) {
         var modulesByExactName = new LinkedHashMap<String, ModuleRef>();
         var modulesByQualifiedName = new LinkedHashMap<String, ModuleRef>();
         var modulesByTailName = new LinkedHashMap<String, ModuleRef>();
@@ -720,6 +740,187 @@ public class CapybaraCompiler {
                 Map.copyOf(linkedTypesByModuleName),
                 Map.copyOf(moduleJavaClassNameByModuleName)
         );
+    }
+
+    private ModuleLinkIndex buildModuleLinkIndexWithCapybaraPass(
+            List<ModuleRef> allModuleRefs,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Boolean> moduleHelperClassRequiredByModule
+    ) {
+        var descriptorTuples = new ArrayList<java.util.List<?>>();
+        var linkedTypesByModuleEntryKey = new LinkedHashMap<String, SortedMap<String, GenericDataType>>();
+
+        for (var module : allModuleRefs) {
+            var linkedTypes = getModuleEntry(linkedTypesByModule, module);
+            linkedTypesByModuleEntryKey.putIfAbsent(module.name(), linkedTypes);
+            linkedTypesByModuleEntryKey.put(qualifiedModuleName(module), linkedTypes);
+            var moduleHelperClassRequired = Boolean.TRUE.equals(getModuleEntry(moduleHelperClassRequiredByModule, module));
+            descriptorTuples.add(moduleLinkingPassModuleDescriptor(
+                    moduleLinkingPassModuleRef(module.name(), module.path()),
+                    List.of(),
+                    linkedTypes == null ? List.of() : List.copyOf(linkedTypes.keySet()),
+                    moduleOwnerTypeShape(module, linkedTypes),
+                    moduleHelperClassRequired,
+                    List.of()
+            ));
+        }
+
+        var index = moduleLinkingPassBuildModuleLinkIndexUnchecked(descriptorTuples);
+        return new ModuleLinkIndex(
+                moduleRefEntryMap(tupleElement(index, 0)),
+                moduleRefEntryMap(tupleElement(index, 1)),
+                moduleRefEntryMap(tupleElement(index, 2)),
+                Set.copyOf(stringList(tupleElement(index, 3))),
+                linkedTypesEntryMap(tupleElement(index, 4), linkedTypesByModuleEntryKey),
+                stringEntryMap(tupleElement(index, 5))
+        );
+    }
+
+    private String moduleOwnerTypeShape(ModuleRef module, SortedMap<String, GenericDataType> linkedTypes) {
+        if (linkedTypes == null) {
+            return "NONE";
+        }
+        var ownerType = linkedTypes.get(module.name());
+        if (ownerType instanceof CompiledDataParentType parentType && !parentType.enumType()) {
+            return "PARENT_NON_ENUM";
+        }
+        if (ownerType instanceof CompiledDataType dataType && dataType.nativeType()) {
+            return "DATA_NATIVE";
+        }
+        return ownerType == null ? "NONE" : "OTHER";
+    }
+
+    private Map<String, ModuleRef> moduleRefEntryMap(List<?> entries) {
+        var result = new LinkedHashMap<String, ModuleRef>();
+        for (var rawEntry : entries) {
+            var entry = tuple(rawEntry);
+            result.put(stringElement(entry, 0), moduleRefFromTuple(tupleElement(entry, 1)));
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, SortedMap<String, GenericDataType>> linkedTypesEntryMap(
+            List<?> entries,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModuleEntryKey
+    ) {
+        var result = new LinkedHashMap<String, SortedMap<String, GenericDataType>>();
+        for (var rawEntry : entries) {
+            var entry = tuple(rawEntry);
+            result.put(stringElement(entry, 0), linkedTypesByModuleEntryKey.get(stringElement(entry, 0)));
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, String> stringEntryMap(List<?> entries) {
+        var result = new LinkedHashMap<String, String>();
+        for (var rawEntry : entries) {
+            var entry = tuple(rawEntry);
+            result.put(stringElement(entry, 0), stringElement(entry, 1));
+        }
+        return Map.copyOf(result);
+    }
+
+    private ModuleRef moduleRefFromTuple(List<?> tuple) {
+        return new ModuleRef(stringElement(tuple, 0), stringElement(tuple, 1));
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> List<T> tupleElement(List<?> tuple, int index) {
+        return (List<T>) tuple.get(index);
+    }
+
+    private List<?> tuple(Object value) {
+        return (List<?>) value;
+    }
+
+    private String stringElement(List<?> tuple, int index) {
+        return (String) tuple.get(index);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Object value) {
+        return (List<String>) value;
+    }
+
+    private boolean moduleLinkingPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.linking.ModuleLinkingPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    private List<?> moduleLinkingPassModuleRef(String name, String path) {
+        return moduleLinkingPassList("moduleRef", new Class<?>[]{String.class, String.class}, name, path);
+    }
+
+    private List<?> moduleLinkingPassImportDeclaration(
+            String moduleName,
+            List<String> symbols,
+            List<String> excludedSymbols,
+            boolean qualifiedOnly
+    ) {
+        return moduleLinkingPassList(
+                "importDeclaration",
+                new Class<?>[]{String.class, List.class, List.class, boolean.class},
+                moduleName,
+                symbols,
+                excludedSymbols,
+                qualifiedOnly
+        );
+    }
+
+    private List<?> moduleLinkingPassModuleDescriptor(
+            List<?> module,
+            List<?> members,
+            List<String> linkedTypeNames,
+            String ownerTypeShape,
+            boolean helperClassRequired,
+            List<?> imports
+    ) {
+        return moduleLinkingPassList(
+                "moduleDescriptor",
+                new Class<?>[]{List.class, List.class, List.class, String.class, boolean.class, List.class},
+                module,
+                members,
+                linkedTypeNames,
+                ownerTypeShape,
+                helperClassRequired,
+                imports
+        );
+    }
+
+    private List<?> moduleLinkingPassBuildModuleLinkIndexUnchecked(List<?> modules) {
+        return moduleLinkingPassList(
+                "buildModuleLinkIndexUnchecked",
+                new Class<?>[]{List.class},
+                modules
+        );
+    }
+
+    private List<?> moduleLinkingPassValidateImportSelection(
+            String moduleName,
+            List<?> importDeclaration,
+            List<String> availableMembers
+    ) {
+        return moduleLinkingPassList(
+                "validateImportSelection",
+                new Class<?>[]{String.class, List.class, List.class},
+                moduleName,
+                importDeclaration,
+                availableMembers
+        );
+    }
+
+    private List<?> moduleLinkingPassList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.linking.ModuleLinkingPass");
+            var method = passClass.getMethod(methodName, parameterTypes);
+            return (List<?>) method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara module linking pass method `" + methodName + "`", e);
+        }
     }
 
     private String qualifiedModuleName(ModuleRef module) {
@@ -1035,23 +1236,9 @@ public class CapybaraCompiler {
             availableMembers.addAll(availableTypeMembers);
             availableMembers.addAll(availableDeriverMembers);
             availableMembers.addAll(availableAnnotationMembers);
-            for (var excludedSymbol : importDeclaration.excludedSymbols()) {
-                if (!availableMembers.contains(excludedSymbol)) {
-                    return Result.error(
-                            "Module `" + module.name() + "` excludes unknown symbol `" + excludedSymbol
-                            + "` from module `" + importDeclaration.moduleName() + "`"
-                    );
-                }
-            }
-            if (!importDeclaration.isStarImport()) {
-                for (var symbol : importDeclaration.symbols()) {
-                    if (!availableMembers.contains(symbol)) {
-                        return Result.error(
-                                "Module `" + module.name() + "` imports unknown symbol `" + symbol
-                                + "` from module `" + importDeclaration.moduleName() + "`"
-                        );
-                    }
-                }
+            var importSelectionError = validateImportSelection(module.name(), importDeclaration, availableMembers);
+            if (importSelectionError.isPresent()) {
+                return Result.error(importSelectionError.get());
             }
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 all.addAll(importedSignaturesByName.getOrDefault(symbol, List.of()));
@@ -1068,6 +1255,57 @@ public class CapybaraCompiler {
         var result = Result.success(List.copyOf(all));
         cachedByModule.put(cacheKey, result);
         return result;
+    }
+
+    private Optional<String> validateImportSelection(
+            String moduleName,
+            ImportDeclaration importDeclaration,
+            Collection<String> availableMembers
+    ) {
+        if (!useCapybaraModuleLinkingPass()) {
+            return validateImportSelectionLegacy(moduleName, importDeclaration, availableMembers);
+        }
+        var result = moduleLinkingPassValidateImportSelection(
+                moduleName,
+                moduleLinkingPassImportDeclaration(
+                        importDeclaration.moduleName(),
+                        importDeclaration.symbols(),
+                        importDeclaration.excludedSymbols(),
+                        importDeclaration.qualifiedOnly()
+                ),
+                List.copyOf(availableMembers)
+        );
+        var success = (Boolean) result.get(0);
+        if (success) {
+            return Optional.empty();
+        }
+        return Optional.of((String) result.get(2));
+    }
+
+    private Optional<String> validateImportSelectionLegacy(
+            String moduleName,
+            ImportDeclaration importDeclaration,
+            Collection<String> availableMembers
+    ) {
+        for (var excludedSymbol : importDeclaration.excludedSymbols()) {
+            if (!availableMembers.contains(excludedSymbol)) {
+                return Optional.of(
+                        "Module `" + moduleName + "` excludes unknown symbol `" + excludedSymbol
+                        + "` from module `" + importDeclaration.moduleName() + "`"
+                );
+            }
+        }
+        if (!importDeclaration.isStarImport()) {
+            for (var symbol : importDeclaration.symbols()) {
+                if (!availableMembers.contains(symbol)) {
+                    return Optional.of(
+                            "Module `" + moduleName + "` imports unknown symbol `" + symbol
+                            + "` from module `" + importDeclaration.moduleName() + "`"
+                    );
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private List<CapybaraExpressionCompiler.FunctionSignature> deriverLexicalSignatures(
