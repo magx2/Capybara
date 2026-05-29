@@ -416,6 +416,8 @@ def capyRuntimeClasspath = files(
         capyResourcesDir,
         compilerClassesDir,
         compilerResourcesDir,
+        capybaraLibClassesDir,
+        capybaraLibResourcesDir,
         capyRuntimeDependencies
 )
 
@@ -481,12 +483,15 @@ application {
 
 test {
     dependsOn ':compiler:classes'
+    dependsOn ':lib:capybara-lib:classes'
     classpath = files(
             sourceSets.test.output,
             capyClassesDir,
             capyResourcesDir,
             compilerClassesDir,
             compilerResourcesDir,
+            capybaraLibClassesDir,
+            capybaraLibResourcesDir,
             testRuntimeDependencies
     )
 }
@@ -545,6 +550,7 @@ def jsTests = tasks.register('jsTests', NodeTask) {
     group = 'verification'
     dependsOn ':capy:classes'
     dependsOn ':compiler:classes'
+    dependsOn ':lib:capybara-lib:classes'
     script.set(jsTestRunner)
     workingDir.set(layout.projectDirectory)
     args.set([jsTestSourcePath])
@@ -565,6 +571,7 @@ def pythonTests = tasks.register('pythonTests', Exec) {
     group = 'verification'
     dependsOn ':capy:classes'
     dependsOn ':compiler:classes'
+    dependsOn ':lib:capybara-lib:classes'
     configurePythonTask(delegate)
     workingDir layout.projectDirectory.asFile
     args pyTestRunner.asFile.absolutePath, pyTestSourcePath
@@ -783,6 +790,7 @@ def registerCapybaraE2eLinkTask = { String taskName, String taskDescription, Str
         dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
         dependsOn ':capy:classes'
         dependsOn ':compiler:classes'
+        dependsOn ':lib:capybara-lib:classes'
 
         runtimeClasspath.from(capyRuntimeClasspath)
         inputDir.set(capybaraInputDir)
