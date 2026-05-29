@@ -64,9 +64,20 @@ jobs:
           CURRENT_SHA="$(git rev-parse HEAD)"
           RELEASE_BRANCH_SHA="$(git ls-remote --heads origin "${RELEASE_BRANCH}" | awk '{ print $1 }')"
 
-          if [[ -n "${RELEASE_BRANCH_SHA}" && "${RELEASE_BRANCH_SHA}" != "${CURRENT_SHA}" ]]; then
-            echo "::error::Release branch '${RELEASE_BRANCH}' already exists at ${RELEASE_BRANCH_SHA}, expected ${CURRENT_SHA}."
-            exit 1
+          if [[ -n "${RELEASE_BRANCH_SHA}" ]]; then
+            git fetch --no-tags origin "${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+            if ! git merge-base --is-ancestor "${RELEASE_BRANCH_SHA}" "${CURRENT_SHA}"; then
+              echo "::error::Release branch '${RELEASE_BRANCH}' already exists at ${RELEASE_BRANCH_SHA}, which is not an ancestor of ${CURRENT_SHA}."
+              exit 1
+            fi
+
+            RELEASE_BRANCH_PROPERTIES="${RUNNER_TEMP:-/tmp}/release-branch-gradle.properties"
+            git show "${RELEASE_BRANCH_SHA}:gradle.properties" > "${RELEASE_BRANCH_PROPERTIES}"
+            RELEASE_BRANCH_VERSION="$(awk -F= '/^version[[:space:]]*=/ { v=$2; gsub(/\r/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v }' "${RELEASE_BRANCH_PROPERTIES}")"
+            if [[ "${RELEASE_BRANCH_VERSION}" != "${VERSION}" ]]; then
+              echo "::error::Release branch '${RELEASE_BRANCH}' has version '${RELEASE_BRANCH_VERSION}', expected '${VERSION}'."
+              exit 1
+            fi
           fi
 
           {
@@ -92,8 +103,11 @@ jobs:
 
           if [[ -z "${RELEASE_BRANCH_SHA}" ]]; then
             git push origin "HEAD:${RELEASE_BRANCH}"
+          elif [[ "${RELEASE_BRANCH_SHA}" != "${CURRENT_SHA}" ]]; then
+            echo "Fast-forwarding release branch ${RELEASE_BRANCH} from ${RELEASE_BRANCH_SHA} to ${CURRENT_SHA}."
+            git push origin "HEAD:${RELEASE_BRANCH}"
           else
-            echo "Release branch ${RELEASE_BRANCH} already exists at ${CURRENT_SHA}."
+            echo "Release branch ${RELEASE_BRANCH} already exists at ${RELEASE_BRANCH_SHA}."
           fi
 
           gh workflow run check.yml --ref "${RELEASE_BRANCH}"
