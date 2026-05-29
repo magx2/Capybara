@@ -939,6 +939,7 @@ tasks.register('nativeCompile', Exec) {
     dependsOn jarTask
 
     def outputDir = layout.buildDirectory.dir('native/nativeCompile')
+    def nativeImageOutput = outputDir.map { it.file(nativeBinaryBaseName).asFile }
     def outputBinary = outputDir.map { it.file(nativeBinaryName).asFile }
 
     inputs.files(nativeRuntimeClasspath)
@@ -957,13 +958,14 @@ tasks.register('nativeCompile', Exec) {
 
         var output = outputBinary.get()
         output.parentFile.mkdirs()
+        var imageOutput = nativeImageOutput.get()
 
         commandLine(
                 nativeImage.absolutePath,
                 '--no-fallback',
                 '-cp', nativeRuntimeClasspath.asPath,
                 mainClassName.get(),
-                output.absolutePath
+                imageOutput.absolutePath
         )
     }
 }
