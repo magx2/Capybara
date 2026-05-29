@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
@@ -91,12 +93,12 @@ class TupleDestructuringCompilerTest {
     private static CompiledProgram compileProgram(List<RawModule> rawModules) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+            fail(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 
-    private static Result.Error.SingleError compileFailure(String code) {
+    private static CompilerError compileFailure(String code) {
         var result = CapybaraCompiler.INSTANCE.compile(
                 List.of(new RawModule("TuplePipes", "/foo/boo", code)),
                 new java.util.TreeSet<>()
@@ -104,7 +106,7 @@ class TupleDestructuringCompilerTest {
         if (result instanceof Result.Success<CompiledProgram> value) {
             fail("Expected compilation to fail but it succeeded: " + value);
         }
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        var errors = CompilerErrors.from((Result.Error<CompiledProgram>) result);
         assertThat(errors).isNotEmpty();
         return errors.first();
     }

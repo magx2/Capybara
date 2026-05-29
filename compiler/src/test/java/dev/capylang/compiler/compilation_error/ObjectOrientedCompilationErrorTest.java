@@ -1,8 +1,10 @@
 package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -34,7 +36,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/Printable.coo");
@@ -58,7 +60,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/Printable.coo");
@@ -84,7 +86,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/BrokenLoop.coo");
@@ -113,7 +115,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/Mutable.coo");
@@ -142,7 +144,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/BrokenStatement.coo");
@@ -170,7 +172,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/BrokenTry.coo");
@@ -201,7 +203,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/BrokenCatch.coo");
@@ -229,7 +231,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/BrokenLocalMethod.coo");
@@ -258,7 +260,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .anySatisfy(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/User.coo");
                     assertThat(error.message()).contains("Annotation Entity is not valid on field declarations");
@@ -281,7 +283,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .anySatisfy(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/User.coo");
                     assertThat(error.message()).contains("Unknown annotation Missing");
@@ -425,7 +427,7 @@ class ObjectOrientedCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .anySatisfy(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/User.coo");
                     assertThat(error.message()).contains("Unknown annotation Entity");
@@ -544,11 +546,11 @@ class ObjectOrientedCompilationErrorTest {
         );
     }
 
-    private static SortedSet<Result.Error.SingleError> compileObjectOrientedSource(String moduleName, String source) {
+    private static SortedSet<CompilerError> compileObjectOrientedSource(String moduleName, String source) {
         return compileObjectOrientedSource(moduleName, source, List.of());
     }
 
-    private static SortedSet<Result.Error.SingleError> compileObjectOrientedSource(
+    private static SortedSet<CompilerError> compileObjectOrientedSource(
             String moduleName,
             String source,
             List<RawModule> extraModules
@@ -559,7 +561,7 @@ class ObjectOrientedCompilationErrorTest {
         if (result instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
-        return ((Result.Error<?>) result).errors();
+        return CompilerErrors.from((Result.Error<?>) result);
     }
 
     private static RawModule effectModule() {

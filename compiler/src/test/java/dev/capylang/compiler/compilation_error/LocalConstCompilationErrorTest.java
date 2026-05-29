@@ -1,8 +1,9 @@
 package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +27,7 @@ class LocalConstCompilationErrorTest {
         );
 
         assertThat(programResult).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<CompiledProgram>) programResult).errors())
+        assertThat(CompilerErrors.from((Result.Error<CompiledProgram>) programResult))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/LocalConst.cfun");

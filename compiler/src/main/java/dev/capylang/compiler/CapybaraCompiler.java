@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
@@ -88,12 +90,12 @@ public class CapybaraCompiler {
             if (!objectOrientedModules.isEmpty()) {
                 var ooParseResult = ObjectOrientedParser.INSTANCE.parseModules(objectOrientedModules);
                 if (ooParseResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
-                    return new Result.Error<>(error.errors());
+                    return ResultOps.error(error);
                 }
                 parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooParseResult).value();
                 var ooValidationResult = ObjectOrientedValidator.INSTANCE.validate(parsedObjectOrientedModules);
                 if (ooValidationResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
-                    return new Result.Error<>(error.errors());
+                    return ResultOps.error(error);
                 }
                 parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooValidationResult).value();
             }
@@ -105,7 +107,7 @@ public class CapybaraCompiler {
             if (!functionalModules.isEmpty()) {
                 var program = CapybaraParser.INSTANCE.parseModule(functionalModules);
                 if (program instanceof Result.Error<Program> error) {
-                    return new Result.Error<>(error.errors());
+                    return ResultOps.error(error);
                 }
                 parsedProgram = ((Result.Success<Program>) program).value();
             }
@@ -125,10 +127,10 @@ public class CapybaraCompiler {
                     mergeNativeProviderManifests(providerManifest, implementationManifest)
             );
             if (nativeProviderCatalog instanceof Result.Error<NativeProviderCatalog> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             var compiledNativeProviderCatalog = ((Result.Success<NativeProviderCatalog>) nativeProviderCatalog).value();
-            return Result.success(new CompiledProgram(
+            return Results.success(new CompiledProgram(
                     functionalProgram.modules(),
                     functionalProgram.objectOrientedModules(),
                     providerManifest,
@@ -136,7 +138,7 @@ public class CapybaraCompiler {
             ));
         } catch (RuntimeException e) {
             // Public boundary: source/compiler errors should not escape as exceptions.
-            return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
+            return CompilerErrors.result(new CompilerError(boundaryErrorMessage(e)));
         }
     }
 
@@ -376,7 +378,7 @@ public class CapybaraCompiler {
             var sourceFile = moduleSourceFile(module);
             var linkedTypes = withFile(types(module), sourceFile);
             if (linkedTypes instanceof Result.Error<SortedMap<String, GenericDataType>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             mergeModuleTypes(
                     linkedTypesByModule,
@@ -407,7 +409,7 @@ public class CapybaraCompiler {
             var sourceFile = moduleSourceFile(module);
             var derivers = withFile(derivers(module.functional().definitions(), sourceFile), sourceFile);
             if (derivers instanceof Result.Error<Map<String, DeriverDeclaration>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             putOwnedModuleEntry(
                     deriversByModule,
@@ -427,7 +429,7 @@ public class CapybaraCompiler {
             var sourceFile = moduleSourceFile(module);
             var annotations = withFile(annotationDefinitions(module.functional().definitions(), sourceFile), sourceFile);
             if (annotations instanceof Result.Error<Map<String, AnnotationDeclaration>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             putOwnedModuleEntry(
                     annotationsByModule,
@@ -444,7 +446,7 @@ public class CapybaraCompiler {
         }
         var annotationValidation = validateAnnotationUsages(program, objectOrientedModules, annotationsByModule, moduleLinkIndex);
         if (annotationValidation instanceof Result.Error<Void> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         linkFunctionalAnnotationMetadata(program, linkedTypesByModule, annotationsByModule, moduleLinkIndex);
         objectOrientedModules = linkObjectOrientedAnnotationMetadata(objectOrientedModules, annotationsByModule, moduleLinkIndex);
@@ -469,7 +471,7 @@ public class CapybaraCompiler {
             var sourceFile = moduleSourceFile(module);
             var visibleTypes = withFile(availableTypes(module, moduleLinkIndex, linkedTypesByModule, allModuleRefs, compileCache), sourceFile);
             if (visibleTypes instanceof Result.Error<Map<String, GenericDataType>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             putOwnedModuleEntry(
                     visibleTypesByModule,
@@ -503,12 +505,12 @@ public class CapybaraCompiler {
                     moduleLinkIndex
             );
             if (functions instanceof Result.Error<List<Function>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             var sourceFile = moduleSourceFile(module);
             var signatures = withFile(linkFunctionSignatures(((Result.Success<List<Function>>) functions).value(), visibleTypes, compileCache, sourceFile), sourceFile);
             if (signatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             putOwnedModuleEntry(
                     signaturesByModule,
@@ -528,7 +530,7 @@ public class CapybaraCompiler {
             var sourceFile = moduleSourceFile(module);
             var availableConstructorSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, annotationsByModule, staticImportsByModule, compileCache);
             if (availableConstructorSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             var linkedConstructors = withFile(linkFunctions(
                     constructors,
@@ -544,7 +546,7 @@ public class CapybaraCompiler {
                     compileCache
             ), sourceFile);
             if (linkedConstructors instanceof Result.Error<List<CompiledFunction>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             var constructorValidation = validateResultReturningTypeConstructors(
                     module,
@@ -553,7 +555,7 @@ public class CapybaraCompiler {
                     sourceFile
             );
             if (constructorValidation instanceof Result.Error<Void> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             putOwnedModuleEntry(
                     signaturesByModule,
@@ -585,7 +587,7 @@ public class CapybaraCompiler {
             );
             firstPassFunctions = withFile(firstPassFunctions, moduleSourceFile(module));
             if (firstPassFunctions instanceof Result.Error<List<CompiledFunction>> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             var refined = mergeSignatures(
                     getModuleEntry(signaturesByModule, moduleRef),
@@ -598,7 +600,7 @@ public class CapybaraCompiler {
         var finalLinkStartedAt = System.nanoTime();
         var linkedObjectOrientedModules = objectOrientedModules;
         var finalModuleLinkIndex = moduleLinkIndex;
-        var result = program.modules().stream()
+        var modulesResult = program.modules().stream()
                 .map(module -> {
                     var moduleRef = new ModuleRef(module.name(), module.path());
                     return linkModule(
@@ -615,16 +617,16 @@ public class CapybaraCompiler {
                             compileCache
                     );
                 })
-                .collect(new ResultCollectionCollector<>())
-                .map(modules -> new CompiledProgram(modules, linkedObjectOrientedModules));
+                .collect(new ResultCollectionCollector<>());
+        var result = ResultOps.map(modulesResult, modules -> new CompiledProgram(modules, linkedObjectOrientedModules));
         if (result instanceof Result.Success<CompiledProgram> success) {
             var postValidation = validateResultReturningTypeConstructors(program, success.value());
             if (postValidation instanceof Result.Error<Void> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
             var getterCompatibilityValidation = validateMethodGetterCompatibility(program, success.value());
             if (getterCompatibilityValidation instanceof Result.Error<Void> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
         }
         log.info("Completed final linking for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - finalLinkStartedAt));
@@ -930,12 +932,12 @@ public class CapybaraCompiler {
         var localTypeNames = localTypes.keySet();
         var functions = functions(module, localTypes, dataTypes, deriversByModule, moduleLinkIndex);
         if (functions instanceof Result.Error<List<Function>> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, annotationsByModule, staticImportsByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-            return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
+            return withFile(ResultOps.error(error), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
         var availableAnnotations = availableAnnotations(module.name(), module.path(), module.imports(), annotationsByModule, moduleLinkIndex);
@@ -960,24 +962,24 @@ public class CapybaraCompiler {
         var visibleTypes = getModuleEntry(visibleTypesByModule, moduleRef);
         var functions = functions(module, localTypes, visibleTypes, deriversByModule, moduleLinkIndex);
         if (functions instanceof Result.Error<List<Function>> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, annotationsByModule, staticImportsByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-            return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
+            return withFile(ResultOps.error(error), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
         var availableAnnotations = availableAnnotations(module.name(), module.path(), module.imports(), annotationsByModule, moduleLinkIndex);
-        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache)
-                .flatMap(firstPassFunctions -> {
+        return withFile(ResultOps.flatMap(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache),
+                firstPassFunctions -> {
                     var moduleSignatures = getModuleEntry(signaturesByModule, moduleRef);
                     var refinedSignatures = mergeSignatures(
                             moduleSignatures,
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     if (refinedSignatures.equals(moduleSignatures)) {
-                        return Result.success(new CompiledModule(
+                        return Results.success(new CompiledModule(
                                 module.name(),
                                 module.path(),
                                 localTypes,
@@ -989,8 +991,8 @@ public class CapybaraCompiler {
                         ));
                     }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache)
-                            .map(linkedFunctions -> new CompiledModule(
+                    return ResultOps.map(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, qualifiedImportAliases(module, moduleLinkIndex), protectedConstructorsByType, availableAnnotations, moduleSourceFile, compileCache),
+                            linkedFunctions -> new CompiledModule(
                                     module.name(),
                                     module.path(),
                                     localTypes,
@@ -1037,7 +1039,7 @@ public class CapybaraCompiler {
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
-                return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
+                return Results.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedSignaturesByName = visibleSignaturesByName(
                     module.path(),
@@ -1068,7 +1070,7 @@ public class CapybaraCompiler {
             availableMembers.addAll(availableAnnotationMembers);
             for (var excludedSymbol : importDeclaration.excludedSymbols()) {
                 if (!availableMembers.contains(excludedSymbol)) {
-                    return Result.error(
+                    return Results.error(
                             "Module `" + module.name() + "` excludes unknown symbol `" + excludedSymbol
                             + "` from module `" + importDeclaration.moduleName() + "`"
                     );
@@ -1077,7 +1079,7 @@ public class CapybaraCompiler {
             if (!importDeclaration.isStarImport()) {
                 for (var symbol : importDeclaration.symbols()) {
                     if (!availableMembers.contains(symbol)) {
-                        return Result.error(
+                        return Results.error(
                                 "Module `" + module.name() + "` imports unknown symbol `" + symbol
                                 + "` from module `" + importDeclaration.moduleName() + "`"
                         );
@@ -1096,7 +1098,7 @@ public class CapybaraCompiler {
                 staticImportsByModule,
                 compileCache
         ));
-        var result = Result.success(List.copyOf(all));
+        var result = Results.success(List.copyOf(all));
         cachedByModule.put(cacheKey, result);
         return result;
     }
@@ -1156,7 +1158,7 @@ public class CapybaraCompiler {
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
-                return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
+                return Results.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedTypes = visibleTypes(
                     module.path(),
@@ -1198,7 +1200,7 @@ public class CapybaraCompiler {
             );
         }
         resolveQualifiedExternalFieldTypes(all);
-        return Result.success(Map.copyOf(all));
+        return Results.success(Map.copyOf(all));
     }
 
     private void addQualifiedTypeAliases(Map<String, GenericDataType> all, ModuleRef module, Map<String, GenericDataType> importedTypes) {
@@ -1375,7 +1377,7 @@ public class CapybaraCompiler {
                 return error;
             }
         }
-        return new Result.Success<>(null);
+        return Results.success(null);
     }
 
     private Result<Void> validateMethodGetterCompatibility(
@@ -1408,7 +1410,7 @@ public class CapybaraCompiler {
                 return error;
             }
         }
-        return new Result.Success<>(null);
+        return Results.success(null);
     }
 
     private Result<Void> validateMethodGetterCompatibility(
@@ -1420,12 +1422,12 @@ public class CapybaraCompiler {
         var ownerTypeName = methodOwnerType(function.name());
         var methodName = methodSimpleName(function.name());
         if (ownerTypeName.isEmpty() || methodName.isEmpty() || function.parameters().size() != 1) {
-            return new Result.Success<>(null);
+            return Results.success(null);
         }
 
         var parserFunction = parserFunctionsByKey.get(functionKey(function.name(), function.parameters().size()));
         if (parserFunction == null) {
-            return new Result.Success<>(null);
+            return Results.success(null);
         }
 
         var ownerType = function.parameters().getFirst().type();
@@ -1442,7 +1444,7 @@ public class CapybaraCompiler {
                             declarationsByName.get(dataType.name()),
                             moduleSourceFile
                     ))
-                    .orElseGet(() -> new Result.Success<>(null));
+                    .orElseGet(() -> Results.success(null));
         }
         if (ownerType instanceof CompiledDataParentType parentType) {
             for (var subType : parentType.subTypes()) {
@@ -1462,7 +1464,7 @@ public class CapybaraCompiler {
                 }
             }
         }
-        return new Result.Success<>(null);
+        return Results.success(null);
     }
 
     private Result<Void> methodGetterConflictError(
@@ -1488,7 +1490,7 @@ public class CapybaraCompiler {
                       + " --> " + normalizedFile + ":" + methodLine + ":" + methodColumn + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new Result.Error<>(List.of(new Result.Error.SingleError(methodLine, methodColumn, normalizedFile, message)));
+        return CompilerErrors.result(List.of(new CompilerError(methodLine, methodColumn, normalizedFile, message)));
     }
 
     private String declarationLocation(Definition definition, String fallbackFile) {
@@ -1963,14 +1965,14 @@ public class CapybaraCompiler {
         combined.addAll(constructorFunctions(module.functional().definitions(), linkedTypes));
         var derivedFunctions = derivedFunctions(module, linkedTypes, visibleTypes, deriversByModule, moduleLinkIndex);
         if (derivedFunctions instanceof Result.Error<List<Function>> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         combined.addAll(((Result.Success<List<Function>>) derivedFunctions).value());
         combined.sort(Comparator
                 .comparingInt((Function function) -> function.position().map(SourcePosition::line).orElse(Integer.MAX_VALUE))
                 .thenComparingInt(function -> function.position().map(SourcePosition::column).orElse(Integer.MAX_VALUE))
                 .thenComparing(Function::name));
-        return Result.success(List.copyOf(combined));
+        return Results.success(List.copyOf(combined));
     }
 
     private Result<List<Function>> derivedFunctions(
@@ -1991,7 +1993,7 @@ public class CapybaraCompiler {
                 var availableDeriver = deriversByName.get(directive.name());
                 if (availableDeriver == null) {
                     return withPosition(
-                            Result.error("Deriver `" + directive.name() + "` not found for `" + target.name() + "`"),
+                            Results.error("Deriver `" + directive.name() + "` not found for `" + target.name() + "`"),
                             directive.position().or(target::position),
                             normalizeFile(moduleSourceFile(module))
                     );
@@ -2000,7 +2002,7 @@ public class CapybaraCompiler {
                 for (var method : deriver.methods()) {
                     var expression = expandDeriverExpression(method.expression(), linkedTarget, moduleSourceFile(module));
                     if (expression instanceof Result.Error<Expression> error) {
-                        return new Result.Error<>(error.errors());
+                        return ResultOps.error(error);
                     }
                     var parameters = new ArrayList<Parameter>(method.parameters().size() + 1);
                     parameters.add(new Parameter(
@@ -2021,7 +2023,7 @@ public class CapybaraCompiler {
                 }
             }
         }
-        return Result.success(List.copyOf(generated));
+        return Results.success(List.copyOf(generated));
     }
 
     private Map<String, AvailableDeriver> availableDerivers(
@@ -2079,7 +2081,7 @@ public class CapybaraCompiler {
     private Result<Map<String, AnnotationDeclaration>> annotationDefinitions(Set<Definition> definitions, String moduleSourceFile) {
         var normalizedFile = normalizeFile(moduleSourceFile);
         var annotations = new LinkedHashMap<String, AnnotationDeclaration>();
-        var errors = new TreeSet<Result.Error.SingleError>();
+        var errors = new TreeSet<CompilerError>();
         for (var definition : definitions) {
             if (!(definition instanceof AnnotationDeclaration annotation)) {
                 continue;
@@ -2094,13 +2096,13 @@ public class CapybaraCompiler {
             }
             validateAnnotationDefinition(annotation, normalizedFile, errors);
         }
-        return errors.isEmpty() ? Result.success(Map.copyOf(annotations)) : new Result.Error<>(errors);
+        return errors.isEmpty() ? Results.success(Map.copyOf(annotations)) : CompilerErrors.result(errors);
     }
 
     private void validateAnnotationDefinition(
             AnnotationDeclaration annotation,
             String normalizedFile,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         for (var target : annotation.targets()) {
             if (AnnotationSemanticTarget.fromSourceName(target.name()).isEmpty()) {
@@ -2139,7 +2141,7 @@ public class CapybaraCompiler {
             Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
             ModuleLinkIndex moduleLinkIndex
     ) {
-        var errors = new TreeSet<Result.Error.SingleError>();
+        var errors = new TreeSet<CompilerError>();
         for (var module : program.modules()) {
             var availableAnnotations = availableAnnotations(
                     module.name(),
@@ -2160,13 +2162,13 @@ public class CapybaraCompiler {
             );
             validateObjectOrientedAnnotationUsages(module, availableAnnotations, errors);
         }
-        return errors.isEmpty() ? Result.success(null) : new Result.Error<>(errors);
+        return errors.isEmpty() ? Results.success(null) : CompilerErrors.result(errors);
     }
 
     private void validateFunctionalAnnotationUsages(
             Module module,
             Map<String, AvailableAnnotation> availableAnnotations,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         for (var definition : module.functional().definitions()) {
@@ -2296,7 +2298,7 @@ public class CapybaraCompiler {
             List<AnnotationUsage> usages,
             Map<String, AvailableAnnotation> availableAnnotations,
             String normalizedFile,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var recursiveUsages = new ArrayList<AnnotationUsage>();
         for (var usage : usages) {
@@ -2328,7 +2330,7 @@ public class CapybaraCompiler {
     private void validateObjectOrientedAnnotationUsages(
             ObjectOrientedModule module,
             Map<String, AvailableAnnotation> availableAnnotations,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         for (var definition : module.objectOriented().definitions()) {
@@ -2395,7 +2397,7 @@ public class CapybaraCompiler {
             String targetDisplayName,
             Map<String, AvailableAnnotation> availableAnnotations,
             String normalizedFile,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var singleUseAnnotations = new HashMap<String, AnnotationUsage>();
         for (var usage : usages) {
@@ -2458,7 +2460,7 @@ public class CapybaraCompiler {
             AnnotationUsage usage,
             AnnotationDeclaration annotation,
             String normalizedFile,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var fieldsByName = annotation.fields().stream()
                 .collect(toMap(
@@ -2514,7 +2516,7 @@ public class CapybaraCompiler {
             AnnotationValue value,
             Optional<SourcePosition> position,
             String normalizedFile,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         if (annotationValueMatchesFieldType(expectedType, value)) {
             return;
@@ -2990,9 +2992,9 @@ public class CapybaraCompiler {
         };
     }
 
-    private Result.Error.SingleError errorAt(String message, Optional<SourcePosition> position, String file) {
+    private CompilerError errorAt(String message, Optional<SourcePosition> position, String file) {
         var sourcePosition = position.orElse(SourcePosition.EMPTY);
-        return new Result.Error.SingleError(
+        return new CompilerError(
                 sourcePosition.line(),
                 sourcePosition.column(),
                 file,
@@ -3060,7 +3062,7 @@ public class CapybaraCompiler {
             var existing = derivers.putIfAbsent(deriver.name(), deriver);
             if (existing != null) {
                 return withPosition(
-                        Result.error("Duplicate deriver `" + deriver.name() + "`"),
+                        Results.error("Duplicate deriver `" + deriver.name() + "`"),
                         deriver.position(),
                         normalizeFile(moduleSourceFile)
                 );
@@ -3073,7 +3075,7 @@ public class CapybaraCompiler {
                                         .toList();
                 if (!methodSignatures.add(methodKey)) {
                     return withPosition(
-                            Result.error("Duplicate deriver method signature `" + method.name() + "`"),
+                            Results.error("Duplicate deriver method signature `" + method.name() + "`"),
                             method.position(),
                             normalizeFile(moduleSourceFile)
                     );
@@ -3083,14 +3085,14 @@ public class CapybaraCompiler {
                         .findFirst();
                 if (reservedReceiver.isPresent()) {
                     return withPosition(
-                            Result.error("Deriver method parameter cannot be named `receiver` because `receiver` is the generated derive receiver"),
+                            Results.error("Deriver method parameter cannot be named `receiver` because `receiver` is the generated derive receiver"),
                             reservedReceiver.orElseThrow().position(),
                             normalizeFile(moduleSourceFile)
                     );
                 }
             }
         }
-        return Result.success(Map.copyOf(derivers));
+        return Results.success(Map.copyOf(derivers));
     }
 
     private List<DeriveTarget> deriveTargets(Set<Definition> definitions) {
@@ -3138,17 +3140,21 @@ public class CapybaraCompiler {
             Set<String> boundNames
     ) {
         if (expression instanceof Value value && "receiver".equals(value.name()) && !boundNames.contains("receiver")) {
-            return Result.success(new Value("this", value.position()));
+            return Results.success(new Value("this", value.position()));
         }
         return switch (expression) {
             case FunctionCall functionCall -> expandDeriverFunctionCall(functionCall, targetType, moduleSourceFile, boundNames);
             case FunctionReference functionReference -> expandDeriverFunctionReference(functionReference, moduleSourceFile);
-            case FunctionInvoke functionInvoke -> expandDeriverExpressions(functionInvoke.arguments(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(arguments -> expandDeriverExpression(functionInvoke.function(), targetType, moduleSourceFile, boundNames)
-                            .map(function -> new FunctionInvoke(function, arguments, functionInvoke.position())));
-            case LetExpression letExpression -> expandDeriverExpression(letExpression.value(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(value -> expandDeriverExpression(letExpression.rest(), targetType, moduleSourceFile, withBoundName(boundNames, letExpression.name()))
-                            .map(rest -> new LetExpression(
+            case FunctionInvoke functionInvoke -> ResultOps.flatMap(
+                    expandDeriverExpressions(functionInvoke.arguments(), targetType, moduleSourceFile, boundNames),
+                    arguments -> ResultOps.map(
+                            expandDeriverExpression(functionInvoke.function(), targetType, moduleSourceFile, boundNames),
+                            function -> new FunctionInvoke(function, arguments, functionInvoke.position())));
+            case LetExpression letExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(letExpression.value(), targetType, moduleSourceFile, boundNames),
+                    value -> ResultOps.map(
+                            expandDeriverExpression(letExpression.rest(), targetType, moduleSourceFile, withBoundName(boundNames, letExpression.name())),
+                            rest -> new LetExpression(
                                     letExpression.name(),
                                     letExpression.declaredType(),
                                     letExpression.kind(),
@@ -3156,20 +3162,29 @@ public class CapybaraCompiler {
                                     rest,
                                     letExpression.position()
                             )));
-            case IfExpression ifExpression -> expandDeriverExpression(ifExpression.condition(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(condition -> expandDeriverExpression(ifExpression.thenBranch(), targetType, moduleSourceFile, boundNames)
-                            .flatMap(thenBranch -> expandDeriverExpression(ifExpression.elseBranch(), targetType, moduleSourceFile, boundNames)
-                                    .map(elseBranch -> new IfExpression(condition, thenBranch, elseBranch, ifExpression.position()))));
-            case InfixExpression infixExpression -> expandDeriverExpression(infixExpression.left(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(left -> expandDeriverExpression(infixExpression.right(), targetType, moduleSourceFile, boundNames)
-                            .map(right -> new InfixExpression(left, infixExpression.operator(), right, infixExpression.position())));
-            case FieldAccess fieldAccess -> expandDeriverExpression(fieldAccess.source(), targetType, moduleSourceFile, boundNames)
-                    .map(source -> new FieldAccess(source, fieldAccess.field(), fieldAccess.position()));
-            case LambdaExpression lambdaExpression -> expandDeriverExpression(lambdaExpression.expression(), targetType, moduleSourceFile, withBoundNames(boundNames, lambdaExpression.argumentNames()))
-                    .map(body -> new LambdaExpression(lambdaExpression.argumentNames(), body, lambdaExpression.position()));
-            case ReduceExpression reduceExpression -> expandDeriverExpression(reduceExpression.initialValue(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(initialValue -> expandDeriverExpression(reduceExpression.reducerExpression(), targetType, moduleSourceFile, withReduceBoundNames(boundNames, reduceExpression))
-                            .map(reducerExpression -> new ReduceExpression(
+            case IfExpression ifExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(ifExpression.condition(), targetType, moduleSourceFile, boundNames),
+                    condition -> ResultOps.flatMap(
+                            expandDeriverExpression(ifExpression.thenBranch(), targetType, moduleSourceFile, boundNames),
+                            thenBranch -> ResultOps.map(
+                                    expandDeriverExpression(ifExpression.elseBranch(), targetType, moduleSourceFile, boundNames),
+                                    elseBranch -> new IfExpression(condition, thenBranch, elseBranch, ifExpression.position()))));
+            case InfixExpression infixExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(infixExpression.left(), targetType, moduleSourceFile, boundNames),
+                    left -> ResultOps.map(
+                            expandDeriverExpression(infixExpression.right(), targetType, moduleSourceFile, boundNames),
+                            right -> new InfixExpression(left, infixExpression.operator(), right, infixExpression.position())));
+            case FieldAccess fieldAccess -> ResultOps.map(
+                    expandDeriverExpression(fieldAccess.source(), targetType, moduleSourceFile, boundNames),
+                    source -> new FieldAccess(source, fieldAccess.field(), fieldAccess.position()));
+            case LambdaExpression lambdaExpression -> ResultOps.map(
+                    expandDeriverExpression(lambdaExpression.expression(), targetType, moduleSourceFile, withBoundNames(boundNames, lambdaExpression.argumentNames())),
+                    body -> new LambdaExpression(lambdaExpression.argumentNames(), body, lambdaExpression.position()));
+            case ReduceExpression reduceExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(reduceExpression.initialValue(), targetType, moduleSourceFile, boundNames),
+                    initialValue -> ResultOps.map(
+                            expandDeriverExpression(reduceExpression.reducerExpression(), targetType, moduleSourceFile, withReduceBoundNames(boundNames, reduceExpression)),
+                            reducerExpression -> new ReduceExpression(
                                     initialValue,
                                     reduceExpression.accumulatorName(),
                                     reduceExpression.keyName(),
@@ -3177,27 +3192,40 @@ public class CapybaraCompiler {
                                     reducerExpression,
                                     reduceExpression.position()
                             )));
-            case IndexExpression indexExpression -> expandDeriverExpression(indexExpression.source(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(source -> expandDeriverExpressions(indexExpression.arguments(), targetType, moduleSourceFile, boundNames)
-                            .map(arguments -> new IndexExpression(source, arguments, indexExpression.position())));
-            case SliceExpression sliceExpression -> expandDeriverExpression(sliceExpression.source(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(source -> expandOptionalDeriverExpression(sliceExpression.start(), targetType, moduleSourceFile, boundNames)
-                            .flatMap(start -> expandOptionalDeriverExpression(sliceExpression.end(), targetType, moduleSourceFile, boundNames)
-                                    .map(end -> new SliceExpression(source, start, end, sliceExpression.position()))));
-            case MatchExpression matchExpression -> expandDeriverExpression(matchExpression.matchWith(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(matchWith -> matchExpression.cases().stream()
+            case IndexExpression indexExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(indexExpression.source(), targetType, moduleSourceFile, boundNames),
+                    source -> ResultOps.map(
+                            expandDeriverExpressions(indexExpression.arguments(), targetType, moduleSourceFile, boundNames),
+                            arguments -> new IndexExpression(source, arguments, indexExpression.position())));
+            case SliceExpression sliceExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(sliceExpression.source(), targetType, moduleSourceFile, boundNames),
+                    source -> ResultOps.flatMap(
+                            expandOptionalDeriverExpression(sliceExpression.start(), targetType, moduleSourceFile, boundNames),
+                            start -> ResultOps.map(
+                                    expandOptionalDeriverExpression(sliceExpression.end(), targetType, moduleSourceFile, boundNames),
+                                    end -> new SliceExpression(source, start, end, sliceExpression.position()))));
+            case MatchExpression matchExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(matchExpression.matchWith(), targetType, moduleSourceFile, boundNames),
+                    matchWith -> {
+                        var cases = matchExpression.cases().stream()
                             .map(matchCase -> {
                                 var branchBoundNames = withBoundNames(boundNames, patternBoundNames(matchCase.pattern()));
-                                return expandOptionalDeriverExpression(matchCase.guard(), targetType, moduleSourceFile, branchBoundNames)
-                                        .flatMap(guard -> expandDeriverExpression(matchCase.expression(), targetType, moduleSourceFile, branchBoundNames)
-                                                .map(body -> new MatchExpression.MatchCase(matchCase.pattern(), guard, body)));
+                                return ResultOps.flatMap(
+                                        expandOptionalDeriverExpression(matchCase.guard(), targetType, moduleSourceFile, branchBoundNames),
+                                        guard -> ResultOps.map(
+                                                expandDeriverExpression(matchCase.expression(), targetType, moduleSourceFile, branchBoundNames),
+                                                body -> new MatchExpression.MatchCase(matchCase.pattern(), guard, body)));
                             })
-                            .collect(new ResultCollectionCollector<>())
-                            .map(cases -> new MatchExpression(matchWith, cases, matchExpression.position())));
-            case NewData newData -> expandFieldAssignments(newData.assignments(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(assignments -> expandDeriverExpressions(newData.positionalArguments(), targetType, moduleSourceFile, boundNames)
-                            .flatMap(positionalArguments -> expandDeriverExpressions(newData.spreads(), targetType, moduleSourceFile, boundNames)
-                                    .map(spreads -> new NewData(
+                            .collect(new ResultCollectionCollector<>());
+                        return ResultOps.map(cases, linkedCases -> new MatchExpression(matchWith, linkedCases, matchExpression.position()));
+                    });
+            case NewData newData -> ResultOps.flatMap(
+                    expandFieldAssignments(newData.assignments(), targetType, moduleSourceFile, boundNames),
+                    assignments -> ResultOps.flatMap(
+                            expandDeriverExpressions(newData.positionalArguments(), targetType, moduleSourceFile, boundNames),
+                            positionalArguments -> ResultOps.map(
+                                    expandDeriverExpressions(newData.spreads(), targetType, moduleSourceFile, boundNames),
+                                    spreads -> new NewData(
                                             newData.type(),
                                             newData.bypassConstructor(),
                                             assignments,
@@ -3205,31 +3233,42 @@ public class CapybaraCompiler {
                                             spreads,
                                             newData.position()
                                     ))));
-            case ConstructorData constructorData -> expandFieldAssignments(constructorData.assignments(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(assignments -> expandDeriverExpressions(constructorData.positionalArguments(), targetType, moduleSourceFile, boundNames)
-                            .flatMap(positionalArguments -> expandDeriverExpressions(constructorData.spreads(), targetType, moduleSourceFile, boundNames)
-                                    .map(spreads -> new ConstructorData(
+            case ConstructorData constructorData -> ResultOps.flatMap(
+                    expandFieldAssignments(constructorData.assignments(), targetType, moduleSourceFile, boundNames),
+                    assignments -> ResultOps.flatMap(
+                            expandDeriverExpressions(constructorData.positionalArguments(), targetType, moduleSourceFile, boundNames),
+                            positionalArguments -> ResultOps.map(
+                                    expandDeriverExpressions(constructorData.spreads(), targetType, moduleSourceFile, boundNames),
+                                    spreads -> new ConstructorData(
                                             assignments,
                                             positionalArguments,
                                             spreads,
                                             constructorData.position()
                                     ))));
-            case WithExpression withExpression -> expandDeriverExpression(withExpression.source(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(source -> expandFieldAssignments(withExpression.assignments(), targetType, moduleSourceFile, boundNames)
-                            .map(assignments -> new WithExpression(source, assignments, withExpression.position())));
-            case NewListExpression newListExpression -> expandDeriverExpressions(newListExpression.values(), targetType, moduleSourceFile, boundNames)
-                    .map(values -> new NewListExpression(values, newListExpression.position()));
-            case NewSetExpression newSetExpression -> expandDeriverExpressions(newSetExpression.values(), targetType, moduleSourceFile, boundNames)
-                    .map(values -> new NewSetExpression(values, newSetExpression.position()));
-            case NewDictExpression newDictExpression -> newDictExpression.entries().stream()
-                    .map(entry -> expandDeriverExpression(entry.key(), targetType, moduleSourceFile, boundNames)
-                            .flatMap(key -> expandDeriverExpression(entry.value(), targetType, moduleSourceFile, boundNames)
-                                    .map(value -> new NewDictExpression.Entry(key, value))))
-                    .collect(new ResultCollectionCollector<>())
-                    .map(entries -> new NewDictExpression(entries, newDictExpression.position()));
-            case TupleExpression tupleExpression -> expandDeriverExpressions(tupleExpression.values(), targetType, moduleSourceFile, boundNames)
-                    .map(values -> new TupleExpression(values, tupleExpression.position()));
-            default -> Result.success(expression);
+            case WithExpression withExpression -> ResultOps.flatMap(
+                    expandDeriverExpression(withExpression.source(), targetType, moduleSourceFile, boundNames),
+                    source -> ResultOps.map(
+                            expandFieldAssignments(withExpression.assignments(), targetType, moduleSourceFile, boundNames),
+                            assignments -> new WithExpression(source, assignments, withExpression.position())));
+            case NewListExpression newListExpression -> ResultOps.map(
+                    expandDeriverExpressions(newListExpression.values(), targetType, moduleSourceFile, boundNames),
+                    values -> new NewListExpression(values, newListExpression.position()));
+            case NewSetExpression newSetExpression -> ResultOps.map(
+                    expandDeriverExpressions(newSetExpression.values(), targetType, moduleSourceFile, boundNames),
+                    values -> new NewSetExpression(values, newSetExpression.position()));
+            case NewDictExpression newDictExpression -> ResultOps.map(
+                    newDictExpression.entries().stream()
+                            .map(entry -> ResultOps.flatMap(
+                                    expandDeriverExpression(entry.key(), targetType, moduleSourceFile, boundNames),
+                                    key -> ResultOps.map(
+                                            expandDeriverExpression(entry.value(), targetType, moduleSourceFile, boundNames),
+                                            value -> new NewDictExpression.Entry(key, value))))
+                            .collect(new ResultCollectionCollector<>()),
+                    entries -> new NewDictExpression(entries, newDictExpression.position()));
+            case TupleExpression tupleExpression -> ResultOps.map(
+                    expandDeriverExpressions(tupleExpression.values(), targetType, moduleSourceFile, boundNames),
+                    values -> new TupleExpression(values, tupleExpression.position()));
+            default -> Results.success(expression);
         };
     }
 
@@ -3251,7 +3290,7 @@ public class CapybaraCompiler {
                     moduleSourceFile
             );
         }
-        return Result.success(functionReference);
+        return Results.success(functionReference);
     }
 
     private Result<Expression> expandDeriverFunctionCall(
@@ -3282,8 +3321,9 @@ public class CapybaraCompiler {
                     moduleSourceFile
             );
         }
-        return expandDeriverExpressions(functionCall.arguments(), targetType, moduleSourceFile, boundNames)
-                .map(arguments -> new FunctionCall(functionCall.moduleName(), functionCall.name(), arguments, functionCall.position()));
+        return ResultOps.map(
+                expandDeriverExpressions(functionCall.arguments(), targetType, moduleSourceFile, boundNames),
+                arguments -> new FunctionCall(functionCall.moduleName(), functionCall.name(), arguments, functionCall.position()));
     }
 
     private Result<Expression> legacyDeriveHelperError(
@@ -3292,7 +3332,7 @@ public class CapybaraCompiler {
             String moduleSourceFile
     ) {
         return withPosition(
-                Result.error(message),
+                Results.error(message),
                 position,
                 normalizeFile(moduleSourceFile)
         );
@@ -3332,8 +3372,10 @@ public class CapybaraCompiler {
             Set<String> boundNames
     ) {
         return expression
-                .map(value -> expandDeriverExpression(value, targetType, moduleSourceFile, boundNames).map(Optional::of))
-                .orElseGet(() -> Result.success(Optional.empty()));
+                .map(value -> ResultOps.map(
+                        expandDeriverExpression(value, targetType, moduleSourceFile, boundNames),
+                        Optional::of))
+                .orElseGet(() -> Results.success(Optional.empty()));
     }
 
     private Result<List<NewData.FieldAssignment>> expandFieldAssignments(
@@ -3351,8 +3393,9 @@ public class CapybaraCompiler {
             Set<String> boundNames
     ) {
         return assignments.stream()
-                .map(assignment -> expandDeriverExpression(assignment.value(), targetType, moduleSourceFile, boundNames)
-                        .map(value -> new NewData.FieldAssignment(assignment.name(), value)))
+                .map(assignment -> ResultOps.map(
+                        expandDeriverExpression(assignment.value(), targetType, moduleSourceFile, boundNames),
+                        value -> new NewData.FieldAssignment(assignment.name(), value)))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -3635,7 +3678,7 @@ public class CapybaraCompiler {
             SortedSet<CompiledModule> compiledModules,
             NativeProviderManifest manifest
     ) {
-        var errors = new TreeSet<Result.Error.SingleError>();
+        var errors = new TreeSet<CompilerError>();
         var linkedTypesByModule = new HashMap<String, SortedMap<String, GenericDataType>>();
         var objectTypeCatalog = objectTypeCatalog(objectOrientedModules);
         objectTypeCatalog.linkedTypesByModule().forEach((moduleName, objectTypes) ->
@@ -3699,7 +3742,7 @@ public class CapybaraCompiler {
                     compileCache
             );
             if (availableTypes instanceof Result.Error<Map<String, NativeProviderTarget>> error) {
-                errors.addAll(error.errors());
+                errors.addAll(CompilerErrors.from(error));
                 continue;
             }
             var visibleTypes = ((Result.Success<Map<String, NativeProviderTarget>>) availableTypes).value();
@@ -3810,7 +3853,7 @@ public class CapybaraCompiler {
 
         manifestBindingsByKey.forEach((key, binding) -> {
             if (!usedManifestKeys.contains(key)) {
-                errors.add(new Result.Error.SingleError(
+                errors.add(new CompilerError(
                         0,
                         0,
                         nativeProviderManifestSource(manifest),
@@ -3822,9 +3865,9 @@ public class CapybaraCompiler {
         });
 
         if (!errors.isEmpty()) {
-            return new Result.Error<>(errors);
+            return CompilerErrors.result(errors);
         }
-        return Result.success(new NativeProviderCatalog(declarations, bindings));
+        return Results.success(new NativeProviderCatalog(declarations, bindings));
     }
 
     private List<NativeProviderDeclaration> visibleNativeProviderDeclarations(
@@ -4001,7 +4044,7 @@ public class CapybaraCompiler {
     private void validateNativeProviderCalls(
             ObjectOrientedModule module,
             List<NativeProviderDeclaration> nativeProviders,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var providersByName = nativeProviders.stream()
                 .collect(toMap(
@@ -4039,7 +4082,7 @@ public class CapybaraCompiler {
             Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.MemberDeclaration member,
             NativeProviderCallScope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         switch (member) {
             case ObjectOriented.FieldDeclaration fieldDeclaration ->
@@ -4062,7 +4105,7 @@ public class CapybaraCompiler {
             Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.MethodBody body,
             NativeProviderCallScope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         switch (body) {
             case ObjectOriented.ExpressionBody expressionBody -> validateNativeProviderCalls(module, providersByName, expressionBody.expression(), scope, errors);
@@ -4075,7 +4118,7 @@ public class CapybaraCompiler {
             Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.StatementBlock block,
             NativeProviderCallScope parentScope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var scope = parentScope;
         for (int index = 0; index < block.statements().size(); index++) {
@@ -4107,7 +4150,7 @@ public class CapybaraCompiler {
             Map<String, NativeProviderDeclaration> providersByName,
             ObjectOriented.Statement statement,
             NativeProviderCallScope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         switch (statement) {
             case ObjectOriented.LetStatement letStatement -> {
@@ -4163,14 +4206,14 @@ public class CapybaraCompiler {
             Map<String, NativeProviderDeclaration> providersByName,
             String expression,
             NativeProviderCallScope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         for (var provider : providersByName.values()) {
             if (scope.hasBinding(provider.name())) {
                 continue;
             }
             if (callsProviderWithArguments(expression, provider.name())) {
-                errors.add(new Result.Error.SingleError(
+                errors.add(new CompilerError(
                         0,
                         0,
                         module.moduleFile(),
@@ -4299,14 +4342,14 @@ public class CapybaraCompiler {
 
     private Map<NativeProviderKey, NativeProviderBinding> nativeProviderManifestBindings(
             NativeProviderManifest manifest,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var bindingsByKey = new LinkedHashMap<NativeProviderKey, NativeProviderBinding>();
         for (var binding : manifest.providers()) {
             var key = new NativeProviderKey(binding.interfaceId(), binding.qualifier());
             var existing = bindingsByKey.putIfAbsent(key, binding);
             if (existing != null) {
-                errors.add(new Result.Error.SingleError(
+                errors.add(new CompilerError(
                         0,
                         0,
                         nativeProviderManifestSource(manifest),
@@ -4400,7 +4443,7 @@ public class CapybaraCompiler {
         for (var importDeclaration : imports) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
-                return new Result.Error<>(new Result.Error.SingleError(
+                return CompilerErrors.result(new CompilerError(
                         0,
                         0,
                         SourceKind.FUNCTIONAL.moduleFile(modulePath, moduleName),
@@ -4456,7 +4499,7 @@ public class CapybaraCompiler {
                     )
             );
         }
-        return Result.success(Map.copyOf(all));
+        return Results.success(Map.copyOf(all));
     }
 
     private void putNativeProviderTypes(
@@ -4489,7 +4532,7 @@ public class CapybaraCompiler {
             NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBinding binding,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         return compiledNativeProviderBinding(
                 provider,
@@ -4507,7 +4550,7 @@ public class CapybaraCompiler {
             NativeProviderBackendBinding javaBinding,
             NativeProviderBackendBinding javascriptBinding,
             NativeProviderBackendBinding pythonBinding,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var errorCount = errors.size();
         validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
@@ -4530,7 +4573,7 @@ public class CapybaraCompiler {
             String interfaceId,
             NativeProviderBackend backend,
             NativeProviderBackendBinding binding,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         if (binding == null) {
             return;
@@ -4565,7 +4608,7 @@ public class CapybaraCompiler {
             NativeProviderBackend backend,
             String fieldName,
             String value,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         if (value != null && !value.isBlank()) {
             return;
@@ -4620,9 +4663,9 @@ public class CapybaraCompiler {
         return qualified.startsWith("/") ? qualified : "/" + qualified;
     }
 
-    private Result.Error.SingleError nativeProviderError(NativeProviderDeclaration provider, String message) {
+    private CompilerError nativeProviderError(NativeProviderDeclaration provider, String message) {
         var sourceFile = provider.sourceFile();
-        return new Result.Error.SingleError(
+        return new CompilerError(
                 0,
                 0,
                 sourceFile,
@@ -5299,14 +5342,14 @@ public class CapybaraCompiler {
             if (linkedDataConstructor != null && !isResultLikeType(linkedDataConstructor.returnType(), dataTypes)) {
                 var parentTarget = parentType.orElseThrow().targetTypeName();
                 return withPosition(
-                        Result.error("Constructor for `" + dataDeclaration.name() + "` must return `Result[" + dataDeclaration.name() + "]` because parent type constructor for `"
+                        Results.error("Constructor for `" + dataDeclaration.name() + "` must return `Result[" + dataDeclaration.name() + "]` because parent type constructor for `"
                                      + parentTarget + "` returns `Result[" + parentTarget + "]`"),
                         dataDeclaration.position(),
                         normalizeFile(moduleSourceFile)
                 );
             }
         }
-        return Result.success(null);
+        return Results.success(null);
     }
 
     private Result<Void> validateResultReturningTypeConstructors(
@@ -5327,10 +5370,10 @@ public class CapybaraCompiler {
                     moduleSourceFile(module)
             );
             if (validation instanceof Result.Error<Void> error) {
-                return new Result.Error<>(error.errors());
+                return ResultOps.error(error);
             }
         }
-        return Result.success(null);
+        return Results.success(null);
     }
 
     private boolean isResultLikeType(CompiledType type, Map<String, GenericDataType> dataTypes) {
@@ -5516,8 +5559,9 @@ public class CapybaraCompiler {
         var tailRecursiveContract = function.annotations().stream()
                 .map(usage -> availableAnnotations.get(usage.name()))
                 .anyMatch(this::isRecursiveAnnotation);
-        var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
-                .flatMap(parameters -> linkExpressionWithRecursiveInference(
+        var linked = ResultOps.flatMap(
+                linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache),
+                parameters -> ResultOps.flatMap(linkExpressionWithRecursiveInference(
                         function,
                         parameters,
                         moduleSourceFile,
@@ -5528,19 +5572,19 @@ public class CapybaraCompiler {
                         qualifiedModuleAliases,
                         protectedConstructorsByType,
                         linkCache
-                ).flatMap(ex -> validateConstructorReturnType(function, ex, dataTypes, functionGenericTypeNames, compileCache)
-                        .flatMap(validatedExpression -> function.returnType()
+                ), ex -> ResultOps.flatMap(validateConstructorReturnType(function, ex, dataTypes, functionGenericTypeNames, compileCache),
+                        validatedExpression -> ResultOps.flatMap(function.returnType()
                                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
-                                .orElseGet(() -> Result.success(validatedExpression.type()))
-                                .flatMap(rtype -> validateFunctionReturnType(function, validatedExpression, rtype, dataTypes, moduleSourceFile)
-                                        .flatMap(finalExpression -> classifyRecursion(
+                                .orElseGet(() -> Results.success(validatedExpression.type()))
+                                , rtype -> ResultOps.flatMap(validateFunctionReturnType(function, validatedExpression, rtype, dataTypes, moduleSourceFile)
+                                        , finalExpression -> ResultOps.map(classifyRecursion(
                                                 function,
                                                 parameters,
                                                 finalExpression,
                                                 tailRecursiveSelfCallNames(function.name(), moduleSourceFile, moduleClassNameByModuleName),
                                                 tailRecursiveContract,
                                                 moduleSourceFile
-                                        ).map(recursion -> new CompiledFunction(
+                                        ), recursion -> new CompiledFunction(
                                                 function.name(),
                                                 rtype,
                                                 parameters,
@@ -5580,7 +5624,7 @@ public class CapybaraCompiler {
                         "`@Recursive` is supported for functions, not type methods"
                 );
             }
-            return Result.success(new RecursionClassification(analysis.hasSelfCall(), false));
+            return Results.success(new RecursionClassification(analysis.hasSelfCall(), false));
         }
 
         if (analysis.firstNonTailCall().isPresent()) {
@@ -5592,7 +5636,7 @@ public class CapybaraCompiler {
                         "Recursive call to `" + displayFunctionName(function.name()) + "` is not in tail position"
                 );
             }
-            return Result.success(new RecursionClassification(true, false));
+            return Results.success(new RecursionClassification(true, false));
         }
         if (!analysis.hasSelfCall()) {
             if (tailRecursiveContract) {
@@ -5603,9 +5647,9 @@ public class CapybaraCompiler {
                         "`@Recursive` function `" + displayFunctionName(function.name()) + "` must call itself in tail position"
                 );
             }
-            return Result.success(new RecursionClassification(false, false));
+            return Results.success(new RecursionClassification(false, false));
         }
-        return Result.success(new RecursionClassification(true, true));
+        return Results.success(new RecursionClassification(true, true));
     }
 
     private record RecursionClassification(boolean recursive, boolean tailRecursive) {
@@ -5629,8 +5673,8 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-        var error = new Result.Error.SingleError(line, column, file, message);
-        return new Result.Error<>(List.of(error));
+        var error = new CompilerError(line, column, file, message);
+        return CompilerErrors.result(List.of(error));
     }
 
     private TailRecursionAnalysis analyzeTailRecursion(
@@ -5848,7 +5892,7 @@ public class CapybaraCompiler {
     ) {
         var constructorTarget = constructorTargetTypeName(function.name());
         if (constructorTarget.isEmpty()) {
-            return Result.success(expression);
+            return Results.success(expression);
         }
         var target = constructorTarget.orElseThrow();
         var internalTargetName = target.kind() == ConstructorKind.TYPE
@@ -5856,18 +5900,18 @@ public class CapybaraCompiler {
                 : target.targetTypeName();
         var linkedTarget = linkType(new DataType(internalTargetName), dataTypes, functionGenericTypeNames, compileCache);
         if (linkedTarget instanceof Result.Error<CompiledType> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var targetType = ((Result.Success<CompiledType>) linkedTarget).value();
         if (targetType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
             if (expression.type().equals(primitiveBackedType.backingType())) {
-                return Result.success(expression);
+                return Results.success(expression);
             }
             if (isResultOf(expression.type(), primitiveBackedType.backingType(), dataTypes)) {
-                return Result.success(expression);
+                return Results.success(expression);
             }
             return withPosition(
-                    Result.error("Constructor for `" + target.targetTypeName() + "` must return `"
+                    Results.error("Constructor for `" + target.targetTypeName() + "` must return `"
                                  + primitiveDescriptorForMessage(primitiveBackedType.backingType()) + "` or `Result["
                                  + primitiveDescriptorForMessage(primitiveBackedType.backingType()) + "]`, but got `" + expression.type() + "`"),
                     returnExpressionPosition(function.expression()).or(() -> function.position()),
@@ -5875,18 +5919,18 @@ public class CapybaraCompiler {
             );
         }
         if (!(targetType instanceof CompiledDataType dataType)) {
-            return Result.success(expression);
+            return Results.success(expression);
         }
         if (expression.type().equals(dataType)) {
-            return Result.success(expression);
+            return Results.success(expression);
         }
         var resultType = resultTypeForData(dataType, dataTypes);
         if (resultType != null && expression.type().equals(resultType)) {
-            return Result.success(expression);
+            return Results.success(expression);
         }
         var userVisibleName = target.targetTypeName();
         return withPosition(
-                Result.error("Constructor for `" + userVisibleName + "` must return `" + userVisibleName + "` or `Result[" + userVisibleName + "]`, but got `" + expression.type() + "`"),
+                Results.error("Constructor for `" + userVisibleName + "` must return `" + userVisibleName + "` or `Result[" + userVisibleName + "]`, but got `" + expression.type() + "`"),
                 returnExpressionPosition(function.expression()).or(() -> function.position()),
                 ""
         );
@@ -5938,11 +5982,11 @@ public class CapybaraCompiler {
         var linkedExpression = shouldLinkForExpectedType
                 ? linker.linkExpressionForExpectedType(function.expression(), linkedDeclaredReturnType.orElseThrow())
                 : linker.linkExpression(function.expression());
-        return linkedExpression.flatMap(expression -> {
+        return ResultOps.flatMap(linkedExpression, expression -> {
             if (function.returnType().isPresent()
                 || expression.type() != PrimitiveLinkedType.ANY
                 || !function.name().contains("__local_fun_")) {
-                return Result.success(expression);
+                return Results.success(expression);
             }
             var selfSignatureAsNothing = signatures.stream()
                     .map(signature -> signature.name().equals(function.name())
@@ -5970,9 +6014,9 @@ public class CapybaraCompiler {
                                     ? constructorStateTypeName(target.targetTypeName())
                                     : target.targetTypeName())
             );
-            return retryLinker.linkExpression(function.expression()).map(retry ->
-                    retry.type() != PrimitiveLinkedType.ANY ? retry : expression
-            );
+            return ResultOps.map(
+                    retryLinker.linkExpression(function.expression()),
+                    retry -> retry.type() != PrimitiveLinkedType.ANY ? retry : expression);
         });
     }
     private Optional<Result<CompiledFunction>> validateTypeMethodDeclaredInLocalType(
@@ -5997,13 +6041,13 @@ public class CapybaraCompiler {
                       + " --> " + normalizedFile + ":" + position.line() + ":" + position.column() + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        var error = new Result.Error.SingleError(
+        var error = new CompilerError(
                 position.line(),
                 position.column(),
                 normalizedFile,
                 message
         );
-        return Optional.of(new Result.Error<>(List.of(error)));
+        return Optional.of(CompilerErrors.result(List.of(error)));
     }
 
     private Optional<String> methodOwnerType(String functionName) {
@@ -6037,14 +6081,14 @@ public class CapybaraCompiler {
         if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
-        var transformed = error.errors().stream()
+        var transformed = CompilerErrors.from(error).stream()
                 .map(singleError -> normalizeInfixOperatorError(singleError, function, moduleSourceFile))
                 .toList();
-        return new Result.Error<>(transformed);
+        return CompilerErrors.result(transformed);
     }
 
-    private Result.Error.SingleError normalizeInfixOperatorError(
-            Result.Error.SingleError error,
+    private CompilerError normalizeInfixOperatorError(
+            CompilerError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -6066,7 +6110,7 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new Result.Error.SingleError(line, column, file, message);
+        return new CompilerError(line, column, file, message);
     }
     private Result<CompiledFunction> normalizeMatchExhaustivenessErrors(
             Result<CompiledFunction> linked,
@@ -6076,10 +6120,10 @@ public class CapybaraCompiler {
         if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
-        var transformed = error.errors().stream()
+        var transformed = CompilerErrors.from(error).stream()
                 .map(singleError -> normalizeMatchExhaustivenessError(singleError, function, moduleSourceFile))
                 .toList();
-        return new Result.Error<>(transformed);
+        return CompilerErrors.result(transformed);
     }
 
     private Result<CompiledFunction> normalizeIntLiteralErrors(
@@ -6090,10 +6134,10 @@ public class CapybaraCompiler {
         if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
-        var transformed = error.errors().stream()
+        var transformed = CompilerErrors.from(error).stream()
                 .map(singleError -> normalizeIntLiteralError(singleError, function, moduleSourceFile))
                 .toList();
-        return new Result.Error<>(transformed);
+        return CompilerErrors.result(transformed);
     }
 
     private Result<CompiledFunction> normalizeExpectedFoundErrors(
@@ -6104,10 +6148,10 @@ public class CapybaraCompiler {
         if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
-        var transformed = error.errors().stream()
+        var transformed = CompilerErrors.from(error).stream()
                 .map(singleError -> normalizeExpectedFoundError(singleError, function, moduleSourceFile))
                 .toList();
-        return new Result.Error<>(transformed);
+        return CompilerErrors.result(transformed);
     }
 
     private Result<CompiledFunction> normalizeReadableFunctionErrors(
@@ -6118,14 +6162,14 @@ public class CapybaraCompiler {
         if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
-        var transformed = error.errors().stream()
+        var transformed = CompilerErrors.from(error).stream()
                 .map(singleError -> normalizeReadableFunctionError(singleError, function, moduleSourceFile))
                 .toList();
-        return new Result.Error<>(transformed);
+        return CompilerErrors.result(transformed);
     }
 
-    private Result.Error.SingleError normalizeReadableFunctionError(
-            Result.Error.SingleError error,
+    private CompilerError normalizeReadableFunctionError(
+            CompilerError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -6146,11 +6190,11 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new Result.Error.SingleError(line, column, file, message);
+        return new CompilerError(line, column, file, message);
     }
 
-    private Result.Error.SingleError normalizeExpectedFoundError(
-            Result.Error.SingleError error,
+    private CompilerError normalizeExpectedFoundError(
+            CompilerError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -6169,7 +6213,7 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new Result.Error.SingleError(line, column, file, message);
+        return new CompilerError(line, column, file, message);
     }
 
     private String formatFunctionPreviewUpToLine(Function function, int line) {
@@ -6182,8 +6226,8 @@ public class CapybaraCompiler {
                 .collect(java.util.stream.Collectors.joining("\n"));
     }
 
-    private Result.Error.SingleError normalizeIntLiteralError(
-            Result.Error.SingleError error,
+    private CompilerError normalizeIntLiteralError(
+            CompilerError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -6201,11 +6245,11 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + messageColumn + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new Result.Error.SingleError(line, reportedColumn, file, message);
+        return new CompilerError(line, reportedColumn, file, message);
     }
 
-    private Result.Error.SingleError normalizeMatchExhaustivenessError(
-            Result.Error.SingleError error,
+    private CompilerError normalizeMatchExhaustivenessError(
+            CompilerError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -6223,7 +6267,7 @@ public class CapybaraCompiler {
                       + header + "\n"
                       + matchLine + "\n"
                       + pointer + "\n";
-        return new Result.Error.SingleError(line, column, file, message);
+        return new CompilerError(line, column, file, message);
     }
 
     private Result<dev.capylang.compiler.expression.CompiledExpression> validateFunctionReturnType(
@@ -6239,7 +6283,7 @@ public class CapybaraCompiler {
         }
         var coercedExpression = coerceReturnExpression(expression, declaredReturnType, dataTypes);
         if (isAssignableReturnType(declaredReturnType, coercedExpression.type(), dataTypes)) {
-            return Result.success(coercedExpression);
+            return Results.success(coercedExpression);
         }
         return returnTypeMismatchError(function, terminalReturnExpression(function.expression()), declaredReturnType, coercedExpression.type(), moduleSourceFile);
     }
@@ -6262,7 +6306,7 @@ public class CapybaraCompiler {
         var pointer = " ".repeat(Math.max(column, 0))
                       + "^ expected `" + formatLinkedType(declaredReturnType)
                       + "`, found `" + formatLinkedType(actualReturnType) + "`";
-        return Result.error(
+        return Results.error(
                 "error: mismatched types\n"
                 + " --> " + file + ":" + line + ":" + column + "\n"
                 + functionPreview + "\n"
@@ -7519,9 +7563,11 @@ public class CapybaraCompiler {
         var linked = functions.stream()
                 .map(function -> {
                     var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes, compileCache);
-                    return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
-                            .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, compileCache, moduleSourceFile)
-                                    .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
+                    return ResultOps.flatMap(
+                            linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache),
+                            parameters -> ResultOps.map(
+                                    linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, compileCache, moduleSourceFile),
+                                    returnType -> new CapybaraExpressionCompiler.FunctionSignature(
                                             function.name(),
                                             parameters.stream().map(CompiledFunctionParameter::type).toList(),
                                             parameters.stream().map(CompiledFunctionParameter::name).toList(),
@@ -7540,7 +7586,7 @@ public class CapybaraCompiler {
             var previous = signaturesByKey.putIfAbsent(signatureKey(signature), functions.get(i));
             if (previous != null) {
                 return withPosition(
-                        Result.error("Duplicate function signature `" + displaySignatureName(signature.name()) + "` for parameter types "
+                        Results.error("Duplicate function signature `" + displaySignatureName(signature.name()) + "` for parameter types "
                                      + signature.parameterTypes().stream().map(CompiledType::name).toList()),
                         functions.get(i).position(),
                         normalizeFile(moduleSourceFile)
@@ -7550,14 +7596,14 @@ public class CapybaraCompiler {
         var invalidMainOverloadIndex = invalidSplitProgramMainOverloadIndex(signatures);
         if (invalidMainOverloadIndex.isPresent()) {
             return withPosition(
-                    Result.error("Invalid overloaded main functions: `main` declarations cannot split the program entrypoint "
+                    Results.error("Invalid overloaded main functions: `main` declarations cannot split the program entrypoint "
                                  + "signature across parameter and return types. Use exactly `fun main(args: List[String]): "
                                  + "Effect[/capy/lang/Program]`."),
                     functions.get(invalidMainOverloadIndex.get()).position(),
                     normalizeFile(moduleSourceFile)
             );
         }
-        return Result.success(signatures);
+        return Results.success(signatures);
     }
 
     private Optional<Integer> invalidSplitProgramMainOverloadIndex(List<CapybaraExpressionCompiler.FunctionSignature> signatures) {
@@ -7807,7 +7853,7 @@ public class CapybaraCompiler {
     ) {
         var linked = function.returnType()
                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
-                .orElseGet(() -> Result.success(PrimitiveLinkedType.ANY));
+                .orElseGet(() -> Results.success(PrimitiveLinkedType.ANY));
         if (!(linked instanceof Result.Error<CompiledType> error)) {
             return linked;
         }
@@ -7816,7 +7862,7 @@ public class CapybaraCompiler {
         var column = signatureReturnTypeColumn(function);
         var file = normalizeFile(moduleSourceFile);
         var header = formatFunctionHeader(function) + " =";
-        var formattedErrors = error.errors().stream()
+        var formattedErrors = CompilerErrors.from(error).stream()
                 .map(singleError -> normalizeSignatureTypeError(singleError.message()))
                 .map(message -> {
                     var pointer = " ".repeat(Math.max(column, 0)) + "^ " + message;
@@ -7824,10 +7870,10 @@ public class CapybaraCompiler {
                                     + " --> " + file + ":" + line + ":" + column + "\n"
                                     + header + "\n"
                                     + pointer + "\n";
-                    return new Result.Error.SingleError(line, column, file, formatted);
+                    return new CompilerError(line, column, file, formatted);
                 })
                 .toList();
-        return new Result.Error<>(formattedErrors);
+        return CompilerErrors.result(formattedErrors);
     }
 
     private String normalizeSignatureTypeError(String message) {
@@ -7838,7 +7884,7 @@ public class CapybaraCompiler {
         return normalizeUserVisibleNames(message);
     }
 
-    private Optional<Result.Error<CompiledFunction>> privateTypeEscapingFunctionSignatureError(
+    private Optional<Result<CompiledFunction>> privateTypeEscapingFunctionSignatureError(
             Function function,
             String moduleSourceFile
     ) {
@@ -7852,7 +7898,7 @@ public class CapybaraCompiler {
             if (escaped.isPresent()) {
                 var line = function.position().map(SourcePosition::line).orElse(0);
                 var column = signatureParameterTypeColumn(function, i);
-                return Optional.of(new Result.Error<>(new Result.Error.SingleError(
+                return Optional.of(CompilerErrors.result(new CompilerError(
                         line,
                         column,
                         "",
@@ -7872,7 +7918,7 @@ public class CapybaraCompiler {
             if (escaped.isPresent()) {
                 var line = function.position().map(SourcePosition::line).orElse(0);
                 var column = signatureReturnTypeColumn(function);
-                return Optional.of(new Result.Error<>(new Result.Error.SingleError(
+                return Optional.of(CompilerErrors.result(new CompilerError(
                         line,
                         column,
                         "",
@@ -8140,8 +8186,9 @@ public class CapybaraCompiler {
             CompileCache compileCache
     ) {
         return withPosition(
-                linkType(parameter.type(), dataTypes, functionGenericTypeNames, compileCache)
-                        .map(type -> new CompiledFunctionParameter(parameter.name(), type)),
+                ResultOps.map(
+                        linkType(parameter.type(), dataTypes, functionGenericTypeNames, compileCache),
+                        type -> new CompiledFunctionParameter(parameter.name(), type)),
                 parameter.position(),
                 "");
     }
@@ -8227,7 +8274,7 @@ public class CapybaraCompiler {
             return cached;
         }
         Result<CompiledType> linked = switch (type) {
-            case PrimitiveType primitiveType -> Result.success(switch (primitiveType) {
+            case PrimitiveType primitiveType -> Results.success(switch (primitiveType) {
                 case BYTE -> PrimitiveLinkedType.BYTE;
                 case INT -> PrimitiveLinkedType.INT;
                 case LONG -> PrimitiveLinkedType.LONG;
@@ -8241,22 +8288,25 @@ public class CapybaraCompiler {
                 case NOTHING -> PrimitiveLinkedType.NOTHING;
             });
             case CollectionType.ListType listType ->
-                    linkType(listType.elementType(), dataTypes, functionGenericTypeNames, compileCache)
-                            .map(CollectionLinkedType.CompiledList::new)
-                            .map(CompiledType.class::cast);
-            case CollectionType.SetType setType -> linkType(setType.elementType(), dataTypes, functionGenericTypeNames, compileCache)
-                    .map(CollectionLinkedType.CompiledSet::new)
-                    .map(CompiledType.class::cast);
-            case CollectionType.DictType dictType -> linkType(dictType.valueType(), dataTypes, functionGenericTypeNames, compileCache)
-                    .map(CollectionLinkedType.CompiledDict::new)
-                    .map(CompiledType.class::cast);
-            case FunctionType functionType -> linkType(functionType.argumentType(), dataTypes, functionGenericTypeNames, compileCache)
-                    .flatMap(argumentType -> linkType(functionType.returnType(), dataTypes, functionGenericTypeNames, compileCache)
-                            .map(returnType -> (CompiledType) new CompiledFunctionType(argumentType, returnType)));
-            case TupleType tupleType -> tupleType.elementTypes().stream()
-                    .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames, compileCache))
-                    .collect(new ResultCollectionCollector<>())
-                    .map(linkedTypes -> (CompiledType) new CompiledTupleType(linkedTypes));
+                    ResultOps.map(
+                            linkType(listType.elementType(), dataTypes, functionGenericTypeNames, compileCache),
+                            elementType -> (CompiledType) new CollectionLinkedType.CompiledList(elementType));
+            case CollectionType.SetType setType -> ResultOps.map(
+                    linkType(setType.elementType(), dataTypes, functionGenericTypeNames, compileCache),
+                    elementType -> (CompiledType) new CollectionLinkedType.CompiledSet(elementType));
+            case CollectionType.DictType dictType -> ResultOps.map(
+                    linkType(dictType.valueType(), dataTypes, functionGenericTypeNames, compileCache),
+                    valueType -> (CompiledType) new CollectionLinkedType.CompiledDict(valueType));
+            case FunctionType functionType -> ResultOps.flatMap(
+                    linkType(functionType.argumentType(), dataTypes, functionGenericTypeNames, compileCache),
+                    argumentType -> ResultOps.map(
+                            linkType(functionType.returnType(), dataTypes, functionGenericTypeNames, compileCache),
+                            returnType -> (CompiledType) new CompiledFunctionType(argumentType, returnType)));
+            case TupleType tupleType -> ResultOps.map(
+                    tupleType.elementTypes().stream()
+                            .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames, compileCache))
+                            .collect(new ResultCollectionCollector<>()),
+                    linkedTypes -> (CompiledType) new CompiledTupleType(linkedTypes));
             case DataType dataType ->
                     linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames, compileCache);
         };
@@ -8272,25 +8322,26 @@ public class CapybaraCompiler {
     ) {
         var parsed = parseGenericTypeName(rawTypeName, compileCache);
         if (parsed.typeArguments().isEmpty() && functionGenericTypeNames.contains(parsed.baseName())) {
-            return Result.success(new CompiledGenericTypeParameter(parsed.baseName()));
+            return Results.success(new CompiledGenericTypeParameter(parsed.baseName()));
         }
 
         var linkedBase = linkType(new DataType(parsed.baseName()), dataTypes, compileCache);
         if (linkedBase instanceof Result.Error<CompiledType> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var baseType = ((Result.Success<CompiledType>) linkedBase).value();
         if (parsed.typeArguments().isEmpty()) {
-            return Result.success(baseType);
+            return Results.success(baseType);
         }
         if (baseType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
-            return Result.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
+            return Results.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
         }
 
-        return parsed.typeArguments().stream()
-                .map(argument -> linkType(parseTypeArgument(argument, compileCache), dataTypes, functionGenericTypeNames, compileCache))
-                .collect(new ResultCollectionCollector<>())
-                .map(arguments -> instantiateTypeArguments(baseType, arguments));
+        return ResultOps.map(
+                parsed.typeArguments().stream()
+                        .map(argument -> linkType(parseTypeArgument(argument, compileCache), dataTypes, functionGenericTypeNames, compileCache))
+                        .collect(new ResultCollectionCollector<>()),
+                arguments -> instantiateTypeArguments(baseType, arguments));
     }
 
     private String typeCacheKey(Type type) {
@@ -8721,7 +8772,7 @@ public class CapybaraCompiler {
                 normalizedFile
         );
         if (primitiveBackedTypesOrError instanceof Result.Error<List<CompiledPrimitiveBackedType>> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var primitiveBackedTypes = ((Result.Success<List<CompiledPrimitiveBackedType>>) primitiveBackedTypesOrError).value();
         var primitiveBackedTypesByName = primitiveBackedTypes.stream()
@@ -8746,7 +8797,7 @@ public class CapybaraCompiler {
                 normalizedFile
         );
         if (dataDeclarationsOrError instanceof Result.Error<?> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var dataDeclarations = ((Result.Success<List<CompiledDataType>>) dataDeclarationsOrError).value();
         Map<String, GenericDataType> knownDataTypes = new HashMap<>();
@@ -8768,7 +8819,7 @@ public class CapybaraCompiler {
                 .collect(new ResultCollectionCollector<>());
 
         if (typeDeclarationsOrError instanceof Result.Error<?> error) {
-            return new Result.Error<>(error.errors());
+            return ResultOps.error(error);
         }
         var typeDeclarations = ((Result.Success<List<CompiledDataParentType>>) typeDeclarationsOrError).value();
 
@@ -8793,7 +8844,7 @@ public class CapybaraCompiler {
                         );
                     }
                 });
-        return Result.success(map);
+        return Results.success(map);
     }
 
     private Result<List<CompiledDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
@@ -8815,7 +8866,7 @@ public class CapybaraCompiler {
     ) {
         if (!PRIMITIVE_BACKED_TYPE_NAME_PATTERN.matcher(declaration.name()).matches()) {
             return withPosition(
-                    Result.error("Primitive-backed type name `" + declaration.name() + "` must start with a lowercase letter and contain only lowercase letters and underscores"),
+                    Results.error("Primitive-backed type name `" + declaration.name() + "` must start with a lowercase letter and contain only lowercase letters and underscores"),
                     declaration.position(),
                     normalizedFile
             );
@@ -8831,12 +8882,12 @@ public class CapybaraCompiler {
         };
         if (backingType == null) {
             return withPosition(
-                    Result.error("Primitive-backed type `" + declaration.name() + "` must be backed by byte, int, long, float, double, or String"),
+                    Results.error("Primitive-backed type `" + declaration.name() + "` must be backed by byte, int, long, float, double, or String"),
                     declaration.position(),
                     normalizedFile
             );
         }
-        return Result.success(new CompiledPrimitiveBackedType(
+        return Results.success(new CompiledPrimitiveBackedType(
                 declaration.name(),
                 backingType,
                 qualifiedModuleNameFromSourceFile(normalizedFile) + "." + declaration.name(),
@@ -8883,7 +8934,7 @@ public class CapybaraCompiler {
             return cached;
         }
         if (dataDeclaration.nativeType()) {
-            var linkedNative = Result.success(new CompiledDataType(
+            var linkedNative = Results.success(new CompiledDataType(
                     dataDeclaration.name(),
                     List.of(),
                     dataDeclaration.typeParameters(),
@@ -8900,7 +8951,7 @@ public class CapybaraCompiler {
         }
         if (!visiting.add(dataDeclaration.name())) {
             return withPosition(
-                    Result.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
+                    Results.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
                     dataDeclaration.position(),
                     normalizedFile);
         }
@@ -8910,11 +8961,11 @@ public class CapybaraCompiler {
                 .map(parentName -> {
                     var parent = declarationsByName.get(parentName);
                     if (parent == null) {
-                        return Result.<List<CompiledDataType.CompiledField>>error(
+                        return Results.<List<CompiledDataType.CompiledField>>error(
                                 "Extended data type `" + parentName + "` not found"
                         );
                     }
-                    return linkDataDeclaration(
+                    return ResultOps.map(linkDataDeclaration(
                             parent,
                             declarationsByName,
                             rawTypeDeclarationsByName,
@@ -8922,8 +8973,8 @@ public class CapybaraCompiler {
                             importDeclarations,
                             cache,
                             visiting,
-                            normalizedFile)
-                            .map(CompiledDataType::fields);
+                            normalizedFile),
+                            CompiledDataType::fields);
                 })
                 .collect(new ResultCollectionCollector<>());
         var ownFields = dataDeclaration.fields().stream()
@@ -8938,11 +8989,11 @@ public class CapybaraCompiler {
                         visiting,
                         normalizedFile))
                 .collect(new ResultCollectionCollector<>());
-        var linked = Result.join(
+        var linked = ResultOps.flatMap(ResultOps.join(
                 LinkedDataFields::new,
                 inheritedFields,
                 ownFields
-        ).flatMap(linkedFields -> {
+        ), linkedFields -> {
             var fields = new ArrayList<CompiledDataType.CompiledField>();
             var fieldOrigins = new LinkedHashMap<String, FieldOrigin>();
             for (var i = 0; i < dataDeclaration.extendsTypes().size(); i++) {
@@ -8950,15 +9001,15 @@ public class CapybaraCompiler {
                 var parentFields = linkedFields.inherited().get(i);
                 var duplicateError = mergeDataFields(fields, fieldOrigins, parentFields, parentName, dataDeclaration.name());
                 if (duplicateError != null) {
-                    return Result.error(duplicateError);
+                    return Results.error(duplicateError);
                 }
             }
             var ownDuplicateError = mergeDataFields(fields, fieldOrigins, linkedFields.own(), dataDeclaration.name(), dataDeclaration.name());
             if (ownDuplicateError != null) {
-                return Result.error(ownDuplicateError);
+                return Results.error(ownDuplicateError);
             }
             var singleton = isZeroFieldSingletonData(dataDeclaration);
-            return Result.success(new CompiledDataType(
+            return Results.success(new CompiledDataType(
                     dataDeclaration.name(),
                     List.copyOf(fields),
                     dataDeclaration.typeParameters(),
@@ -9040,10 +9091,10 @@ public class CapybaraCompiler {
             String normalizedFile
     ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
-            return Result.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
+            return Results.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
         }
         if (type.type() instanceof DataType dataType && declarationsByName.containsKey(dataType.name())) {
-            return linkDataDeclaration(
+            return ResultOps.map(linkDataDeclaration(
                     declarationsByName.get(dataType.name()),
                     declarationsByName,
                     rawTypeDeclarationsByName,
@@ -9051,8 +9102,8 @@ public class CapybaraCompiler {
                     importDeclarations,
                     cache,
                     visiting,
-                    normalizedFile)
-                    .map(linkedDataType -> new CompiledDataType.CompiledField(type.name(), linkedDataType));
+                    normalizedFile),
+                    linkedDataType -> new CompiledDataType.CompiledField(type.name(), linkedDataType));
         }
         var knownDataTypes = new HashMap<String, GenericDataType>();
         declarationsByName.forEach((name, declaration) -> {
@@ -9086,7 +9137,7 @@ public class CapybaraCompiler {
             && type.type() instanceof DataType dataType) {
             var importedQualifiedName = resolveImportedQualifiedTypeName(dataType.name(), importDeclarations);
             if (importedQualifiedName.isPresent() && isQualifiedExternalTypeName(importedQualifiedName.get())) {
-                return Result.success(new CompiledDataType.CompiledField(
+                return Results.success(new CompiledDataType.CompiledField(
                         type.name(),
                         externalTypePlaceholder(importedQualifiedName.get())
                 ));
@@ -9095,12 +9146,12 @@ public class CapybaraCompiler {
         if (linkedType instanceof Result.Error<CompiledType>
             && type.type() instanceof DataType dataType
             && isQualifiedExternalTypeName(dataType.name())) {
-            return Result.success(new CompiledDataType.CompiledField(
+            return Results.success(new CompiledDataType.CompiledField(
                     type.name(),
                     externalTypePlaceholder(dataType.name())
             ));
         }
-        return linkedType.map(t -> new CompiledDataType.CompiledField(type.name(), t));
+        return ResultOps.map(linkedType, t -> new CompiledDataType.CompiledField(type.name(), t));
     }
 
     private Map<String, GenericDataType> importedExternalTypePlaceholders(List<ImportDeclaration> importDeclarations) {
@@ -9290,8 +9341,9 @@ public class CapybaraCompiler {
             Map<String, GenericDataType> knownDataTypes,
             String normalizedFile
     ) {
-        var linked = findSubtypes(typeDeclaration.subTypes(), dataDeclarations, rawTypeDeclarationsByName, new HashSet<>())
-                .flatMap(subTypes -> linkedDataParentType(typeDeclaration, subTypes, knownDataTypes));
+        var linked = ResultOps.flatMap(
+                findSubtypes(typeDeclaration.subTypes(), dataDeclarations, rawTypeDeclarationsByName, new HashSet<>()),
+                subTypes -> linkedDataParentType(typeDeclaration, subTypes, knownDataTypes));
         return withPosition(linked, typeDeclaration.position(), normalizedFile);
     }
 
@@ -9301,14 +9353,14 @@ public class CapybaraCompiler {
             Map<String, GenericDataType> knownDataTypes
     ) {
         var genericTypes = Set.copyOf(typeDeclaration.typeParameters());
-        return typeDeclaration.fields()
-                .stream()
-                .map(field -> linkField(field, genericTypes, knownDataTypes))
-                .collect(new ResultCollectionCollector<>())
-                .flatMap(fields -> subTypes.stream()
-                        .map(subType -> mergeParentFields(typeDeclaration.name(), fields, subType))
-                        .collect(new ResultCollectionCollector<>())
-                        .map(inheritedSubtypes -> new CompiledDataParentType(
+        return ResultOps.flatMap(typeDeclaration.fields()
+                        .stream()
+                        .map(field -> linkField(field, genericTypes, knownDataTypes))
+                        .collect(new ResultCollectionCollector<>()),
+                fields -> ResultOps.map(subTypes.stream()
+                                .map(subType -> mergeParentFields(typeDeclaration.name(), fields, subType))
+                                .collect(new ResultCollectionCollector<>()),
+                        inheritedSubtypes -> new CompiledDataParentType(
                                 typeDeclaration.name(),
                                 fields,
                                 inheritedSubtypes,
@@ -9338,7 +9390,7 @@ public class CapybaraCompiler {
                 continue;
             }
             if (!parentField.type().equals(childField.type())) {
-                return Result.error("Field `%s` in subtype `%s` must match parent type `%s` field type `%s`, but was `%s`"
+                return Results.error("Field `%s` in subtype `%s` must match parent type `%s` field type `%s`, but was `%s`"
                         .formatted(
                                 parentField.name(),
                                 childType.name(),
@@ -9350,7 +9402,7 @@ public class CapybaraCompiler {
             merged.removeIf(field -> field.name().equals(parentField.name()));
         }
         merged.addAll(childType.fields());
-        return Result.success(new CompiledDataType(
+        return Results.success(new CompiledDataType(
                 childType.name(),
                 List.copyOf(merged),
                 childType.typeParameters(),
@@ -9370,10 +9422,11 @@ public class CapybaraCompiler {
             Map<String, GenericDataType> knownDataTypes
     ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
-            return Result.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
+            return Results.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
         }
-        return linkType(type.type(), knownDataTypes)
-                .map(t -> new CompiledDataType.CompiledField(type.name(), t));
+        return ResultOps.map(
+                linkType(type.type(), knownDataTypes),
+                t -> new CompiledDataType.CompiledField(type.name(), t));
     }
 
     private Result<List<CompiledDataType>> findSubtypes(
@@ -9383,38 +9436,38 @@ public class CapybaraCompiler {
             Set<String> visitingTypes
     ) {
         var dataTypesMap = dataDeclarations.stream().collect(toMap(CompiledDataType::name, identity(), (first, second) -> first));
-        return rawSubTypes.stream()
+        var nestedTypes = rawSubTypes.stream()
                 .map(key -> {
                     var dataType = dataTypesMap.get(key);
                     if (dataType != null) {
-                        return Result.success(List.of(dataType));
+                        return Results.success(List.of(dataType));
                     }
                     var typeDeclaration = rawTypeDeclarationsByName.get(key);
                     if (typeDeclaration == null) {
-                        return Result.<List<CompiledDataType>>error("Type " + key + " not found");
+                        return Results.<List<CompiledDataType>>error("Type " + key + " not found");
                     }
                     if (!visitingTypes.add(key)) {
-                        return Result.<List<CompiledDataType>>error("Circular type hierarchy detected for `" + key + "`");
+                        return Results.<List<CompiledDataType>>error("Circular type hierarchy detected for `" + key + "`");
                     }
                     var nested = findSubtypes(typeDeclaration.subTypes(), dataDeclarations, rawTypeDeclarationsByName, visitingTypes);
                     visitingTypes.remove(key);
                     return nested;
                 })
-                .collect(new ResultCollectionCollector<List<CompiledDataType>>())
-                .map(list -> list.stream().flatMap(Collection::stream).toList());
+                .collect(new ResultCollectionCollector<List<CompiledDataType>>());
+        return ResultOps.map(nestedTypes, list -> list.stream().flatMap(Collection::stream).toList());
     }
 
     private static <T> Result<T> withPosition(Result<T> valueOrError, Optional<SourcePosition> position, String file) {
         if (valueOrError instanceof Result.Error<T> error && position.isPresent()) {
             var pos = position.get();
-            return new Result.Error<>(error.errors()
+            return CompilerErrors.result(CompilerErrors.from(error)
                     .stream()
                     .map(singleError -> {
                         var hasKnownPosition = singleError.line() > 0;
                         var line = hasKnownPosition ? singleError.line() : pos.line();
                         var column = hasKnownPosition ? singleError.column() : pos.column();
                         var sourceFile = singleError.file().isBlank() ? file : singleError.file();
-                        return new Result.Error.SingleError(line, column, sourceFile, singleError.message());
+                        return new CompilerError(line, column, sourceFile, singleError.message());
                     })
                     .toList());
         }
@@ -9426,8 +9479,8 @@ public class CapybaraCompiler {
             return valueOrError;
         }
         var normalizedFile = normalizeFile(moduleSourceFile);
-        return new Result.Error<>(error.errors().stream()
-                .map(singleError -> new Result.Error.SingleError(
+        return CompilerErrors.result(CompilerErrors.from(error).stream()
+                .map(singleError -> new CompilerError(
                         singleError.line(),
                         singleError.column(),
                         singleError.file().isBlank() ? normalizedFile : singleError.file(),

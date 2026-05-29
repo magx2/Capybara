@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -337,12 +339,12 @@ class AnnotationCompilerTest {
     private static CompiledProgram compileSuccess(List<RawModule> modules) {
         var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+            fail(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 
-    private static Result.Error.SingleError compileFailure(RawModule module) {
+    private static CompilerError compileFailure(RawModule module) {
         return compileFailure(List.of(module));
     }
 
@@ -355,17 +357,17 @@ class AnnotationCompilerTest {
         if (result instanceof Result.Success<CompiledProgram> success) {
             fail("Expected compilation to fail but got " + success.value());
         }
-        return ((Result.Error<CompiledProgram>) result).errors().stream()
-                .map(Result.Error.SingleError::message)
+        return CompilerErrors.from((Result.Error<CompiledProgram>) result).stream()
+                .map(CompilerError::message)
                 .toList();
     }
 
-    private static Result.Error.SingleError compileFailure(List<RawModule> modules) {
+    private static CompilerError compileFailure(List<RawModule> modules) {
         var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Success<CompiledProgram> success) {
             fail("Expected compilation to fail but got " + success.value());
         }
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        var errors = CompilerErrors.from((Result.Error<CompiledProgram>) result);
         assertThat(errors).isNotEmpty();
         return errors.first();
     }

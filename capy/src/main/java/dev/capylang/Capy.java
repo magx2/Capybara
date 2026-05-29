@@ -17,7 +17,8 @@ import dev.capylang.compiler.NativeProviderCatalog;
 import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.NativeImplementationScanner;
 import dev.capylang.compiler.OutputType;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.expression.CompiledExpression;
 import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledInfixExpression;
@@ -809,8 +810,8 @@ public class Capy {
         var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries, nativeProviders, nativeImplementationProviders);
         log.info("Linked " + rawModules.size() + " modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - linkingStartedAt));
         if (linking instanceof Result.Error<CompiledProgram> error) {
-            err.println("Compilation failed with " + error.errors().size() + " error(s):");
-            error.errors().forEach(err::println);
+            err.println("Compilation failed with " + CompilerErrors.from(error).size() + " error(s):");
+            CompilerErrors.from(error).forEach(err::println);
             return null;
         }
 

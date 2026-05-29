@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -14,11 +16,11 @@ public class ResultCollectionCollector<T>
 
     public static final class Accumulator<T> {
         private final List<T> values = new ArrayList<>();
-        private final List<Result.Error.SingleError> errors = new ArrayList<>();
+        private final List<CompilerError> errors = new ArrayList<>();
 
         void add(Result<T> valueOrError) {
             if (valueOrError instanceof Result.Error<T> error) {
-                errors.addAll(error.errors());
+                errors.addAll(CompilerErrors.from(error));
                 return;
             }
 
@@ -33,10 +35,10 @@ public class ResultCollectionCollector<T>
 
         Result<List<T>> finish() {
             if (!errors.isEmpty()) {
-                return new Result.Error<>(errors);
+                return CompilerErrors.result(errors);
             }
 
-            return Result.success(List.copyOf(values));
+            return Results.success(List.copyOf(values));
         }
     }
 

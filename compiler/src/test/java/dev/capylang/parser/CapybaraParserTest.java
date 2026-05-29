@@ -11,7 +11,9 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.stream.Stream;
 
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerError;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
 import dev.capylang.compiler.parser.ParserAst.AnnotationTypeNameValue;
@@ -542,7 +544,7 @@ class CapybaraParserTest {
                 """));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");
@@ -724,7 +726,7 @@ class CapybaraParserTest {
                 """));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");
@@ -865,7 +867,7 @@ class CapybaraParserTest {
                     0
                 """);
 
-        var error = (Result.Error.SingleError) method.invoke(
+        var error = (CompilerError) method.invoke(
                 parser,
                 module,
                 module.input(),
@@ -1121,7 +1123,7 @@ class CapybaraParserTest {
                 """));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");

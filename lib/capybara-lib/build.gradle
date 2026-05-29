@@ -464,7 +464,7 @@ def capybaraJsTestResultsDir = layout.buildDirectory.dir('test-results/capybara-
 def capybaraPyTestResultsDir = layout.buildDirectory.dir('test-results/capybara-python')
 def capybaraJsTestRunner = layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
 def capybaraPyTestRunner = layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
-def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, capyRuntimeClasspath, sourceSets.test.output.classesDirs)
+def capybaraTestRuntimeClasspath = files(capyRuntimeClasspath, sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
 def directoryContainsFile = { directory, matcher = { true } ->
     Path root = directory.asFile.toPath()
     if (Files.notExists(root) || !Files.isDirectory(root)) {

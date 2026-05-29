@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledFieldAccess;
 import dev.capylang.compiler.expression.CompiledLetExpression;
@@ -1240,17 +1242,17 @@ class CapybaraCompilerLibrariesTest {
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+            fail(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 
-    private static Result.Error.SingleError compileFailure(List<RawModule> rawModules) {
+    private static CompilerError compileFailure(List<RawModule> rawModules) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (result instanceof Result.Success<CompiledProgram> value) {
             fail("Expected compilation to fail but it succeeded: " + value);
         }
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        var errors = CompilerErrors.from((Result.Error<CompiledProgram>) result);
         assertThat(errors).isNotEmpty();
         return errors.first();
     }

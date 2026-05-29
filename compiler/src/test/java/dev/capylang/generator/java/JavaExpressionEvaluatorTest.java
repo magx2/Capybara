@@ -1,5 +1,9 @@
 package dev.capylang.generator.java;
 
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
+import dev.capylang.compiler.CompilerError;
+
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -112,9 +116,9 @@ class JavaExpressionEvaluatorTest {
     private static CompiledProgram compileProgram(List<RawModule> modules) {
         var programResult = CapybaraCompiler.INSTANCE.compile(modules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Error<CompiledProgram> er) {
-            throw new AssertionError(er.errors()
+            throw new AssertionError(CompilerErrors.from(er)
                     .stream()
-                    .map(Result.Error.SingleError::message)
+                    .map(CompilerError::message)
                     .collect(joining(", ")));
         }
         return ((Result.Success<CompiledProgram>) programResult).value();
@@ -186,7 +190,7 @@ class JavaExpressionEvaluatorTest {
                 """)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
-        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
+        assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
                 .contains("dict keys must be of type `STRING`");
     }
 
@@ -560,7 +564,7 @@ class JavaExpressionEvaluatorTest {
                 """)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
-        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
+        assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
                 .contains("Singleton data value `Done` must be constructed with `Done {}`");
     }
 
@@ -572,7 +576,7 @@ class JavaExpressionEvaluatorTest {
                 """)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
-        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
+        assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
                 .contains("Enum value `DONE` must be used without `{}`");
     }
 
@@ -589,7 +593,7 @@ class JavaExpressionEvaluatorTest {
                 """)), libraries);
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
-        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
+        assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
                 .contains("Singleton data value `DONE` must be constructed with `DONE {}`");
     }
 
@@ -1672,8 +1676,8 @@ class JavaExpressionEvaluatorTest {
                 var rawModules = loadRawModules(sourceRoot);
                 var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
                 if (programResult instanceof Result.Error<CompiledProgram> error) {
-                    throw new AssertionError(error.errors().stream()
-                            .map(Result.Error.SingleError::toString)
+                    throw new AssertionError(CompilerErrors.from(error).stream()
+                            .map(CompilerError::toString)
                             .collect(joining(System.lineSeparator())));
                 }
                 var generatedProgram = new JavaGenerator().generate(((Result.Success<CompiledProgram>) programResult).value());

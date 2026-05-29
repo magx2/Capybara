@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
@@ -18,19 +20,19 @@ public final class ObjectOrientedValidator {
     );
 
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
-        var errors = new TreeSet<Result.Error.SingleError>();
+        var errors = new TreeSet<CompilerError>();
         modules.forEach(module -> validateModule(module, errors));
-        return errors.isEmpty() ? Result.success(modules) : new Result.Error<>(errors);
+        return errors.isEmpty() ? Results.success(modules) : CompilerErrors.result(errors);
     }
 
-    private void validateModule(ObjectOrientedModule module, TreeSet<Result.Error.SingleError> errors) {
+    private void validateModule(ObjectOrientedModule module, TreeSet<CompilerError> errors) {
         module.objectOriented().definitions().forEach(definition -> validateDefinition(module, definition, errors));
     }
 
     private void validateDefinition(
             ObjectOrientedModule module,
             ObjectOriented.TypeDeclaration definition,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var constructorParameters = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
                 ? classDeclaration.constructorParameters().stream().map(ObjectOriented.Parameter::name).toList()
@@ -43,7 +45,7 @@ public final class ObjectOrientedValidator {
             String typeName,
             ObjectOriented.MemberDeclaration member,
             List<String> constructorParameters,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         if (member instanceof ObjectOriented.MethodDeclaration method
             && method.body().isPresent()) {
@@ -65,7 +67,7 @@ public final class ObjectOrientedValidator {
             String owner,
             ObjectOriented.StatementBlock block,
             Scope parentScope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var scope = parentScope.child();
         for (var statement : block.statements()) {
@@ -111,7 +113,7 @@ public final class ObjectOrientedValidator {
             String owner,
             ObjectOriented.Statement statement,
             Scope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         switch (statement) {
             case ObjectOriented.StatementBlock block -> validateBlock(module, owner, block, scope, errors);
@@ -154,7 +156,7 @@ public final class ObjectOrientedValidator {
             String owner,
             ObjectOriented.AssignmentStatement assignmentStatement,
             Scope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var resolution = scope.resolve(assignmentStatement.name());
         if (resolution == Resolution.MUTABLE) {
@@ -165,7 +167,7 @@ public final class ObjectOrientedValidator {
             case UNDECLARED -> "Assignment target `" + assignmentStatement.name() + "` in `" + owner + "` is not a mutable local variable";
             case MUTABLE -> throw new IllegalStateException("unreachable");
         };
-        errors.add(new Result.Error.SingleError(0, 0, module.moduleFile(), message));
+        errors.add(new CompilerError(0, 0, module.moduleFile(), message));
     }
 
     private void validateLocalMethod(
@@ -173,7 +175,7 @@ public final class ObjectOrientedValidator {
             String owner,
             ObjectOriented.LocalMethodStatement localMethodStatement,
             Scope scope,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var mutableCaptures = new TreeSet<String>();
         var localScope = scope.child();
@@ -181,7 +183,7 @@ public final class ObjectOrientedValidator {
         localScope.declareImmutable(localMethodStatement.name());
         collectMutableCaptures(localMethodStatement.body(), localScope, mutableCaptures);
         if (!mutableCaptures.isEmpty()) {
-            errors.add(new Result.Error.SingleError(
+            errors.add(new CompilerError(
                     0,
                     0,
                     module.moduleFile(),
@@ -197,12 +199,12 @@ public final class ObjectOrientedValidator {
             ObjectOrientedModule module,
             String owner,
             ObjectOriented.ExpressionStatement expressionStatement,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         if (isCallExpression(expressionStatement.expression())) {
             return;
         }
-        errors.add(new Result.Error.SingleError(
+        errors.add(new CompilerError(
                 0,
                 0,
                 module.moduleFile(),
@@ -267,7 +269,7 @@ public final class ObjectOrientedValidator {
             ObjectOrientedModule module,
             String owner,
             ObjectOriented.MethodBody body,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         switch (body) {
             case ObjectOriented.ExpressionBody expressionBody -> validateUnsafeEffectRunUsage(module, owner, expressionBody.expression(), errors);
@@ -279,7 +281,7 @@ public final class ObjectOrientedValidator {
             ObjectOrientedModule module,
             String owner,
             ObjectOriented.StatementBlock block,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         for (var statement : block.statements()) {
             validateUnsafeEffectRunUsage(module, owner, statement, errors);
@@ -290,7 +292,7 @@ public final class ObjectOrientedValidator {
             ObjectOrientedModule module,
             String owner,
             ObjectOriented.Statement statement,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         switch (statement) {
             case ObjectOriented.LetStatement letStatement -> validateUnsafeEffectRunUsage(module, owner, letStatement.expression(), errors);
@@ -331,13 +333,13 @@ public final class ObjectOrientedValidator {
             ObjectOrientedModule module,
             String owner,
             String expression,
-            TreeSet<Result.Error.SingleError> errors
+            TreeSet<CompilerError> errors
     ) {
         var withoutStrings = STRING_LITERAL.matcher(expression).replaceAll(" ");
         if (!UNSAFE_RUN_CALL.matcher(withoutStrings).find()) {
             return;
         }
-        errors.add(new Result.Error.SingleError(
+        errors.add(new CompilerError(
                 0,
                 0,
                 module.moduleFile(),

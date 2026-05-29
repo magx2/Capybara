@@ -6,8 +6,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 import dev.capylang.compiler.ImportDeclaration;
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.RawModule;
 
 import java.util.*;
@@ -53,7 +55,7 @@ public class CompilationErrorTest {
                 "local_names_in_errors");
 
         assertThat(errors).isNotEmpty();
-        assertThat(errors.stream().map(Result.Error.SingleError::message))
+        assertThat(errors.stream().map(CompilerError::message))
                 .allMatch(message -> !message.contains("__parse_semver__local_fun_"))
                 .allMatch(message -> !message.contains("__parse_semver__local_type_"))
                 .anyMatch(message -> message.contains("fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] ="));
@@ -322,7 +324,7 @@ public class CompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        var error = ((Result.Error<CompiledProgram>) result).errors().first();
+        var error = CompilerErrors.from((Result.Error<CompiledProgram>) result).first();
         assertThat(error.message())
                 .contains("Constructor bypass `User! { ... }` can only be used in module `foo/model/UserModel` where `User` is defined");
     }
@@ -440,7 +442,7 @@ public class CompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .anySatisfy(error -> assertThat(error.message()).contains("Unknown annotation Test"));
     }
 
@@ -967,7 +969,7 @@ public class CompilationErrorTest {
         ), new java.util.TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        var errors = CompilerErrors.from((Result.Error<CompiledProgram>) result);
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
                 .contains("Expected `Result[Widget]`, but got `Widget`");
@@ -2103,11 +2105,11 @@ public class CompilationErrorTest {
     }
 
 
-    private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName) {
+    private static SortedSet<CompilerError> compileProgram(String fun, String moduleName) {
         return compileProgram(fun, moduleName, List.of());
     }
 
-    private static SortedSet<Result.Error.SingleError> compileProgramWithEffect(String fun, String moduleName) {
+    private static SortedSet<CompilerError> compileProgramWithEffect(String fun, String moduleName) {
         var rawModules = new ArrayList<>(DEFAULT_MODULES);
         rawModules.add(new RawModule("Effect", "/capy/lang", """
                 union Effect[T] = UnsafeEffect[T]
@@ -2125,7 +2127,7 @@ public class CompilationErrorTest {
         if (programResult instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
-        return ((Result.Error<?>) programResult).errors();
+        return CompilerErrors.from((Result.Error<?>) programResult);
     }
 
     private static void assertInvalidPrimitiveBackedTypeName(String moduleName, String typeName) {
@@ -2156,18 +2158,18 @@ public class CompilationErrorTest {
                     """)
     );
 
-    private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
+    private static SortedSet<CompilerError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
         var rawModules = new ArrayList<>(DEFAULT_MODULES);
         rawModules.add(new RawModule(moduleName, "/foo/boo", prependImports(imports, fun)));
         var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
-        var errors = ((Result.Error<?>) programResult).errors();
+        var errors = CompilerErrors.from((Result.Error<?>) programResult);
         return adjustImportLineOffsets(normalizeLinkerErrors(errors, fun, moduleName), imports.size());
     }
-    private static SortedSet<Result.Error.SingleError> normalizeLinkerErrors(
-            SortedSet<Result.Error.SingleError> errors,
+    private static SortedSet<CompilerError> normalizeLinkerErrors(
+            SortedSet<CompilerError> errors,
             String code,
             String moduleName
     ) {
@@ -2201,7 +2203,7 @@ public class CompilationErrorTest {
                       + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, lineNumber, column)
                       + codeLine + "\n"
                       + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-        return new TreeSet<>(Set.of(new Result.Error.SingleError(
+        return new TreeSet<>(Set.of(new CompilerError(
                 lineNumber,
                 column,
                 "/foo/boo/%s.cfun".formatted(moduleName),
@@ -2218,8 +2220,8 @@ public class CompilationErrorTest {
                 .toList();
         return String.join("\n", java.util.stream.Stream.concat(importLines.stream(), java.util.stream.Stream.of(code)).toList());
     }
-    private static SortedSet<Result.Error.SingleError> adjustImportLineOffsets(
-            SortedSet<Result.Error.SingleError> errors,
+    private static SortedSet<CompilerError> adjustImportLineOffsets(
+            SortedSet<CompilerError> errors,
             int importLineCount
     ) {
         if (importLineCount == 0) {
@@ -2232,7 +2234,7 @@ public class CompilationErrorTest {
                             "/foo/boo/%s.cfun:%d:%d".formatted(moduleFileName(error.file()), error.line(), error.column()),
                             "/foo/boo/%s.cfun:%d:%d".formatted(moduleFileName(error.file()), adjustedLine, error.column())
                     );
-                    return new Result.Error.SingleError(adjustedLine, error.column(), error.file(), adjustedMessage);
+                    return new CompilerError(adjustedLine, error.column(), error.file(), adjustedMessage);
                 })
                 .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
     }

@@ -2,7 +2,10 @@ package dev.capylang.compiler.parser;
 
 
 import dev.capylang.compiler.ImportDeclaration;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
+import dev.capylang.compiler.Results;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.ParserAst.AnnotationValue;
 import dev.capylang.parser.antlr.FunctionalParser;
 import org.antlr.v4.runtime.*;
@@ -34,28 +37,28 @@ public class CapybaraParser {
     private static final Pattern QUALIFIED_IMPORT_PATTERN = Pattern.compile(
             "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
     );
-    private final List<Result.Error.SingleError> parserErrors = new ArrayList<>();
+    private final List<CompilerError> parserErrors = new ArrayList<>();
     private RawModule currentModule;
     private String currentSource;
 
     public synchronized Result<Program> parseModule(Collection<RawModule> rawModules) {
         try {
             var modules = new ArrayList<Module>();
-            var errors = new TreeSet<Result.Error.SingleError>();
+            var errors = new TreeSet<CompilerError>();
             for (var rawModule : rawModules) {
                 var parsedModule = parseModule(rawModule);
                 if (parsedModule instanceof Result.Success<Module> success) {
                     modules.add(success.value());
                 } else if (parsedModule instanceof Result.Error<Module> error) {
-                    errors.addAll(error.errors());
+                    errors.addAll(CompilerErrors.from(error));
                 }
             }
             if (!errors.isEmpty()) {
-                return new Result.Error<>(errors);
+                return CompilerErrors.result(errors);
             }
-            return Result.success(new Program(List.copyOf(modules)));
+            return Results.success(new Program(List.copyOf(modules)));
         } catch (RuntimeException e) {
-            return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
+            return CompilerErrors.result(new CompilerError(boundaryErrorMessage(e)));
         }
     }
 
@@ -90,7 +93,7 @@ public class CapybaraParser {
 
             var program = parser.program();
             if (!syntaxErrors.isEmpty()) {
-                return new Result.Error<>(formatSyntaxError(module, parsedSource.source(), syntaxErrors.get(0)));
+                return CompilerErrors.result(formatSyntaxError(module, parsedSource.source(), syntaxErrors.get(0)));
             }
 
             var parsedDefinitions = program.definition().stream()
@@ -99,19 +102,19 @@ public class CapybaraParser {
                     .toList();
             var duplicateLocalFunctions = findDuplicateLocalFunctions(parsedDefinitions);
             if (!duplicateLocalFunctions.isEmpty()) {
-                return new Result.Error<>(duplicateLocalFunctions);
+                return CompilerErrors.result(duplicateLocalFunctions);
             }
             var duplicateLocalConsts = findDuplicateLocalConsts(parsedDefinitions);
             if (!duplicateLocalConsts.isEmpty()) {
-                return new Result.Error<>(duplicateLocalConsts);
+                return CompilerErrors.result(duplicateLocalConsts);
             }
             if (!parserErrors.isEmpty()) {
-                return new Result.Error<>(parserErrors);
+                return CompilerErrors.result(parserErrors);
             }
             var definitions = new java.util.LinkedHashSet<>(parsedDefinitions);
-            return Result.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports(), module.sourceKind()));
+            return Results.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports(), module.sourceKind()));
         } catch (RuntimeException e) {
-            return new Result.Error<>(formatParserException(module, e));
+            return CompilerErrors.result(formatParserException(module, e));
         } finally {
             parserErrors.clear();
             currentModule = null;
@@ -197,7 +200,7 @@ public class CapybaraParser {
         return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
     }
 
-    private Result.Error.SingleError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
+    private CompilerError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
         var lines = source.split("\\R", -1);
         var lineText = lines[Math.max(0, Math.min(syntaxError.line() - 1, lines.length - 1))].stripLeading();
         var removedSingle = Pattern.compile("^single\\s+((?:_*)[A-Z][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s*(?://.*)?$").matcher(lineText);
@@ -216,7 +219,7 @@ public class CapybaraParser {
         return formatParserError(module, source, formatSyntaxError(syntaxError));
     }
 
-    private Result.Error.SingleError formatParserException(RawModule module, RuntimeException exception) {
+    private CompilerError formatParserException(RawModule module, RuntimeException exception) {
         return formatParserError(module, module.input(), exception.getMessage());
     }
 
@@ -256,7 +259,7 @@ public class CapybaraParser {
         );
     }
 
-    private List<Result.Error.SingleError> findDuplicateLocalFunctions(List<Definition> definitions) {
+    private List<CompilerError> findDuplicateLocalFunctions(List<Definition> definitions) {
         if (currentModule == null || currentSource == null) {
             return List.of();
         }
@@ -271,7 +274,7 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private Result.Error.SingleError duplicateLocalFunctionError(List<Function> functions) {
+    private CompilerError duplicateLocalFunctionError(List<Function> functions) {
         var firstFunction = functions.getFirst();
         var firstPosition = firstFunction.position().orElseThrow();
         var originalName = firstFunction.name().replaceFirst("^.*__local_fun_\\d+_", "");
@@ -288,7 +291,7 @@ public class CapybaraParser {
         );
     }
 
-    private List<Result.Error.SingleError> findDuplicateLocalConsts(List<Definition> definitions) {
+    private List<CompilerError> findDuplicateLocalConsts(List<Definition> definitions) {
         if (currentModule == null || currentSource == null) {
             return List.of();
         }
@@ -303,7 +306,7 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private Result.Error.SingleError duplicateLocalConstError(List<Function> functions) {
+    private CompilerError duplicateLocalConstError(List<Function> functions) {
         var firstFunction = functions.getFirst();
         var firstPosition = firstFunction.position().orElseThrow();
         var originalName = firstFunction.name().replaceFirst("^.*__local_const_\\d+_", "");
@@ -320,7 +323,7 @@ public class CapybaraParser {
         );
     }
 
-    private Result.Error.SingleError formatParserError(RawModule module, String source, String rawMessage) {
+    private CompilerError formatParserError(RawModule module, String source, String rawMessage) {
         var parserError = Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(String.valueOf(rawMessage));
         if (!parserError.matches()) {
             var duplicateLocalFunctionMatcher = Pattern.compile("Duplicate local function name: ([A-Za-z_][A-Za-z0-9_]*)").matcher(String.valueOf(rawMessage));
@@ -340,7 +343,7 @@ public class CapybaraParser {
                     );
                 }
             }
-            return new Result.Error.SingleError(0, 0, moduleFile(module), String.valueOf(rawMessage));
+            return new CompilerError(0, 0, moduleFile(module), String.valueOf(rawMessage));
         }
 
         var line = Integer.parseInt(parserError.group(1));
@@ -387,7 +390,7 @@ public class CapybaraParser {
                       + " --> %s:%d:%d\n".formatted(moduleFile(module), line, column)
                       + String.join("\n", renderedLines) + "\n"
                       + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-        return new Result.Error.SingleError(line, column, moduleFile(module), message);
+        return new CompilerError(line, column, moduleFile(module), message);
     }
 
     private List<SourcePosition> findLocalFunctionLocations(String source, String localName) {

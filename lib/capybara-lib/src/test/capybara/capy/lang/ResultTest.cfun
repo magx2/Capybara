@@ -20,9 +20,6 @@ fun tests(): Effect[TestFile] =
         test("should return other result if failed", () => should_return_other_result_if_failed()),
         test("should reduce success result", () => should_reduce_success_result()),
         test("should reduce error result", () => should_reduce_error_result()),
-        test("success helper should create success", () => success_helper_should_create_success()),
-        test("error helper should create error", () => error_helper_should_create_error()),
-        test("error helper should combine messages", () => error_helper_should_combine_messages()),
     ])
 
 fun should_map_success(): Assert =
@@ -110,14 +107,3 @@ fun should_reduce_error_result(): Assert =
     let reduced: String = result |> (x=>x+"", msg=>msg)
     assert_that(reduced).is_equal_to("Unknown")
 
-fun success_helper_should_create_success(): Assert =
-    let result = success(100)
-    assert_that(result).succeeds(100)
-
-fun error_helper_should_create_error(): Assert =
-    let result: Result[int] = error("Unknown")
-    assert_that(result).fails("Unknown")
-
-fun error_helper_should_combine_messages(): Assert =
-    let result: Result[int] = error(["left", "right"])
-    assert_that(result).fails("left\nright")

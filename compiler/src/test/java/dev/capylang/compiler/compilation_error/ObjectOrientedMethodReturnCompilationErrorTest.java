@@ -1,8 +1,9 @@
 package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import org.junit.jupiter.api.Test;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 
@@ -30,7 +31,7 @@ class ObjectOrientedMethodReturnCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/InvalidReturn.coo");
@@ -59,7 +60,7 @@ class ObjectOrientedMethodReturnCompilationErrorTest {
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<?>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/InvalidIfReturn.coo");

@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
@@ -118,7 +120,7 @@ class RecursionCompilerTest {
                 new TreeSet<>()
         );
         if (result instanceof Result.Error<CompiledProgram> error) {
-            throw new AssertionError(error.errors().toString());
+            throw new AssertionError(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }

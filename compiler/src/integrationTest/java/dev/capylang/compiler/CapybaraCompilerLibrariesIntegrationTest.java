@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import org.junit.jupiter.api.Test;
 import dev.capylang.generator.GeneratedModule;
 import dev.capylang.generator.JavaGenerator;
@@ -108,7 +110,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+            fail(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }

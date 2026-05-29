@@ -4,9 +4,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.ImportDeclaration;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.RawModule;
 
 import java.util.ArrayList;
@@ -90,7 +92,7 @@ class LocalVisibilityCompilationErrorTest {
         );
     }
 
-    private static SortedSet<Result.Error.SingleError> compileProgram(
+    private static SortedSet<CompilerError> compileProgram(
             String fun,
             String moduleName,
             String modulePath,
@@ -107,7 +109,7 @@ class LocalVisibilityCompilationErrorTest {
         if (programResult instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
-        return ((Result.Error<?>) programResult).errors();
+        return CompilerErrors.from((Result.Error<?>) programResult);
     }
 
     private static String prependImports(List<ImportDeclaration> imports, String code) {

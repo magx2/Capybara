@@ -2,7 +2,8 @@ package dev.capylang.generator;
 
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
@@ -227,7 +228,7 @@ class PrimitiveBackedTypeGeneratorTest {
     private static CompiledProgram compileProgram(List<RawModule> modules) {
         var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+            fail(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }

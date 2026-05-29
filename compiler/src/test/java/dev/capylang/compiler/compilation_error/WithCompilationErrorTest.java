@@ -1,8 +1,9 @@
 package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -21,7 +22,7 @@ class WithCompilationErrorTest {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule(name, "/foo/boo", source)), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        var error = ((Result.Error<CompiledProgram>) result).errors().first();
+        var error = CompilerErrors.from((Result.Error<CompiledProgram>) result).first();
         assertThat(error.message()).contains(expectedFragment);
     }
 

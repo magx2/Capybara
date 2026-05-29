@@ -1,7 +1,10 @@
 package dev.capylang.compiler.parser;
 
 import dev.capylang.compiler.ImportDeclaration;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
+import dev.capylang.compiler.Results;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.ParserAst.AnnotationValue;
 import dev.capylang.parser.antlr.ObjectOrientedLexer;
 import org.antlr.v4.runtime.CharStreams;
@@ -55,13 +58,13 @@ public final class ObjectOrientedParser {
 
             var program = parser.program();
             if (!syntaxErrors.isEmpty()) {
-                return new Result.Error<>(formatSyntaxError(module, syntaxErrors.getFirst()));
+                return CompilerErrors.result(formatSyntaxError(module, syntaxErrors.getFirst()));
             }
 
             var definitions = program.definition().stream()
                     .map(this::typeDeclaration)
                     .toList();
-            return Result.success(new ObjectOrientedModule(
+            return Results.success(new ObjectOrientedModule(
                     module.name(),
                     module.path(),
                     new ObjectOriented(definitions),
@@ -69,22 +72,22 @@ public final class ObjectOrientedParser {
                     module.sourceKind()
             ));
         } catch (RuntimeException exception) {
-            return new Result.Error<>(new Result.Error.SingleError(0, 0, module.file(), String.valueOf(exception.getMessage())));
+            return CompilerErrors.result(new CompilerError(0, 0, module.file(), String.valueOf(exception.getMessage())));
         }
     }
 
     public Result<List<ObjectOrientedModule>> parseModules(Collection<RawModule> modules) {
         var parsedModules = new ArrayList<ObjectOrientedModule>();
-        var errors = new java.util.TreeSet<Result.Error.SingleError>();
+        var errors = new java.util.TreeSet<CompilerError>();
         for (var module : modules) {
             var parsed = parseModule(module);
             if (parsed instanceof Result.Success<ObjectOrientedModule> success) {
                 parsedModules.add(success.value());
             } else if (parsed instanceof Result.Error<ObjectOrientedModule> error) {
-                errors.addAll(error.errors());
+                errors.addAll(CompilerErrors.from(error));
             }
         }
-        return errors.isEmpty() ? Result.success(List.copyOf(parsedModules)) : new Result.Error<>(errors);
+        return errors.isEmpty() ? Results.success(List.copyOf(parsedModules)) : CompilerErrors.result(errors);
     }
 
     private ParsedSource parseSource(String source) {
@@ -117,9 +120,9 @@ public final class ObjectOrientedParser {
         return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
     }
 
-    private Result.Error.SingleError formatSyntaxError(RawModule module, SyntaxError syntaxError) {
+    private CompilerError formatSyntaxError(RawModule module, SyntaxError syntaxError) {
         var details = "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
-        return new Result.Error.SingleError(syntaxError.line(), syntaxError.column(), module.file(), details);
+        return new CompilerError(syntaxError.line(), syntaxError.column(), module.file(), details);
     }
 
     private ObjectOriented.TypeDeclaration typeDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.DefinitionContext context) {

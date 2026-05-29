@@ -1,6 +1,7 @@
 package dev.capylang.parser;
 
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.compiler.parser.ObjectOrientedParser;
@@ -235,7 +236,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -359,7 +360,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -379,7 +380,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -403,7 +404,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -466,7 +467,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Broken.coo");
@@ -867,7 +868,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -891,7 +892,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -916,7 +917,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }
@@ -938,7 +939,7 @@ class ObjectOrientedParserTest {
         ));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+        assertThat(CompilerErrors.from((Result.Error<ObjectOrientedModule>) result))
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
     }

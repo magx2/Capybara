@@ -6,8 +6,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.generator.Generator;
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
 import dev.capylang.compiler.parser.RawModule;
 
 import java.util.Arrays;
@@ -24,7 +25,7 @@ class CompilationTest {
 
         var link = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (link instanceof Result.Error<CompiledProgram>) {
-            var errors = ((Result.Error<CompiledProgram>) link).errors();
+            var errors = CompilerErrors.from((Result.Error<CompiledProgram>) link);
             throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
         }
         System.out.println("\n === LINKING === ");

@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
@@ -654,8 +656,8 @@ class ObjectOrientedCompilerTest {
 
     private List<String> errorMessages(Result<CompiledProgram> result) {
         assertThat(result).isInstanceOf(Result.Error.class);
-        return ((Result.Error<CompiledProgram>) result).errors().stream()
-                .map(Result.Error.SingleError::message)
+        return CompilerErrors.from((Result.Error<CompiledProgram>) result).stream()
+                .map(CompilerError::message)
                 .toList();
     }
 
@@ -682,7 +684,7 @@ class ObjectOrientedCompilerTest {
         allModules.addAll(modules);
         var result = CapybaraCompiler.INSTANCE.compile(allModules, new TreeSet<>(), manifest);
         if (result instanceof Result.Error<CompiledProgram> error) {
-            throw new AssertionError("Expected success, got " + error.errors());
+            throw new AssertionError("Expected success, got " + CompilerErrors.from(error));
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }

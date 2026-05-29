@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.CollectionLinkedType.CompiledDict;
 import dev.capylang.compiler.CollectionLinkedType.CompiledList;
 import dev.capylang.compiler.CollectionLinkedType.CompiledSet;
@@ -39,7 +41,7 @@ public class CapybaraTypeCompiler {
             return cached;
         }
         var linked = switch (type) {
-            case PrimitiveType primitiveType -> Result.success(linkPrimitiveType(primitiveType));
+            case PrimitiveType primitiveType -> Results.success(linkPrimitiveType(primitiveType));
             case CollectionType collectionType -> linkCollectionType(collectionType, dataTypes, linkCache);
             case DataType dataType -> linkDataType(dataType, dataTypes, linkCache);
             case FunctionType functionType -> linkFunctionType(functionType, dataTypes, linkCache);
@@ -89,7 +91,7 @@ public class CapybaraTypeCompiler {
             return instantiateTypeArgumentsIfNeeded(withQualifiedNameIfNeeded(dataTypes.get(normalized), normalized), parsedName.typeArguments(), dataTypes, linkCache);
         }
 
-        return Result.error("Data type \"" + baseName + "\" not found");
+        return Results.error("Data type \"" + baseName + "\" not found");
     }
 
     private static Result<CompiledType> instantiateTypeArgumentsIfNeeded(
@@ -99,19 +101,19 @@ public class CapybaraTypeCompiler {
             LinkCache linkCache
     ) {
         if (typeArguments.isEmpty()) {
-            return Result.success(linkedType);
+            return Results.success(linkedType);
         }
         if (linkedType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
-            return Result.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
+            return Results.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
         }
         if (linkedType instanceof CompiledObjectType objectType) {
-            return Result.error("Type `" + objectType.name() + "` does not accept type arguments");
+            return Results.error("Type `" + objectType.name() + "` does not accept type arguments");
         }
-        return typeArguments.stream()
+        var linkedTypeArguments = typeArguments.stream()
                 .map(typeArgument -> parseTypeArgument(typeArgument, linkCache))
                 .map(type -> linkType(type, dataTypes, linkCache))
-                .collect(new ResultCollectionCollector<>())
-                .map(linkedTypeArguments -> instantiateTypeArguments(linkedType, linkedTypeArguments));
+                .collect(new ResultCollectionCollector<>());
+        return ResultOps.map(linkedTypeArguments, arguments -> instantiateTypeArguments(linkedType, arguments));
     }
 
     private static Type parseTypeArgument(String raw) {
@@ -604,14 +606,14 @@ public class CapybaraTypeCompiler {
 
     private static Result<CompiledType> linkCollectionType(CollectionType type, Map<String, GenericDataType> dataTypes, LinkCache linkCache) {
         return switch (type) {
-            case ListType list -> linkType(list.elementType(), dataTypes, linkCache).map(CompiledList::new);
-            case DictType dict -> linkType(dict.valueType(), dataTypes, linkCache).map(CompiledDict::new);
-            case SetType set -> linkType(set.elementType(), dataTypes, linkCache).map(CompiledSet::new);
+            case ListType list -> ResultOps.map(linkType(list.elementType(), dataTypes, linkCache), CompiledList::new);
+            case DictType dict -> ResultOps.map(linkType(dict.valueType(), dataTypes, linkCache), CompiledDict::new);
+            case SetType set -> ResultOps.map(linkType(set.elementType(), dataTypes, linkCache), CompiledSet::new);
         };
     }
 
     private static Result<CompiledType> linkFunctionType(FunctionType type, Map<String, GenericDataType> dataTypes, LinkCache linkCache) {
-        return Result.join(
+        return ResultOps.join(
                 (CompiledType argumentType, CompiledType returnType) -> new CompiledFunctionType(argumentType, returnType),
                 linkType(type.argumentType(), dataTypes, linkCache),
                 linkType(type.returnType(), dataTypes, linkCache)
@@ -619,9 +621,10 @@ public class CapybaraTypeCompiler {
     }
 
     private static Result<CompiledType> linkTupleType(TupleType type, Map<String, GenericDataType> dataTypes, LinkCache linkCache) {
-        return type.elementTypes().stream()
-                .map(elementType -> linkType(elementType, dataTypes, linkCache))
-                .collect(new ResultCollectionCollector<>())
-                .map(CompiledTupleType::new);
+        return ResultOps.map(
+                type.elementTypes().stream()
+                        .map(elementType -> linkType(elementType, dataTypes, linkCache))
+                        .collect(new ResultCollectionCollector<>()),
+                CompiledTupleType::new);
     }
 }

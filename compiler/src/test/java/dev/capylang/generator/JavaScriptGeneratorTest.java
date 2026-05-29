@@ -5,7 +5,9 @@ import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.NativeProviderBinding;
 import dev.capylang.compiler.NativeProviderManifest;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -1004,8 +1006,8 @@ class JavaScriptGeneratorTest {
                 nativeProviders
         );
         if (result instanceof Result.Error<CompiledProgram> error) {
-            throw new AssertionError(error.errors().stream()
-                    .map(Result.Error.SingleError::message)
+            throw new AssertionError(CompilerErrors.from(error).stream()
+                    .map(CompilerError::message)
                     .collect(joining(", ")));
         }
         return ((Result.Success<CompiledProgram>) result).value();

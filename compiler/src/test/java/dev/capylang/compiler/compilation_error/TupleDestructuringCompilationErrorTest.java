@@ -1,8 +1,10 @@
 package dev.capylang.compiler.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +41,7 @@ class TupleDestructuringCompilationErrorTest {
         assertThat(error.message()).contains("Tuple destructuring expects 2 arguments, got 3");
     }
 
-    private static Result.Error.SingleError compileFailure(String moduleName, String code) {
+    private static CompilerError compileFailure(String moduleName, String code) {
         var result = CapybaraCompiler.INSTANCE.compile(
                 List.of(
                         new RawModule("List", "/capy/collection", """
@@ -53,7 +55,7 @@ class TupleDestructuringCompilationErrorTest {
         if (result instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        var errors = CompilerErrors.from((Result.Error<CompiledProgram>) result);
         assertThat(errors).isNotEmpty();
         return errors.first();
     }

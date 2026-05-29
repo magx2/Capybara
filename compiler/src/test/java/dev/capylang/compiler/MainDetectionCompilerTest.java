@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -151,18 +153,18 @@ class MainDetectionCompilerTest {
                 new TreeSet<>()
         );
         if (result instanceof Result.Error<CompiledProgram> error) {
-            throw new AssertionError(error.errors().toString());
+            throw new AssertionError(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 
-    private static Result.Error.SingleError compileFailure(String source) {
+    private static CompilerError compileFailure(String source) {
         var result = CapybaraCompiler.INSTANCE.compile(
                 List.of(new RawModule("MainDetection", "/foo/bar", source)),
                 new TreeSet<>()
         );
         assertThat(result).isInstanceOf(Result.Error.class);
-        return ((Result.Error<CompiledProgram>) result).errors().first();
+        return CompilerErrors.from((Result.Error<CompiledProgram>) result).first();
     }
 
     private static CompiledFunction function(CompiledProgram program, String name) {

@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import capy.lang.Result;
+
 import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledNewData;
 import dev.capylang.compiler.expression.CompiledUnwrapExpression;
@@ -277,21 +279,21 @@ class PrimitiveBackedTypeCompilerTest {
     private static CompiledProgram compileSuccess(List<RawModule> modules) {
         var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+            fail(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 
-    private static Result.Error.SingleError compileFailure(RawModule module) {
+    private static CompilerError compileFailure(RawModule module) {
         return compileFailure(List.of(module));
     }
 
-    private static Result.Error.SingleError compileFailure(List<RawModule> modules) {
+    private static CompilerError compileFailure(List<RawModule> modules) {
         var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Success<CompiledProgram> success) {
             fail("Expected compilation to fail but got " + success.value());
         }
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        var errors = CompilerErrors.from((Result.Error<CompiledProgram>) result);
         assertThat(errors).isNotEmpty();
         return errors.first();
     }

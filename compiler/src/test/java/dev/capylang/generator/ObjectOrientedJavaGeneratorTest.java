@@ -5,7 +5,9 @@ import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.NativeProviderBinding;
 import dev.capylang.compiler.NativeProviderManifest;
-import dev.capylang.compiler.Result;
+import capy.lang.Result;
+import dev.capylang.compiler.CompilerErrors;
+import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -215,8 +217,8 @@ class ObjectOrientedJavaGeneratorTest {
                 """)), new TreeSet<>(), providerManifest(javaProviderBinding("/foo/boo/Providers.Clock", "system")));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<CompiledProgram>) result).errors())
-                .extracting(Result.Error.SingleError::message)
+        assertThat(CompilerErrors.from((Result.Error<CompiledProgram>) result))
+                .extracting(CompilerError::message)
                 .anySatisfy(message -> assertThat(message)
                         .contains("TypeMismatch")
                         .contains("Native provider `system_clock`")
@@ -1042,7 +1044,7 @@ class ObjectOrientedJavaGeneratorTest {
         var allModules = modulesWithNativeProviderAnnotation(modules);
         var result = CapybaraCompiler.INSTANCE.compile(allModules, new TreeSet<>(), nativeProviders);
         if (result instanceof Result.Error<CompiledProgram> error) {
-            throw new AssertionError(error.errors().toString());
+            throw new AssertionError(CompilerErrors.from(error).toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
