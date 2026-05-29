@@ -6,6 +6,7 @@ on:
 permissions:
   actions: write
   contents: write
+  pull-requests: write
 
 concurrency:
   group: prepare-release-${{ github.event.repository.default_branch }}
@@ -59,15 +60,19 @@ jobs:
           MINOR="${BASH_REMATCH[2]}"
           NEXT_MINOR_VERSION="${MAJOR}.$((MINOR + 1)).0-SNAPSHOT"
           RELEASE_BRANCH="release/${MAJOR}.${MINOR}.x"
+          BUMP_BRANCH="automation/prepare-release-${MAJOR}.${MINOR}.x"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          RELEASE_BRANCH_SHA="$(git ls-remote --heads origin "${RELEASE_BRANCH}" | awk '{ print $1 }')"
 
-          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" >/dev/null 2>&1; then
-            echo "::error::Release branch '${RELEASE_BRANCH}' already exists."
+          if [[ -n "${RELEASE_BRANCH_SHA}" && "${RELEASE_BRANCH_SHA}" != "${CURRENT_SHA}" ]]; then
+            echo "::error::Release branch '${RELEASE_BRANCH}' already exists at ${RELEASE_BRANCH_SHA}, expected ${CURRENT_SHA}."
             exit 1
           fi
 
           {
             echo "release_branch=${RELEASE_BRANCH}"
             echo "next_minor_version=${NEXT_MINOR_VERSION}"
+            echo "bump_branch=${BUMP_BRANCH}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Configure git user
@@ -76,20 +81,100 @@ jobs:
           git config user.email "CapyAutomata@capylang.dev"
 
       - name: Create release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           RELEASE_BRANCH="${{ steps.version.outputs.release_branch }}"
-          git branch "${RELEASE_BRANCH}"
-          git push origin "${RELEASE_BRANCH}"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          RELEASE_BRANCH_SHA="$(git ls-remote --heads origin "${RELEASE_BRANCH}" | awk '{ print $1 }')"
+
+          if [[ -z "${RELEASE_BRANCH_SHA}" ]]; then
+            git push origin "HEAD:${RELEASE_BRANCH}"
+          else
+            echo "Release branch ${RELEASE_BRANCH} already exists at ${CURRENT_SHA}."
+          fi
+
+          gh workflow run check.yml --ref "${RELEASE_BRANCH}"
+          gh workflow run verify_version.yml --ref "${RELEASE_BRANCH}"
 
       - name: Bump minor on default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          BUMP_BRANCH="${{ steps.version.outputs.bump_branch }}"
           NEXT_MINOR_VERSION="${{ steps.version.outputs.next_minor_version }}"
+
+          git switch -C "${BUMP_BRANCH}"
           sed -i "s/^version=.*/version=${NEXT_MINOR_VERSION}/" gradle.properties
           git add gradle.properties
           git commit -m "chore: bump version to ${NEXT_MINOR_VERSION}"
-          git push origin "HEAD:${DEFAULT_BRANCH}"
+
+          BUMP_BRANCH_SHA="$(git ls-remote --heads origin "${BUMP_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${BUMP_BRANCH_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${BUMP_BRANCH}:${BUMP_BRANCH_SHA}" origin "HEAD:${BUMP_BRANCH}"
+          else
+            git push origin "HEAD:${BUMP_BRANCH}"
+          fi
+
+          PR_NUMBER="$(
+            gh pr list \
+              --base "${DEFAULT_BRANCH}" \
+              --head "${BUMP_BRANCH}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -z "${PR_NUMBER}" ]]; then
+            PR_URL="$(
+              gh pr create \
+                --base "${DEFAULT_BRANCH}" \
+                --head "${BUMP_BRANCH}" \
+                --title "chore: bump version to ${NEXT_MINOR_VERSION}" \
+                --body "Bumps the default branch to ${NEXT_MINOR_VERSION} after creating ${{ steps.version.outputs.release_branch }}."
+            )"
+            PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
+          fi
+
+          WORKFLOW="check.yml"
+          SHA="$(git rev-parse HEAD)"
+          gh workflow run "${WORKFLOW}" --ref "${BUMP_BRANCH}"
+
+          find_check_run() {
+            gh run list \
+              --workflow "${WORKFLOW}" \
+              --branch "${BUMP_BRANCH}" \
+              --commit "${SHA}" \
+              --json databaseId,event,status,conclusion,url \
+              --limit 20 \
+              --jq '[.[] | select(.event == "workflow_dispatch")][0] // empty'
+          }
+
+          CHECK_RUN="$(find_check_run)"
+          CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            for _ in {1..30}; do
+              sleep 10
+              CHECK_RUN="$(find_check_run)"
+              CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+              if [[ -n "${CHECK_RUN_ID}" ]]; then
+                break
+              fi
+            done
+          fi
+
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            echo "::error::No Build & Check run found for ${BUMP_BRANCH} at ${SHA}."
+            exit 1
+          fi
+
+          CHECK_RUN_URL="$(jq -r '.url' <<< "${CHECK_RUN}")"
+          echo "Watching Build & Check run ${CHECK_RUN_ID}: ${CHECK_RUN_URL}"
+          gh run watch "${CHECK_RUN_ID}" --exit-status
+
+          gh pr merge "${PR_NUMBER}" --rebase --delete-branch
+          gh workflow run check.yml --ref "${DEFAULT_BRANCH}"
