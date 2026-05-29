@@ -2,6 +2,7 @@ package dev.capylang.compiler.parser;
 
 import dev.capylang.compiler.ImportDeclaration;
 import dev.capylang.compiler.Result;
+import dev.capylang.compiler.parser.ParserAst.AnnotationValue;
 import dev.capylang.parser.antlr.ObjectOrientedLexer;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -262,27 +263,27 @@ public final class ObjectOrientedParser {
 
     private AnnotationValue annotationValue(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationValueContext context) {
         if (context.STRING_LITERAL() != null) {
-            return new AnnotationValue.StringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
+            return new ParserAst.AnnotationStringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
         }
         if (context.INT_LITERAL() != null) {
-            return new AnnotationValue.IntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
+            return new ParserAst.AnnotationIntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
         }
         if (context.LONG_LITERAL() != null) {
-            return new AnnotationValue.LongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
+            return new ParserAst.AnnotationLongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
         }
         if (context.FLOAT_LITERAL() != null) {
-            return new AnnotationValue.FloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
+            return new ParserAst.AnnotationFloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
         }
         if (context.DOUBLE_LITERAL() != null) {
-            return new AnnotationValue.DoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
+            return new ParserAst.AnnotationDoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
         }
         if (context.BOOL_LITERAL() != null) {
-            return new AnnotationValue.BoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
+            return new ParserAst.AnnotationBoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
         }
         if (context.NOTHING_LITERAL() != null) {
-            return new AnnotationValue.NothingValue(position(context.NOTHING_LITERAL()));
+            return new ParserAst.AnnotationNothingValue(position(context.NOTHING_LITERAL()));
         }
-        return new AnnotationValue.TypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
+        return new ParserAst.AnnotationTypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
     }
 
     private ObjectOriented.MethodBody methodBody(dev.capylang.parser.antlr.ObjectOrientedParser.MethodBodyContext context) {

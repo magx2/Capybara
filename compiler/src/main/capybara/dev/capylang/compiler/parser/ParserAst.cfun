@@ -1,0 +1,18 @@
+union AnnotationValue =
+    AnnotationStringValue
+    | AnnotationIntValue
+    | AnnotationLongValue
+    | AnnotationFloatValue
+    | AnnotationDoubleValue
+    | AnnotationBoolValue
+    | AnnotationNothingValue
+    | AnnotationTypeNameValue
+
+data AnnotationStringValue { value: String, position: any }
+data AnnotationIntValue { value: String, position: any }
+data AnnotationLongValue { value: String, position: any }
+data AnnotationFloatValue { value: String, position: any }
+data AnnotationDoubleValue { value: String, position: any }
+data AnnotationBoolValue { value: bool, position: any }
+data AnnotationNothingValue { position: any }
+data AnnotationTypeNameValue { name: String, position: any }

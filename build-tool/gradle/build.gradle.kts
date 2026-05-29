@@ -16,6 +16,15 @@ val githubPackagesRepository = providers.environmentVariable("GITHUB_REPOSITORY"
 
 repositories {
     mavenCentral()
+    ivy {
+        url = uri("https://github.com/magx2/Capybara/releases/download/release")
+        patternLayout {
+            artifact("[revision]/[artifact]-[revision].[ext]")
+        }
+        metadataSources {
+            artifact()
+        }
+    }
 }
 
 dependencies {

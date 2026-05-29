@@ -42,6 +42,18 @@ pythonPlugin {
     pythonVersion = '3.12.8'
 }
 
+repositories {
+    ivy {
+        url = uri('https://github.com/magx2/Capybara/releases/download/release')
+        patternLayout {
+            artifact '[revision]/[artifact]-[revision].[ext]'
+        }
+        metadataSources {
+            artifact()
+        }
+    }
+}
+
 def pythonEnvDir = providers.provider {
     def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
     def pythonOs = osName.contains('windows') ? 'Windows' : osName.contains('mac') ? 'MacOSX' : 'Linux'

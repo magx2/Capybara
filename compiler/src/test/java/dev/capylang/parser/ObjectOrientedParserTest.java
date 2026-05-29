@@ -1,10 +1,10 @@
 package dev.capylang.parser;
 
 import dev.capylang.compiler.Result;
-import dev.capylang.compiler.parser.AnnotationValue;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.compiler.parser.ObjectOrientedParser;
+import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.DisplayName;
@@ -61,7 +61,7 @@ class ObjectOrientedParserTest {
             assertThat(annotation.arguments()).singleElement().satisfies(argument -> {
                 assertThat(argument.name()).isEqualTo("table");
                 assertThat(argument.value()).isInstanceOfSatisfying(
-                        AnnotationValue.StringValue.class,
+                        AnnotationStringValue.class,
                         value -> assertThat(value.value()).isEqualTo("\"users\"")
                 );
             });
@@ -73,7 +73,7 @@ class ObjectOrientedParserTest {
             assertThat(annotation.arguments()).singleElement().satisfies(argument -> {
                 assertThat(argument.name()).isEqualTo("value");
                 assertThat(argument.value()).isInstanceOfSatisfying(
-                        AnnotationValue.StringValue.class,
+                        AnnotationStringValue.class,
                         value -> assertThat(value.value()).isEqualTo("\"user_name\"")
                 );
             });
@@ -85,7 +85,7 @@ class ObjectOrientedParserTest {
             assertThat(annotation.arguments()).singleElement().satisfies(argument -> {
                 assertThat(argument.name()).isEqualTo("since");
                 assertThat(argument.value()).isInstanceOfSatisfying(
-                        AnnotationValue.StringValue.class,
+                        AnnotationStringValue.class,
                         value -> assertThat(value.value()).isEqualTo("\"1.4\"")
                 );
             });

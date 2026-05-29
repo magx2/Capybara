@@ -9,6 +9,15 @@ import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.Module;
+import dev.capylang.compiler.parser.ParserAst.AnnotationBoolValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationDoubleValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationFloatValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationIntValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationLongValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationNothingValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationTypeNameValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationValue;
 
 import java.io.IOException;
 import java.net.URI;
@@ -238,10 +247,14 @@ public class CapybaraCompiler {
             if (isStdlibBootstrap(rawModules)) {
                 return new TreeSet<>();
             }
-            var resource = CapybaraCompiler.class.getClassLoader().getResource("capy");
-            if (resource != null) {
+            var resources = CapybaraCompiler.class.getClassLoader().getResources("capy");
+            while (resources.hasMoreElements()) {
+                var resource = resources.nextElement();
                 try (var paths = Files.walk(resourcePath(resource.toURI()))) {
-                    return readBundledLibraries(paths);
+                    var libraries = readBundledLibraries(paths);
+                    if (!libraries.isEmpty()) {
+                        return libraries;
+                    }
                 }
             }
             var fallbackPath = bundledLibrariesFallbackPath();
@@ -2113,7 +2126,7 @@ public class CapybaraCompiler {
                     field.name(),
                     field.type(),
                     value,
-                    value.position().or(field::position),
+                    annotationValuePosition(value).or(field::position),
                     normalizedFile,
                     errors
             ));
@@ -2478,7 +2491,7 @@ public class CapybaraCompiler {
                     argument.name(),
                     field.type(),
                     argument.value(),
-                    argument.value().position().or(argument::position),
+                    annotationValuePosition(argument.value()).or(argument::position),
                     normalizedFile,
                     errors
             );
@@ -2517,33 +2530,50 @@ public class CapybaraCompiler {
     private boolean annotationValueMatchesFieldType(String expectedType, AnnotationValue value) {
         var normalizedExpectedType = expectedType.replace(" ", "");
         return switch (normalizedExpectedType) {
-            case "String" -> value instanceof AnnotationValue.StringValue;
-            case "byte", "int" -> value instanceof AnnotationValue.IntValue;
-            case "long" -> value instanceof AnnotationValue.IntValue
-                           || value instanceof AnnotationValue.LongValue;
-            case "float" -> value instanceof AnnotationValue.IntValue
-                            || value instanceof AnnotationValue.LongValue
-                            || value instanceof AnnotationValue.FloatValue;
-            case "double" -> value instanceof AnnotationValue.IntValue
-                             || value instanceof AnnotationValue.LongValue
-                             || value instanceof AnnotationValue.FloatValue
-                             || value instanceof AnnotationValue.DoubleValue;
-            case "bool" -> value instanceof AnnotationValue.BoolValue;
-            case "nothing" -> value instanceof AnnotationValue.NothingValue;
-            default -> value instanceof AnnotationValue.TypeNameValue;
+            case "String" -> value instanceof AnnotationStringValue;
+            case "byte", "int" -> value instanceof AnnotationIntValue;
+            case "long" -> value instanceof AnnotationIntValue
+                           || value instanceof AnnotationLongValue;
+            case "float" -> value instanceof AnnotationIntValue
+                            || value instanceof AnnotationLongValue
+                            || value instanceof AnnotationFloatValue;
+            case "double" -> value instanceof AnnotationIntValue
+                             || value instanceof AnnotationLongValue
+                             || value instanceof AnnotationFloatValue
+                             || value instanceof AnnotationDoubleValue;
+            case "bool" -> value instanceof AnnotationBoolValue;
+            case "nothing" -> value instanceof AnnotationNothingValue;
+            default -> value instanceof AnnotationTypeNameValue;
         };
+    }
+
+    private Optional<SourcePosition> annotationValuePosition(AnnotationValue value) {
+        var position = switch (value) {
+            case AnnotationStringValue stringValue -> stringValue.position();
+            case AnnotationIntValue intValue -> intValue.position();
+            case AnnotationLongValue longValue -> longValue.position();
+            case AnnotationFloatValue floatValue -> floatValue.position();
+            case AnnotationDoubleValue doubleValue -> doubleValue.position();
+            case AnnotationBoolValue boolValue -> boolValue.position();
+            case AnnotationNothingValue nothingValue -> nothingValue.position();
+            case AnnotationTypeNameValue typeNameValue -> typeNameValue.position();
+        };
+        if (position instanceof Optional<?> optionalPosition) {
+            return optionalPosition.map(SourcePosition.class::cast);
+        }
+        return Optional.empty();
     }
 
     private String annotationValueTypeName(AnnotationValue value) {
         return switch (value) {
-            case AnnotationValue.StringValue ignored -> "String";
-            case AnnotationValue.IntValue ignored -> "int";
-            case AnnotationValue.LongValue ignored -> "long";
-            case AnnotationValue.FloatValue ignored -> "float";
-            case AnnotationValue.DoubleValue ignored -> "double";
-            case AnnotationValue.BoolValue ignored -> "bool";
-            case AnnotationValue.NothingValue ignored -> "nothing";
-            case AnnotationValue.TypeNameValue ignored -> "type";
+            case AnnotationStringValue ignored -> "String";
+            case AnnotationIntValue ignored -> "int";
+            case AnnotationLongValue ignored -> "long";
+            case AnnotationFloatValue ignored -> "float";
+            case AnnotationDoubleValue ignored -> "double";
+            case AnnotationBoolValue ignored -> "bool";
+            case AnnotationNothingValue ignored -> "nothing";
+            case AnnotationTypeNameValue ignored -> "type";
         };
     }
 
@@ -2949,14 +2979,14 @@ public class CapybaraCompiler {
 
     private CompiledAnnotationValue compiledAnnotationValue(AnnotationValue value) {
         return switch (value) {
-            case AnnotationValue.StringValue stringValue -> new CompiledAnnotationValue.StringValue(stringValue.value());
-            case AnnotationValue.IntValue intValue -> new CompiledAnnotationValue.IntValue(intValue.value());
-            case AnnotationValue.LongValue longValue -> new CompiledAnnotationValue.LongValue(longValue.value());
-            case AnnotationValue.FloatValue floatValue -> new CompiledAnnotationValue.FloatValue(floatValue.value());
-            case AnnotationValue.DoubleValue doubleValue -> new CompiledAnnotationValue.DoubleValue(doubleValue.value());
-            case AnnotationValue.BoolValue boolValue -> new CompiledAnnotationValue.BoolValue(boolValue.value());
-            case AnnotationValue.NothingValue ignored -> new CompiledAnnotationValue.NothingValue();
-            case AnnotationValue.TypeNameValue typeNameValue -> new CompiledAnnotationValue.TypeNameValue(typeNameValue.name());
+            case AnnotationStringValue stringValue -> new CompiledAnnotationValue.StringValue(stringValue.value());
+            case AnnotationIntValue intValue -> new CompiledAnnotationValue.IntValue(intValue.value());
+            case AnnotationLongValue longValue -> new CompiledAnnotationValue.LongValue(longValue.value());
+            case AnnotationFloatValue floatValue -> new CompiledAnnotationValue.FloatValue(floatValue.value());
+            case AnnotationDoubleValue doubleValue -> new CompiledAnnotationValue.DoubleValue(doubleValue.value());
+            case AnnotationBoolValue boolValue -> new CompiledAnnotationValue.BoolValue(boolValue.value());
+            case AnnotationNothingValue ignored -> new CompiledAnnotationValue.NothingValue();
+            case AnnotationTypeNameValue typeNameValue -> new CompiledAnnotationValue.TypeNameValue(typeNameValue.name());
         };
     }
 

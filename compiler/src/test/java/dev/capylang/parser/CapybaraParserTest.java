@@ -13,6 +13,8 @@ import java.util.stream.Stream;
 
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.parser.*;
+import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
+import dev.capylang.compiler.parser.ParserAst.AnnotationTypeNameValue;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -110,9 +112,9 @@ class CapybaraParserTest {
                 .containsExactly("message", "since", "replacement", "order", "enabled", "ratio", "scale", "count", "unknown");
         assertThat(annotation.fields().getFirst().defaultValue()).isEmpty();
         assertThat(annotation.fields().get(1).defaultValue())
-                .hasValueSatisfying(value -> assertThat(((AnnotationValue.StringValue) value).value()).isEqualTo("\"\""));
+                .hasValueSatisfying(value -> assertThat(((AnnotationStringValue) value).value()).isEqualTo("\"\""));
         assertThat(annotation.fields().get(2).defaultValue())
-                .hasValueSatisfying(value -> assertThat(((AnnotationValue.TypeNameValue) value).name()).isEqualTo("User"));
+                .hasValueSatisfying(value -> assertThat(((AnnotationTypeNameValue) value).name()).isEqualTo("User"));
 
         assertThat(findDefinition(AnnotationDeclaration.class, "Repeatable", module.functional()).multiple()).isTrue();
 
@@ -125,9 +127,9 @@ class CapybaraParserTest {
             assertThat(usage.name()).isEqualTo("Deprecated");
             assertThat(usage.arguments()).extracting(AnnotationArgument::name).containsExactly("message", "since");
             assertThat(usage.arguments().get(0).value())
-                    .isInstanceOfSatisfying(AnnotationValue.StringValue.class, value -> assertThat(value.value()).isEqualTo("\"use parse_v2\""));
+                    .isInstanceOfSatisfying(AnnotationStringValue.class, value -> assertThat(value.value()).isEqualTo("\"use parse_v2\""));
             assertThat(usage.arguments().get(1).value())
-                    .isInstanceOfSatisfying(AnnotationValue.StringValue.class, value -> assertThat(value.value()).isEqualTo("\"1.4\""));
+                    .isInstanceOfSatisfying(AnnotationStringValue.class, value -> assertThat(value.value()).isEqualTo("\"1.4\""));
         });
 
         var data = findDefinition(DataDeclaration.class, "User", module.functional());
