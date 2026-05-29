@@ -3156,7 +3156,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String dataGuard(String varName) {
-        return varName + " instanceof dev.capylang.CapybaraDataValue";
+        return "dev.capylang.CapybaraDataValue.isDataValue(" + varName + ")";
     }
 
     private static String enumGuard(String varName) {
@@ -3351,12 +3351,12 @@ public class JavaExpressionEvaluator {
         if (reflectionValue.target().type() == dev.capylang.compiler.PrimitiveLinkedType.DATA) {
             var targetJavaReference = evaluateExpression(targetReference, current).popExpression();
             current = targetJavaReference.scope();
-            current = current.addStatement("if (!(" + targetJavaReference.expression() + " instanceof dev.capylang.CapybaraDataValue)) {\n"
+            current = current.addStatement("if (!dev.capylang.CapybaraDataValue.isDataValue(" + targetJavaReference.expression() + ")) {\n"
                                            + "throw new java.lang.IllegalArgumentException(\"reflection expects a Capybara data value\");\n"
                                            + "}");
-            return current.addExpression("((capy.metaProg.Reflection.DataValueInfo) ((dev.capylang.CapybaraDataValue) "
+            return current.addExpression("((capy.metaProg.Reflection.DataValueInfo) dev.capylang.CapybaraDataValue.dataValueInfo("
                                          + targetJavaReference.expression()
-                                         + ").capybaraDataValueInfo())");
+                                         + "))");
         }
 
         var fields = new ArrayList<JavaDataValueInfo.Field>(reflectionValue.fields().size());

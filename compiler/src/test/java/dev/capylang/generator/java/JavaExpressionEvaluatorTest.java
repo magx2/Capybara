@@ -609,9 +609,9 @@ class JavaExpressionEvaluatorTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(generated).contains("instanceof dev.capylang.CapybaraDataValue");
+        assertThat(generated).contains("dev.capylang.CapybaraDataValue.isDataValue");
         assertThat(generated).contains("reflection expects a Capybara data value");
-        assertThat(generated).contains(".capybaraDataValueInfo()");
+        assertThat(generated).contains("dev.capylang.CapybaraDataValue.dataValueInfo");
     }
 
     @Test
@@ -682,7 +682,7 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("instanceof dev.capylang.CapybaraDataValue");
+        assertThat(generated).contains("dev.capylang.CapybaraDataValue.isDataValue");
         assertThat(generated).doesNotContain("instanceof java.util.List");
         assertGeneratedJavaCompiles(generatedProgram);
     }
