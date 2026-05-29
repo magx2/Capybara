@@ -41,9 +41,19 @@ repositories {
 
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
 
+configurations {
+    capybaraBootstrapRuntime {
+        canBeConsumed = false
+        canBeResolved = true
+        visible = false
+    }
+    compileOnly.extendsFrom(capybaraBootstrapRuntime)
+}
+
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
-    implementation 'dev.capylang:capybara-lib:0.3.0'
+    capybaraBootstrapRuntime 'dev.capylang:capybara-lib:0.3.0'
+    runtimeOnly project(':lib:capybara-lib')
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion

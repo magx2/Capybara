@@ -343,6 +343,7 @@ abstract class CapybaraPythonTestTask extends Exec {
 
 dependencies {
     implementation project(':compiler')
+    runtimeOnly project(':lib:capybara-lib')
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
     implementation 'org.yaml:snakeyaml:2.4'

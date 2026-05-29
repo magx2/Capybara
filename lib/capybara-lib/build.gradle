@@ -447,6 +447,7 @@ def capyRuntimeDependencies = capyProject.configurations.runtimeClasspath.incomi
 def capyRuntimeClasspath = files(
         capyProject.sourceSets.main.output.classesDirs,
         compilerProject.sourceSets.main.output.classesDirs,
+        compilerProject.configurations.capybaraBootstrapRuntime,
         capyRuntimeDependencies
 )
 
