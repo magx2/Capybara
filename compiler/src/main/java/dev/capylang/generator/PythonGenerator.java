@@ -2723,7 +2723,8 @@ public final class PythonGenerator implements Generator {
         private static Map<String, Set<String>> runtimeExports() {
             var exports = new LinkedHashMap<String, Set<String>>();
             exports.put("capy.lang.Option", Set.of("Some", "None_"));
-            exports.put("capy.lang.Result", Set.of("Success", "Error"));
+            exports.put("capy.lang.Result", Set.of(
+                    "Success", "Error", "success", "error__string", "error__compiledlist_elementtype_string"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
             exports.put("capy.lang.Program", Set.of(
                     "Success", "Failed", "__constructor__primitive__failed_exit_code", "capy__constructorPrimitiveFailedExitCode",
@@ -2816,7 +2817,8 @@ public final class PythonGenerator implements Generator {
             return List.of(
                     new GeneratedModule(RUNTIME_PATH, runtime()),
                     new GeneratedModule(Path.of("capy", "lang", "Option.py"), runtimeForwarder("Some", "None_")),
-                    new GeneratedModule(Path.of("capy", "lang", "Result.py"), runtimeForwarder("Success", "Error")),
+                    new GeneratedModule(Path.of("capy", "lang", "Result.py"), runtimeForwarder(
+                            "Success", "Error", "success", "error__string", "error__compiledlist_elementtype_string")),
                     new GeneratedModule(Path.of("capy", "lang", "Effect.py"), runtimeForwarder("pure", "delay")),
                     new GeneratedModule(Path.of("capy", "lang", "Program.py"), programRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.py"), primitivesRuntime()),
@@ -3989,6 +3991,21 @@ public final class PythonGenerator implements Generator {
                         def __str__(self): return data_to_string(self)
                         def toString(self): return str(self)
                         def capybaraDataValueInfo(self): return data_value_info(self, 'Error', 'capy.lang', 'capy/lang/Result', ['message'])
+
+                    def success(value):
+                        return Success({'value': value})
+
+                    def _combine_error_messages(messages):
+                        result = ''
+                        for message in messages:
+                            result = message if result == '' else result + '\\\\n' + message
+                        return result
+
+                    def error__string(message):
+                        return Error({'message': message})
+
+                    def error__compiledlist_elementtype_string(messages):
+                        return Error({'message': _combine_error_messages(messages)})
 
                     class Effect:
                         def __init__(self, thunk):

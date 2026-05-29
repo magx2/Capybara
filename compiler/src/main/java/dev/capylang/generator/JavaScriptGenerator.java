@@ -2819,7 +2819,8 @@ public final class JavaScriptGenerator implements Generator {
         private static Map<String, Set<String>> runtimeExports() {
             var exports = new LinkedHashMap<String, Set<String>>();
             exports.put("capy.lang.Option", Set.of("Some", "None"));
-            exports.put("capy.lang.Result", Set.of("Success", "Error"));
+            exports.put("capy.lang.Result", Set.of(
+                    "Success", "Error", "success", "error__string", "error__compiledlist_elementtype_string"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
             exports.put("capy.lang.Program", Set.of(
                     "Success", "Failed", "__constructor__primitive__failed_exit_code",
@@ -2917,7 +2918,9 @@ public final class JavaScriptGenerator implements Generator {
             return List.of(
                     new GeneratedModule(RUNTIME_PATH, runtime()),
                     new GeneratedModule(Path.of("capy", "lang", "Option.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Some", "None")),
-                    new GeneratedModule(Path.of("capy", "lang", "Result.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Success", "Error")),
+                    new GeneratedModule(Path.of("capy", "lang", "Result.js"), runtimeForwarder(
+                            "../../dev/capylang/capybara.js",
+                            "Success", "Error", "success", "error__string", "error__compiledlist_elementtype_string")),
                     new GeneratedModule(Path.of("capy", "lang", "Effect.js"), runtimeForwarder("../../dev/capylang/capybara.js", "pure", "delay")),
                     new GeneratedModule(Path.of("capy", "lang", "Program.js"), programRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.js"), primitivesRuntime()),
@@ -5761,6 +5764,22 @@ public final class JavaScriptGenerator implements Generator {
                         capybaraDataValueInfo() { return dataValueInfo(this, 'Error', 'capy.lang', 'capy/lang/Result'); }
                     }
 
+                    function success(value) {
+                        return new Success({ value });
+                    }
+
+                    function combineErrorMessages(messages) {
+                        return messages.reduce((acc, message) => acc === '' ? message : acc + '\\\\n' + message, '');
+                    }
+
+                    function error__string(message) {
+                        return new ErrorValue({ message });
+                    }
+
+                    function error__compiledlist_elementtype_string(messages) {
+                        return new ErrorValue({ message: combineErrorMessages(messages) });
+                    }
+
                     class Effect {
                         constructor(thunk) {
                             this.thunk = thunk;
@@ -6735,6 +6754,9 @@ public final class JavaScriptGenerator implements Generator {
                         None,
                         Success,
                         Error: ErrorValue,
+                        success,
+                        error__string,
+                        error__compiledlist_elementtype_string,
                         Effect,
                         pure,
                         delay,

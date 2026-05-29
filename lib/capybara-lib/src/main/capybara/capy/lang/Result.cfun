@@ -1,6 +1,18 @@
+from /capy/collection/List import { * }
+
 union Result[T] = Success[T] | Error
 data Success[T] { value: T }
 data Error { message: String }
+
+fun success(value: T): Result[T] = Success { value }
+
+fun error(message: String): Result[T] = Error { message }
+
+fun error(messages: List[String]): Result[T] = Error { combine_error_messages(messages) }
+
+private fun combine_error_messages(messages: List[String]): String =
+    messages.reduce("", (acc, message) =>
+        if acc == "" then message else acc + "\n" + message)
 
 fun Result[T].`|`(map: T => Result[Y]): Result[Y] =
     match this with
