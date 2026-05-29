@@ -931,15 +931,17 @@ tasks.register('nativeCompile', Exec) {
     group = 'build'
     description = 'Builds a GraalVM native binary for the CLI application.'
 
-    dependsOn tasks.named('jar')
+    def jarTask = tasks.named('jar')
+    def jarArchive = jarTask.flatMap { it.archiveFile }
+    def nativeRuntimeClasspath = files(jarArchive, sourceSets.main.runtimeClasspath)
+    def mainClassName = application.mainClass
+
+    dependsOn jarTask
 
     def outputDir = layout.buildDirectory.dir('native/nativeCompile')
     def outputBinary = outputDir.map { it.file(nativeBinaryName).asFile }
 
-    inputs.files(
-            tasks.named('jar').flatMap { it.archiveFile },
-            sourceSets.main.runtimeClasspath
-    )
+    inputs.files(nativeRuntimeClasspath)
     outputs.file(outputBinary)
 
     doFirst {
@@ -953,16 +955,14 @@ tasks.register('nativeCompile', Exec) {
             throw new GradleException("native-image not found at `${nativeImage}`. Install GraalVM Native Image.")
         }
 
-        var jarFile = tasks.named('jar').get().archiveFile.get().asFile
-        var classpath = files(jarFile, sourceSets.main.runtimeClasspath).asPath
         var output = outputBinary.get()
         output.parentFile.mkdirs()
 
         commandLine(
                 nativeImage.absolutePath,
                 '--no-fallback',
-                '-cp', classpath,
-                application.mainClass.get(),
+                '-cp', nativeRuntimeClasspath.asPath,
+                mainClassName.get(),
                 output.absolutePath
         )
     }
