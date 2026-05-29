@@ -2985,7 +2985,7 @@ public class CapybaraCompiler {
             case AnnotationFloatValue floatValue -> new CompiledAnnotationValue.FloatValue(floatValue.value());
             case AnnotationDoubleValue doubleValue -> new CompiledAnnotationValue.DoubleValue(doubleValue.value());
             case AnnotationBoolValue boolValue -> new CompiledAnnotationValue.BoolValue(boolValue.value());
-            case AnnotationNothingValue ignored -> new CompiledAnnotationValue.NothingValue();
+            case AnnotationNothingValue ignored -> CompiledAnnotationValue.NothingValue.INSTANCE;
             case AnnotationTypeNameValue typeNameValue -> new CompiledAnnotationValue.TypeNameValue(typeNameValue.name());
         };
     }

@@ -1,0 +1,4 @@
+data CompiledObjectMethodParameter {
+    name: String,
+    type: String
+}

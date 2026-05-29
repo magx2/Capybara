@@ -1,0 +1,6 @@
+from /dev/capylang/compiler/CompiledAnnotationValue import { CompiledAnnotationValue }
+
+data CompiledAnnotationArgument {
+    name: String,
+    value: CompiledAnnotationValue
+}
