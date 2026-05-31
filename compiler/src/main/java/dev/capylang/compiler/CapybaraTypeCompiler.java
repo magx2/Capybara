@@ -5,15 +5,8 @@ import capy.lang.Result;
 import dev.capylang.compiler.CollectionLinkedType.CompiledDict;
 import dev.capylang.compiler.CollectionLinkedType.CompiledList;
 import dev.capylang.compiler.CollectionLinkedType.CompiledSet;
-import dev.capylang.compiler.parser.CollectionType;
-import dev.capylang.compiler.parser.CollectionType.DictType;
-import dev.capylang.compiler.parser.CollectionType.ListType;
-import dev.capylang.compiler.parser.CollectionType.SetType;
-import dev.capylang.compiler.parser.DataType;
-import dev.capylang.compiler.parser.FunctionType;
-import dev.capylang.compiler.parser.PrimitiveType;
-import dev.capylang.compiler.parser.Type;
-import dev.capylang.compiler.parser.TupleType;
+import dev.capylang.compiler.parser.ParserAst;
+import dev.capylang.compiler.parser.ParserAst.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,9 +47,9 @@ public class CapybaraTypeCompiler {
     private static String typeCacheKey(Type type) {
         return switch (type) {
             case PrimitiveType primitiveType -> primitiveType.name();
-            case CollectionType.ListType listType -> "List[" + typeCacheKey(listType.elementType()) + "]";
-            case CollectionType.SetType setType -> "Set[" + typeCacheKey(setType.elementType()) + "]";
-            case CollectionType.DictType dictType -> "Dict[" + typeCacheKey(dictType.valueType()) + "]";
+            case ListType listType -> "List[" + typeCacheKey(listType.elementType()) + "]";
+            case SetType setType -> "Set[" + typeCacheKey(setType.elementType()) + "]";
+            case DictType dictType -> "Dict[" + typeCacheKey(dictType.valueType()) + "]";
             case DataType dataType -> dataType.name();
             case FunctionType functionType ->
                     "(" + typeCacheKey(functionType.argumentType()) + " => " + typeCacheKey(functionType.returnType()) + ")";
@@ -126,7 +119,7 @@ public class CapybaraTypeCompiler {
             return cached;
         }
         var trimmed = raw.trim();
-        var parsed = PrimitiveType.find(trimmed)
+        var parsed = ParserAst.findPrimitiveType(trimmed)
                 .map(Type.class::cast)
                 .orElseGet(() -> {
                     if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
@@ -589,18 +582,19 @@ public class CapybaraTypeCompiler {
     }
 
     private static CompiledType linkPrimitiveType(PrimitiveType primitiveType) {
-        return switch (primitiveType) {
-            case BYTE -> PrimitiveLinkedType.BYTE;
-            case INT -> PrimitiveLinkedType.INT;
-            case LONG -> PrimitiveLinkedType.LONG;
-            case DOUBLE -> PrimitiveLinkedType.DOUBLE;
-            case STRING -> PrimitiveLinkedType.STRING;
-            case BOOL -> PrimitiveLinkedType.BOOL;
-            case FLOAT -> PrimitiveLinkedType.FLOAT;
-            case ANY -> PrimitiveLinkedType.ANY;
-            case DATA -> PrimitiveLinkedType.DATA;
-            case ENUM -> PrimitiveLinkedType.ENUM;
-            case NOTHING -> PrimitiveLinkedType.NOTHING;
+        return switch (primitiveType.name()) {
+            case "BYTE" -> PrimitiveLinkedType.BYTE;
+            case "INT" -> PrimitiveLinkedType.INT;
+            case "LONG" -> PrimitiveLinkedType.LONG;
+            case "DOUBLE" -> PrimitiveLinkedType.DOUBLE;
+            case "STRING" -> PrimitiveLinkedType.STRING;
+            case "BOOL" -> PrimitiveLinkedType.BOOL;
+            case "FLOAT" -> PrimitiveLinkedType.FLOAT;
+            case "ANY" -> PrimitiveLinkedType.ANY;
+            case "DATA" -> PrimitiveLinkedType.DATA;
+            case "ENUM" -> PrimitiveLinkedType.ENUM;
+            case "NOTHING" -> PrimitiveLinkedType.NOTHING;
+            default -> throw new IllegalStateException("Unknown primitive type: " + primitiveType.name());
         };
     }
 

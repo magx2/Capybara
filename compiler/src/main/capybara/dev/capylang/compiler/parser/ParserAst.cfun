@@ -1,3 +1,95 @@
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/lang/Option import { * }
+from /dev/capylang/compiler/ImportDeclaration import { * }
+from /dev/capylang/compiler/Visibility import { Visibility }
+from /dev/capylang/compiler/parser/AnnotationTarget import { AnnotationTarget }
+from /dev/capylang/compiler/parser/DeriveDirective import { DeriveDirective }
+from /dev/capylang/compiler/parser/InfixOperator import { * }
+from /dev/capylang/compiler/parser/SourceKind import { * }
+from /dev/capylang/compiler/parser/SourcePosition import { SourcePosition }
+
+union Type =
+    PrimitiveType
+    | DataType
+    | ListType
+    | SetType
+    | DictType
+    | FunctionType
+    | TupleType
+
+union CollectionType =
+    ListType
+    | SetType
+    | DictType
+
+data PrimitiveType {
+    name: String,
+    descriptor: String
+}
+
+const BYTE: PrimitiveType = PrimitiveType { name: "BYTE", descriptor: "byte" }
+const INT: PrimitiveType = PrimitiveType { name: "INT", descriptor: "int" }
+const LONG: PrimitiveType = PrimitiveType { name: "LONG", descriptor: "long" }
+const DOUBLE: PrimitiveType = PrimitiveType { name: "DOUBLE", descriptor: "double" }
+const STRING: PrimitiveType = PrimitiveType { name: "STRING", descriptor: "String" }
+const BOOL: PrimitiveType = PrimitiveType { name: "BOOL", descriptor: "bool" }
+const FLOAT: PrimitiveType = PrimitiveType { name: "FLOAT", descriptor: "float" }
+const ANY: PrimitiveType = PrimitiveType { name: "ANY", descriptor: "any" }
+const DATA: PrimitiveType = PrimitiveType { name: "DATA", descriptor: "data" }
+const ENUM: PrimitiveType = PrimitiveType { name: "ENUM", descriptor: "enum" }
+const NOTHING: PrimitiveType = PrimitiveType { name: "NOTHING", descriptor: "nothing" }
+
+data DataType { name: String }
+data ListType { elementType: Type }
+data SetType { elementType: Type }
+data DictType { valueType: Type }
+data FunctionType { argumentType: Type, returnType: Type }
+data TupleType { elementTypes: List[Type] }
+
+fun findPrimitiveType(name: String): Option[PrimitiveType] =
+    if name == BYTE.descriptor
+    then Some { BYTE }
+    else if name == INT.descriptor
+        then Some { INT }
+        else if name == LONG.descriptor
+            then Some { LONG }
+            else if name == DOUBLE.descriptor
+                then Some { DOUBLE }
+                else if name == STRING.descriptor
+                    then Some { STRING }
+                    else if name == BOOL.descriptor
+                        then Some { BOOL }
+                        else if name == FLOAT.descriptor
+                            then Some { FLOAT }
+                            else if name == ANY.descriptor
+                                then Some { ANY }
+                                else if name == DATA.descriptor
+                                    then Some { DATA }
+                                    else if name == ENUM.descriptor
+                                        then Some { ENUM }
+                                        else if name == NOTHING.descriptor
+                                            then Some { NOTHING }
+                                            else None {}
+
+fun Type.name(): String =
+    match this with
+    case PrimitiveType { name, descriptor } -> name
+    case DataType { name } -> name
+    case ListType { elementType } -> "List"
+    case SetType { elementType } -> "Set"
+    case DictType { valueType } -> "Dict"
+    case FunctionType { argumentType, returnType } -> argumentType.name() + "=>" + returnType.name()
+    case TupleType { elementTypes } -> "Tuple"
+
+fun PrimitiveType.to_string(): String = this.name
+fun DataType.to_string(): String = "DataType[name=" + this.name + "]"
+fun ListType.to_string(): String = "ListType[elementType=" + this.elementType + "]"
+fun SetType.to_string(): String = "SetType[elementType=" + this.elementType + "]"
+fun DictType.to_string(): String = "DictType[valueType=" + this.valueType + "]"
+fun FunctionType.to_string(): String = "FunctionType[argumentType=" + this.argumentType + ", returnType=" + this.returnType + "]"
+fun TupleType.to_string(): String = "TupleType[elementTypes=" + this.elementTypes + "]"
+
 union AnnotationValue =
     AnnotationStringValue
     | AnnotationIntValue
@@ -8,11 +100,336 @@ union AnnotationValue =
     | AnnotationNothingValue
     | AnnotationTypeNameValue
 
-data AnnotationStringValue { value: String, position: any }
-data AnnotationIntValue { value: String, position: any }
-data AnnotationLongValue { value: String, position: any }
-data AnnotationFloatValue { value: String, position: any }
-data AnnotationDoubleValue { value: String, position: any }
-data AnnotationBoolValue { value: bool, position: any }
-data AnnotationNothingValue { position: any }
-data AnnotationTypeNameValue { name: String, position: any }
+data AnnotationStringValue { value: String, position: Option[SourcePosition] }
+data AnnotationIntValue { value: String, position: Option[SourcePosition] }
+data AnnotationLongValue { value: String, position: Option[SourcePosition] }
+data AnnotationFloatValue { value: String, position: Option[SourcePosition] }
+data AnnotationDoubleValue { value: String, position: Option[SourcePosition] }
+data AnnotationBoolValue { value: bool, position: Option[SourcePosition] }
+data AnnotationNothingValue { position: Option[SourcePosition] }
+data AnnotationTypeNameValue { name: String, position: Option[SourcePosition] }
+
+data AnnotationArgument {
+    name: String,
+    value: AnnotationValue,
+    position: Option[SourcePosition]
+}
+
+data AnnotationUsage {
+    name: String,
+    arguments: List[AnnotationArgument],
+    position: Option[SourcePosition]
+}
+
+data AnnotationFieldDeclaration {
+    name: String,
+    type: String,
+    defaultValue: Option[AnnotationValue],
+    position: Option[SourcePosition]
+}
+
+union Pattern =
+    IntPattern
+    | LongPattern
+    | StringPattern
+    | BoolPattern
+    | FloatPattern
+    | TypedPattern
+    | VariablePattern
+    | WildcardPattern
+    | WildcardBindingPattern
+    | ConstructorPattern
+
+data IntPattern { value: String }
+data LongPattern { value: String }
+data StringPattern { value: String }
+data BoolPattern { value: String }
+data FloatPattern { value: String }
+data TypedPattern { type: Type, name: String }
+data VariablePattern { name: String }
+data WildcardPattern {}
+data WildcardBindingPattern { name: String }
+data ConstructorPattern { constructorName: String, fieldPatterns: List[Pattern] }
+
+data MatchCase {
+    pattern: Pattern,
+    guard: Option[Expression],
+    expression: Expression
+}
+
+enum LetKind { ASSIGN, RESULT_BIND }
+
+union Expression =
+    BooleanValue
+    | ByteValue
+    | ConstructorData
+    | DoubleValue
+    | FieldAccess
+    | FloatValue
+    | FunctionCall
+    | FunctionInvoke
+    | FunctionReference
+    | IfExpression
+    | IndexExpression
+    | InfixExpression
+    | IntValue
+    | LambdaExpression
+    | LetExpression
+    | LongValue
+    | MatchExpression
+    | NewData
+    | NewDictExpression
+    | NewListExpression
+    | NewSetExpression
+    | NothingValue
+    | PlaceholderExpression
+    | ReduceExpression
+    | SliceExpression
+    | StringValue
+    | TupleExpression
+    | UnwrapExpression
+    | Value
+    | WithExpression
+
+data BooleanValue { value: bool, position: Option[SourcePosition] }
+data ByteValue { byteValue: String, position: Option[SourcePosition] }
+data IntValue { intValue: String, position: Option[SourcePosition] }
+data LongValue { longValue: String, position: Option[SourcePosition] }
+data FloatValue { floatValue: String, position: Option[SourcePosition] }
+data DoubleValue { doubleValue: String, position: Option[SourcePosition] }
+data StringValue { stringValue: String, position: Option[SourcePosition] }
+data NothingValue { position: Option[SourcePosition], literal: String }
+data Value { name: String, position: Option[SourcePosition] }
+data FunctionCall { moduleName: Option[String], name: String, arguments: List[Expression], position: Option[SourcePosition] }
+data FunctionInvoke { function: Expression, arguments: List[Expression], position: Option[SourcePosition] }
+data FunctionReference { name: String, position: Option[SourcePosition] }
+data IfExpression { condition: Expression, thenBranch: Expression, elseBranch: Expression, position: Option[SourcePosition] }
+data IndexExpression { source: Expression, arguments: List[Expression], position: Option[SourcePosition] }
+data InfixExpression { left: Expression, operator: InfixOperator, right: Expression, position: Option[SourcePosition] }
+data LambdaExpression { argumentNames: List[String], expression: Expression, position: Option[SourcePosition] }
+data LetExpression { name: String, declaredType: Option[Type], kind: LetKind, value: Expression, rest: Expression, position: Option[SourcePosition] }
+data ReduceExpression {
+    initialValue: Expression,
+    accumulatorName: String,
+    keyName: Option[String],
+    valueName: String,
+    reducerExpression: Expression,
+    position: Option[SourcePosition]
+}
+data SliceExpression { source: Expression, start: Option[Expression], end: Option[Expression], position: Option[SourcePosition] }
+data MatchExpression { matchWith: Expression, cases: List[MatchCase], position: Option[SourcePosition] }
+data FieldAssignment { name: String, value: Expression }
+data NewData {
+    type: Type,
+    bypassConstructor: bool,
+    assignments: List[FieldAssignment],
+    positionalArguments: List[Expression],
+    spreads: List[Expression],
+    position: Option[SourcePosition]
+}
+data ConstructorData {
+    assignments: List[FieldAssignment],
+    positionalArguments: List[Expression],
+    spreads: List[Expression],
+    position: Option[SourcePosition]
+}
+data WithExpression { source: Expression, assignments: List[FieldAssignment], position: Option[SourcePosition] }
+data NewListExpression { values: List[Expression], position: Option[SourcePosition] }
+data NewSetExpression { values: List[Expression], position: Option[SourcePosition] }
+data DictEntry { key: Expression, value: Expression }
+data NewDictExpression { entries: List[DictEntry], position: Option[SourcePosition] }
+data TupleExpression { values: List[Expression], position: Option[SourcePosition] }
+data UnwrapExpression { expression: Expression, position: Option[SourcePosition] }
+data PlaceholderExpression { position: Option[SourcePosition] }
+data FieldAccess { source: Expression, field: String, position: Option[SourcePosition] }
+
+fun Expression.position(): Option[SourcePosition] =
+    match this with
+    case BooleanValue { value, position } -> position
+    case ByteValue { byteValue, position } -> position
+    case ConstructorData { assignments, positionalArguments, spreads, position } -> position
+    case DoubleValue { doubleValue, position } -> position
+    case FieldAccess { source, field, position } -> position
+    case FloatValue { floatValue, position } -> position
+    case FunctionCall { moduleName, name, arguments, position } -> position
+    case FunctionInvoke { function, arguments, position } -> position
+    case FunctionReference { name, position } -> position
+    case IfExpression { condition, thenBranch, elseBranch, position } -> position
+    case IndexExpression { source, arguments, position } -> position
+    case InfixExpression { left, operator, right, position } -> position
+    case IntValue { intValue, position } -> position
+    case LambdaExpression { argumentNames, expression, position } -> position
+    case LetExpression { name, declaredType, kind, value, rest, position } -> position
+    case LongValue { longValue, position } -> position
+    case MatchExpression { matchWith, cases, position } -> position
+    case NewData { type, bypassConstructor, assignments, positionalArguments, spreads, position } -> position
+    case NewDictExpression { entries, position } -> position
+    case NewListExpression { values, position } -> position
+    case NewSetExpression { values, position } -> position
+    case NothingValue { position, literal } -> position
+    case PlaceholderExpression { position } -> position
+    case ReduceExpression { initialValue, accumulatorName, keyName, valueName, reducerExpression, position } -> position
+    case SliceExpression { source, start, end, position } -> position
+    case StringValue { stringValue, position } -> position
+    case TupleExpression { values, position } -> position
+    case UnwrapExpression { expression, position } -> position
+    case Value { name, position } -> position
+    case WithExpression { source, assignments, position } -> position
+
+private fun placeholderIndex(position: Option[SourcePosition]): Expression =
+    PlaceholderExpression { position }
+
+fun IndexExpression.index(): Expression =
+    match this.arguments[0] with
+    case Some { value } -> value
+    case None {} -> placeholderIndex(this.position)
+
+fun StringValue.to_string(): String = this.stringValue
+
+data Parameter {
+    type: Type,
+    name: String,
+    position: Option[SourcePosition]
+}
+
+data DataField {
+    name: String,
+    type: Type,
+    annotations: List[AnnotationUsage]
+}
+
+union Definition =
+    AnnotationDeclaration
+    | DataDeclaration
+    | DeriverDeclaration
+    | EnumDeclaration
+    | Function
+    | PrimitiveBackedTypeDeclaration
+    | TypeDeclaration
+
+data Function {
+    name: String,
+    parameters: List[Parameter],
+    returnType: Option[Type],
+    expression: Expression,
+    comments: List[String],
+    visibility: Visibility,
+    position: Option[SourcePosition],
+    tailRecursive: bool,
+    annotations: List[AnnotationUsage]
+}
+
+data DataDeclaration {
+    name: String,
+    fields: List[DataField],
+    extendsTypes: List[String],
+    typeParameters: List[String],
+    constructorExpression: Option[Expression],
+    derives: List[DeriveDirective],
+    comments: List[String],
+    visibility: Visibility,
+    nativeType: bool,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+data EnumDeclaration {
+    name: String,
+    values: List[String],
+    comments: List[String],
+    visibility: Visibility,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+data PrimitiveBackedTypeDeclaration {
+    name: String,
+    backingType: PrimitiveType,
+    constructorExpression: Option[Expression],
+    comments: List[String],
+    visibility: Visibility,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+data TypeDeclaration {
+    name: String,
+    subTypes: List[String],
+    fields: List[DataField],
+    typeParameters: List[String],
+    constructorExpression: Option[Expression],
+    derives: List[DeriveDirective],
+    comments: List[String],
+    visibility: Visibility,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+data DeriverDeclaration {
+    name: String,
+    methods: List[DeriverMethod],
+    comments: List[String],
+    visibility: Visibility,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+data DeriverMethod {
+    name: String,
+    parameters: List[Parameter],
+    returnType: Type,
+    expression: Expression,
+    comments: List[String],
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+data AnnotationDeclaration {
+    name: String,
+    targets: List[AnnotationTarget],
+    fields: List[AnnotationFieldDeclaration],
+    multiple: bool,
+    comments: List[String],
+    visibility: Visibility,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+fun Definition.position(): Option[SourcePosition] =
+    match this with
+    case AnnotationDeclaration { name, targets, fields, multiple, comments, visibility, position, annotations } -> position
+    case DataDeclaration { name, fields, extendsTypes, typeParameters, constructorExpression, derives, comments, visibility, nativeType, position, annotations } -> position
+    case DeriverDeclaration { name, methods, comments, visibility, position, annotations } -> position
+    case EnumDeclaration { name, values, comments, visibility, position, annotations } -> position
+    case Function { name, parameters, returnType, expression, comments, visibility, position, tailRecursive, annotations } -> position
+    case PrimitiveBackedTypeDeclaration { name, backingType, constructorExpression, comments, visibility, position, annotations } -> position
+    case TypeDeclaration { name, subTypes, fields, typeParameters, constructorExpression, derives, comments, visibility, position, annotations } -> position
+
+fun Definition.visibility(): Visibility =
+    match this with
+    case AnnotationDeclaration { name, targets, fields, multiple, comments, visibility, position, annotations } -> visibility
+    case DataDeclaration { name, fields, extendsTypes, typeParameters, constructorExpression, derives, comments, visibility, nativeType, position, annotations } -> visibility
+    case DeriverDeclaration { name, methods, comments, visibility, position, annotations } -> visibility
+    case EnumDeclaration { name, values, comments, visibility, position, annotations } -> visibility
+    case Function { name, parameters, returnType, expression, comments, visibility, position, tailRecursive, annotations } -> visibility
+    case PrimitiveBackedTypeDeclaration { name, backingType, constructorExpression, comments, visibility, position, annotations } -> visibility
+    case TypeDeclaration { name, subTypes, fields, typeParameters, constructorExpression, derives, comments, visibility, position, annotations } -> visibility
+
+data Functional {
+    definitions: Set[Definition]
+}
+
+fun Functional.reduce(other: Functional): Functional =
+    Functional { definitions: this.definitions + other.definitions }
+
+data Module {
+    name: String,
+    path: String,
+    functional: Functional,
+    imports: List[ImportDeclaration],
+    sourceKind: SourceKind
+}
+
+data Program {
+    modules: List[Module]
+}

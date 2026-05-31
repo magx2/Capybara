@@ -15,8 +15,8 @@ import capy.lang.Result;
 import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.parser.*;
-import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
-import dev.capylang.compiler.parser.ParserAst.AnnotationTypeNameValue;
+import dev.capylang.compiler.parser.ParserAst;
+import dev.capylang.compiler.parser.ParserAst.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -152,10 +152,10 @@ class CapybaraParserTest {
         assertThat(result).isInstanceOf(Result.Error.class);
     }
 
-    private static dev.capylang.compiler.parser.Module parseSuccess(RawModule module) {
+    private static ParserAst.Module parseSuccess(RawModule module) {
         var result = new CapybaraParser().parseModule(module);
         assertThat(result).isInstanceOf(Result.Success.class);
-        return ((Result.Success<dev.capylang.compiler.parser.Module>) result).value();
+        return ((Result.Success<ParserAst.Module>) result).value();
     }
 
     static Stream<Arguments> parse() {
@@ -321,7 +321,7 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "Bar", module.functional());
-        assertThat(data.fields()).extracting(DataDeclaration.DataField::name).containsExactly("d");
+        assertThat(data.fields()).extracting(DataField::name).containsExactly("d");
         assertThat(data.extendsTypes()).containsExactly("Foo", "Boo");
     }
 
@@ -335,9 +335,9 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "User", module.functional());
-        assertThat(data.constructor()).isPresent();
-        assertThat(data.constructor().orElseThrow()).isInstanceOf(IfExpression.class);
-        var constructor = (IfExpression) data.constructor().orElseThrow();
+        assertThat(data.constructorExpression()).isPresent();
+        assertThat(data.constructorExpression().orElseThrow()).isInstanceOf(IfExpression.class);
+        var constructor = (IfExpression) data.constructorExpression().orElseThrow();
         assertThat(constructor.thenBranch()).isInstanceOf(ConstructorData.class);
         assertThat(constructor.elseBranch()).isInstanceOf(ConstructorData.class);
     }
@@ -354,12 +354,12 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "foo_bar", module.functional());
-        assertThat(declaration.backingType()).isEqualTo(PrimitiveType.INT);
-        assertThat(declaration.constructor()).isEmpty();
+        assertThat(declaration.backingType()).isEqualTo(ParserAst.INT);
+        assertThat(declaration.constructorExpression()).isEmpty();
         assertThat(declaration.comments()).containsExactly("Domain-specific identifier", "Erases to int");
 
         var tokenDeclaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "token", module.functional());
-        assertThat(tokenDeclaration.backingType()).isEqualTo(PrimitiveType.STRING);
+        assertThat(tokenDeclaration.backingType()).isEqualTo(ParserAst.STRING);
 
         var identity = findFunction("identity", module.functional());
         assertThat(identity.parameters().getFirst().type()).isEqualTo(new DataType("foo_bar"));
@@ -389,7 +389,7 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "user_id", module.functional());
-        assertThat(declaration.constructor()).hasValueSatisfying(constructor ->
+        assertThat(declaration.constructorExpression()).hasValueSatisfying(constructor ->
                 assertThat(constructor).isInstanceOf(IfExpression.class));
 
         var unwrap = findFunction("unwrap", module.functional());
@@ -443,13 +443,13 @@ class CapybaraParserTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(deriver.name()).isEqualTo("Show");
-        assertThat(deriver.methods()).extracting(DeriverDeclaration.DeriverMethod::name)
+        assertThat(deriver.methods()).extracting(DeriverMethod::name)
                 .containsExactly("show");
         assertThat(deriver.methods().getFirst().parameters()).extracting(Parameter::name)
                 .isEmpty();
 
         var data = findDefinition(DataDeclaration.class, "User", module.functional());
-        assertThat(data.constructor()).isEmpty();
+        assertThat(data.constructorExpression()).isEmpty();
         assertThat(data.derives()).extracting(DeriveDirective::name)
                 .containsExactly("Show");
 
@@ -485,9 +485,9 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         var type = findDefinition(TypeDeclaration.class, "User", module.functional());
-        assertThat(type.constructor()).isPresent();
-        assertThat(type.constructor().orElseThrow()).isInstanceOf(IfExpression.class);
-        var constructor = (IfExpression) type.constructor().orElseThrow();
+        assertThat(type.constructorExpression()).isPresent();
+        assertThat(type.constructorExpression().orElseThrow()).isInstanceOf(IfExpression.class);
+        var constructor = (IfExpression) type.constructorExpression().orElseThrow();
         assertThat(constructor.thenBranch()).isInstanceOf(NewData.class);
     }
 
@@ -517,7 +517,7 @@ class CapybaraParserTest {
         var function = findFunction("users", module.functional());
         assertThat(function.expression()).isInstanceOf(LetExpression.class);
         var letExpression = (LetExpression) function.expression();
-        assertThat(letExpression.kind()).isEqualTo(LetExpression.Kind.RESULT_BIND);
+        assertThat(letExpression.kind()).isEqualTo(LetKind.RESULT_BIND);
         assertThat(letExpression.name()).isEqualTo("user");
         assertThat(letExpression.rest()).isInstanceOf(Value.class);
     }
@@ -544,7 +544,7 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
+        assertThat(CompilerErrors.from((Result.Error<ParserAst.Module>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");
@@ -560,7 +560,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", "const E: double = 2.", SourceKind.FUNCTIONAL));
         var function = findFunction("E", module.functional());
         assertThat(function.parameters()).isEmpty();
-        assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
+        assertThat(function.returnType()).contains(ParserAst.DOUBLE);
     }
 
     @Test
@@ -568,7 +568,7 @@ class CapybaraParserTest {
     void parseBareDecimalLiteralAsDouble() {
         var module = parseSuccess(new RawModule("Test", "/parser", "fun pi(): double = 3.14", SourceKind.FUNCTIONAL));
         var function = findFunction("pi", module.functional());
-        assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
+        assertThat(function.returnType()).contains(ParserAst.DOUBLE);
         assertThat(function.expression()).isInstanceOf(DoubleValue.class);
     }
 
@@ -577,7 +577,7 @@ class CapybaraParserTest {
     void parseSuffixedFloatLiteralAsFloat() {
         var module = parseSuccess(new RawModule("Test", "/parser", "fun ratio(): float = 3.14f", SourceKind.FUNCTIONAL));
         var function = findFunction("ratio", module.functional());
-        assertThat(function.returnType()).contains(PrimitiveType.FLOAT);
+        assertThat(function.returnType()).contains(ParserAst.FLOAT);
         assertThat(function.expression()).isInstanceOf(FloatValue.class);
     }
 
@@ -636,10 +636,10 @@ class CapybaraParserTest {
 
         var function = findFunction("aliases", module.functional());
 
-        assertThat(function.parameters().get(0).type()).isEqualTo(PrimitiveType.STRING);
-        assertThat(function.parameters().get(1).type()).isInstanceOf(CollectionType.ListType.class);
-        assertThat(function.parameters().get(2).type()).isInstanceOf(CollectionType.SetType.class);
-        assertThat(function.parameters().get(3).type()).isInstanceOf(CollectionType.DictType.class);
+        assertThat(function.parameters().get(0).type()).isEqualTo(ParserAst.STRING);
+        assertThat(function.parameters().get(1).type()).isInstanceOf(ListType.class);
+        assertThat(function.parameters().get(2).type()).isInstanceOf(SetType.class);
+        assertThat(function.parameters().get(3).type()).isInstanceOf(DictType.class);
         assertThat(function.parameters().get(4).type()).isInstanceOf(TupleType.class);
         assertThat(function.returnType()).containsInstanceOf(TupleType.class);
     }
@@ -691,7 +691,7 @@ class CapybaraParserTest {
 
         var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
         assertThat(localConst.parameters()).isEmpty();
-        assertThat(localConst.returnType()).contains(new CollectionType.SetType(PrimitiveType.STRING));
+        assertThat(localConst.returnType()).contains(new SetType(ParserAst.STRING));
 
         var function = findFunction("foo", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -711,7 +711,7 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
-        assertThat(localConst.returnType()).contains(new CollectionType.SetType(PrimitiveType.STRING));
+        assertThat(localConst.returnType()).contains(new SetType(ParserAst.STRING));
     }
 
     @Test
@@ -726,7 +726,7 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
+        assertThat(CompilerErrors.from((Result.Error<ParserAst.Module>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");
@@ -752,7 +752,7 @@ class CapybaraParserTest {
         assertThat(parameters).hasSize(1);
         var parameter = parameters.get(0);
         assertThat(parameter.name()).isEqualTo("l");
-        var listOfIntsType = new CollectionType.ListType(PrimitiveType.INT);
+        var listOfIntsType = new ListType(ParserAst.INT);
         assertThat(parameter.type()).isEqualTo(listOfIntsType);
         assertThat(function.returnType()).hasValue(listOfIntsType);
     }
@@ -786,11 +786,11 @@ class CapybaraParserTest {
 
         findDefinition(DataDeclaration.class, "Box", module.functional());
         assertThat(findFunction("list_identity", module.functional()).returnType())
-                .hasValue(new CollectionType.ListType(PrimitiveType.STRING));
+                .hasValue(new ListType(ParserAst.STRING));
         findFunction("box_identity", module.functional());
         findFunction("match_list", module.functional());
         var annotated = findFunction("annotated_identity", module.functional());
-        assertThat(annotated.returnType()).hasValue(new CollectionType.ListType(PrimitiveType.STRING));
+        assertThat(annotated.returnType()).hasValue(new ListType(ParserAst.STRING));
         assertThat(annotated.annotations()).extracting(AnnotationUsage::name).containsExactly("LineStartAnnotation");
     }
 
@@ -1123,7 +1123,7 @@ class CapybaraParserTest {
                 """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
+        assertThat(CompilerErrors.from((Result.Error<ParserAst.Module>) result))
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Test.cfun");
@@ -1202,10 +1202,10 @@ class CapybaraParserTest {
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(WithExpression.class);
         var outerWith = (WithExpression) function.expression();
-        assertThat(outerWith.assignments()).singleElement().extracting(NewData.FieldAssignment::name).isEqualTo("b");
+        assertThat(outerWith.assignments()).singleElement().extracting(FieldAssignment::name).isEqualTo("b");
         assertThat(outerWith.source()).isInstanceOf(WithExpression.class);
         var innerWith = (WithExpression) outerWith.source();
-        assertThat(innerWith.assignments()).singleElement().extracting(NewData.FieldAssignment::name).isEqualTo("a");
+        assertThat(innerWith.assignments()).singleElement().extracting(FieldAssignment::name).isEqualTo("a");
     }
 
     @Test
@@ -1315,12 +1315,12 @@ class CapybaraParserTest {
         assertThat(function.expression()).isInstanceOf(MatchExpression.class);
         var expression = (MatchExpression) function.expression();
         assertThat(expression.cases()).hasSize(4);
-        assertThat(expression.cases().get(0).pattern()).isEqualTo(new MatchExpression.StringPattern("\"1\""));
-        assertThat(expression.cases().get(1).pattern()).isEqualTo(new MatchExpression.StringPattern("\"2\""));
-        assertThat(expression.cases().get(2).pattern()).isEqualTo(new MatchExpression.StringPattern("\"3\""));
-        assertThat(expression.cases().get(3).pattern()).isEqualTo(MatchExpression.WildcardPattern.WILDCARD);
+        assertThat(expression.cases().get(0).pattern()).isEqualTo(new StringPattern("\"1\""));
+        assertThat(expression.cases().get(1).pattern()).isEqualTo(new StringPattern("\"2\""));
+        assertThat(expression.cases().get(2).pattern()).isEqualTo(new StringPattern("\"3\""));
+        assertThat(expression.cases().get(3).pattern()).isEqualTo(WildcardPattern.INSTANCE);
         assertThat(expression.cases().subList(0, 3))
-                .extracting(MatchExpression.MatchCase::expression)
+                .extracting(MatchCase::expression)
                 .allSatisfy(caseExpression -> {
                     assertThat(caseExpression).isInstanceOf(StringValue.class);
                     assertThat(((StringValue) caseExpression).stringValue()).isEqualTo("\"digit\"");
@@ -1344,11 +1344,11 @@ class CapybaraParserTest {
         var expression = (MatchExpression) function.expression();
         assertThat(expression.cases()).hasSize(4);
         assertThat(expression.cases().get(0).pattern())
-                .isEqualTo(new MatchExpression.TypedPattern(new CollectionType.ListType(PrimitiveType.ANY), "__ignored"));
+                .isEqualTo(new TypedPattern(new ListType(ParserAst.ANY), "__ignored"));
         assertThat(expression.cases().get(1).pattern())
-                .isEqualTo(new MatchExpression.TypedPattern(new CollectionType.SetType(PrimitiveType.ANY), "s"));
+                .isEqualTo(new TypedPattern(new SetType(ParserAst.ANY), "s"));
         assertThat(expression.cases().get(2).pattern())
-                .isEqualTo(new MatchExpression.TypedPattern(new CollectionType.DictType(PrimitiveType.ANY), "__ignored"));
+                .isEqualTo(new TypedPattern(new DictType(ParserAst.ANY), "__ignored"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package dev.capylang.compiler.parser;
 
 import dev.capylang.compiler.CompiledAnnotation;
+import dev.capylang.compiler.parser.ParserAst.AnnotationUsage;
 
 import java.util.List;
 import java.util.Optional;

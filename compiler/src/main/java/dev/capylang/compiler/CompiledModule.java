@@ -1,7 +1,7 @@
 package dev.capylang.compiler;
 
-import dev.capylang.compiler.parser.AnnotationDeclaration;
-import dev.capylang.compiler.parser.DeriverDeclaration;
+import dev.capylang.compiler.parser.ParserAst.AnnotationDeclaration;
+import dev.capylang.compiler.parser.ParserAst.DeriverDeclaration;
 
 import java.util.Collection;
 import java.util.Map;

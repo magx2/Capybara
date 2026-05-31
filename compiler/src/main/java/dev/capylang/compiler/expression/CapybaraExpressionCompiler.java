@@ -11,6 +11,8 @@ import dev.capylang.compiler.CollectionLinkedType.CompiledDict;
 import dev.capylang.compiler.CollectionLinkedType.CompiledList;
 import dev.capylang.compiler.CollectionLinkedType.CompiledSet;
 import dev.capylang.compiler.parser.*;
+import dev.capylang.compiler.parser.ParserAst;
+import dev.capylang.compiler.parser.ParserAst.*;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -34,6 +36,42 @@ public class CapybaraExpressionCompiler {
     private static final String REFLECTION_DATA_VALUE_INFO = "DataValueInfo";
     private static final Map<String, String> NORMALIZED_TYPE_ALIAS_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> SIMPLE_RAW_TYPE_NAME_CACHE = new ConcurrentHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    private static <T> Optional<T> typedOptional(Optional value) {
+        return (Optional<T>) value;
+    }
+
+    private static Optional<SourcePosition> sourcePosition(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<Type> parserType(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<Expression> parserExpression(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<String> optionalString(Optional value) {
+        return typedOptional(value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Result.Error<T> typedError(Result.Error<?> error) {
+        return (Result.Error<T>) error;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Result.Success<T> typedSuccess(Result.Success<?> success) {
+        return (Result.Success<T>) success;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Result<T> typedResult(Result result) {
+        return (Result<T>) result;
+    }
 
     public static final class LinkCache {
         private final Map<String, GenericDataType> fallbackDataTypesBySuffix;
@@ -283,7 +321,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Optional<SourcePosition> lambdaErrorPosition(LambdaExpression lambdaExpression) {
-        return lambdaExpression.position().map(position -> {
+        return sourcePosition(lambdaExpression.position()).map(position -> {
             if (lambdaExpression.argumentNames().isEmpty() && position.column() > 0) {
                 return new SourcePosition(position.line(), position.column() - 1, position.length());
             }
@@ -335,8 +373,8 @@ public class CapybaraExpressionCompiler {
                                 expression.position()
                         );
                     }
-                    return ResultOps.flatMap(linkSliceBound(expression.start(), scope, "start"),
-                            start -> ResultOps.map(linkSliceBound(expression.end(), scope, "end"),
+                    return ResultOps.flatMap(linkSliceBound(parserExpression(expression.start()), scope, "start"),
+                            start -> ResultOps.map(linkSliceBound(parserExpression(expression.end()), scope, "end"),
                                     end -> (CompiledExpression) new CompiledSliceExpression(
                                             source,
                                             start,
@@ -423,7 +461,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isIndexMethodResolutionError(Result.Error<CompiledExpression> error) {
-        return CompilerErrors.from(error).stream()
+        return CompilerErrors.from(typedError(error)).stream()
                 .map(CompilerError::message)
                 .anyMatch(message -> message.contains("No method `get`")
                                      || message.contains("No matching method `get`"));
@@ -736,8 +774,8 @@ public class CapybaraExpressionCompiler {
         for (var i = 0; i < functionInvoke.arguments().size(); i++) {
             var parameter = constructor.parameters().get(i);
             var parameterType = linkObjectConstructorParameterType(parameter, scope, functionInvoke.position());
-            if (parameterType instanceof Result.Error<CompiledType> error) {
-                return ResultOps.error(error);
+            if (parameterType instanceof Result.Error<?> error) {
+                return ResultOps.error(typedError(error));
             }
             var linked = linkArgumentForExpectedType(
                     functionInvoke.arguments().get(i),
@@ -942,7 +980,7 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             Optional<CompiledType> expectedType
     ) {
-        var rawModuleName = functionCall.moduleName().orElseThrow();
+        var rawModuleName = optionalString(functionCall.moduleName()).orElseThrow();
         var moduleName = normalizeQualifiedModuleName(rawModuleName);
         var enumQualified = resolveEnumQualifiedFunctionCall(functionCall, scope, moduleName);
         if (enumQualified.isPresent()) {
@@ -2428,7 +2466,7 @@ public class CapybaraExpressionCompiler {
             var position = rawArguments.get(i).position();
             var message = expectedGotMessage(expected, actual);
             return withPosition(Results.error(message), position) instanceof Result.Error<?> error
-                    ? CompilerErrors.from(error).first()
+                    ? CompilerErrors.from(typedError(error)).first()
                     : null;
         }
         return null;
@@ -3094,7 +3132,7 @@ public class CapybaraExpressionCompiler {
         }
         var lambdaArguments = new java.util.ArrayList<String>();
         lambdaArguments.add(reduceExpression.accumulatorName());
-        reduceExpression.keyName().ifPresent(lambdaArguments::add);
+        optionalString(reduceExpression.keyName()).ifPresent(lambdaArguments::add);
         lambdaArguments.add(reduceExpression.valueName());
         var rewritten = new FunctionCall(
                 functionCall.moduleName(),
@@ -3185,13 +3223,13 @@ public class CapybaraExpressionCompiler {
         var matchExpression = new MatchExpression(
                 source,
                 List.of(
-                        new MatchExpression.MatchCase(
-                                new MatchExpression.ConstructorPattern("Some", List.of(new MatchExpression.VariablePattern(valueName))),
+                        new MatchCase(
+                                new ConstructorPattern("Some", List.of(new VariablePattern(valueName))),
                                 Optional.empty(),
                                 someExpression
                         ),
-                        new MatchExpression.MatchCase(
-                                new MatchExpression.VariablePattern("None"),
+                        new MatchCase(
+                                new VariablePattern("None"),
                                 Optional.empty(),
                                 noneExpression(position)
                         )
@@ -3234,20 +3272,20 @@ public class CapybaraExpressionCompiler {
         var matchExpression = new MatchExpression(
                 source,
                 List.of(
-                        new MatchExpression.MatchCase(
-                                new MatchExpression.ConstructorPattern("Some", List.of(new MatchExpression.VariablePattern(reduceExpression.valueName()))),
+                        new MatchCase(
+                                new ConstructorPattern("Some", List.of(new VariablePattern(reduceExpression.valueName()))),
                                 Optional.empty(),
                                 new LetExpression(
                                         reduceExpression.accumulatorName(),
                                         Optional.empty(),
-                                        LetExpression.Kind.ASSIGN,
+                                        LetKind.ASSIGN,
                                         reduceExpression.initialValue(),
                                         reduceExpression.reducerExpression(),
                                         reduceExpression.position()
                                 )
                         ),
-                        new MatchExpression.MatchCase(
-                                new MatchExpression.VariablePattern("None"),
+                        new MatchCase(
+                                new VariablePattern("None"),
                                 Optional.empty(),
                                 reduceExpression.initialValue()
                         )
@@ -4653,8 +4691,8 @@ public class CapybaraExpressionCompiler {
         if (expected.matches("[A-Z]") || actual.matches("[A-Z]")) {
             return true;
         }
-        var expectedPrimitive = PrimitiveType.find(expected).map(this::toPrimitiveLinkedType);
-        var actualPrimitive = PrimitiveType.find(actual).map(this::toPrimitiveLinkedType);
+        var expectedPrimitive = ParserAst.findPrimitiveType(expected).map(this::toPrimitiveLinkedType);
+        var actualPrimitive = ParserAst.findPrimitiveType(actual).map(this::toPrimitiveLinkedType);
         if (expectedPrimitive.isPresent() && actualPrimitive.isPresent()) {
             if (expectedPrimitive.get() == actualPrimitive.get()) {
                 return true;
@@ -4685,18 +4723,19 @@ public class CapybaraExpressionCompiler {
     }
 
     private PrimitiveLinkedType toPrimitiveLinkedType(PrimitiveType primitiveType) {
-        return switch (primitiveType) {
-            case BYTE -> BYTE;
-            case INT -> INT;
-            case LONG -> LONG;
-            case DOUBLE -> DOUBLE;
-            case BOOL -> BOOL;
-            case STRING -> STRING;
-            case FLOAT -> FLOAT;
-            case NOTHING -> NOTHING;
-            case ANY -> ANY;
-            case DATA -> DATA;
-            case ENUM -> ENUM;
+        return switch (primitiveType.name()) {
+            case "BYTE" -> BYTE;
+            case "INT" -> INT;
+            case "LONG" -> LONG;
+            case "DOUBLE" -> DOUBLE;
+            case "BOOL" -> BOOL;
+            case "STRING" -> STRING;
+            case "FLOAT" -> FLOAT;
+            case "NOTHING" -> NOTHING;
+            case "ANY" -> ANY;
+            case "DATA" -> DATA;
+            case "ENUM" -> ENUM;
+            default -> throw new IllegalStateException("Unknown primitive type: " + primitiveType.name());
         };
     }
 
@@ -4860,12 +4899,12 @@ public class CapybaraExpressionCompiler {
                                 scope,
                                 expression.position()
                         );
-                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                            return value;
+                        if (methodCall instanceof Result.Success<?> value) {
+                            return typedSuccess(value);
                         }
-                        if (methodCall instanceof Result.Error<CompiledExpression> error
-                            && !CompilerErrors.from(error).isEmpty()) {
-                            return methodCall;
+                        if (methodCall instanceof Result.Error<?> error
+                            && !CompilerErrors.from(typedError(error)).isEmpty()) {
+                            return typedResult(methodCall);
                         }
                         if (!isPipeMapExpression(expression)) {
                             return ResultOps.flatMap(
@@ -4892,12 +4931,12 @@ public class CapybaraExpressionCompiler {
                                 scope,
                                 expression.position()
                         );
-                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                            return value;
+                        if (methodCall instanceof Result.Success<?> value) {
+                            return typedSuccess(value);
                         }
-                        if (methodCall instanceof Result.Error<CompiledExpression> error
-                            && !CompilerErrors.from(error).isEmpty()) {
-                            return methodCall;
+                        if (methodCall instanceof Result.Error<?> error
+                            && !CompilerErrors.from(typedError(error)).isEmpty()) {
+                            return typedResult(methodCall);
                         }
                         if (resolveSpecializedOptionType(left.type()).isPresent()) {
                             return linkPipeFilterOutExpression(expression, scope);
@@ -4917,12 +4956,12 @@ public class CapybaraExpressionCompiler {
                                 scope,
                                 expression.position()
                         );
-                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                            return value;
+                        if (methodCall instanceof Result.Success<?> value) {
+                            return typedSuccess(value);
                         }
-                        if (methodCall instanceof Result.Error<CompiledExpression> error
-                            && !CompilerErrors.from(error).isEmpty()) {
-                            return methodCall;
+                        if (methodCall instanceof Result.Error<?> error
+                            && !CompilerErrors.from(typedError(error)).isEmpty()) {
+                            return typedResult(methodCall);
                         }
                         return withPosition(
                                 Results.error("`|*` operator is not defined for `" + left.type() + "`"),
@@ -4943,12 +4982,12 @@ public class CapybaraExpressionCompiler {
                                 scope,
                                 expression.position()
                         );
-                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                            return value;
+                        if (methodCall instanceof Result.Success<?> value) {
+                            return typedSuccess(value);
                         }
-                        if (methodCall instanceof Result.Error<CompiledExpression> error
-                            && !CompilerErrors.from(error).isEmpty()) {
-                            return methodCall;
+                        if (methodCall instanceof Result.Error<?> error
+                            && !CompilerErrors.from(typedError(error)).isEmpty()) {
+                            return typedResult(methodCall);
                         }
                         return withPosition(
                                 Results.error("`|>` operator is not defined for `" + left.type() + "`"),
@@ -4959,12 +4998,12 @@ public class CapybaraExpressionCompiler {
         return ResultOps.flatMap(linkExpression(expression.left(), scope), left ->
                 ResultOps.flatMap(linkExpression(expression.right(), scope), right -> {
                                     var methodCall = resolveMethodInfixCall(InfixOperatorModule.symbol(expression.operator()), left, right, expression.position());
-                                    if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                                        return value;
+                                    if (methodCall instanceof Result.Success<?> value) {
+                                        return typedSuccess(value);
                                     }
-                                    if (methodCall instanceof Result.Error<CompiledExpression> error
-                                        && !CompilerErrors.from(error).isEmpty()) {
-                                        return methodCall;
+                                    if (methodCall instanceof Result.Error<?> error
+                                        && !CompilerErrors.from(typedError(error)).isEmpty()) {
+                                        return typedResult(methodCall);
                                     }
                                     return ResultOps.map(
                                             getLinkedInfixExpression(left, expression.operator(), right, expression.position()),
@@ -4981,7 +5020,7 @@ public class CapybaraExpressionCompiler {
         }
         var lambdaArguments = new java.util.ArrayList<String>();
         lambdaArguments.add(reduceExpression.accumulatorName());
-        reduceExpression.keyName().ifPresent(lambdaArguments::add);
+        optionalString(reduceExpression.keyName()).ifPresent(lambdaArguments::add);
         lambdaArguments.add(reduceExpression.valueName());
         var methodCall = new FunctionCall(
                 Optional.empty(),
@@ -5073,8 +5112,8 @@ public class CapybaraExpressionCompiler {
                             .anyMatch(argument -> containsValueReference(argument, variableName));
             case SliceExpression sliceExpression ->
                     containsValueReference(sliceExpression.source(), variableName)
-                    || sliceExpression.start().map(start -> containsValueReference(start, variableName)).orElse(false)
-                    || sliceExpression.end().map(end -> containsValueReference(end, variableName)).orElse(false);
+                    || parserExpression(sliceExpression.start()).map(start -> containsValueReference(start, variableName)).orElse(false)
+                    || parserExpression(sliceExpression.end()).map(end -> containsValueReference(end, variableName)).orElse(false);
             case LambdaExpression lambdaExpression -> {
                 if (lambdaExpression.argumentNames().contains(variableName)) {
                     yield false;
@@ -5084,7 +5123,7 @@ public class CapybaraExpressionCompiler {
             case ReduceExpression reduceExpression -> {
                 if (reduceExpression.accumulatorName().equals(variableName)
                     || reduceExpression.valueName().equals(variableName)
-                    || reduceExpression.keyName().map(variableName::equals).orElse(false)) {
+                    || optionalString(reduceExpression.keyName()).map(variableName::equals).orElse(false)) {
                     yield false;
                 }
                 yield containsValueReference(reduceExpression.initialValue(), variableName)
@@ -5302,10 +5341,10 @@ public class CapybaraExpressionCompiler {
     }
 
     private static CompilerError firstError(Result.Error<?> error) {
-        if (CompilerErrors.from(error).isEmpty()) {
+        if (CompilerErrors.from(typedError(error)).isEmpty()) {
             return null;
         }
-        return CompilerErrors.from(error).first();
+        return CompilerErrors.from(typedError(error)).first();
     }
 
     private static CompilerError preferDeeperError(
@@ -5881,7 +5920,7 @@ public class CapybaraExpressionCompiler {
                                                 reduceExpression.position()
                                         );
                                     }
-                                    reduceScope = reduceScope.add(reduceExpression.keyName().orElseThrow(), STRING);
+                                    reduceScope = reduceScope.add(optionalString(reduceExpression.keyName()).orElseThrow(), STRING);
                                 }
                                 reduceScope = reduceScope.add(reduceExpression.valueName(), elementType);
                                 return ResultOps.flatMap(linkExpression(reduceExpression.reducerExpression(), reduceScope), reducer -> {
@@ -5925,7 +5964,7 @@ public class CapybaraExpressionCompiler {
                                             if (!linkedTypeDescriptor(inferredReduceType).equals(linkedTypeDescriptor(accumulatorType))) {
                                                 var refinedReduceScope = scope.add(reduceExpression.accumulatorName(), inferredReduceType);
                                                 if (reduceExpression.keyName().isPresent()) {
-                                                    refinedReduceScope = refinedReduceScope.add(reduceExpression.keyName().orElseThrow(), STRING);
+                                                    refinedReduceScope = refinedReduceScope.add(optionalString(reduceExpression.keyName()).orElseThrow(), STRING);
                                                 }
                                                 refinedReduceScope = refinedReduceScope.add(reduceExpression.valueName(), elementType);
                                                 var refinedReducer = linkExpression(reduceExpression.reducerExpression(), refinedReduceScope);
@@ -7651,7 +7690,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledMatchExpression.MatchCase> linkMatchCase(
-            MatchExpression.MatchCase matchCase,
+            MatchCase matchCase,
             CompiledExpression matchWith,
             Scope scope
     ) {
@@ -7659,7 +7698,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledMatchExpression.MatchCase> linkMatchCase(
-            MatchExpression.MatchCase matchCase,
+            MatchCase matchCase,
             CompiledExpression matchWith,
             Scope scope,
             Optional<CompiledType> expectedType
@@ -7672,7 +7711,7 @@ public class CapybaraExpressionCompiler {
                         branchScope = branchScope.add(matchedVariable.name(), typedPattern.type());
                     }
                     var caseScope = branchScope;
-                    return ResultOps.flatMap(linkGuard(matchCase.guard(), caseScope), guard -> {
+                    return ResultOps.flatMap(linkGuard(parserExpression(matchCase.guard()), caseScope), guard -> {
                         var expressionResult = expectedType
                                 .<Result<CompiledExpression>>map(type -> ResultOps.map(
                                         linkArgumentForExpectedType(matchCase.expression(), caseScope, type),
@@ -7739,28 +7778,28 @@ public class CapybaraExpressionCompiler {
         );
     }
 
-    private Result<PatternAndScope> linkPattern(MatchExpression.Pattern pattern, CompiledType matchType, Scope scope) {
+    private Result<PatternAndScope> linkPattern(Pattern pattern, CompiledType matchType, Scope scope) {
         return switch (pattern) {
-            case MatchExpression.IntPattern intPattern -> validateLiteralPattern(intPattern, matchType, scope, PrimitiveLinkedType.INT);
-            case MatchExpression.LongPattern longPattern -> validateLiteralPattern(longPattern, matchType, scope, PrimitiveLinkedType.LONG);
-            case MatchExpression.StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, PrimitiveLinkedType.STRING);
-            case MatchExpression.BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, PrimitiveLinkedType.BOOL);
-            case MatchExpression.FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, PrimitiveLinkedType.FLOAT);
-            case MatchExpression.TypedPattern typedPattern -> linkTypedPattern(typedPattern, matchType, scope);
-            case MatchExpression.VariablePattern variablePattern -> linkVariablePattern(variablePattern, matchType, scope);
-            case MatchExpression.WildcardPattern wildcardPattern ->
+            case IntPattern intPattern -> validateLiteralPattern(intPattern, matchType, scope, PrimitiveLinkedType.INT);
+            case LongPattern longPattern -> validateLiteralPattern(longPattern, matchType, scope, PrimitiveLinkedType.LONG);
+            case StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, PrimitiveLinkedType.STRING);
+            case BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, PrimitiveLinkedType.BOOL);
+            case FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, PrimitiveLinkedType.FLOAT);
+            case TypedPattern typedPattern -> linkTypedPattern(typedPattern, matchType, scope);
+            case VariablePattern variablePattern -> linkVariablePattern(variablePattern, matchType, scope);
+            case WildcardPattern wildcardPattern ->
                     Results.success(new PatternAndScope(CompiledMatchExpression.WildcardPattern.WILDCARD, scope));
-            case MatchExpression.WildcardBindingPattern wildcardBindingPattern ->
+            case WildcardBindingPattern wildcardBindingPattern ->
                     Results.success(new PatternAndScope(
                             new CompiledMatchExpression.WildcardBindingPattern(wildcardBindingPattern.name()),
                             scope.add(wildcardBindingPattern.name(), matchType)
                     ));
-            case MatchExpression.ConstructorPattern constructorPattern -> linkConstructorPattern(constructorPattern, matchType, scope);
+            case ConstructorPattern constructorPattern -> linkConstructorPattern(constructorPattern, matchType, scope);
         };
     }
 
     private Result<PatternAndScope> validateLiteralPattern(
-            MatchExpression.Pattern pattern,
+            Pattern pattern,
             CompiledType matchType,
             Scope scope,
             PrimitiveLinkedType expected
@@ -7769,22 +7808,22 @@ public class CapybaraExpressionCompiler {
             return Results.error("Cannot match `" + matchType + "` with literal of type `" + expected + "`");
         }
         return switch (pattern) {
-            case MatchExpression.IntPattern intPattern ->
+            case IntPattern intPattern ->
                     Results.success(new PatternAndScope(new CompiledMatchExpression.IntPattern(intPattern.value()), scope));
-            case MatchExpression.LongPattern longPattern ->
+            case LongPattern longPattern ->
                     Results.success(new PatternAndScope(new CompiledMatchExpression.LongPattern(longPattern.value()), scope));
-            case MatchExpression.StringPattern stringPattern ->
+            case StringPattern stringPattern ->
                     Results.success(new PatternAndScope(new CompiledMatchExpression.StringPattern(stringPattern.value()), scope));
-            case MatchExpression.BoolPattern boolPattern ->
+            case BoolPattern boolPattern ->
                     Results.success(new PatternAndScope(new CompiledMatchExpression.BoolPattern(boolPattern.value()), scope));
-            case MatchExpression.FloatPattern floatPattern ->
+            case FloatPattern floatPattern ->
                     Results.success(new PatternAndScope(new CompiledMatchExpression.FloatPattern(floatPattern.value()), scope));
             default -> throw new IllegalStateException("Unexpected literal pattern: " + pattern);
         };
     }
 
     private Result<PatternAndScope> linkVariablePattern(
-            MatchExpression.VariablePattern variablePattern,
+            VariablePattern variablePattern,
             CompiledType matchType,
             Scope scope
     ) {
@@ -7800,7 +7839,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<PatternAndScope> linkTypedPattern(
-            MatchExpression.TypedPattern typedPattern,
+            TypedPattern typedPattern,
             CompiledType matchType,
             Scope scope
     ) {
@@ -7829,13 +7868,13 @@ public class CapybaraExpressionCompiler {
 
     private Optional<String> unsupportedRuntimePatternType(Type type) {
         return switch (type) {
-            case CollectionType.ListType listType -> listType.elementType() == PrimitiveType.ANY
+            case ListType listType -> listType.elementType().equals(ParserAst.ANY)
                     ? Optional.empty()
                     : Optional.of("List");
-            case CollectionType.SetType setType -> setType.elementType() == PrimitiveType.ANY
+            case SetType setType -> setType.elementType().equals(ParserAst.ANY)
                     ? Optional.empty()
                     : Optional.of("Set");
-            case CollectionType.DictType dictType -> dictType.valueType() == PrimitiveType.ANY
+            case DictType dictType -> dictType.valueType().equals(ParserAst.ANY)
                     ? Optional.empty()
                     : Optional.of("Dict");
             case TupleType ignored -> Optional.of("Tuple");
@@ -7849,9 +7888,9 @@ public class CapybaraExpressionCompiler {
 
     private Type defaultAnyPatternTypeArguments(Type type) {
         return switch (type) {
-            case CollectionType.ListType listType -> new CollectionType.ListType(defaultAnyPatternTypeArguments(listType.elementType()));
-            case CollectionType.SetType setType -> new CollectionType.SetType(defaultAnyPatternTypeArguments(setType.elementType()));
-            case CollectionType.DictType dictType -> new CollectionType.DictType(defaultAnyPatternTypeArguments(dictType.valueType()));
+            case ListType listType -> new ListType(defaultAnyPatternTypeArguments(listType.elementType()));
+            case SetType setType -> new SetType(defaultAnyPatternTypeArguments(setType.elementType()));
+            case DictType dictType -> new DictType(defaultAnyPatternTypeArguments(dictType.valueType()));
             case TupleType tupleType -> new TupleType(tupleType.elementTypes().stream()
                     .map(this::defaultAnyPatternTypeArguments)
                     .toList());
@@ -7891,7 +7930,7 @@ public class CapybaraExpressionCompiler {
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         }
 
-        if (PrimitiveType.find(trimmed).isPresent()) {
+        if (ParserAst.findPrimitiveType(trimmed).isPresent()) {
             return trimmed;
         }
         var resolved = resolveDataTypeByName(trimmed);
@@ -7994,7 +8033,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<PatternAndScope> linkConstructorPattern(
-            MatchExpression.ConstructorPattern constructorPattern,
+            ConstructorPattern constructorPattern,
             CompiledType matchType,
             Scope scope
     ) {
@@ -8009,7 +8048,7 @@ public class CapybaraExpressionCompiler {
                     var linkedFieldPatterns = new java.util.ArrayList<CompiledMatchExpression.Pattern>(constructorPattern.fieldPatterns().size());
                     for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
                         var fieldPattern = constructorPattern.fieldPatterns().get(i);
-                        if (fieldPattern instanceof MatchExpression.VariablePattern variablePattern) {
+                        if (fieldPattern instanceof VariablePattern variablePattern) {
                             updatedScope = updatedScope.add(variablePattern.name(), resolvedFields.get(i).type());
                             linkedFieldPatterns.add(new CompiledMatchExpression.VariablePattern(variablePattern.name()));
                             continue;
@@ -8862,7 +8901,7 @@ public class CapybaraExpressionCompiler {
         });
     }
 
-    private Optional<String> firstDuplicateAssignment(List<NewData.FieldAssignment> assignments) {
+    private Optional<String> firstDuplicateAssignment(List<FieldAssignment> assignments) {
         var names = new java.util.LinkedHashSet<String>();
         for (var assignment : assignments) {
             if (!names.add(assignment.name())) {
@@ -9184,7 +9223,7 @@ public class CapybaraExpressionCompiler {
 
     private Optional<PlaceholderExpression> directDataPlaceholder(NewData newData) {
         var fieldPlaceholder = newData.assignments().stream()
-                .map(NewData.FieldAssignment::value)
+                .map(FieldAssignment::value)
                 .filter(PlaceholderExpression.class::isInstance)
                 .map(PlaceholderExpression.class::cast)
                 .findFirst();
@@ -9745,10 +9784,10 @@ public class CapybaraExpressionCompiler {
                                            || newSet.values().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
             case NewDictExpression newDict -> newDict.entries().isEmpty()
                                              || newDict.entries().stream()
-                                                     .map(NewDictExpression.Entry::value)
+                                                     .map(DictEntry::value)
                                                      .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
             case NewData newData -> newData.assignments().stream()
-                    .map(NewData.FieldAssignment::value)
+                    .map(FieldAssignment::value)
                     .anyMatch(this::hasKnownEmptyCollectionShapeExpression)
                                     || newData.positionalArguments().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression)
                                     || newData.spreads().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
@@ -9763,14 +9802,14 @@ public class CapybaraExpressionCompiler {
                     || hasKnownEmptyCollectionShapeExpression(ifExpression.elseBranch());
             case MatchExpression matchExpression ->
                     matchExpression.cases().stream()
-                            .map(MatchExpression.MatchCase::expression)
+                            .map(MatchCase::expression)
                             .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
             case LetExpression letExpression ->
                     hasKnownEmptyCollectionShapeExpression(letExpression.value())
                     || hasKnownEmptyCollectionShapeExpression(letExpression.rest());
             case WithExpression withExpression ->
                     withExpression.assignments().stream()
-                            .map(NewData.FieldAssignment::value)
+                            .map(FieldAssignment::value)
                             .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
             case ReduceExpression reduceExpression ->
                     hasKnownEmptyCollectionShapeExpression(reduceExpression.initialValue())
@@ -9989,7 +10028,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<List<CompiledNewData.FieldAssignment>> linkFieldAssignment(
-            List<NewData.FieldAssignment> assignments,
+            List<FieldAssignment> assignments,
             Scope scope,
             CompiledType type
     ) {
@@ -10177,7 +10216,7 @@ public class CapybaraExpressionCompiler {
     private Optional<SourcePosition> findAssignmentValuePosition(NewData source, String fieldName) {
         return source.assignments().stream()
                 .filter(assignment -> assignment.name().equals(fieldName))
-                .map(NewData.FieldAssignment::value)
+                .map(FieldAssignment::value)
                 .map(Expression::position)
                 .flatMap(Optional::stream)
                 .findFirst();
@@ -10347,11 +10386,11 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             Optional<CompiledType> expectedType
     ) {
-        if (expression.kind() == LetExpression.Kind.RESULT_BIND) {
+        if (expression.kind() == LetKind.RESULT_BIND) {
             return linkBindLetExpression(expression, scope, expectedType);
         }
         if (expression.declaredType().isPresent()) {
-            return ResultOps.flatMap(linkTypeInScope(expression.declaredType().orElseThrow(), scope),
+            return ResultOps.flatMap(linkTypeInScope(parserType(expression.declaredType()).orElseThrow(), scope),
                     linkedDeclaredType -> ResultOps.flatMap(
                             linkArgumentForExpectedType(expression.value(), scope, linkedDeclaredType),
                             coercedValue -> ResultOps.map(linkLetRestExpression(
@@ -10393,7 +10432,7 @@ public class CapybaraExpressionCompiler {
             Optional<CompiledType> expectedType
     ) {
         if (expression.declaredType().isPresent()) {
-            return ResultOps.flatMap(linkTypeInScope(expression.declaredType().orElseThrow(), scope), declaredType -> {
+            return ResultOps.flatMap(linkTypeInScope(parserType(expression.declaredType()).orElseThrow(), scope), declaredType -> {
                         var linkedSource = linkResultBindSourceExpression(expression.value(), scope);
                         if (linkedSource instanceof Result.Success<CompiledExpression> success) {
                             var sourceExpression = success.value();
@@ -10609,16 +10648,16 @@ public class CapybaraExpressionCompiler {
                             rest
                     );
                     var successResultType = resultParentForExpression(rest, expression.position());
-                    if (successResultType instanceof Result.Error<CompiledDataParentType> error) {
-                        return ResultOps.error(error);
+                    if (successResultType instanceof Result.Error<?> error) {
+                        return ResultOps.error(typedError(error));
                     }
                     var wrappedSuccess = ensureResultExpression(
                             successContinuation,
                             ((Result.Success<CompiledDataParentType>) successResultType).value(),
                             expression.position()
                     );
-                    if (wrappedSuccess instanceof Result.Error<CompiledExpression> error) {
-                        return ResultOps.error(error);
+                    if (wrappedSuccess instanceof Result.Error<?> error) {
+                        return ResultOps.error(typedError(error));
                     }
                     var messageVariable = "__result_bind_error_" + scope.localValues().size();
                     return Results.success((CompiledExpression) new CompiledMatchExpression(
@@ -10670,16 +10709,16 @@ public class CapybaraExpressionCompiler {
                 linkEffectBindRestExpression(expression.rest(), scope.add(expression.name(), letType), expectedType),
                 rest -> {
                     var effectResultType = effectParentForExpression(rest, expression.position());
-                    if (effectResultType instanceof Result.Error<CompiledDataParentType> error) {
-                        return ResultOps.error(error);
+                    if (effectResultType instanceof Result.Error<?> error) {
+                        return ResultOps.error(typedError(error));
                     }
                     var wrapped = ensureEffectExpression(
                             rest,
                             ((Result.Success<CompiledDataParentType>) effectResultType).value(),
                             expression.position()
                     );
-                    if (wrapped instanceof Result.Error<CompiledExpression> error) {
-                        return ResultOps.error(error);
+                    if (wrapped instanceof Result.Error<?> error) {
+                        return ResultOps.error(typedError(error));
                     }
                     return Results.success((CompiledExpression) new CompiledEffectBindExpression(
                             expression.name(),
@@ -10801,7 +10840,7 @@ public class CapybaraExpressionCompiler {
                 var linkedValue = linkExpression(letExpression.value(), scope);
                 if (linkedValue instanceof Result.Success<CompiledExpression> success) {
                     var letType = success.value().type();
-                    if (letExpression.kind() == LetExpression.Kind.RESULT_BIND) {
+                    if (letExpression.kind() == LetKind.RESULT_BIND) {
                         letType = resolveSpecializedResultType(success.value().type())
                                 .flatMap(resultType -> {
                                     var successType = findSubtype("Success", resultType);
@@ -10864,9 +10903,9 @@ public class CapybaraExpressionCompiler {
             }
             case SliceExpression sliceExpression -> {
                 collectGenericBindingsFromExpression(variableName, parentType, sliceExpression.source(), scope, bindings);
-                sliceExpression.start().ifPresent(value ->
+                parserExpression(sliceExpression.start()).ifPresent(value ->
                         collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
-                sliceExpression.end().ifPresent(value ->
+                parserExpression(sliceExpression.end()).ifPresent(value ->
                         collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
             }
             case IndexExpression indexExpression -> {
@@ -11085,7 +11124,7 @@ public class CapybaraExpressionCompiler {
     private static <T> Result<T> withPosition(Result<T> valueOrError, Optional<SourcePosition> position) {
         if (valueOrError instanceof Result.Error<T> error && position.isPresent()) {
             var pos = position.get();
-            return CompilerErrors.result(CompilerErrors.from(error)
+            return CompilerErrors.result(CompilerErrors.from(typedError(error))
                     .stream()
                     .map(singleError -> new CompilerError(
                             singleError.line() > 0 ? singleError.line() : pos.line(),

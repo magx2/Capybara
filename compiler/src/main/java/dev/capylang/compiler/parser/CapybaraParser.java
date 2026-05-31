@@ -6,6 +6,8 @@ import capy.lang.Result;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.Results;
 import dev.capylang.compiler.CompilerError;
+import dev.capylang.compiler.parser.ParserAst.Module;
+import dev.capylang.compiler.parser.ParserAst.*;
 import dev.capylang.compiler.parser.ParserAst.AnnotationValue;
 import dev.capylang.parser.antlr.FunctionalParser;
 import org.antlr.v4.runtime.*;
@@ -13,7 +15,6 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.*;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class CapybaraParser {
@@ -22,24 +23,45 @@ public class CapybaraParser {
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String REGEX_MODULE_NAME = "/capy/lang/Regex";
     private static final String REGEX_FACTORY_NAME = "from_literal";
-    private static final Pattern LIST_PATTERN = Pattern.compile("List\\[(.+)]");
-    private static final Pattern SET_PATTERN = Pattern.compile("Set\\[(.+)]");
-    private static final Pattern DICT_PATTERN = Pattern.compile("Dict\\[(.+)]");
-    private static final Pattern TUPLE_PATTERN = Pattern.compile("Tuple\\[(.+)]");
-    private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
-    private static final Pattern MISMATCHED_INPUT_PATTERN = Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
-    private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
-    private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
+    private static final java.util.regex.Pattern LIST_PATTERN = java.util.regex.Pattern.compile("List\\[(.+)]");
+    private static final java.util.regex.Pattern SET_PATTERN = java.util.regex.Pattern.compile("Set\\[(.+)]");
+    private static final java.util.regex.Pattern DICT_PATTERN = java.util.regex.Pattern.compile("Dict\\[(.+)]");
+    private static final java.util.regex.Pattern TUPLE_PATTERN = java.util.regex.Pattern.compile("Tuple\\[(.+)]");
+    private static final java.util.regex.Pattern NO_VIABLE_ALTERNATIVE_PATTERN = java.util.regex.Pattern.compile("no viable alternative at input '(.+)'");
+    private static final java.util.regex.Pattern MISMATCHED_INPUT_PATTERN = java.util.regex.Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
+    private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
+    private static final java.util.regex.Pattern ENUM_VALUE_NAME_PATTERN = java.util.regex.Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
     private static final String MODULE_NAME_PATTERN = "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+";
-    private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
+    private static final java.util.regex.Pattern FROM_IMPORT_PATTERN = java.util.regex.Pattern.compile(
             "^\\s*from\\s+(" + MODULE_NAME_PATTERN + ")\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
-    private static final Pattern QUALIFIED_IMPORT_PATTERN = Pattern.compile(
+    private static final java.util.regex.Pattern QUALIFIED_IMPORT_PATTERN = java.util.regex.Pattern.compile(
             "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
     );
     private final List<CompilerError> parserErrors = new ArrayList<>();
     private RawModule currentModule;
     private String currentSource;
+
+    @SuppressWarnings("unchecked")
+    private static <T> Optional<T> typedOptional(Optional value) {
+        return (Optional<T>) value;
+    }
+
+    private static Optional<SourcePosition> sourcePosition(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<Type> parserType(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<Expression> parserExpression(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<String> optionalString(Optional value) {
+        return typedOptional(value);
+    }
 
     public synchronized Result<Program> parseModule(Collection<RawModule> rawModules) {
         try {
@@ -262,7 +284,7 @@ public class CapybaraParser {
     private CompilerError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
         var lines = source.split("\\R", -1);
         var lineText = lines[Math.max(0, Math.min(syntaxError.line() - 1, lines.length - 1))].stripLeading();
-        var removedSingle = Pattern.compile("^single\\s+((?:_*)[A-Z][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s*(?://.*)?$").matcher(lineText);
+        var removedSingle = java.util.regex.Pattern.compile("^single\\s+((?:_*)[A-Z][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s*(?://.*)?$").matcher(lineText);
         if (removedSingle.matches()) {
             var name = removedSingle.group(1);
             return formatParserError(
@@ -340,10 +362,10 @@ public class CapybaraParser {
 
     private CompilerError duplicateLocalFunctionError(List<Function> functions) {
         var firstFunction = functions.getFirst();
-        var firstPosition = firstFunction.position().orElseThrow();
+        var firstPosition = sourcePosition(firstFunction.position()).orElseThrow();
         var originalName = firstFunction.name().replaceFirst("^.*__local_fun_\\d+_", "");
         var locations = functions.stream()
-                .map(function -> function.position().orElseThrow())
+                .map(function -> sourcePosition(function.position()).orElseThrow())
                 .map(position -> "%d:%d".formatted(position.line(), position.column()))
                 .distinct()
                 .collect(java.util.stream.Collectors.joining(", "));
@@ -372,10 +394,10 @@ public class CapybaraParser {
 
     private CompilerError duplicateLocalConstError(List<Function> functions) {
         var firstFunction = functions.getFirst();
-        var firstPosition = firstFunction.position().orElseThrow();
+        var firstPosition = sourcePosition(firstFunction.position()).orElseThrow();
         var originalName = firstFunction.name().replaceFirst("^.*__local_const_\\d+_", "");
         var locations = functions.stream()
-                .map(function -> function.position().orElseThrow())
+                .map(function -> sourcePosition(function.position()).orElseThrow())
                 .map(position -> "%d:%d".formatted(position.line(), position.column()))
                 .distinct()
                 .collect(java.util.stream.Collectors.joining(", "));
@@ -388,9 +410,9 @@ public class CapybaraParser {
     }
 
     private CompilerError formatParserError(RawModule module, String source, String rawMessage) {
-        var parserError = Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(String.valueOf(rawMessage));
+        var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(String.valueOf(rawMessage));
         if (!parserError.matches()) {
-            var duplicateLocalFunctionMatcher = Pattern.compile("Duplicate local function name: ([A-Za-z_][A-Za-z0-9_]*)").matcher(String.valueOf(rawMessage));
+            var duplicateLocalFunctionMatcher = java.util.regex.Pattern.compile("Duplicate local function name: ([A-Za-z_][A-Za-z0-9_]*)").matcher(String.valueOf(rawMessage));
             if (duplicateLocalFunctionMatcher.find()) {
                 var localName = duplicateLocalFunctionMatcher.group(1);
                 var locations = findLocalFunctionLocations(source, localName);
@@ -459,7 +481,7 @@ public class CapybaraParser {
 
     private List<SourcePosition> findLocalFunctionLocations(String source, String localName) {
         var locations = new ArrayList<SourcePosition>();
-        var pattern = Pattern.compile("(^|\\R)([ \\t]*)fun\\s+" + Pattern.quote(localName) + "\\s*\\(");
+        var pattern = java.util.regex.Pattern.compile("(^|\\R)([ \\t]*)fun\\s+" + java.util.regex.Pattern.quote(localName) + "\\s*\\(");
         var matcher = pattern.matcher(source);
         while (matcher.find()) {
             var prefix = source.substring(0, matcher.start(2));
@@ -527,7 +549,7 @@ public class CapybaraParser {
     private PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration(FunctionalParser.PrimitiveBackedTypeDeclarationContext context) {
         return new PrimitiveBackedTypeDeclaration(
                 context.primitiveBackedTypeName().getText(),
-                PrimitiveType.find(context.primitiveBackingType().getText())
+                ParserAst.findPrimitiveType(context.primitiveBackingType().getText())
                         .orElseThrow(() -> new IllegalStateException("Unknown primitive backing type: " + context.primitiveBackingType().getText())),
                 constructorExpression(context.constructorClause()),
                 context.docComment().stream()
@@ -601,10 +623,10 @@ public class CapybaraParser {
         );
     }
 
-    private DeriverDeclaration.DeriverMethod deriverMethodDeclaration(
+    private DeriverMethod deriverMethodDeclaration(
             FunctionalParser.DeriverMethodDeclarationContext context
     ) {
-        return new DeriverDeclaration.DeriverMethod(
+        return new DeriverMethod(
                 identifier(context.identifier()),
                 parameters(context.parameters()),
                 type(context.functionType().type()),
@@ -734,6 +756,7 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
+                null,
                 position(context),
                 annotations(context.annotationBlock())
         );
@@ -759,18 +782,18 @@ public class CapybaraParser {
         );
     }
 
-    private List<DataDeclaration.DataField> fieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
+    private List<DataField> fieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
         return context.fieldDeclaration()
                 .stream()
                 .map(this::fieldDeclaration)
                 .toList();
     }
 
-    private DataDeclaration.DataField fieldDeclaration(FunctionalParser.FieldDeclarationContext context) {
+    private DataField fieldDeclaration(FunctionalParser.FieldDeclarationContext context) {
         if (context.SPREAD() != null) {
             throw new IllegalStateException("Spread field declaration is not allowed in this context: " + context.getText());
         }
-        return new DataDeclaration.DataField(
+        return new DataField(
                 fieldName(context.identifier(), context.STRING_LITERAL()),
                 type(context.type()),
                 annotations(context.annotationBlock())
@@ -1015,7 +1038,10 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                position(context)
+                null,
+                position(context),
+                false,
+                List.of()
         );
     }
 
@@ -1036,7 +1062,7 @@ public class CapybaraParser {
                 .map(this::fieldDeclarationList)
                 .stream()
                 .flatMap(Collection::stream)
-                .map(field -> new DataDeclaration.DataField(
+                .map(field -> new DataField(
                         field.name(),
                         rewriteLocalTypeNames(field.type(), localTypeNameMap),
                         field.annotations()))
@@ -1055,7 +1081,10 @@ public class CapybaraParser {
                 constructorExpression(context.constructorClause())
                         .map(expression -> rewriteLocalNames(expression, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                 List.of(),
-                position(context)
+                List.of(),
+                null,
+                position(context),
+                List.of()
         );
     }
 
@@ -1077,7 +1106,7 @@ public class CapybaraParser {
         return new DataDeclaration(
                 mappedDataName,
                 dataFields.fields().stream()
-                        .map(field -> new DataDeclaration.DataField(
+                        .map(field -> new DataField(
                                 field.name(),
                                 rewriteLocalTypeNames(field.type(), localTypeNameMap),
                                 field.annotations()
@@ -1093,7 +1122,8 @@ public class CapybaraParser {
                 List.of(),
                 null,
                 nativeType,
-                position(context)
+                position(context),
+                List.of()
         );
     }
 
@@ -1135,7 +1165,7 @@ public class CapybaraParser {
                             functionCall.position()
                     );
                 }
-                var rewrittenModuleName = functionCall.moduleName()
+                var rewrittenModuleName = optionalString(functionCall.moduleName())
                         .map(name -> rewriteLocalTypeName(name, localTypeNameMap));
                 yield new FunctionCall(
                         rewrittenModuleName,
@@ -1169,7 +1199,7 @@ public class CapybaraParser {
             );
             case LetExpression letExpression -> new LetExpression(
                     letExpression.name(),
-                    letExpression.declaredType().map(type -> rewriteLocalTypeNames(type, localTypeNameMap)),
+                    parserType(letExpression.declaredType()).map(type -> rewriteLocalTypeNames(type, localTypeNameMap)),
                     letExpression.kind(),
                     rewriteLocalNames(letExpression.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     rewriteLocalNames(letExpression.rest(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
@@ -1214,16 +1244,16 @@ public class CapybaraParser {
             );
             case SliceExpression sliceExpression -> new SliceExpression(
                     rewriteLocalNames(sliceExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
-                    sliceExpression.start().map(start -> rewriteLocalNames(start, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
-                    sliceExpression.end().map(end -> rewriteLocalNames(end, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
+                    parserExpression(sliceExpression.start()).map(start -> rewriteLocalNames(start, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
+                    parserExpression(sliceExpression.end()).map(end -> rewriteLocalNames(end, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                     sliceExpression.position()
             );
             case MatchExpression matchExpression -> new MatchExpression(
                     rewriteLocalNames(matchExpression.matchWith(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     matchExpression.cases().stream()
-                            .map(matchCase -> new MatchExpression.MatchCase(
+                            .map(matchCase -> new MatchCase(
                                     rewriteLocalTypeNames(matchCase.pattern(), localTypeNameMap),
-                                    matchCase.guard().map(guard -> rewriteLocalNames(guard, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
+                                    parserExpression(matchCase.guard()).map(guard -> rewriteLocalNames(guard, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                                     rewriteLocalNames(matchCase.expression(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
                             .toList(),
@@ -1233,7 +1263,7 @@ public class CapybaraParser {
                     rewriteLocalTypeNames(newData.type(), localTypeNameMap),
                     newData.bypassConstructor(),
                     newData.assignments().stream()
-                            .map(assignment -> new NewData.FieldAssignment(
+                            .map(assignment -> new FieldAssignment(
                                     assignment.name(),
                                     rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
@@ -1248,7 +1278,7 @@ public class CapybaraParser {
             );
             case ConstructorData constructorData -> new ConstructorData(
                     constructorData.assignments().stream()
-                            .map(assignment -> new NewData.FieldAssignment(
+                            .map(assignment -> new FieldAssignment(
                                     assignment.name(),
                                     rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
@@ -1264,7 +1294,7 @@ public class CapybaraParser {
             case WithExpression withExpression -> new WithExpression(
                     rewriteLocalNames(withExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     withExpression.assignments().stream()
-                            .map(assignment -> new NewData.FieldAssignment(
+                            .map(assignment -> new FieldAssignment(
                                     assignment.name(),
                                     rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
@@ -1285,7 +1315,7 @@ public class CapybaraParser {
             );
             case NewDictExpression newDictExpression -> new NewDictExpression(
                     newDictExpression.entries().stream()
-                            .map(entry -> new NewDictExpression.Entry(
+                            .map(entry -> new DictEntry(
                                     rewriteLocalNames(entry.key(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                                     rewriteLocalNames(entry.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
@@ -1307,25 +1337,25 @@ public class CapybaraParser {
         };
     }
 
-    private MatchExpression.Pattern rewriteLocalTypeNames(
-            MatchExpression.Pattern pattern,
+    private Pattern rewriteLocalTypeNames(
+            Pattern pattern,
             java.util.Map<String, String> localTypeNameMap
     ) {
         return switch (pattern) {
-            case MatchExpression.TypedPattern typedPattern -> new MatchExpression.TypedPattern(
+            case TypedPattern typedPattern -> new TypedPattern(
                     rewriteLocalTypeNames(typedPattern.type(), localTypeNameMap),
                     typedPattern.name()
             );
-            case MatchExpression.ConstructorPattern constructorPattern -> new MatchExpression.ConstructorPattern(
+            case ConstructorPattern constructorPattern -> new ConstructorPattern(
                     rewriteLocalTypeName(constructorPattern.constructorName(), localTypeNameMap),
                     constructorPattern.fieldPatterns().stream()
                             .map(fieldPattern -> rewriteLocalTypeNames(fieldPattern, localTypeNameMap))
                             .toList()
             );
-            case MatchExpression.VariablePattern variablePattern -> {
+            case VariablePattern variablePattern -> {
                 var mapped = localTypeNameMap.get(variablePattern.name());
                 if (mapped != null) {
-                    yield new MatchExpression.VariablePattern(mapped);
+                    yield new VariablePattern(mapped);
                 }
                 yield variablePattern;
             }
@@ -1336,13 +1366,13 @@ public class CapybaraParser {
     private Type rewriteLocalTypeNames(Type type, java.util.Map<String, String> localTypeNameMap) {
         return switch (type) {
             case DataType dataType -> new DataType(rewriteLocalTypeName(dataType.name(), localTypeNameMap));
-            case CollectionType.ListType listType -> new CollectionType.ListType(
+            case ListType listType -> new ListType(
                     rewriteLocalTypeNames(listType.elementType(), localTypeNameMap)
             );
-            case CollectionType.SetType setType -> new CollectionType.SetType(
+            case SetType setType -> new SetType(
                     rewriteLocalTypeNames(setType.elementType(), localTypeNameMap)
             );
-            case CollectionType.DictType dictType -> new CollectionType.DictType(
+            case DictType dictType -> new DictType(
                     rewriteLocalTypeNames(dictType.valueType(), localTypeNameMap)
             );
             case FunctionType functionType -> new FunctionType(
@@ -1414,7 +1444,7 @@ public class CapybaraParser {
             if ("(".equals(context.getChild(0).getText())) {
                 var parts = context.type();
                 if (parts.size() == 1) {
-                    return new FunctionType(PrimitiveType.NOTHING, type(parts.getFirst()));
+                    return new FunctionType(ParserAst.NOTHING, type(parts.getFirst()));
                 }
                 var returnType = type(parts.get(parts.size() - 1));
                 var functionType = returnType;
@@ -1429,7 +1459,7 @@ public class CapybaraParser {
     }
 
     private static Type type(String name) {
-        return PrimitiveType.find(name)
+        return ParserAst.findPrimitiveType(name)
                 .map(Type.class::cast)
                 .or(() -> findCollectionType(name))
                 .or(() -> findTupleType(name))
@@ -1443,9 +1473,9 @@ public class CapybaraParser {
     }
 
     private static Optional<Type> findCollectionType(String name) {
-        return findCollectionType(name, LIST_PATTERN, CollectionType.ListType::new)
-                .or(() -> findCollectionType(name, SET_PATTERN, CollectionType.SetType::new))
-                .or(() -> findCollectionType(name, DICT_PATTERN, CollectionType.DictType::new));
+        return findCollectionType(name, LIST_PATTERN, ListType::new)
+                .or(() -> findCollectionType(name, SET_PATTERN, SetType::new))
+                .or(() -> findCollectionType(name, DICT_PATTERN, DictType::new));
     }
 
     private static Optional<Type> findTupleType(String name) {
@@ -1471,7 +1501,7 @@ public class CapybaraParser {
         var right = name.substring(arrowIndex + 2).trim();
         var returnType = type(right);
         if ("()".equals(left)) {
-            return Optional.of(new FunctionType(PrimitiveType.NOTHING, returnType));
+            return Optional.of(new FunctionType(ParserAst.NOTHING, returnType));
         }
         var strippedLeft = stripOptionalParentheses(left);
         var arguments = splitTopLevelTypeArguments(strippedLeft);
@@ -1582,7 +1612,7 @@ public class CapybaraParser {
         return Optional.empty();
     }
 
-    private static Optional<Type> findCollectionType(String name, Pattern pattern, java.util.function.Function<Type, CollectionType> creator) {
+    private static Optional<Type> findCollectionType(String name, java.util.regex.Pattern pattern, java.util.function.Function<Type, Type> creator) {
         return Optional.of(pattern)
                 .map(p -> p.matcher(name))
                 .filter(Matcher::matches)
@@ -1599,7 +1629,7 @@ public class CapybaraParser {
             result = new LetExpression(
                     letExpression.identifier().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
-                    letExpression.letBindingOperator().ASSIGN() != null ? LetExpression.Kind.ASSIGN : LetExpression.Kind.RESULT_BIND,
+                    letExpression.letBindingOperator().ASSIGN() != null ? LetKind.ASSIGN : LetKind.RESULT_BIND,
                     expressionNoLet(letExpression.expressionNoLet()),
                     result,
                     position(letExpression)
@@ -1616,7 +1646,7 @@ public class CapybaraParser {
             result = new LetExpression(
                     letExpression.identifier().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
-                    letExpression.letBindingOperator().ASSIGN() != null ? LetExpression.Kind.ASSIGN : LetExpression.Kind.RESULT_BIND,
+                    letExpression.letBindingOperator().ASSIGN() != null ? LetKind.ASSIGN : LetKind.RESULT_BIND,
                     expressionNoLet(letExpression.expressionNoLet()),
                     result,
                     position(letExpression)
@@ -1689,7 +1719,7 @@ public class CapybaraParser {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
                 }
                 if (literal.NOTHING_LITERAL() != null) {
-                    return new NothingValue(position(literal.NOTHING_LITERAL()));
+                    return new NothingValue(position(literal.NOTHING_LITERAL()), "???");
                 }
                 if (literal.NATIVE_LITERAL() != null) {
                     return new NothingValue(position(literal.NATIVE_LITERAL()), literal.NATIVE_LITERAL().getText());
@@ -1982,7 +2012,7 @@ public class CapybaraParser {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
                 }
                 if (literal.NOTHING_LITERAL() != null) {
-                    return new NothingValue(position(literal.NOTHING_LITERAL()));
+                    return new NothingValue(position(literal.NOTHING_LITERAL()), "???");
                 }
                 if (literal.NATIVE_LITERAL() != null) {
                     return new NothingValue(position(literal.NATIVE_LITERAL()), literal.NATIVE_LITERAL().getText());
@@ -2514,12 +2544,12 @@ public class CapybaraParser {
         );
     }
 
-    private MatchExpression.MatchCase matchCase(
+    private MatchCase matchCase(
             FunctionalParser.PatternContext pattern,
             FunctionalParser.ExpressionContext guard,
             FunctionalParser.ExpressionContext expression
     ) {
-        return new MatchExpression.MatchCase(
+        return new MatchCase(
                 matchExpressionPattern(pattern),
                 Optional.ofNullable(guard).map(this::expression),
                 this.expression(expression)
@@ -2527,12 +2557,12 @@ public class CapybaraParser {
         );
     }
 
-    private MatchExpression.MatchCase matchCase(
+    private MatchCase matchCase(
             FunctionalParser.PatternContext pattern,
             FunctionalParser.ExpressionNoPipeContext guard,
             FunctionalParser.ExpressionNoPipeContext expression
     ) {
-        return new MatchExpression.MatchCase(
+        return new MatchCase(
                 matchExpressionPattern(pattern),
                 Optional.ofNullable(guard).map(this::expressionNoPipe),
                 expressionNoPipe(expression)
@@ -2540,45 +2570,45 @@ public class CapybaraParser {
         );
     }
 
-    private MatchExpression.Pattern matchExpressionPattern(FunctionalParser.PatternContext context) {
+    private Pattern matchExpressionPattern(FunctionalParser.PatternContext context) {
         var type = context.TYPE();
         if (type != null) {
             var typeName = type.getText();
             if ("List".equals(typeName)) {
-                return new MatchExpression.TypedPattern(new CollectionType.ListType(PrimitiveType.ANY), "__ignored");
+                return new TypedPattern(new ListType(ParserAst.ANY), "__ignored");
             }
             if ("Set".equals(typeName)) {
-                return new MatchExpression.TypedPattern(new CollectionType.SetType(PrimitiveType.ANY), "__ignored");
+                return new TypedPattern(new SetType(ParserAst.ANY), "__ignored");
             }
             if ("Dict".equals(typeName)) {
-                return new MatchExpression.TypedPattern(new CollectionType.DictType(PrimitiveType.ANY), "__ignored");
+                return new TypedPattern(new DictType(ParserAst.ANY), "__ignored");
             }
-            return new MatchExpression.VariablePattern(type.getText());
+            return new VariablePattern(type.getText());
         }
 
         var boolLiteral = context.BOOL_LITERAL();
         if (boolLiteral != null) {
-            return new MatchExpression.BoolPattern(boolLiteral.getText());
+            return new BoolPattern(boolLiteral.getText());
         }
 
         var intLiteral = context.INT_LITERAL();
         if (intLiteral != null) {
-            return new MatchExpression.IntPattern(intLiteral.getText());
+            return new IntPattern(intLiteral.getText());
         }
 
         var longLiteral = context.LONG_LITERAL();
         if (longLiteral != null) {
-            return new MatchExpression.LongPattern(longLiteral.getText());
+            return new LongPattern(longLiteral.getText());
         }
 
         var stringLiteral = context.STRING_LITERAL();
         if (stringLiteral != null) {
-            return new MatchExpression.StringPattern(normalizeStringLiteral(stringLiteral.getText()));
+            return new StringPattern(normalizeStringLiteral(stringLiteral.getText()));
         }
 
         var floatLiteral = context.FLOAT_LITERAL();
         if (floatLiteral != null) {
-            return new MatchExpression.FloatPattern(floatLiteral.getText());
+            return new FloatPattern(floatLiteral.getText());
         }
 
         var typedPattern = context.typedPattern();
@@ -2586,7 +2616,7 @@ public class CapybaraParser {
             var patternName = typedPattern.NAME() != null
                     ? typedPattern.NAME().getText()
                     : "__ignored";
-            return new MatchExpression.TypedPattern(
+            return new TypedPattern(
                     patternType(typedPattern.patternType()),
                     patternName
             );
@@ -2594,7 +2624,7 @@ public class CapybaraParser {
 
         var patternType = context.patternType();
         if (patternType != null) {
-            return new MatchExpression.TypedPattern(
+            return new TypedPattern(
                     patternType(patternType),
                     "__ignored"
             );
@@ -2604,19 +2634,19 @@ public class CapybaraParser {
         if (wildcardPattern != null) {
             var wildcardName = wildcardPattern.NAME();
             if (wildcardName == null) {
-                return MatchExpression.WildcardPattern.WILDCARD;
+                return WildcardPattern.INSTANCE;
             }
-            return new MatchExpression.WildcardBindingPattern(wildcardName.getText());
+            return new WildcardBindingPattern(wildcardName.getText());
         }
 
         var identifier = context.identifier();
         if (identifier != null) {
-            return new MatchExpression.VariablePattern(this.identifier(identifier));
+            return new VariablePattern(this.identifier(identifier));
         }
 
         var constructorPattern = context.constructorPattern();
         if (constructorPattern != null) {
-            return new MatchExpression.ConstructorPattern(
+            return new ConstructorPattern(
                     constructorPattern.TYPE().getText(),
                     constructorPattern.fieldPatternList() == null
                             ? List.of()
@@ -2632,9 +2662,9 @@ public class CapybaraParser {
     private static Type patternType(FunctionalParser.PatternTypeContext context) {
         if (context.type().isEmpty()) {
             return switch (context.getText()) {
-                case "List" -> new CollectionType.ListType(PrimitiveType.ANY);
-                case "Set" -> new CollectionType.SetType(PrimitiveType.ANY);
-                case "Dict" -> new CollectionType.DictType(PrimitiveType.ANY);
+                case "List" -> new ListType(ParserAst.ANY);
+                case "Set" -> new SetType(ParserAst.ANY);
+                case "Dict" -> new DictType(ParserAst.ANY);
                 default -> type(context.getText());
             };
         }
@@ -2670,8 +2700,8 @@ public class CapybaraParser {
         );
     }
 
-    private NewDictExpression.Entry dictEntry(dev.capylang.parser.antlr.FunctionalParser.Dict_entryContext context) {
-        return new NewDictExpression.Entry(
+    private DictEntry dictEntry(dev.capylang.parser.antlr.FunctionalParser.Dict_entryContext context) {
+        return new DictEntry(
                 expression(context.expression(0)),
                 expression(context.expression(1))
         );
@@ -2725,7 +2755,7 @@ public class CapybaraParser {
         return new TupleExpression(values, position(context));
     }
 
-    private NewData.FieldAssignment fieldAssignment(dev.capylang.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
+    private FieldAssignment fieldAssignment(dev.capylang.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
         if (context.spreadFieldAssignment() != null) {
             throw new IllegalStateException("Spread field assignment is not allowed in this context: " + context.getText());
         }
@@ -2733,14 +2763,14 @@ public class CapybaraParser {
         if (named == null) {
             throw new IllegalStateException("Named field assignment is not available in this context: " + context.getText());
         }
-        return new NewData.FieldAssignment(fieldName(named.identifier(), named.STRING_LITERAL()), expression(named.expression()));
+        return new FieldAssignment(fieldName(named.identifier(), named.STRING_LITERAL()), expression(named.expression()));
     }
 
     private DataFieldDeclarations dataFieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
         if (context == null) {
             return new DataFieldDeclarations(List.of(), List.of());
         }
-        var fields = new java.util.ArrayList<DataDeclaration.DataField>();
+        var fields = new java.util.ArrayList<DataField>();
         var extendsTypes = new java.util.ArrayList<String>();
         var seenSpread = false;
         for (var declaration : context.fieldDeclaration()) {
@@ -2786,7 +2816,7 @@ public class CapybaraParser {
         if (context == null) {
             return new NewDataFieldAssignments(List.of(), List.of(), List.of());
         }
-        var assignments = new java.util.ArrayList<NewData.FieldAssignment>();
+        var assignments = new java.util.ArrayList<FieldAssignment>();
         var positionalArguments = new java.util.ArrayList<Expression>();
         var spreads = new java.util.ArrayList<Expression>();
         for (var assignment : context.fieldAssignment()) {
@@ -2809,12 +2839,12 @@ public class CapybaraParser {
         if (context == null) {
             return new MethodArguments(List.of(), List.of());
         }
-        var assignments = new java.util.ArrayList<NewData.FieldAssignment>();
+        var assignments = new java.util.ArrayList<FieldAssignment>();
         var positionalArguments = new java.util.ArrayList<Expression>();
         for (var argument : context.methodArgument()) {
             if (argument.namedMethodArgument() != null) {
                 var named = argument.namedMethodArgument();
-                assignments.add(new NewData.FieldAssignment(
+                assignments.add(new FieldAssignment(
                         identifier(named.identifier()),
                         expression(named.expression())
                 ));
@@ -3079,9 +3109,9 @@ public class CapybaraParser {
             case LongValue value -> new LongValue(value.longValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
             case MatchExpression value -> new MatchExpression(
                     shiftInterpolationPositions(value.matchWith(), stringPosition, interpolationOffset),
-                    value.cases().stream().map(matchCase -> new MatchExpression.MatchCase(
+                    value.cases().stream().map(matchCase -> new MatchCase(
                             matchCase.pattern(),
-                            matchCase.guard().map(guard -> shiftInterpolationPositions(guard, stringPosition, interpolationOffset)),
+                            parserExpression(matchCase.guard()).map(guard -> shiftInterpolationPositions(guard, stringPosition, interpolationOffset)),
                             shiftInterpolationPositions(matchCase.expression(), stringPosition, interpolationOffset)
                     )).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
@@ -3089,7 +3119,7 @@ public class CapybaraParser {
             case NewData value -> new NewData(
                     value.type(),
                     value.bypassConstructor(),
-                    value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
+                    value.assignments().stream().map(assignment -> new FieldAssignment(
                             assignment.name(),
                             shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
                     )).toList(),
@@ -3098,7 +3128,7 @@ public class CapybaraParser {
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
             case ConstructorData value -> new ConstructorData(
-                    value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
+                    value.assignments().stream().map(assignment -> new FieldAssignment(
                             assignment.name(),
                             shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
                     )).toList(),
@@ -3108,14 +3138,14 @@ public class CapybaraParser {
             );
             case WithExpression value -> new WithExpression(
                     shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
-                    value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
+                    value.assignments().stream().map(assignment -> new FieldAssignment(
                             assignment.name(),
                             shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
                     )).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
             case NewDictExpression value -> new NewDictExpression(
-                    value.entries().stream().map(entry -> new NewDictExpression.Entry(
+                    value.entries().stream().map(entry -> new DictEntry(
                             shiftInterpolationPositions(entry.key(), stringPosition, interpolationOffset),
                             shiftInterpolationPositions(entry.value(), stringPosition, interpolationOffset)
                     )).toList(),
@@ -3140,8 +3170,8 @@ public class CapybaraParser {
             );
             case SliceExpression value -> new SliceExpression(
                     shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
-                    value.start().map(start -> shiftInterpolationPositions(start, stringPosition, interpolationOffset)),
-                    value.end().map(end -> shiftInterpolationPositions(end, stringPosition, interpolationOffset)),
+                    parserExpression(value.start()).map(start -> shiftInterpolationPositions(start, stringPosition, interpolationOffset)),
+                    parserExpression(value.end()).map(end -> shiftInterpolationPositions(end, stringPosition, interpolationOffset)),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
             case StringValue value -> new StringValue(value.stringValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
@@ -3339,21 +3369,21 @@ public class CapybaraParser {
 
     private static Optional<Type> inferConstType(Expression expression) {
         return switch (expression) {
-            case BooleanValue ignored -> Optional.of(PrimitiveType.BOOL);
-            case ByteValue ignored -> Optional.of(PrimitiveType.BYTE);
-            case IntValue ignored -> Optional.of(PrimitiveType.INT);
-            case LongValue ignored -> Optional.of(PrimitiveType.LONG);
-            case DoubleValue ignored -> Optional.of(PrimitiveType.DOUBLE);
-            case FloatValue ignored -> Optional.of(PrimitiveType.FLOAT);
-            case StringValue ignored -> Optional.of(PrimitiveType.STRING);
-            case NothingValue ignored -> Optional.of(PrimitiveType.NOTHING);
+            case BooleanValue ignored -> Optional.of(ParserAst.BOOL);
+            case ByteValue ignored -> Optional.of(ParserAst.BYTE);
+            case IntValue ignored -> Optional.of(ParserAst.INT);
+            case LongValue ignored -> Optional.of(ParserAst.LONG);
+            case DoubleValue ignored -> Optional.of(ParserAst.DOUBLE);
+            case FloatValue ignored -> Optional.of(ParserAst.FLOAT);
+            case StringValue ignored -> Optional.of(ParserAst.STRING);
+            case NothingValue ignored -> Optional.of(ParserAst.NOTHING);
             case NewListExpression newList -> inferCollectionElementType(newList.values())
-                    .map(CollectionType.ListType::new);
+                    .map(ListType::new);
             case NewSetExpression newSet -> inferCollectionElementType(newSet.values())
-                    .map(CollectionType.SetType::new);
+                    .map(SetType::new);
             case NewDictExpression newDict -> inferCollectionElementType(
-                            newDict.entries().stream().map(NewDictExpression.Entry::value).toList())
-                    .map(CollectionType.DictType::new);
+                            newDict.entries().stream().map(DictEntry::value).toList())
+                    .map(DictType::new);
             default -> Optional.empty();
         };
     }
@@ -3361,8 +3391,8 @@ public class CapybaraParser {
     private static Optional<Type> inferCollectionElementType(List<Expression> values) {
         return values.stream()
                 .map(CapybaraParser::inferConstType)
-                .reduce((left, right) -> left.equals(right) ? left : Optional.of(PrimitiveType.ANY))
-                .orElse(Optional.of(PrimitiveType.ANY));
+                .reduce((left, right) -> left.equals(right) ? left : Optional.of(ParserAst.ANY))
+                .orElse(Optional.of(ParserAst.ANY));
     }
 
     private static String methodIdentifier(FunctionalParser.MethodIdentifierContext context) {
@@ -4106,18 +4136,18 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {
+    private record DataFieldDeclarations(List<DataField> fields, List<String> extendsTypes) {
     }
 
     private record NewDataFieldAssignments(
-            List<NewData.FieldAssignment> assignments,
+            List<FieldAssignment> assignments,
             List<Expression> positionalArguments,
             List<Expression> spreads
     ) {
     }
 
     private record MethodArguments(
-            List<NewData.FieldAssignment> assignments,
+            List<FieldAssignment> assignments,
             List<Expression> positionalArguments
     ) {
     }
