@@ -11,7 +11,41 @@ import static dev.capylang.compiler.PrimitiveLinkedType.ENUM;
 import static dev.capylang.compiler.PrimitiveLinkedType.NOTHING;
 
 public class CapybaraTypeFinder {
+    private static final String EXPRESSION_PASS_PROPERTY = "capybara.compiler.useCapybaraExpressionCompilationPass";
+
     public static CompiledType findHigherType(CompiledType left, CompiledType right) {
+        if (useCapybaraExpressionCompilationPass()) {
+            return findHigherTypeWithCapybaraPass(left, right);
+        }
+        return findHigherTypeLegacy(left, right);
+    }
+
+    private static CompiledType findHigherTypeWithCapybaraPass(CompiledType left, CompiledType right) {
+        var decision = expressionCompilationPassHigherTypeDecision(
+                typeDecisionName(left),
+                left instanceof PrimitiveLinkedType,
+                isEnumLikeType(left),
+                typeDecisionName(right),
+                right instanceof PrimitiveLinkedType,
+                isEnumLikeType(right)
+        );
+        if ("LEFT".equals(decision)) {
+            return left;
+        }
+        if ("RIGHT".equals(decision)) {
+            return right;
+        }
+        return PrimitiveLinkedType.find(decision).map(type -> (CompiledType) type).orElse(ANY);
+    }
+
+    private static String typeDecisionName(CompiledType type) {
+        if (type instanceof PrimitiveLinkedType primitive) {
+            return primitive.name();
+        }
+        return type.name();
+    }
+
+    private static CompiledType findHigherTypeLegacy(CompiledType left, CompiledType right) {
         if (left.equals(right)) return left;
         if (left == NOTHING) return right;
         if (right == NOTHING) return left;
@@ -90,6 +124,27 @@ public class CapybaraTypeFinder {
     /// @return higher type
     ///
     public static CompiledType findHigherType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+        if (useCapybaraExpressionCompilationPass()) {
+            var decision = expressionCompilationPassHigherTypeDecision(
+                    left.name(),
+                    true,
+                    isEnumLikeType(left),
+                    right.name(),
+                    true,
+                    isEnumLikeType(right)
+            );
+            if ("LEFT".equals(decision)) {
+                return left;
+            }
+            if ("RIGHT".equals(decision)) {
+                return right;
+            }
+            return PrimitiveLinkedType.find(decision).map(type -> (CompiledType) type).orElse(ANY);
+        }
+        return findHigherPrimitiveTypeLegacy(left, right);
+    }
+
+    private static CompiledType findHigherPrimitiveTypeLegacy(PrimitiveLinkedType left, PrimitiveLinkedType right) {
         if (left == NOTHING) {
             return right;
         }
@@ -109,5 +164,44 @@ public class CapybaraTypeFinder {
             return right;
         }
         return left;
+    }
+
+    private static boolean useCapybaraExpressionCompilationPass() {
+        return Boolean.parseBoolean(System.getProperty(EXPRESSION_PASS_PROPERTY, "true"))
+               && expressionCompilationPassAvailable();
+    }
+
+    private static boolean expressionCompilationPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    private static String expressionCompilationPassHigherTypeDecision(
+            String left,
+            boolean leftPrimitive,
+            boolean leftEnumLike,
+            String right,
+            boolean rightPrimitive,
+            boolean rightEnumLike
+    ) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            var method = passClass.getMethod(
+                    "higherTypeDecision",
+                    String.class,
+                    boolean.class,
+                    boolean.class,
+                    String.class,
+                    boolean.class,
+                    boolean.class
+            );
+            return (String) method.invoke(null, left, leftPrimitive, leftEnumLike, right, rightPrimitive, rightEnumLike);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara expression compilation pass method `higherTypeDecision`", e);
+        }
     }
 }

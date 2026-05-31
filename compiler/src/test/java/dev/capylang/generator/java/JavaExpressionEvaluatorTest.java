@@ -1,5 +1,6 @@
 package dev.capylang.generator.java;
 
+import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Result;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompilerError;
@@ -103,14 +104,14 @@ class JavaExpressionEvaluatorTest {
     }
 
     private static CompiledProgram compileProgram(String name, String path, String source) {
-        return compileProgram(List.of(new RawModule(name, path, source)));
+        return compileProgram(List.of(new RawModule(name, path, source, SourceKind.FUNCTIONAL)));
     }
 
     private static RawModule collectionsModule() {
         return new RawModule("List", "/capy/collection", """
                 data List[T] { <native> }
                 fun List[T].size(): int = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
@@ -187,7 +188,7 @@ class JavaExpressionEvaluatorTest {
                 fun invalid_dict() = {
                     1: 1
                 }
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
@@ -247,7 +248,7 @@ class JavaExpressionEvaluatorTest {
 
                         fun choose(values: List[int]): int = 100 + values.size()
                         fun choose(values: List[long]): int = 200 + values.size()
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Right", "/beta", """
                         from /capy/collection/List import { * }
                         from /capy/collection/Set import { * }
@@ -255,7 +256,7 @@ class JavaExpressionEvaluatorTest {
 
                         fun choose(values: List[int]): int = 300 + values.size()
                         fun choose(values: List[long]): int = 400 + values.size()
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Main", "/app", """
                         fun ints(): List[int] = [1, 2, 3]
                         fun longs(): List[long] = [1L, 2L, 3L]
@@ -263,11 +264,11 @@ class JavaExpressionEvaluatorTest {
                         fun left_choice_long(): int = /alpha/Left.choose(longs())
                         fun right_choice(): int = /beta/Right.choose(ints())
                         fun right_choice_long(): int = /beta/Right.choose(longs())
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var generated = new JavaGenerator().generate(program).modules().stream()
-                .filter(module -> module.relativePath().equals(java.nio.file.Path.of("app", "Main.java")))
+                .filter(module -> module.relativePath().equals("app/Main.java"))
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -378,7 +379,7 @@ class JavaExpressionEvaluatorTest {
                         assertions_count: assert_.assertions.size(),
                         execution_time: -1
                     }
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var generated = new JavaGenerator().generate(program).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -411,7 +412,7 @@ class JavaExpressionEvaluatorTest {
                         assertions_count: assert_.assertions.size(),
                         execution_time: -1
                     }
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var generated = new JavaGenerator().generate(program).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -493,15 +494,15 @@ class JavaExpressionEvaluatorTest {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
                 new RawModule("Modes", "/foo/lib", """
                         enum RoundMode { FLOOR, HALF_EVEN }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/lib/Modes import { HALF_EVEN, RoundMode }
 
                         fun selected(): RoundMode = HALF_EVEN
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         var generated = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.java")))
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.java"))
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -515,12 +516,12 @@ class JavaExpressionEvaluatorTest {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
                 new RawModule("Color", "/foo", """
                         enum Color { RED, BLUE }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/Color import { * }
 
                         fun selected(): Color = RED
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -541,12 +542,12 @@ class JavaExpressionEvaluatorTest {
                             if value < 0 then LESS
                             else if value > 0 then GREATER
                             else EQUAL
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/Ordering import { * }
 
                         fun selected(): Ordering = from_int(1)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -561,7 +562,7 @@ class JavaExpressionEvaluatorTest {
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 data Done {}
                 fun done(): Done = Done
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
@@ -573,7 +574,7 @@ class JavaExpressionEvaluatorTest {
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 enum Status { DONE }
                 fun done(): Status = DONE {}
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
@@ -584,13 +585,13 @@ class JavaExpressionEvaluatorTest {
     void shouldStillRequireBracesForSingleValuesThatShareEnumValueNames() {
         var libraries = compileProgram(List.of(new RawModule("Statuses", "/foo/lib", """
                 enum Status { DONE }
-                """))).modules();
+                """, SourceKind.FUNCTIONAL))).modules();
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 from /foo/lib/Statuses import { * }
 
                 data DONE {}
                 fun done(): DONE = DONE
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
@@ -605,10 +606,10 @@ class JavaExpressionEvaluatorTest {
                         from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                         fun reflect_data(obj: data): DataValueInfo = reflection(obj)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         var generated = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.java")))
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.java"))
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -628,10 +629,10 @@ class JavaExpressionEvaluatorTest {
                         data User { name: String }
 
                         fun reflect_user(user: User): DataValueInfo = reflection(user)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         var generated = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.java")))
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.java"))
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -728,17 +729,17 @@ class JavaExpressionEvaluatorTest {
         var program = compileProgram(List.of(
                 new RawModule("Bounds", "/foo", """
                         const FLOAT_BOUND: long = 16777216L
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/bar", """
                         from /foo/Bounds import { FLOAT_BOUND }
 
                         fun value(): long = FLOAT_BOUND
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var generatedProgram = new JavaGenerator().generate(program);
         var generated = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("bar", "Consumer.java")))
+                .filter(module -> module.relativePath().equals("bar/Consumer.java"))
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -799,7 +800,7 @@ class JavaExpressionEvaluatorTest {
                 """);
 
         var generatedDate = new JavaGenerator().generate(program).modules().stream()
-                .filter(module -> module.relativePath().equals(java.nio.file.Path.of("foo", "bar", "LocalDateModule.java")))
+                .filter(module -> module.relativePath().equals("foo/bar/LocalDateModule.java"))
                 .findFirst()
                 .orElseThrow()
                 .code();
@@ -811,7 +812,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldRewriteQualifiedTailRecursiveCallWhenStaticMethodsUseModuleSuffix() {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
-                new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}"),
+                new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}", SourceKind.FUNCTIONAL),
                 new RawModule("Counter", "/foo/bar", """
                 from /capy/meta_prog/Recursive import { Recursive }
 
@@ -820,11 +821,11 @@ class JavaExpressionEvaluatorTest {
                 @Recursive
                 fun sum(n: int, acc: int): int =
                     if n <= 0 then acc else Counter.sum(n - 1, acc + n)
-                """)
+                """, SourceKind.FUNCTIONAL)
         )));
 
         var generated = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "bar", "CounterModule.java")))
+                .filter(module -> module.relativePath().equals("foo/bar/CounterModule.java"))
                 .findFirst()
                 .orElseThrow()
                 .code();
@@ -1094,7 +1095,7 @@ class JavaExpressionEvaluatorTest {
                         union EitherLike[L, R] = Left[L, R] | Right[L, R]
                         data Left[L, R] { value: L }
                         data Right[L, R] { value: R }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/types/EitherLike import { * }
 
@@ -1102,7 +1103,7 @@ class JavaExpressionEvaluatorTest {
                             match value with
                             case Left { message } -> message
                             case Right { number } -> "ok:" + number
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -1570,7 +1571,7 @@ class JavaExpressionEvaluatorTest {
                 data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo], annotations: List[AnnotationInfo] }
 
                 fun reflection(obj: data): DataValueInfo = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private void assertGeneratedJavaCompiles(dev.capylang.generator.GeneratedProgram generatedProgram) {
@@ -1747,7 +1748,7 @@ class JavaExpressionEvaluatorTest {
             var moduleParent = relativePath.getParent() == null
                     ? "/"
                     : "/" + relativePath.getParent().toString().replace('\\', '/');
-            return new RawModule(moduleName, moduleParent, Files.readString(sourceFile, StandardCharsets.UTF_8));
+            return new RawModule(moduleName, moduleParent, Files.readString(sourceFile, StandardCharsets.UTF_8), SourceKind.FUNCTIONAL);
         } catch (Exception e) {
             throw new AssertionError("Unable to load raw module from " + sourceFile, e);
         }

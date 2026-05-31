@@ -23,6 +23,7 @@ import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.NativeProviderCatalog;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.*;
+import dev.capylang.compiler.parser.InfixOperatorModule;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.generator.java.JavaAstBuilder;
@@ -113,7 +114,10 @@ public final class PythonGenerator implements Generator {
         );
 
         for (var moduleInfo : moduleInfos) {
-            modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
+            modules.add(new GeneratedModule(
+                    Generator.generatedRelativePath(moduleInfo.relativePath()),
+                    new ModuleRenderer(context, moduleInfo).render()
+            ));
         }
         modules.addAll(new ObjectOrientedPythonGenerator(context).generate(program.objectOrientedModules()));
         modules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
@@ -125,7 +129,10 @@ public final class PythonGenerator implements Generator {
         if (providers.isEmpty()) {
             return List.of();
         }
-        return List.of(new GeneratedModule(NATIVE_PROVIDER_BOOTSTRAP_PATH, renderNativeProviderBootstrap(providers)));
+        return List.of(new GeneratedModule(
+                Generator.generatedRelativePath(NATIVE_PROVIDER_BOOTSTRAP_PATH),
+                renderNativeProviderBootstrap(providers)
+        ));
     }
 
     private String renderNativeProviderBootstrap(List<ProgramContext.NativeProviderInfo> providers) {
@@ -1085,7 +1092,7 @@ public final class PythonGenerator implements Generator {
                     }
                     yield "capy.math.pow(" + left + ", " + right + ")";
                 }
-                case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
+                case GT, LT, LE, GE -> "((" + left + ") " + InfixOperatorModule.symbol(expression.operator()) + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
                 case AND -> "((" + renderBoolean(expression.left(), scope) + ") and (" + renderBoolean(expression.right(), scope) + "))";
@@ -1937,7 +1944,7 @@ public final class PythonGenerator implements Generator {
                     modules,
                     modules.stream().map(ModuleInfo::module).toList(),
                     List.of(),
-                    NativeProviderCatalog.empty(),
+                    new NativeProviderCatalog(List.of(), List.of()),
                     functionNameOverrides
             );
         }
@@ -2814,33 +2821,33 @@ public final class PythonGenerator implements Generator {
     private static final class RuntimeModules {
         private static List<GeneratedModule> modules() {
             return List.of(
-                    new GeneratedModule(RUNTIME_PATH, runtime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Option.py"), runtimeForwarder("Some", "None_")),
-                    new GeneratedModule(Path.of("capy", "lang", "Result.py"), runtimeForwarder("Success", "Error")),
-                    new GeneratedModule(Path.of("capy", "lang", "Effect.py"), runtimeForwarder("pure", "delay")),
-                    new GeneratedModule(Path.of("capy", "lang", "Program.py"), programRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Primitives.py"), primitivesRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "String.py"), stringRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "RegexModule.py"), regexRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Seq.py"), seqRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "System.py"), systemRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Math.py"), mathRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "List.py"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "Set.py"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "Dict.py"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "Tuple.py"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "Console.py"), consoleRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "Stdout.py"), stdoutRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "PathModule.py"), pathRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "IO.py"), ioRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "DateModule.py"), dateRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "TimeModule.py"), timeRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "DurationModule.py"), durationRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "DateTimeModule.py"), dateTimeRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "Interval.py"), intervalRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "Clock.py"), clockRuntime()),
-                    new GeneratedModule(Path.of("capy", "test", "Assert.py"), assertRuntime()),
-                    new GeneratedModule(Path.of("capy", "test", "CapyTest.py"), capyTestRuntime())
+                    new GeneratedModule(Generator.generatedRelativePath(RUNTIME_PATH), runtime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Option.py")), runtimeForwarder("Some", "None_")),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Result.py")), runtimeForwarder("Success", "Error")),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Effect.py")), runtimeForwarder("pure", "delay")),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Program.py")), programRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Primitives.py")), primitivesRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "String.py")), stringRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "RegexModule.py")), regexRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Seq.py")), seqRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "System.py")), systemRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Math.py")), mathRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "List.py")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "Set.py")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "Dict.py")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "Tuple.py")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "Console.py")), consoleRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "Stdout.py")), stdoutRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "PathModule.py")), pathRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "IO.py")), ioRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "DateModule.py")), dateRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "TimeModule.py")), timeRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "DurationModule.py")), durationRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "DateTimeModule.py")), dateTimeRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "Interval.py")), intervalRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "Clock.py")), clockRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "test", "Assert.py")), assertRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "test", "CapyTest.py")), capyTestRuntime())
             );
         }
 

@@ -212,12 +212,12 @@ public class CapybaraExpressionCompiler {
     }
 
     public Result<CompiledExpression> linkExpression(Expression expression) {
-        return linkExpression(expression, Scope.EMPTY);
+        return linkExpression(expression, ScopeModule.EMPTY);
     }
 
     public Result<CompiledExpression> linkExpressionForExpectedType(Expression expression, CompiledType expectedType) {
         return ResultOps.map(
-                linkArgumentForExpectedType(expression, Scope.EMPTY, expectedType),
+                linkArgumentForExpectedType(expression, ScopeModule.EMPTY, expectedType),
                 CoercedArgument::expression);
     }
 
@@ -507,6 +507,7 @@ public class CapybaraExpressionCompiler {
                     if (source.type() instanceof CompiledDataType linkedDataType && linkedDataType.singleton()) {
                         var enumParent = findEnumParentForValue(linkedDataType.name());
                         if (enumParent != null) {
+
                             if ("order".equals(fieldAccess.field())) {
                                 return Results.success(new CompiledFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
                             }
@@ -2355,7 +2356,7 @@ public class CapybaraExpressionCompiler {
         if ("void".equals(trimmed) || trimmed.endsWith("[]")) {
             return Optional.empty();
         }
-        var linkedType = linkTypeInScope(CapybaraParser.parseTypeDescriptor(trimmed), Scope.EMPTY);
+        var linkedType = linkTypeInScope(CapybaraParser.parseTypeDescriptor(trimmed), ScopeModule.EMPTY);
         if (linkedType instanceof Result.Error<CompiledType>) {
             return Optional.empty();
         }
@@ -4853,7 +4854,7 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE) {
             return ResultOps.flatMap(linkExpression(expression.left(), scope), left -> {
                         var methodCall = resolveMethodInfixCall(
-                                expression.operator().symbol(),
+                                InfixOperatorModule.symbol(expression.operator()),
                                 left,
                                 expression.right(),
                                 scope,
@@ -4885,7 +4886,7 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE_MINUS) {
             return ResultOps.flatMap(linkExpression(expression.left(), scope), left -> {
                         var methodCall = resolveMethodInfixCall(
-                                expression.operator().symbol(),
+                                InfixOperatorModule.symbol(expression.operator()),
                                 left,
                                 expression.right(),
                                 scope,
@@ -4910,7 +4911,7 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE_FLATMAP) {
             return ResultOps.flatMap(linkExpression(expression.left(), scope), left -> {
                         var methodCall = resolveMethodInfixCall(
-                                expression.operator().symbol(),
+                                InfixOperatorModule.symbol(expression.operator()),
                                 left,
                                 expression.right(),
                                 scope,
@@ -4936,7 +4937,7 @@ public class CapybaraExpressionCompiler {
             }
             return ResultOps.flatMap(linkExpression(expression.left(), scope), left -> {
                         var methodCall = resolveMethodInfixCall(
-                                expression.operator().symbol(),
+                                InfixOperatorModule.symbol(expression.operator()),
                                 left,
                                 expression.right(),
                                 scope,
@@ -4957,7 +4958,7 @@ public class CapybaraExpressionCompiler {
         }
         return ResultOps.flatMap(linkExpression(expression.left(), scope), left ->
                 ResultOps.flatMap(linkExpression(expression.right(), scope), right -> {
-                                    var methodCall = resolveMethodInfixCall(expression.operator().symbol(), left, right, expression.position());
+                                    var methodCall = resolveMethodInfixCall(InfixOperatorModule.symbol(expression.operator()), left, right, expression.position());
                                     if (methodCall instanceof Result.Success<CompiledExpression> value) {
                                         return value;
                                     }
@@ -4975,7 +4976,7 @@ public class CapybaraExpressionCompiler {
         if (!(expression.right() instanceof ReduceExpression reduceExpression)) {
             return Optional.empty();
         }
-        if (methodsByNameAndArity(functionSignatures, expression.operator().symbol(), 3).isEmpty()) {
+        if (methodsByNameAndArity(functionSignatures, InfixOperatorModule.symbol(expression.operator()), 3).isEmpty()) {
             return Optional.empty();
         }
         var lambdaArguments = new java.util.ArrayList<String>();
@@ -4984,7 +4985,7 @@ public class CapybaraExpressionCompiler {
         lambdaArguments.add(reduceExpression.valueName());
         var methodCall = new FunctionCall(
                 Optional.empty(),
-                METHOD_INVOKE_PREFIX + expression.operator().symbol(),
+                METHOD_INVOKE_PREFIX + InfixOperatorModule.symbol(expression.operator()),
                 List.of(
                         expression.left(),
                         reduceExpression.initialValue(),
@@ -6562,7 +6563,7 @@ public class CapybaraExpressionCompiler {
             case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
         };
         if (type == null) {
-            var op = operator.symbol();
+            var op = InfixOperatorModule.symbol(operator);
             return withPosition(Results.error("Cannot apply `" + op + "` to `" + left.type() + "` and `" + right.type() + "`"), position);
         }
         if (isArithmeticOperator(operator)

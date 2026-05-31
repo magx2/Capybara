@@ -1,0 +1,32 @@
+from /capy/lang/Option import { * }
+from /capy/lang/String import { * }
+
+enum SourceKind { FUNCTIONAL, OBJECT_ORIENTED }
+
+fun extension(sourceKind: SourceKind): String =
+    match sourceKind with
+    case FUNCTIONAL -> ".cfun"
+    case OBJECT_ORIENTED -> ".coo"
+
+fun fileName(sourceKind: SourceKind, moduleName: String): String =
+    moduleName + extension(sourceKind)
+
+fun moduleFile(sourceKind: SourceKind, path: String, moduleName: String): String =
+    let normalizedPath = path.replace("\\", "/")
+    let absolutePath =
+        if normalizedPath.starts_with("/")
+        then normalizedPath
+        else "/" + normalizedPath
+    absolutePath + "/" + fileName(sourceKind, moduleName)
+
+fun fromFileName(fileName: String): Option[SourceKind] =
+    if fileName.end_with(extension(SourceKind.FUNCTIONAL))
+    then Some { SourceKind.FUNCTIONAL }
+    else if fileName.end_with(extension(SourceKind.OBJECT_ORIENTED))
+        then Some { SourceKind.OBJECT_ORIENTED }
+        else None {}
+
+fun stripKnownExtension(fileName: String): String =
+    match fromFileName(fileName) with
+    case Some { sourceKind } -> fileName[0, fileName.size().value - extension(sourceKind).size().value]
+    case _ -> fileName

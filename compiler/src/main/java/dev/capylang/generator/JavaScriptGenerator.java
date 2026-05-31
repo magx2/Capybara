@@ -24,6 +24,7 @@ import dev.capylang.compiler.NativeProviderCatalog;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
+import dev.capylang.compiler.parser.InfixOperatorModule;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.generator.java.JavaAstBuilder;
@@ -115,7 +116,10 @@ public final class JavaScriptGenerator implements Generator {
         );
 
         for (var moduleInfo : moduleInfos) {
-            modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
+            modules.add(new GeneratedModule(
+                    Generator.generatedRelativePath(moduleInfo.relativePath()),
+                    new ModuleRenderer(context, moduleInfo).render()
+            ));
         }
         modules.addAll(new ObjectOrientedJavaScriptGenerator(context).generate(program.objectOrientedModules()));
         modules.addAll(nativeProviderBootstrapModules(context.nativeProviderInfos()));
@@ -127,7 +131,10 @@ public final class JavaScriptGenerator implements Generator {
         if (providers.isEmpty()) {
             return List.of();
         }
-        return List.of(new GeneratedModule(NATIVE_PROVIDER_BOOTSTRAP_PATH, renderNativeProviderBootstrap(providers)));
+        return List.of(new GeneratedModule(
+                Generator.generatedRelativePath(NATIVE_PROVIDER_BOOTSTRAP_PATH),
+                renderNativeProviderBootstrap(providers)
+        ));
     }
 
     private String renderNativeProviderBootstrap(List<ProgramContext.NativeProviderInfo> providers) {
@@ -1104,7 +1111,7 @@ public final class JavaScriptGenerator implements Generator {
                     }
                     yield "Math.pow(" + left + ", " + right + ")";
                 }
-                case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
+                case GT, LT, LE, GE -> "((" + left + ") " + InfixOperatorModule.symbol(expression.operator()) + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
                 case AND -> "((" + renderBoolean(expression.left(), scope) + ") && (" + renderBoolean(expression.right(), scope) + "))";
@@ -2033,7 +2040,7 @@ public final class JavaScriptGenerator implements Generator {
                     modules,
                     modules.stream().map(ModuleInfo::module).toList(),
                     List.of(),
-                    NativeProviderCatalog.empty(),
+                    new NativeProviderCatalog(List.of(), List.of()),
                     functionNameOverrides
             );
         }
@@ -2915,33 +2922,33 @@ public final class JavaScriptGenerator implements Generator {
     private static final class RuntimeModules {
         private static List<GeneratedModule> modules() {
             return List.of(
-                    new GeneratedModule(RUNTIME_PATH, runtime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Option.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Some", "None")),
-                    new GeneratedModule(Path.of("capy", "lang", "Result.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Success", "Error")),
-                    new GeneratedModule(Path.of("capy", "lang", "Effect.js"), runtimeForwarder("../../dev/capylang/capybara.js", "pure", "delay")),
-                    new GeneratedModule(Path.of("capy", "lang", "Program.js"), programRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Primitives.js"), primitivesRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "String.js"), stringRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "RegexModule.js"), regexRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Seq.js"), seqRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "System.js"), systemRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Math.js"), mathRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "List.js"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "Set.js"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "Dict.js"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "collection", "Tuple.js"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "Console.js"), consoleRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "Stdout.js"), stdoutRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "PathModule.js"), pathRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "IO.js"), ioRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "DateModule.js"), dateRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "TimeModule.js"), timeRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "DurationModule.js"), durationRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "DateTimeModule.js"), dateTimeRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "Interval.js"), intervalRuntime()),
-                    new GeneratedModule(Path.of("capy", "date_time", "Clock.js"), clockRuntime()),
-                    new GeneratedModule(Path.of("capy", "test", "Assert.js"), assertRuntime()),
-                    new GeneratedModule(Path.of("capy", "test", "CapyTest.js"), capyTestRuntime())
+                    new GeneratedModule(Generator.generatedRelativePath(RUNTIME_PATH), runtime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Option.js")), runtimeForwarder("../../dev/capylang/capybara.js", "Some", "None")),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Result.js")), runtimeForwarder("../../dev/capylang/capybara.js", "Success", "Error")),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Effect.js")), runtimeForwarder("../../dev/capylang/capybara.js", "pure", "delay")),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Program.js")), programRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Primitives.js")), primitivesRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "String.js")), stringRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "RegexModule.js")), regexRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Seq.js")), seqRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "System.js")), systemRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "lang", "Math.js")), mathRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "List.js")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "Set.js")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "Dict.js")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "collection", "Tuple.js")), collectionRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "Console.js")), consoleRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "Stdout.js")), stdoutRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "PathModule.js")), pathRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "io", "IO.js")), ioRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "DateModule.js")), dateRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "TimeModule.js")), timeRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "DurationModule.js")), durationRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "DateTimeModule.js")), dateTimeRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "Interval.js")), intervalRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "date_time", "Clock.js")), clockRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "test", "Assert.js")), assertRuntime()),
+                    new GeneratedModule(Generator.generatedRelativePath(Path.of("capy", "test", "CapyTest.js")), capyTestRuntime())
             );
         }
 

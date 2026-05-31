@@ -52,13 +52,13 @@ class ObjectOrientedJavaGeneratorTest {
         var generatedProgram = new JavaGenerator().generate(program);
         assertThat(generatedProgram.modules())
                 .extracting(GeneratedModule::relativePath)
-                .contains(Path.of("dev", "capylang", "NativeProviderBootstrap.java"));
+                .contains("dev/capylang/NativeProviderBootstrap.java");
         var providerModule = generatedProgram.modules().stream()
                 .filter(module -> module.relativePath().endsWith("ProvidersNative.java"))
                 .findFirst()
                 .orElseThrow();
         var bootstrapModule = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("dev", "capylang", "NativeProviderBootstrap.java")))
+                .filter(module -> module.relativePath().equals("dev/capylang/NativeProviderBootstrap.java"))
                 .findFirst()
                 .orElseThrow();
 
@@ -141,7 +141,7 @@ class ObjectOrientedJavaGeneratorTest {
 
         var generatedProgram = new JavaGenerator().generate(program);
         var consumerModule = generatedProgram.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "boo", "ClockConsumer.java")))
+                .filter(module -> module.relativePath().equals("foo/boo/ClockConsumer.java"))
                 .findFirst()
                 .orElseThrow();
 
@@ -404,9 +404,9 @@ class ObjectOrientedJavaGeneratorTest {
         assertThat(generatedProgram.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(
-                        Path.of("foo", "boo", "Base.java"),
-                        Path.of("foo", "boo", "Printable.java"),
-                        Path.of("foo", "boo", "User.java")
+                        "foo/boo/Base.java",
+                        "foo/boo/Printable.java",
+                        "foo/boo/User.java"
                 );
         assertThat(generatedProgram.modules().stream()
                 .filter(module -> module.relativePath().endsWith("Base.java"))
@@ -1021,7 +1021,7 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private CompiledProgram compileProgram(List<RawModule> modules) {
-        return compileProgram(modules, NativeProviderManifest.empty());
+        return compileProgram(modules, new NativeProviderManifest(List.of(), null));
     }
 
     private List<RawModule> nativeProviderModules(String providerSource) {
@@ -1036,7 +1036,7 @@ class ObjectOrientedJavaGeneratorTest {
                                 """,
                         SourceKind.OBJECT_ORIENTED
                 ),
-                new RawModule("ProvidersNative", "/foo/boo", providerSource)
+                new RawModule("ProvidersNative", "/foo/boo", providerSource, SourceKind.FUNCTIONAL)
         );
     }
 
@@ -1050,7 +1050,7 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
-        return new NativeProviderManifest(List.of(bindings));
+        return new NativeProviderManifest(List.of(bindings), null);
     }
 
     private NativeProviderBinding javaProviderBinding(String interfaceId, String qualifier) {
@@ -1092,7 +1092,7 @@ class ObjectOrientedJavaGeneratorTest {
                 annotation NativeProvider on fun {
                     qualifier: String = ""
                 }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private Path compileGeneratedJava(GeneratedProgram generatedProgram, JavaSource... extraSources) throws Exception {

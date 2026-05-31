@@ -1,5 +1,6 @@
 package dev.capylang.compiler.compilation_error;
 
+import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
@@ -19,7 +20,7 @@ class WithCompilationErrorTest {
     @ParameterizedTest(name = "{index}: {0}")
     @MethodSource
     void compilationErrors(String name, String source, String expectedFragment) {
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule(name, "/foo/boo", source)), new TreeSet<>());
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule(name, "/foo/boo", source, SourceKind.FUNCTIONAL)), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
         var error = CompilerErrors.from((Result.Error<CompiledProgram>) result).first();

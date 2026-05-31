@@ -1,5 +1,6 @@
 package dev.capylang.compiler.compilation_error;
 
+import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
@@ -47,8 +48,8 @@ class TupleDestructuringCompilationErrorTest {
                         new RawModule("List", "/capy/collection", """
                                 data List[T] { <native> }
                                 fun List[T].`|`(map: T => Y): List[Y] = <native>
-                                """),
-                        new RawModule(moduleName, "/foo/boo", code)
+                                """, SourceKind.FUNCTIONAL),
+                        new RawModule(moduleName, "/foo/boo", code, SourceKind.FUNCTIONAL)
                 ),
                 new java.util.TreeSet<>()
         );

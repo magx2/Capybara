@@ -1,0 +1,16 @@
+enum NativeProviderBackend { JAVA, JAVASCRIPT, PYTHON }
+
+fun jsonValue(backend: NativeProviderBackend): String =
+    match backend with
+    case JAVA -> "java"
+    case JAVASCRIPT -> "javascript"
+    case PYTHON -> "python"
+
+fun defaultFactory(backend: NativeProviderBackend): String =
+    match backend with
+    case JAVA -> "constructor"
+    case JAVASCRIPT -> "new"
+    case PYTHON -> "call"
+
+fun supportedValues(): String =
+    "java, javascript, python"

@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Result;
 
 import dev.capylang.compiler.parser.RawModule;
@@ -69,7 +70,7 @@ class RecursionCompilerTest {
                         @Recursive
                         fun sum(n: int, acc: int): int =
                             if n <= 0 then acc else sum(n - 1, acc + n)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(function(program, "sum"))
@@ -107,11 +108,11 @@ class RecursionCompilerTest {
     }
 
     private static CompiledProgram compileProgram(String source) {
-        return compileProgram(List.of(new RawModule("Recursion", "/foo/bar", source)));
+        return compileProgram(List.of(new RawModule("Recursion", "/foo/bar", source, SourceKind.FUNCTIONAL)));
     }
 
     private static RawModule recursiveAnnotationModule() {
-        return new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}");
+        return new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}", SourceKind.FUNCTIONAL);
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {

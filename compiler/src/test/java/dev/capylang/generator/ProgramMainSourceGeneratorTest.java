@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
 import capy.lang.Result;
@@ -102,13 +103,13 @@ class ProgramMainSourceGeneratorTest {
                                     if args.size() > 0
                                     then pure(Success {})
                                     else pure(Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                                """),
+                                """, SourceKind.FUNCTIONAL),
                         new RawModule("SecondaryMain", "/foo", """
                                 from /capy/collection/List import { * }
 
                                 fun main(args: List[String]): /capy/lang/Program =
                                     /capy/lang/Program.Success {}
-                                """)
+                                """, SourceKind.FUNCTIONAL)
                 ),
                 new TreeSet<>()
         );
@@ -122,7 +123,7 @@ class ProgramMainSourceGeneratorTest {
 
     private static String generatedCode(GeneratedProgram generated, Path relativePath) {
         return generated.modules().stream()
-                .filter(module -> module.relativePath().equals(relativePath))
+                .filter(module -> module.relativePath().equals(Generator.generatedRelativePath(relativePath)))
                 .map(GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();

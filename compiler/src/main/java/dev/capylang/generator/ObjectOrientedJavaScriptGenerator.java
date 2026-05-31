@@ -52,7 +52,7 @@ final class ObjectOrientedJavaScriptGenerator {
                 .map(definition -> {
                     var typeName = JavaScriptGenerator.simpleTypeName(definition.name());
                     return new GeneratedModule(
-                            relativePath(module, typeName),
+                            Generator.generatedRelativePath(relativePath(module, typeName)),
                             renderType(new RenderContext(module, definition, definitionsByName))
                     );
                 })

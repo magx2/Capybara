@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Result;
 
 import dev.capylang.compiler.parser.RawModule;
@@ -24,7 +25,7 @@ class TupleDestructuringCompilerTest {
 
                         fun map_pairs(values: List[Tuple[int, int]]): Seq[String] = values | (number, expected) => "digits(" + number + ") should return " + expected
                         """
-        )));
+        , SourceKind.FUNCTIONAL)));
 
         var function = compiled.modules().first().functions().stream()
                 .filter(it -> it.name().equals("map_pairs"))
@@ -51,7 +52,7 @@ class TupleDestructuringCompilerTest {
 
                         fun filter_pairs(values: List[Tuple[int, int]]): Seq[Tuple[int, int]] = values |- (left, right) => left == right
                         """
-        )));
+        , SourceKind.FUNCTIONAL)));
 
         var function = compiled.modules().first().functions().stream()
                 .filter(it -> it.name().equals("filter_pairs"))
@@ -100,7 +101,7 @@ class TupleDestructuringCompilerTest {
 
     private static CompilerError compileFailure(String code) {
         var result = CapybaraCompiler.INSTANCE.compile(
-                List.of(new RawModule("TuplePipes", "/foo/boo", code)),
+                List.of(new RawModule("TuplePipes", "/foo/boo", code, SourceKind.FUNCTIONAL)),
                 new java.util.TreeSet<>()
         );
         if (result instanceof Result.Success<CompiledProgram> value) {

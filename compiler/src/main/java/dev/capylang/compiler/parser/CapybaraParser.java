@@ -122,6 +122,65 @@ public class CapybaraParser {
         }
     }
 
+    public Result<ObjectOrientedModule> parseObjectOrientedModule(RawModule module) {
+        try {
+            var parsedSource = parseSource(module.input());
+            var lexer = new dev.capylang.parser.antlr.ObjectOrientedLexer(CharStreams.fromString(parsedSource.source()));
+            var tokens = new CommonTokenStream(lexer);
+            var parser = new dev.capylang.parser.antlr.ObjectOrientedParser(tokens);
+            var syntaxErrors = new ArrayList<SyntaxError>();
+            var errorListener = new org.antlr.v4.runtime.BaseErrorListener() {
+                @Override
+                public void syntaxError(
+                        Recognizer<?, ?> recognizer,
+                        Object offendingSymbol,
+                        int line,
+                        int charPositionInLine,
+                        String msg,
+                        RecognitionException e
+                ) {
+                    syntaxErrors.add(new SyntaxError(line, charPositionInLine, msg));
+                }
+            };
+            lexer.removeErrorListeners();
+            parser.removeErrorListeners();
+            lexer.addErrorListener(errorListener);
+            parser.addErrorListener(errorListener);
+
+            var program = parser.program();
+            if (!syntaxErrors.isEmpty()) {
+                return CompilerErrors.result(formatObjectOrientedSyntaxError(module, syntaxErrors.getFirst()));
+            }
+
+            var definitions = program.definition().stream()
+                    .map(this::objectOrientedTypeDeclaration)
+                    .toList();
+            return Results.success(new ObjectOrientedModule(
+                    module.name(),
+                    module.path(),
+                    new ObjectOriented(definitions),
+                    parsedSource.imports(),
+                    module.sourceKind()
+            ));
+        } catch (RuntimeException exception) {
+            return CompilerErrors.result(new CompilerError(0, 0, module.file(), String.valueOf(exception.getMessage())));
+        }
+    }
+
+    public Result<List<ObjectOrientedModule>> parseObjectOrientedModules(Collection<RawModule> modules) {
+        var parsedModules = new ArrayList<ObjectOrientedModule>();
+        var errors = new java.util.TreeSet<CompilerError>();
+        for (var module : modules) {
+            var parsed = parseObjectOrientedModule(module);
+            if (parsed instanceof Result.Success<ObjectOrientedModule> success) {
+                parsedModules.add(success.value());
+            } else if (parsed instanceof Result.Error<ObjectOrientedModule> error) {
+                errors.addAll(CompilerErrors.from(error));
+            }
+        }
+        return errors.isEmpty() ? Results.success(List.copyOf(parsedModules)) : CompilerErrors.result(errors);
+    }
+
     private static String boundaryErrorMessage(RuntimeException exception) {
         return Objects.toString(exception.getMessage(), exception.getClass().getSimpleName());
     }
@@ -144,11 +203,11 @@ public class CapybaraParser {
                                 .map(String::trim)
                                 .filter(symbol -> !symbol.isBlank())
                                 .toList();
-                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
+                imports.add(new ImportDeclaration(module, symbols, excludedSymbols, false));
                 // Keep source line numbers stable for parser/linker diagnostics.
                 bodyLines.add("");
             } else if (qualifiedMatcher.matches()) {
-                imports.add(ImportDeclaration.qualified(qualifiedMatcher.group(1)));
+                imports.add(new ImportDeclaration(qualifiedMatcher.group(1), List.of(), List.of(), true));
                 // Keep source line numbers stable for parser/linker diagnostics.
                 bodyLines.add("");
             } else {
@@ -217,6 +276,11 @@ public class CapybaraParser {
             );
         }
         return formatParserError(module, source, formatSyntaxError(syntaxError));
+    }
+
+    private CompilerError formatObjectOrientedSyntaxError(RawModule module, SyntaxError syntaxError) {
+        var details = "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
+        return new CompilerError(syntaxError.line(), syntaxError.column(), module.file(), details);
     }
 
     private CompilerError formatParserException(RawModule module, RuntimeException exception) {
@@ -1758,7 +1822,8 @@ public class CapybaraParser {
         var infixOperator = expression.infixOperator();
         if (infixOperator != null) {
             var leftContext = expression.expressionNoLet(0);
-            var operator = InfixOperator.fromSymbol(infixOperator.getText());
+            var operator = InfixOperatorModule.fromSymbol(infixOperator.getText())
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + infixOperator.getText()));
             var rightContext = expression.expressionNoLet(1);
             var left = expressionNoLet(leftContext);
             if (isPipeOperator(operator) && rightContext.lambdaExpression() != null) {
@@ -2053,7 +2118,8 @@ public class CapybaraParser {
         var infixOperator = expression.infixOperatorNoPipe();
         if (infixOperator != null) {
             var leftContext = expression.expressionNoLetNoPipe(0);
-            var operator = InfixOperator.fromSymbol(infixOperator.getText());
+            var operator = InfixOperatorModule.fromSymbol(infixOperator.getText())
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + infixOperator.getText()));
             var rightContext = expression.expressionNoLetNoPipe(1);
             return rebalanceInfixByPrecedence(
                     expressionNoLetNoPipe(leftContext),
@@ -2257,35 +2323,35 @@ public class CapybaraParser {
             var receiverContext = expression.expressionNoLetNoPipe(0);
             if (expression.DOT().getSymbol().getLine() > receiverContext.getStart().getLine()) {
                 var nested = findTrailingPostfixPosition(receiverContext);
-                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.DOT().getSymbol()));
+                return nested.isPresent() ? nested : Optional.of(sourcePosition(expression.DOT().getSymbol()));
             }
         }
         if (isFieldAccess(expression)) {
             var sourceContext = expression.expressionNoLetNoPipe(0);
             if (expression.DOT().getSymbol().getLine() > sourceContext.getStart().getLine()) {
                 var nested = findTrailingPostfixPosition(sourceContext);
-                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.DOT().getSymbol()));
+                return nested.isPresent() ? nested : Optional.of(sourcePosition(expression.DOT().getSymbol()));
             }
         }
         if (isIndex(expression)) {
             var sourceContext = expression.expressionNoLetNoPipe(0);
             if (expression.LBRACK().getSymbol().getLine() > sourceContext.getStart().getLine()) {
                 var nested = findTrailingPostfixPosition(sourceContext);
-                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LBRACK().getSymbol()));
+                return nested.isPresent() ? nested : Optional.of(sourcePosition(expression.LBRACK().getSymbol()));
             }
         }
         if (isSlice(expression)) {
             var sourceContext = expression.expressionNoLetNoPipe(0);
             if (expression.LBRACK().getSymbol().getLine() > sourceContext.getStart().getLine()) {
                 var nested = findTrailingPostfixPosition(sourceContext);
-                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LBRACK().getSymbol()));
+                return nested.isPresent() ? nested : Optional.of(sourcePosition(expression.LBRACK().getSymbol()));
             }
         }
         if (isFunctionInvoke(expression)) {
             var functionContext = expression.expressionNoLetNoPipe(0);
             if (expression.LPAREN().getSymbol().getLine() > functionContext.getStart().getLine()) {
                 var nested = findTrailingPostfixPosition(functionContext);
-                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LPAREN().getSymbol()));
+                return nested.isPresent() ? nested : Optional.of(sourcePosition(expression.LPAREN().getSymbol()));
             }
         }
         return java.util.Optional.empty();
@@ -2387,7 +2453,7 @@ public class CapybaraParser {
                                                          Optional<SourcePosition> position) {
         if (!leftGrouped &&
             left instanceof InfixExpression leftInfix &&
-            operator.precedence() > leftInfix.operator().precedence()) {
+            InfixOperatorModule.precedence(operator) > InfixOperatorModule.precedence(leftInfix.operator())) {
             return new InfixExpression(
                     leftInfix.left(),
                     leftInfix.operator(),
@@ -2779,11 +2845,41 @@ public class CapybaraParser {
     }
 
     private static Optional<SourcePosition> position(ParserRuleContext context) {
-        return SourcePosition.of(context);
+        if (context == null) {
+            return Optional.empty();
+        }
+        var start = context.getStart();
+        var stop = context.getStop();
+        if (start == null) {
+            return Optional.empty();
+        }
+        var line = start.getLine();
+        var column = start.getCharPositionInLine();
+        if (stop == null || start.getStartIndex() < 0 || stop.getStopIndex() < start.getStartIndex()) {
+            return Optional.of(new SourcePosition(line, column, Optional.empty()));
+        }
+        return Optional.of(new SourcePosition(line, column, Optional.of(stop.getStopIndex() - start.getStartIndex() + 1)));
     }
 
     private static Optional<SourcePosition> position(TerminalNode node) {
-        return Optional.of(SourcePosition.of(node));
+        return Optional.of(sourcePosition(node));
+    }
+
+    private static SourcePosition sourcePosition(Token token) {
+        if (token == null) {
+            return new SourcePosition(0, 0, Optional.empty());
+        }
+        var start = token.getStartIndex();
+        var stop = token.getStopIndex();
+        var length = start >= 0 && stop >= start ? Optional.of(stop - start + 1) : Optional.<Integer>empty();
+        return new SourcePosition(token.getLine(), token.getCharPositionInLine(), length);
+    }
+
+    private static SourcePosition sourcePosition(TerminalNode node) {
+        if (node == null) {
+            return new SourcePosition(0, 0, Optional.empty());
+        }
+        return sourcePosition(node.getSymbol());
     }
 
     private static String fieldName(FunctionalParser.IdentifierContext identifier, TerminalNode stringLiteral) {
@@ -2806,7 +2902,7 @@ public class CapybaraParser {
 
     private Expression stringLiteralExpression(TerminalNode stringLiteral) {
         var raw = stringLiteral.getText();
-        var position = SourcePosition.of(stringLiteral);
+        var position = sourcePosition(stringLiteral);
         if (!isDoubleQuoted(raw) || !hasInterpolation(raw)) {
             return new StringValue(normalizeStringLiteral(raw), Optional.of(position));
         }
@@ -2824,7 +2920,7 @@ public class CapybaraParser {
                 .replace("\\/", "/")
                 .replace("\\\\", "\\");
         var flags = content.substring(closingSlashIndex + 1);
-        var position = SourcePosition.of(regexLiteral);
+        var position = sourcePosition(regexLiteral);
         return new FunctionCall(
                 Optional.of(REGEX_MODULE_NAME),
                 REGEX_FACTORY_NAME,
@@ -3613,6 +3709,401 @@ public class CapybaraParser {
 
     private static boolean isSameLinePostfixBracket(Token bracket, ParserRuleContext sourceContext) {
         return sourceContext.getStop() != null && bracket.getLine() == sourceContext.getStop().getLine();
+    }
+
+    private ObjectOriented.TypeDeclaration objectOrientedTypeDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.DefinitionContext context
+    ) {
+        if (context.classDeclaration() != null) {
+            return objectOrientedClassDeclaration(context.classDeclaration());
+        }
+        if (context.traitDeclaration() != null) {
+            return objectOrientedTraitDeclaration(context.traitDeclaration());
+        }
+        return objectOrientedInterfaceDeclaration(context.interfaceDeclaration());
+    }
+
+    private ObjectOriented.ClassDeclaration objectOrientedClassDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ClassDeclarationContext context
+    ) {
+        return new ObjectOriented.ClassDeclaration(
+                context.TYPE().getText(),
+                objectOrientedParameters(context.constructorParameters() == null ? null : context.constructorParameters().parameters()),
+                objectOrientedTypeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
+                objectOrientedMembers(context.typeBody().memberDeclaration()),
+                context.classModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private ObjectOriented.TraitDeclaration objectOrientedTraitDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.TraitDeclarationContext context
+    ) {
+        return new ObjectOriented.TraitDeclaration(
+                context.TYPE().getText(),
+                objectOrientedTypeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
+                objectOrientedMembers(context.typeBody().memberDeclaration()),
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private ObjectOriented.InterfaceDeclaration objectOrientedInterfaceDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InterfaceDeclarationContext context
+    ) {
+        var members = context.interfaceBody().interfaceMemberDeclaration().stream()
+                .<ObjectOriented.MemberDeclaration>map(interfaceMember -> objectOrientedMethodDeclaration(interfaceMember.interfaceMethodDeclaration()))
+                .toList();
+        return new ObjectOriented.InterfaceDeclaration(
+                context.TYPE().getText(),
+                objectOrientedTypeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
+                members,
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private List<ObjectOriented.MemberDeclaration> objectOrientedMembers(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.MemberDeclarationContext> members
+    ) {
+        return members.stream()
+                .<ObjectOriented.MemberDeclaration>map(member -> {
+                    if (member.fieldDeclaration() != null) {
+                        return objectOrientedFieldDeclaration(member.fieldDeclaration());
+                    }
+                    if (member.methodDeclaration() != null) {
+                        return objectOrientedMethodDeclaration(member.methodDeclaration());
+                    }
+                    return objectOrientedInitBlock(member.initBlock());
+                })
+                .toList();
+    }
+
+    private ObjectOriented.FieldDeclaration objectOrientedFieldDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.FieldDeclarationContext context
+    ) {
+        return new ObjectOriented.FieldDeclaration(
+                context.identifier().getText(),
+                context.type().getText(),
+                context.visibility() == null ? "public" : context.visibility().getText(),
+                context.expression() == null ? Optional.empty() : Optional.of(context.expression().getText()),
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private ObjectOriented.MethodDeclaration objectOrientedMethodDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MethodDeclarationContext context
+    ) {
+        return new ObjectOriented.MethodDeclaration(
+                context.identifier().getText(),
+                objectOrientedParameters(context.parameters()),
+                context.functionType().type().getText(),
+                context.visibility() == null ? "public" : context.visibility().getText(),
+                context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
+                context.methodBody() == null ? Optional.empty() : Optional.of(objectOrientedMethodBody(context.methodBody())),
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private ObjectOriented.MethodDeclaration objectOrientedMethodDeclaration(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InterfaceMethodDeclarationContext context
+    ) {
+        return new ObjectOriented.MethodDeclaration(
+                context.identifier().getText(),
+                objectOrientedParameters(context.parameters()),
+                context.functionType().type().getText(),
+                context.visibility() == null ? "public" : context.visibility().getText(),
+                context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
+                Optional.empty(),
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private ObjectOriented.InitBlock objectOrientedInitBlock(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InitBlockContext context
+    ) {
+        return new ObjectOriented.InitBlock(
+                objectOrientedStatementBlock(context.statementBlock()),
+                comments(context.docComment()),
+                objectOrientedAnnotations(context.annotationBlock())
+        );
+    }
+
+    private List<AnnotationUsage> objectOrientedAnnotations(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext> contexts
+    ) {
+        return contexts.stream()
+                .map(this::annotationBlock)
+                .toList();
+    }
+
+    private AnnotationUsage annotationBlock(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext context) {
+        return new AnnotationUsage(
+                context.annotationName().getText(),
+                annotationArguments(context.annotationArgumentList()),
+                position(context)
+        );
+    }
+
+    private List<AnnotationArgument> annotationArguments(
+            dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentListContext context
+    ) {
+        if (context == null) {
+            return List.of();
+        }
+        return context.annotationArgument().stream()
+                .map(this::annotationArgument)
+                .toList();
+    }
+
+    private AnnotationArgument annotationArgument(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentContext context) {
+        return new AnnotationArgument(
+                context.identifier().getText(),
+                annotationValue(context.annotationValue()),
+                position(context)
+        );
+    }
+
+    private AnnotationValue annotationValue(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationValueContext context) {
+        if (context.STRING_LITERAL() != null) {
+            return new ParserAst.AnnotationStringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
+        }
+        if (context.INT_LITERAL() != null) {
+            return new ParserAst.AnnotationIntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
+        }
+        if (context.LONG_LITERAL() != null) {
+            return new ParserAst.AnnotationLongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
+        }
+        if (context.FLOAT_LITERAL() != null) {
+            return new ParserAst.AnnotationFloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
+        }
+        if (context.DOUBLE_LITERAL() != null) {
+            return new ParserAst.AnnotationDoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
+        }
+        if (context.BOOL_LITERAL() != null) {
+            return new ParserAst.AnnotationBoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
+        }
+        if (context.NOTHING_LITERAL() != null) {
+            return new ParserAst.AnnotationNothingValue(position(context.NOTHING_LITERAL()));
+        }
+        return new ParserAst.AnnotationTypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
+    }
+
+    private ObjectOriented.MethodBody objectOrientedMethodBody(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MethodBodyContext context
+    ) {
+        if (context.expression() != null) {
+            return new ObjectOriented.ExpressionBody(context.expression().getText());
+        }
+        return objectOrientedStatementBlock(context.statementBlock());
+    }
+
+    private ObjectOriented.StatementBlock objectOrientedStatementBlock(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext context
+    ) {
+        return new ObjectOriented.StatementBlock(context.statement().stream().map(this::objectOrientedStatement).toList());
+    }
+
+    private ObjectOriented.Statement objectOrientedStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext context
+    ) {
+        if (context.letStatement() != null) {
+            return objectOrientedLetStatement(context.letStatement());
+        }
+        if (context.defStatement() != null) {
+            return objectOrientedDefStatement(context.defStatement());
+        }
+        if (context.assignmentStatement() != null) {
+            return objectOrientedAssignmentStatement(context.assignmentStatement());
+        }
+        if (context.expressionStatement() != null) {
+            return objectOrientedExpressionStatement(context.expressionStatement());
+        }
+        if (context.throwStatement() != null) {
+            return objectOrientedThrowStatement(context.throwStatement());
+        }
+        if (context.returnStatement() != null) {
+            return objectOrientedReturnStatement(context.returnStatement());
+        }
+        if (context.ifStatement() != null) {
+            return objectOrientedIfStatement(context.ifStatement());
+        }
+        if (context.tryCatchStatement() != null) {
+            return objectOrientedTryCatchStatement(context.tryCatchStatement());
+        }
+        if (context.whileStatement() != null) {
+            return objectOrientedWhileStatement(context.whileStatement());
+        }
+        if (context.doWhileStatement() != null) {
+            return objectOrientedDoWhileStatement(context.doWhileStatement());
+        }
+        if (context.forEachStatement() != null) {
+            return objectOrientedForEachStatement(context.forEachStatement());
+        }
+        return objectOrientedStatementBlock(context.statementBlock());
+    }
+
+    private ObjectOriented.LetStatement objectOrientedLetStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.LetStatementContext context
+    ) {
+        return new ObjectOriented.LetStatement(
+                context.identifier().getText(),
+                context.type() == null ? Optional.empty() : Optional.of(context.type().getText()),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.Statement objectOrientedDefStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.DefStatementContext context
+    ) {
+        if (context.localMethodTail() != null) {
+            return objectOrientedLocalMethodStatement(context);
+        }
+        return objectOrientedMutableVariableStatement(context);
+    }
+
+    private ObjectOriented.LocalMethodStatement objectOrientedLocalMethodStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.DefStatementContext context
+    ) {
+        return new ObjectOriented.LocalMethodStatement(
+                context.identifier().getText(),
+                objectOrientedParameters(context.localMethodTail().parameters()),
+                context.localMethodTail().functionType().type().getText(),
+                objectOrientedMethodBody(context.localMethodTail().methodBody()),
+                comments(context.docComment())
+        );
+    }
+
+    private ObjectOriented.MutableVariableStatement objectOrientedMutableVariableStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.DefStatementContext context
+    ) {
+        return new ObjectOriented.MutableVariableStatement(
+                context.identifier().getText(),
+                context.mutableVariableTail().type() == null ? Optional.empty() : Optional.of(context.mutableVariableTail().type().getText()),
+                context.mutableVariableTail().expression().getText()
+        );
+    }
+
+    private List<String> comments(List<? extends org.antlr.v4.runtime.tree.ParseTree> comments) {
+        return comments.stream()
+                .map(org.antlr.v4.runtime.tree.ParseTree::getText)
+                .map(CapybaraParser::stripDocComment)
+                .toList();
+    }
+
+    private ObjectOriented.AssignmentStatement objectOrientedAssignmentStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.AssignmentStatementContext context
+    ) {
+        return new ObjectOriented.AssignmentStatement(
+                context.identifier().getText(),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.ExpressionStatement objectOrientedExpressionStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ExpressionStatementContext context
+    ) {
+        return new ObjectOriented.ExpressionStatement(context.callExpression().getText());
+    }
+
+    private ObjectOriented.ThrowStatement objectOrientedThrowStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ThrowStatementContext context
+    ) {
+        return new ObjectOriented.ThrowStatement(context.expression().getText());
+    }
+
+    private ObjectOriented.ReturnStatement objectOrientedReturnStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ReturnStatementContext context
+    ) {
+        return new ObjectOriented.ReturnStatement(context.expression().getText());
+    }
+
+    private ObjectOriented.IfStatement objectOrientedIfStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.IfStatementContext context
+    ) {
+        Optional<ObjectOriented.Statement> elseBranch = context.ifStatement() != null
+                ? Optional.of(objectOrientedIfStatement(context.ifStatement()))
+                : context.statementBlock().size() > 1
+                        ? Optional.of(objectOrientedStatementBlock(context.statementBlock(1)))
+                        : Optional.empty();
+        return new ObjectOriented.IfStatement(
+                context.expression().getText(),
+                objectOrientedStatementBlock(context.statementBlock(0)),
+                elseBranch
+        );
+    }
+
+    private ObjectOriented.TryCatchStatement objectOrientedTryCatchStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.TryCatchStatementContext context
+    ) {
+        return new ObjectOriented.TryCatchStatement(
+                objectOrientedStatementBlock(context.statementBlock()),
+                context.catchClause().stream().map(this::objectOrientedCatchClause).toList()
+        );
+    }
+
+    private ObjectOriented.CatchClause objectOrientedCatchClause(
+            dev.capylang.parser.antlr.ObjectOrientedParser.CatchClauseContext context
+    ) {
+        return new ObjectOriented.CatchClause(
+                context.identifier().getText(),
+                objectOrientedStatementBlock(context.statementBlock())
+        );
+    }
+
+    private ObjectOriented.WhileStatement objectOrientedWhileStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.WhileStatementContext context
+    ) {
+        return new ObjectOriented.WhileStatement(
+                context.expression().getText(),
+                objectOrientedStatementBlock(context.statementBlock())
+        );
+    }
+
+    private ObjectOriented.DoWhileStatement objectOrientedDoWhileStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.DoWhileStatementContext context
+    ) {
+        return new ObjectOriented.DoWhileStatement(
+                objectOrientedStatementBlock(context.statementBlock()),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.ForEachStatement objectOrientedForEachStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ForEachStatementContext context
+    ) {
+        return new ObjectOriented.ForEachStatement(
+                context.identifier().getText(),
+                context.type() == null ? Optional.empty() : Optional.of(context.type().getText()),
+                context.expression().getText(),
+                objectOrientedStatementBlock(context.statementBlock())
+        );
+    }
+
+    private List<ObjectOriented.Parameter> objectOrientedParameters(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ParametersContext context
+    ) {
+        if (context == null) {
+            return List.of();
+        }
+        return context.parameter().stream()
+                .map(parameter -> new ObjectOriented.Parameter(parameter.identifier().getText(), parameter.type().getText()))
+                .toList();
+    }
+
+    private List<ObjectOriented.TypeReference> objectOrientedTypeReferences(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.QualifiedTypeContext> contexts
+    ) {
+        if (contexts == null) {
+            return List.of();
+        }
+        return contexts.stream()
+                .map(context -> new ObjectOriented.TypeReference(context.getText()))
+                .toList();
     }
 
     private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {

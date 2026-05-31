@@ -1,0 +1,479 @@
+/// Pure validation helpers for native provider declarations and wiring metadata.
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+
+fun provider_declaration(
+    name: String,
+    target_type: String,
+    qualifier: String,
+    source_file: String,
+    parameter_count: int,
+    effect_return_type: bool,
+    native_body: bool,
+    interface_id: String,
+    target_kind: String,
+    module_name: String
+): Tuple[String, String, String, String, int, bool, bool, String, String, String] =
+    (name, target_type, qualifier, source_file, parameter_count, effect_return_type, native_body, interface_id, target_kind, module_name)
+
+fun provider_key(interface_id: String, qualifier: String): Tuple[String, String] =
+    (interface_id, qualifier)
+
+fun backend_binding(
+    class_name: String,
+    module_name: String,
+    export_name: String,
+    factory: String
+): Tuple[String, String, String, String] =
+    (class_name, module_name, export_name, factory)
+
+fun manifest_entry(
+    interface_id: String,
+    qualifier: String,
+    java_binding: Tuple[bool, Tuple[String, String, String, String]],
+    javascript_binding: Tuple[bool, Tuple[String, String, String, String]],
+    python_binding: Tuple[bool, Tuple[String, String, String, String]]
+): Tuple[String, String, Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]]] =
+    (interface_id, qualifier, java_binding, javascript_binding, python_binding)
+
+fun no_backend_binding(): Tuple[bool, Tuple[String, String, String, String]] =
+    (false, ("", "", "", ""))
+
+fun some_backend_binding(binding: Tuple[String, String, String, String]): Tuple[bool, Tuple[String, String, String, String]] =
+    (true, binding)
+
+fun validate_provider_declaration(
+    provider: Tuple[String, String, String, String, int, bool, bool, String, String, String],
+    declared_provider_keys: List[Tuple[String, String]],
+    declared_provider_symbols: List[String]
+): Tuple[bool, String] =
+    if provider_parameter_count(provider) > 0
+    then np_failure("TypeMismatch: Native provider `" + provider_name(provider)
+        + "` must not declare parameters; provider functions are called as `" + provider_name(provider) + "()`")
+    else if !provider_effect_return_type(provider)
+        then np_failure("TypeMismatch: Native provider `" + provider_name(provider)
+            + "` must return `Effect[Interface]`, got `" + provider_target_type(provider) + "`")
+        else if !provider_native_body(provider)
+            then np_failure("TypeMismatch: Native provider `" + provider_name(provider)
+                + "` must use `<native>` as its function body")
+            else if provider_target_kind(provider) == "BUILTIN_OR_COMPOSITE"
+                then np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` target type `" + provider_target_type(provider)
+                    + "` with qualifier `" + provider_qualifier(provider) + "` is not an interface")
+                else if provider_target_kind(provider) == "UNKNOWN"
+                    then np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` targets unknown type `" + provider_target_type(provider)
+                        + "` with qualifier `" + provider_qualifier(provider) + "`")
+                    else if provider_target_kind(provider) != "INTERFACE"
+                        then np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` target type `" + provider_target_type(provider)
+                            + "` resolves to " + provider_target_kind(provider)
+                            + " and is not an interface; qualifier `" + provider_qualifier(provider) + "`")
+                        else if np_list_contains_key(declared_provider_keys, provider_key(provider_interface_id(provider), provider_qualifier(provider)))
+                            then np_failure("DuplicateProvider: Duplicate native provider declaration for native provider `" + provider_name(provider)
+                                + "` and interface `" + provider_interface_id(provider)
+                                + "` with qualifier `" + provider_qualifier(provider) + "`")
+                            else if np_list_contains_string(declared_provider_symbols, provider_name(provider))
+                                then np_failure("DuplicateProvider: Native provider `" + provider_name(provider) + "` duplicates another provider symbol in module `" + provider_module_name(provider)
+                                    + "` for target `" + provider_target_type(provider) + "` with qualifier `" + provider_qualifier(provider) + "`")
+                                else np_success()
+
+fun not_wired_error(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    "NotWired: Native provider `" + provider_name(provider) + "` for interface `" + provider_interface_id(provider)
+        + "` with qualifier `" + provider_qualifier(provider) + "` has no matching @NativeImplementation backend class or manifest entry"
+
+fun unused_manifest_entry_error(interface_id: String, qualifier: String, manifest_source_file: String): String =
+    "NotWired: Native provider manifest entry for interface `" + interface_id
+        + "` with qualifier `" + qualifier
+        + "` has no matching provider declaration" + native_provider_manifest_source_suffix(manifest_source_file)
+
+fun validate_manifest_entries(
+    entries: List[Tuple[String, String, Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]]]],
+    manifest_source_file: String
+): List[Tuple[int, int, String]] =
+    validate_manifest_entry_scan(entries, manifest_source_file, 0, [], [])
+
+fun validate_backend_binding(
+    provider: Tuple[String, String, String, String, int, bool, bool, String, String, String],
+    backend: String,
+    binding_present: bool,
+    binding: Tuple[String, String, String, String]
+): Tuple[bool, String] =
+    if !binding_present
+    then np_success()
+    else
+        let required_errors = validate_backend_required_fields(provider, backend, binding)
+        if required_errors[0] == false
+        then required_errors
+        else
+            let factory = backend_binding_factory(binding)
+            if np_list_contains_string(np_supported_backend_factories(backend), factory)
+            then np_success()
+            else np_failure("UnsupportedBackend: Native provider `" + provider_name(provider) + "` for interface `" + provider_interface_id(provider)
+                + "` with qualifier `" + provider_qualifier(provider) + "` for backend `" + backend + "` has unsupported "
+                + backend + " factory `" + factory + "`. Supported values: " + np_join_strings(np_supported_backend_factories(backend), 0, ""))
+
+fun is_builtin_or_composite_native_provider_target(target_type: String): bool =
+    let trimmed = np_string_trim(target_type)
+    if np_string_contains(trimmed, "=>") | np_string_contains(trimmed, "[") | np_string_ends_with(trimmed, "[]")
+    then true
+    else trimmed == "byte" | trimmed == "int" | trimmed == "long" | trimmed == "double"
+        | trimmed == "bool" | trimmed == "float" | trimmed == "String" | trimmed == "any"
+        | trimmed == "data" | trimmed == "void"
+
+fun calls_provider_with_arguments(expression: String, provider_name: String): bool =
+    calls_provider_with_arguments_scan(expression, provider_name, 0)
+
+private fun validate_manifest_entry_scan(
+    entries: List[Tuple[String, String, Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]]]],
+    manifest_source_file: String,
+    idx: int,
+    seen_keys: List[Tuple[String, String]],
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    match entries[idx] with
+    case Some { entry } ->
+        let key = provider_key(manifest_entry_interface_id(entry), manifest_entry_qualifier(entry))
+        if np_list_contains_key(seen_keys, key)
+        then validate_manifest_entry_scan(
+            entries,
+            manifest_source_file,
+            idx + 1,
+            seen_keys,
+            errors + (0, 0, duplicate_native_provider_manifest_message(manifest_source_file, manifest_entry_interface_id(entry), manifest_entry_qualifier(entry)))
+        )
+        else validate_manifest_entry_scan(entries, manifest_source_file, idx + 1, seen_keys + key, errors)
+    case _ -> errors
+
+private fun duplicate_native_provider_manifest_message(manifest_source_file: String, interface_id: String, qualifier: String): String =
+    if manifest_source_file == "native source annotations"
+    then "DuplicateProvider: Duplicate @NativeImplementation for interface `" + interface_id
+        + "` with qualifier `" + qualifier + "`" + native_provider_manifest_source_suffix(manifest_source_file)
+    else "DuplicateProvider: Duplicate native provider manifest entry for interface `" + interface_id
+        + "` with qualifier `" + qualifier + "`" + native_provider_manifest_source_suffix(manifest_source_file)
+
+private fun native_provider_manifest_source_suffix(manifest_source_file: String): String =
+    if np_string_is_empty(manifest_source_file)
+    then ""
+    else " in manifest `" + manifest_source_file + "`"
+
+private fun validate_backend_required_fields(
+    provider: Tuple[String, String, String, String, int, bool, bool, String, String, String],
+    backend: String,
+    binding: Tuple[String, String, String, String]
+): Tuple[bool, String] =
+    if backend == "java"
+    then require_backend_text(provider, backend, "java.className", backend_binding_class_name(binding))
+    else if backend == "javascript"
+        then
+            let module_result = require_backend_text(provider, backend, "javascript.module", backend_binding_module_name(binding))
+            if module_result[0] == false
+            then module_result
+            else require_backend_text(provider, backend, "javascript.export", backend_binding_export_name(binding))
+        else
+            let module_result = require_backend_text(provider, backend, "python.module", backend_binding_module_name(binding))
+            if module_result[0] == false
+            then module_result
+            else require_backend_text(provider, backend, "python.className", backend_binding_class_name(binding))
+
+private fun require_backend_text(
+    provider: Tuple[String, String, String, String, int, bool, bool, String, String, String],
+    backend: String,
+    field_name: String,
+    value: String
+): Tuple[bool, String] =
+    if !np_string_is_blank(value)
+    then np_success()
+    else np_failure("UnsupportedBackend: Native provider `" + provider_name(provider) + "` for interface `" + provider_interface_id(provider)
+        + "` with qualifier `" + provider_qualifier(provider) + "` for backend `" + backend
+        + "` requires field `" + field_name + "`")
+
+private fun np_supported_backend_factories(backend: String): List[String] =
+    if backend == "java"
+    then ["constructor"]
+    else if backend == "javascript"
+        then ["new", "call"]
+        else ["call"]
+
+private fun calls_provider_with_arguments_scan(expression: String, provider_name: String, index: int): bool =
+    if index >= np_string_size(expression)
+    then false
+    else
+        match expression[index] with
+        case Some { current } ->
+            if current == '"' | current == "'"
+            then calls_provider_with_arguments_scan(expression, provider_name, np_skip_string_literal(expression, index))
+            else if !np_matches_direct_identifier(expression, index, provider_name)
+                then calls_provider_with_arguments_scan(expression, provider_name, index + 1)
+                else
+                    let open_paren = np_skip_whitespace(expression, index + np_string_size(provider_name))
+                    if open_paren < np_string_size(expression)
+                    then
+                        match expression[open_paren] with
+                        case Some { char } ->
+                            if char == "("
+                            then
+                                let close_paren = np_matching_paren(expression, open_paren)
+                                if close_paren > open_paren & !np_string_is_blank(expression[open_paren + 1, close_paren])
+                                then true
+                                else calls_provider_with_arguments_scan(expression, provider_name, index + np_string_size(provider_name))
+                            else calls_provider_with_arguments_scan(expression, provider_name, index + np_string_size(provider_name))
+                        case _ -> false
+                    else false
+        case _ -> false
+
+private fun np_skip_string_literal(expression: String, start: int): int =
+    match expression[start] with
+    case Some { delimiter } -> np_skip_string_literal_scan(expression, delimiter, start + 1)
+    case _ -> start + 1
+
+private fun np_skip_string_literal_scan(expression: String, delimiter: String, index: int): int =
+    if index >= np_string_size(expression)
+    then index
+    else
+        match expression[index] with
+        case Some { current } ->
+            if current == "\\"
+            then np_skip_string_literal_scan(expression, delimiter, index + 2)
+            else if current == delimiter
+                then index + 1
+                else np_skip_string_literal_scan(expression, delimiter, index + 1)
+        case _ -> index
+
+private fun np_matches_direct_identifier(expression: String, index: int, identifier: String): bool =
+    if !np_string_starts_with(expression[index, np_string_size(expression)], identifier)
+    then false
+    else if index + np_string_size(identifier) < np_string_size(expression) & np_is_identifier_part_at(expression, index + np_string_size(identifier))
+        then false
+        else
+            let previous = np_previous_non_whitespace(expression, index - 1)
+            if previous < 0
+            then true
+            else !np_is_identifier_part_at(expression, previous) & !np_char_at_equals(expression, previous, ".")
+
+private fun np_previous_non_whitespace(expression: String, index: int): int =
+    if index < 0
+    then -1
+    else
+        match expression[index] with
+        case Some { char } ->
+            if np_is_whitespace(char)
+            then np_previous_non_whitespace(expression, index - 1)
+            else index
+        case _ -> -1
+
+private fun np_is_identifier_part_at(expression: String, index: int): bool =
+    match expression[index] with
+    case Some { char } -> np_is_identifier_part(char)
+    case _ -> false
+
+private fun np_is_identifier_part(char: String): bool =
+    np_is_ascii_letter(char) | np_is_digit(char) | char == "_"
+
+private fun np_is_ascii_letter(char: String): bool =
+    np_string_contains("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", char)
+
+private fun np_is_digit(char: String): bool =
+    np_string_contains("0123456789", char)
+
+private fun np_skip_whitespace(expression: String, index: int): int =
+    if index < np_string_size(expression) & np_is_whitespace_at(expression, index)
+    then np_skip_whitespace(expression, index + 1)
+    else index
+
+private fun np_is_whitespace_at(expression: String, index: int): bool =
+    match expression[index] with
+    case Some { char } -> np_is_whitespace(char)
+    case _ -> false
+
+private fun np_matching_paren(expression: String, open_paren: int): int =
+    np_matching_paren_scan(expression, open_paren, 0)
+
+private fun np_matching_paren_scan(expression: String, index: int, depth: int): int =
+    if index >= np_string_size(expression)
+    then -1
+    else
+        match expression[index] with
+        case Some { current } ->
+            if current == '"' | current == "'"
+            then np_matching_paren_scan(expression, np_skip_string_literal(expression, index), depth)
+            else if current == "("
+                then np_matching_paren_scan(expression, index + 1, depth + 1)
+                else if current == ")"
+                    then
+                        let next_depth = depth - 1
+                        if next_depth == 0
+                        then index
+                        else np_matching_paren_scan(expression, index + 1, next_depth)
+                    else np_matching_paren_scan(expression, index + 1, depth)
+        case _ -> -1
+
+private fun provider_name(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    provider[0]
+
+private fun provider_target_type(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    provider[1]
+
+private fun provider_qualifier(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    provider[2]
+
+private fun provider_parameter_count(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): int =
+    provider[4]
+
+private fun provider_effect_return_type(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): bool =
+    provider[5]
+
+private fun provider_native_body(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): bool =
+    provider[6]
+
+private fun provider_interface_id(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    provider[7]
+
+private fun provider_target_kind(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    provider[8]
+
+private fun provider_module_name(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
+    provider[9]
+
+private fun manifest_entry_interface_id(
+    entry: Tuple[String, String, Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]]]
+): String =
+    entry[0]
+
+private fun manifest_entry_qualifier(
+    entry: Tuple[String, String, Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]], Tuple[bool, Tuple[String, String, String, String]]]
+): String =
+    entry[1]
+
+private fun backend_binding_class_name(binding: Tuple[String, String, String, String]): String =
+    binding[0]
+
+private fun backend_binding_module_name(binding: Tuple[String, String, String, String]): String =
+    binding[1]
+
+private fun backend_binding_export_name(binding: Tuple[String, String, String, String]): String =
+    binding[2]
+
+private fun backend_binding_factory(binding: Tuple[String, String, String, String]): String =
+    binding[3]
+
+private fun np_list_contains_string(values: List[String], value: String): bool =
+    match values[0] with
+    case Some _ -> np_list_contains_string_scan(values, value, 0)
+    case _ -> false
+
+private fun np_list_contains_string_scan(values: List[String], value: String, idx: int): bool =
+    match values[idx] with
+    case Some { current } ->
+        if current == value
+        then true
+        else np_list_contains_string_scan(values, value, idx + 1)
+    case _ -> false
+
+private fun np_list_contains_key(values: List[Tuple[String, String]], value: Tuple[String, String]): bool =
+    match values[0] with
+    case Some _ -> np_list_contains_key_scan(values, value, 0)
+    case _ -> false
+
+private fun np_list_contains_key_scan(values: List[Tuple[String, String]], value: Tuple[String, String], idx: int): bool =
+    match values[idx] with
+    case Some { current } ->
+        if current == value
+        then true
+        else np_list_contains_key_scan(values, value, idx + 1)
+    case _ -> false
+
+private fun np_success(): Tuple[bool, String] =
+    (true, "")
+
+private fun np_failure(message: String): Tuple[bool, String] =
+    (false, message)
+
+private fun np_join_strings(values: List[String], idx: int, output: String): String =
+    match values[idx] with
+    case Some { value } ->
+        if np_string_is_empty(output)
+        then np_join_strings(values, idx + 1, value)
+        else np_join_strings(values, idx + 1, output + ", " + value)
+    case _ -> output
+
+private fun np_string_contains(value: String, target: String): bool =
+    np_contains_scan(value, target, 0)
+
+private fun np_contains_scan(value: String, target: String, idx: int): bool =
+    if idx > np_string_size(value) - np_string_size(target)
+    then false
+    else if np_string_starts_with(value[idx, np_string_size(value)], target)
+        then true
+        else np_contains_scan(value, target, idx + 1)
+
+private fun np_char_at_equals(value: String, index: int, expected: String): bool =
+    match value[index] with
+    case Some { char } -> char == expected
+    case _ -> false
+
+private fun np_string_size(value: String): int =
+    fun scan(value: String, idx: int): int =
+        match value[idx] with
+        case Some _ -> scan(value, idx + 1)
+        case _ -> idx
+    ---
+    scan(value, 0)
+
+private fun np_string_is_empty(value: String): bool =
+    np_string_size(value) == 0
+
+private fun np_string_is_blank(value: String): bool =
+    fun scan(value: String, idx: int): bool =
+        match value[idx] with
+        case Some { char } ->
+            if np_is_whitespace(char)
+            then scan(value, idx + 1)
+            else false
+        case _ -> true
+    ---
+    scan(value, 0)
+
+private fun np_string_trim(value: String): String =
+    np_trim_right(np_trim_left(value))
+
+private fun np_trim_left(value: String): String =
+    fun scan(value: String, idx: int): String =
+        match value[idx] with
+        case Some { char } ->
+            if np_is_whitespace(char)
+            then scan(value, idx + 1)
+            else value[idx, np_string_size(value)]
+        case _ -> ""
+    ---
+    scan(value, 0)
+
+private fun np_trim_right(value: String): String =
+    fun scan(value: String, idx: int): String =
+        if idx < 0
+        then ""
+        else
+            match value[idx] with
+            case Some { char } ->
+                if np_is_whitespace(char)
+                then scan(value, idx - 1)
+                else value[0, idx + 1]
+            case _ -> ""
+    ---
+    scan(value, np_string_size(value) - 1)
+
+private fun np_is_whitespace(char: String): bool =
+    char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
+
+private fun np_string_starts_with(value: String, prefix: String): bool =
+    let prefix_size = np_string_size(prefix)
+    if np_string_size(value) < prefix_size
+    then false
+    else value[0, prefix_size] == prefix
+
+private fun np_string_ends_with(value: String, suffix: String): bool =
+    let value_size = np_string_size(value)
+    let suffix_size = np_string_size(suffix)
+    if value_size < suffix_size
+    then false
+    else value[value_size - suffix_size, value_size] == suffix

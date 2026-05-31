@@ -1,5 +1,6 @@
 package dev.capylang.compiler.compilation_error;
 
+import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -87,7 +88,7 @@ class StringInterpolationCompilationErrorTest {
 
     private static SortedSet<CompilerError> compileProgram(String fun, String moduleName) {
         var programResult = CapybaraCompiler.INSTANCE.compile(
-                java.util.List.of(new RawModule(moduleName, "/foo/boo", fun)),
+                java.util.List.of(new RawModule(moduleName, "/foo/boo", fun, SourceKind.FUNCTIONAL)),
                 new TreeSet<>()
         );
         if (programResult instanceof Result.Success<CompiledProgram> value) {

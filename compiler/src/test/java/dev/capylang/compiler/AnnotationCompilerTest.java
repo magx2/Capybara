@@ -22,7 +22,7 @@ class AnnotationCompilerTest {
                             name: String
                             retries: int = 0
                         }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Tests", "/foo/app", """
                         from /capy/test/Annotations import { Test }
 
@@ -31,7 +31,7 @@ class AnnotationCompilerTest {
                         @Test(name: "adds values")
                         @Local()
                         fun should_add(): bool = true
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var annotationsModule = compiled.modules().stream()
@@ -52,7 +52,7 @@ class AnnotationCompilerTest {
 
                         annotation First on data { value: String = "first" }
                         annotation Second on data { value: String = "second" }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Tests", "/foo/app", """
                         from /capy/test/Annotations import { Label, First, Second }
 
@@ -68,7 +68,7 @@ class AnnotationCompilerTest {
 
                         @Label(order: 3, label: "run")
                         fun run(id: user_id): User = User { name: "ok" }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         );
 
         var compiled = compileSuccess(modules);
@@ -118,7 +118,7 @@ class AnnotationCompilerTest {
 
                 @Test
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
     }
 
     @Test
@@ -129,7 +129,7 @@ class AnnotationCompilerTest {
                 @Deprecated
                 @Deprecated
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Annotation Deprecated cannot be applied multiple times");
     }
@@ -144,7 +144,7 @@ class AnnotationCompilerTest {
                 @Tag(value: "slow")
                 @Tag(value: "integration")
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(function(compiled, "Tests", "should_run").annotations())
                 .extracting(CompiledAnnotation::name)
@@ -160,7 +160,7 @@ class AnnotationCompilerTest {
 
                 @Test()
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Missing required annotation argument name for Test");
     }
@@ -170,7 +170,7 @@ class AnnotationCompilerTest {
         var error = compileFailure(new RawModule("Tests", "/foo/app", """
                 @Missing()
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Unknown annotation Missing");
     }
@@ -178,11 +178,11 @@ class AnnotationCompilerTest {
     @Test
     void shouldRejectUnimportedAnnotationFromAnotherModule() {
         var error = compileFailure(List.of(
-                new RawModule("Annotations", "/capy/test", "annotation Test on fun {}"),
+                new RawModule("Annotations", "/capy/test", "annotation Test on fun {}", SourceKind.FUNCTIONAL),
                 new RawModule("Tests", "/foo/app", """
                         @Test()
                         fun should_run(): bool = true
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(error.message()).contains("Unknown annotation Test");
@@ -195,7 +195,7 @@ class AnnotationCompilerTest {
 
                 @Entity
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Annotation Entity is not valid on function declarations");
     }
@@ -207,7 +207,7 @@ class AnnotationCompilerTest {
 
                 @Marker()
                 annotation Meta on fun {}
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Annotation Marker is not valid on annotation declarations");
     }
@@ -221,7 +221,7 @@ class AnnotationCompilerTest {
 
                 @Test(label: "wrong")
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(messages).anySatisfy(message ->
                 assertThat(message).contains("Unknown annotation argument label for Test"));
@@ -236,7 +236,7 @@ class AnnotationCompilerTest {
 
                 @Test(name: "one", name: "two")
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Duplicate annotation argument name for Test");
     }
@@ -250,7 +250,7 @@ class AnnotationCompilerTest {
 
                 @Retry(retries: "three")
                 fun should_run(): bool = true
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Annotation argument retries for Retry expects int, got String");
     }
@@ -264,14 +264,14 @@ class AnnotationCompilerTest {
 
                 @MethodOnly()
                 fun Box.read(): int = 1
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var error = compileFailure(new RawModule("Tests", "/foo/app", """
                 annotation MethodOnly on method {}
 
                 @MethodOnly()
                 fun read(): int = 1
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("Annotation MethodOnly is not valid on function declarations");
     }
@@ -283,7 +283,7 @@ class AnnotationCompilerTest {
                         annotation Entity on class {}
                         annotation JsonName on field { value: String }
                         annotation Endpoint on method {}
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("User", "/foo/app", """
                         from /capy/test/Annotations import { Entity, JsonName, Endpoint }
 
@@ -318,7 +318,7 @@ class AnnotationCompilerTest {
                         .containsExactly("Endpoint"));
 
         var error = compileFailure(List.of(
-                new RawModule("Annotations", "/capy/test", "annotation Entity on class {}"),
+                new RawModule("Annotations", "/capy/test", "annotation Entity on class {}", SourceKind.FUNCTIONAL),
                 new RawModule("User", "/foo/app", """
                         from /capy/test/Annotations import { Entity }
 

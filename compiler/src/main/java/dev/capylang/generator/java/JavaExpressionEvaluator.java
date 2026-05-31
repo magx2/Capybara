@@ -5,6 +5,7 @@ import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
+import dev.capylang.compiler.parser.InfixOperatorModule;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -770,10 +771,10 @@ public class JavaExpressionEvaluator {
                 }
                 if (infixExpression.type() == dev.capylang.compiler.PrimitiveLinkedType.STRING) {
                     yield stringConcatOperand(left.expression(), infixExpression.left().type())
-                          + operator.symbol()
+                          + InfixOperatorModule.symbol(operator)
                           + stringConcatOperand(right.expression(), infixExpression.right().type());
                 }
-                yield left.expression() + operator.symbol() + right.expression();
+                yield left.expression() + InfixOperatorModule.symbol(operator) + right.expression();
             }
             case MINUS -> {
                 if (infixExpression.left().type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList) {
@@ -788,13 +789,13 @@ public class JavaExpressionEvaluator {
                 if (isStringLeftNumericRight(infixExpression)) {
                     yield left.expression() + "+" + right.expression();
                 }
-                yield left.expression() + operator.symbol() + right.expression();
+                yield left.expression() + InfixOperatorModule.symbol(operator) + right.expression();
             }
             case MUL, DIV, MOD -> {
                 if (isStringLeftNumericRight(infixExpression)) {
                     yield left.expression() + "+" + right.expression();
                 }
-                yield left.expression() + operator.symbol() + right.expression();
+                yield left.expression() + InfixOperatorModule.symbol(operator) + right.expression();
             }
             case QUESTION -> {
                 if (infixExpression.left().type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList) {
@@ -810,21 +811,21 @@ public class JavaExpressionEvaluator {
                     && infixExpression.right().type() == dev.capylang.compiler.PrimitiveLinkedType.STRING) {
                     yield left.expression() + ".contains(" + right.expression() + ")";
                 }
-                yield left.expression() + operator.symbol() + right.expression();
+                yield left.expression() + InfixOperatorModule.symbol(operator) + right.expression();
             }
             case BITWISE_AND, BITWISE_OR, BITWISE_XOR ->
-                    left.expression() + operator.javaSymbol() + right.expression();
+                    left.expression() + InfixOperatorModule.javaSymbol(operator) + right.expression();
             case BITWISE_NAND ->
-                    "~(" + left.expression() + operator.javaSymbol() + right.expression() + ")";
+                    "~(" + left.expression() + InfixOperatorModule.javaSymbol(operator) + right.expression() + ")";
             case BITWISE_NOT ->
-                    operator.javaSymbol() + left.expression();
+                    InfixOperatorModule.javaSymbol(operator) + left.expression();
             case AND, PIPE -> toBooleanExpression(left.expression(), infixExpression.left().type())
-                            + operator.javaSymbol()
+                            + InfixOperatorModule.javaSymbol(operator)
                             + toBooleanExpression(right.expression(), infixExpression.right().type());
             case EQUAL, NOTEQUAL -> {
                 if (isBooleanCoercionComparison(infixExpression)) {
                     yield toBooleanExpression(left.expression(), infixExpression.left().type())
-                          + operator.javaSymbol()
+                          + InfixOperatorModule.javaSymbol(operator)
                           + toBooleanExpression(right.expression(), infixExpression.right().type());
                 }
                 if (isStringComparison(infixExpression)) {
@@ -839,9 +840,9 @@ public class JavaExpressionEvaluator {
                             ? equalsExpression
                             : "!(" + equalsExpression + ")";
                 }
-                yield left.expression() + operator.javaSymbol() + right.expression();
+                yield left.expression() + InfixOperatorModule.javaSymbol(operator) + right.expression();
             }
-            default -> left.expression() + operator.javaSymbol() + right.expression();
+            default -> left.expression() + InfixOperatorModule.javaSymbol(operator) + right.expression();
         };
 
         return right.scope().addExpression('(' + castIfNeeded(infixExpression.type(), expression) + ')');

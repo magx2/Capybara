@@ -1,6 +1,7 @@
 package dev.capylang.compiler;
 
 import dev.capylang.compiler.expression.*;
+import dev.capylang.compiler.parser.InfixOperatorModule;
 
 import static java.lang.System.lineSeparator;
 import static java.util.stream.Collectors.joining;
@@ -105,7 +106,7 @@ public class CompiledExpressionPrinter {
 
     private static String printLinkedInfixExpression(CompiledInfixExpression linkedInfixExpression, int level) {
         return printExpression(linkedInfixExpression.left(), level)
-               + " " + linkedInfixExpression.operator().symbol()
+               + " " + InfixOperatorModule.symbol(linkedInfixExpression.operator())
                + " " + printExpression(linkedInfixExpression.right(), level);
     }
 

@@ -12,6 +12,7 @@ public record ObjectOrientedModule(
         SourceKind sourceKind
 ) {
     public String moduleFile() {
-        return sourceKind.moduleFile(path, name);
+        return SourceKindModule.moduleFile(sourceKind, path, name);
     }
 }
+

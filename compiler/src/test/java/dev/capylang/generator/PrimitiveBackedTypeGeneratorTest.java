@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
 import capy.lang.Result;
@@ -39,15 +40,15 @@ class PrimitiveBackedTypeGeneratorTest {
         var program = compileProgram(List.of(
                 new RawModule("UserIds", "/foo/users", """
                         type user_id -> int
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("OrderIds", "/foo/orders", """
                         type user_id -> long
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/users/UserIds import { user_id }
 
                         fun echo(id: user_id): user_id = id
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var code = generatedCode(new JavaGenerator(), program, Path.of("foo", "app", "Consumer.java"));
@@ -67,7 +68,7 @@ class PrimitiveBackedTypeGeneratorTest {
                     then Success { value }
                     else Error { "bad count" }
                 }
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var code = generatedCode(new JavaGenerator(), program, Path.of("foo", "Numbers.java"));
 
@@ -117,7 +118,7 @@ class PrimitiveBackedTypeGeneratorTest {
 
                 fun make(value: String): token = token { value }
                 fun unwrap(value: token): String = value.value
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var js = generatedCode(new JavaScriptGenerator(), program, Path.of("foo", "Tokens.js"));
         var python = generatedCode(new PythonGenerator(), program, Path.of("foo", "Tokens.py"));
@@ -150,7 +151,7 @@ class PrimitiveBackedTypeGeneratorTest {
                 }
 
                 fun next(value: index): index = index! { value.value + 1 }
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var code = generatedCode(new PythonGenerator(), program, Path.of("foo", "Numbers.py"));
 
@@ -190,7 +191,7 @@ class PrimitiveBackedTypeGeneratorTest {
 
     private static String generatedCode(Generator generator, CompiledProgram program, Path modulePath) {
         return generator.generate(program).modules().stream()
-                .filter(module -> module.relativePath().equals(modulePath))
+                .filter(module -> module.relativePath().equals(Generator.generatedRelativePath(modulePath)))
                 .map(GeneratedModule::code)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Generated module " + modulePath + " not found"));
@@ -204,7 +205,7 @@ class PrimitiveBackedTypeGeneratorTest {
                 fun unwrap(value: user_id): int = value.value
                 fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
                 fun plus(left: user_id, right: user_id): user_id = left.plus(right)
-                """)));
+                """, SourceKind.FUNCTIONAL)));
     }
 
     private static RawModule semVerModule() {
@@ -222,7 +223,7 @@ class PrimitiveBackedTypeGeneratorTest {
                 fun sem_ver(value: int): Result[SemVer] =
                     let major_value <- major { value }
                     Success { SemVer { major_value } }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {

@@ -25,7 +25,7 @@ class CapybaraParserTest {
     @ParameterizedTest(name = "{index}: should parse function {0}")
     @MethodSource
     void parse(String name, String code) {
-        var module = parseSuccess(new RawModule("Test", "/parser", code));
+        var module = parseSuccess(new RawModule("Test", "/parser", code, SourceKind.FUNCTIONAL));
         findFunction(name, module.functional());
         System.out.println(module);
     }
@@ -64,7 +64,7 @@ class CapybaraParserTest {
                 import /foo/A
 
                 fun value(): int = A.foo(1)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(module.imports())
                 .containsExactly(new dev.capylang.compiler.ImportDeclaration("/foo/A", List.of(), List.of(), true));
@@ -103,7 +103,7 @@ class CapybaraParserTest {
 
                 @A
                 fun Box[T].map(value: T): T = value
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var annotation = findDefinition(AnnotationDeclaration.class, "Deprecated", module.functional());
         assertThat(annotation.multiple()).isFalse();
@@ -147,7 +147,7 @@ class CapybaraParserTest {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 @A, @B
                 fun broken(): int = 1
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
     }
@@ -259,7 +259,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun add(a: int, b: int): int = a + b
                 fun test(): int => int = add(1, _)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(FunctionCall.class);
@@ -274,7 +274,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun foo(a: int, b: String, c: double, d: int): String = b
                 fun test(b: String): (int, double, int) => String = foo(_, b, _, _)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(FunctionCall.class);
@@ -291,7 +291,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun union(): int = 1
                 fun call_union(): int = union()
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("call_union", module.functional());
         assertThat(function.expression()).isInstanceOf(FunctionCall.class);
@@ -305,7 +305,7 @@ class CapybaraParserTest {
     void parseStandalonePlaceholderForCompilerDiagnostics() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun test(): int => int = _
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(PlaceholderExpression.class);
@@ -318,7 +318,7 @@ class CapybaraParserTest {
                 data Foo { a: int, b: int }
                 data Boo { b: int, c: int }
                 data Bar { d: int, ...Foo, ...Boo }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "Bar", module.functional());
         assertThat(data.fields()).extracting(DataDeclaration.DataField::name).containsExactly("d");
@@ -332,7 +332,7 @@ class CapybaraParserTest {
                 data User { age: int } with constructor {
                     if age > 0 then * { age: age } else * { age: 1 }
                 }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "User", module.functional());
         assertThat(data.constructor()).isPresent();
@@ -351,7 +351,7 @@ class CapybaraParserTest {
                 type foo_bar -> int
                 type token -> String
                 fun identity(value: foo_bar): foo_bar = value
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "foo_bar", module.functional());
         assertThat(declaration.backingType()).isEqualTo(PrimitiveType.INT);
@@ -372,7 +372,7 @@ class CapybaraParserTest {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 type token -> User
                 data User { value: String }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
     }
@@ -386,7 +386,7 @@ class CapybaraParserTest {
                 }
 
                 fun unwrap(id: user_id): int = id.value
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "user_id", module.functional());
         assertThat(declaration.constructor()).hasValueSatisfying(constructor ->
@@ -408,7 +408,7 @@ class CapybaraParserTest {
 
                 fun user_id.plus(id: user_id): user_id = user_id! { this.value + id.value }
                 fun user_id.`+`(id: user_id): user_id = user_id! { this.value + id.value }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var plus = findFunction("__method__user_id__plus", module.functional());
         var operator = findFunction("__method__user_id__+", module.functional());
@@ -435,7 +435,7 @@ class CapybaraParserTest {
                 data User { name: String, age: int } derive Show
                 union Named { id: String } = Person derive Show
                 data Person { id: String, name: String }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var deriver = module.functional().definitions().stream()
                 .filter(DeriverDeclaration.class::isInstance)
@@ -467,7 +467,7 @@ class CapybaraParserTest {
                 }
 
                 fun fallback(): User = User! { age: 1 }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("fallback", module.functional());
         assertThat(function.expression()).isInstanceOf(NewData.class);
@@ -482,7 +482,7 @@ class CapybaraParserTest {
                 union User { age: int } with constructor {
                    if age > 0 then Success { * { age: age } } else Error { "age" }
                 } = Adult | Child
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var type = findDefinition(TypeDeclaration.class, "User", module.functional());
         assertThat(type.constructor()).isPresent();
@@ -498,7 +498,7 @@ class CapybaraParserTest {
                 type Result = Success | Error
                 data Success {}
                 data Error {}
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
     }
@@ -512,7 +512,7 @@ class CapybaraParserTest {
                 fun users(name: String): Result[String] =
                     let user <- Success { value: name }
                     user
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("users", module.functional());
         assertThat(function.expression()).isInstanceOf(LetExpression.class);
@@ -527,7 +527,7 @@ class CapybaraParserTest {
     void parseComparisonWithUnaryMinusWithoutSpaces() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun negative_compare(a: int): bool = a<-1
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("negative_compare", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -541,7 +541,7 @@ class CapybaraParserTest {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 data Foo { a: int }
                 data Bar { ...Foo, b: int }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
         assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
@@ -557,7 +557,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse const declaration as zero-arg function")
     void parseConstDeclaration() {
-        var module = parseSuccess(new RawModule("Test", "/parser", "const E: double = 2."));
+        var module = parseSuccess(new RawModule("Test", "/parser", "const E: double = 2.", SourceKind.FUNCTIONAL));
         var function = findFunction("E", module.functional());
         assertThat(function.parameters()).isEmpty();
         assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
@@ -566,7 +566,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse bare decimal literal as double")
     void parseBareDecimalLiteralAsDouble() {
-        var module = parseSuccess(new RawModule("Test", "/parser", "fun pi(): double = 3.14"));
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun pi(): double = 3.14", SourceKind.FUNCTIONAL));
         var function = findFunction("pi", module.functional());
         assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
         assertThat(function.expression()).isInstanceOf(DoubleValue.class);
@@ -575,7 +575,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse suffixed float literal as float")
     void parseSuffixedFloatLiteralAsFloat() {
-        var module = parseSuccess(new RawModule("Test", "/parser", "fun ratio(): float = 3.14f"));
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun ratio(): float = 3.14f", SourceKind.FUNCTIONAL));
         var function = findFunction("ratio", module.functional());
         assertThat(function.returnType()).contains(PrimitiveType.FLOAT);
         assertThat(function.expression()).isInstanceOf(FloatValue.class);
@@ -588,7 +588,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun i(): int = 100_000
                 fun l(): long = 9_738_771_718_7L
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var intFunction = findFunction("i", module.functional());
         assertThat(intFunction.expression()).isInstanceOf(IntValue.class);
@@ -602,7 +602,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse native expression literal")
     void parseNativeExpressionLiteral() {
-        var module = parseSuccess(new RawModule("Test", "/parser", "fun generated(): int = <native>"));
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun generated(): int = <native>", SourceKind.FUNCTIONAL));
 
         var function = findFunction("generated", module.functional());
 
@@ -613,7 +613,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse native data declaration")
     void parseNativeDataDeclaration() {
-        var module = parseSuccess(new RawModule("String", "/capy/lang", "data String { <native> }"));
+        var module = parseSuccess(new RawModule("String", "/capy/lang", "data String { <native> }", SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "String", module.functional());
 
@@ -632,7 +632,7 @@ class CapybaraParserTest {
                     counts: Dict[int],
                     pair: Tuple[int, String]
                 ): Tuple[String, int] = (text, pair[0])
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("aliases", module.functional());
 
@@ -647,7 +647,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse regex literal into runtime factory call")
     void parseRegexLiteral() {
-        var module = parseSuccess(new RawModule("Test", "/parser", "fun digits() = regex/\\\\d+/im"));
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun digits() = regex/\\\\d+/im", SourceKind.FUNCTIONAL));
 
         var function = findFunction("digits", module.functional());
         assertThat(function.expression()).isInstanceOf(FunctionCall.class);
@@ -670,7 +670,7 @@ class CapybaraParserTest {
                 fun find_all(v: String) = regex/\\\\d+/ ~~ v
                 fun redact() = regex/\\\\d+/ ~> "#"
                 fun split(v: String) = regex/,/ /> v
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(((InfixExpression) findFunction("check", module.functional()).expression()).operator()).isEqualTo(InfixOperator.QUESTION);
         assertThat(((InfixExpression) findFunction("find", module.functional()).expression()).operator()).isEqualTo(InfixOperator.TILDE);
@@ -687,7 +687,7 @@ class CapybaraParserTest {
                     const white_space = { " ", "\\t", "\\n" }
                     ---
                     white_space ? x
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
         assertThat(localConst.parameters()).isEmpty();
@@ -708,7 +708,7 @@ class CapybaraParserTest {
                     const white_space = { " ", "\\t", "\\n" }
                     ---
                     white_space ? x
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
         assertThat(localConst.returnType()).contains(new CollectionType.SetType(PrimitiveType.STRING));
@@ -723,7 +723,7 @@ class CapybaraParserTest {
                     const white_space = 2
                     ---
                     white_space
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
         assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
@@ -744,7 +744,7 @@ class CapybaraParserTest {
         var code = "fun list_identity(l: List[int]): List[int] = l";
 
         // when
-        var module = parseSuccess(new RawModule("Test", "/parser", code));
+        var module = parseSuccess(new RawModule("Test", "/parser", code, SourceKind.FUNCTIONAL));
 
         // then
         var function = findFunction(name, module.functional());
@@ -782,7 +782,7 @@ class CapybaraParserTest {
                 fun annotated_identity(xs: List
                 [String]): List
                 [String] = xs
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         findDefinition(DataDeclaration.class, "Box", module.functional());
         assertThat(findFunction("list_identity", module.functional()).returnType())
@@ -806,7 +806,7 @@ class CapybaraParserTest {
 
                 /// The result of comparing two values.
                 enum Ordering { LESS, EQUAL, GREATER }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "JUnitReport", module.functional());
         var type = findDefinition(TypeDeclaration.class, "JUnitNode", module.functional());
@@ -828,7 +828,7 @@ class CapybaraParserTest {
                 /// with exit code zero.
                 data Success {}
                 data Failed { exit_code: int }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var data = findDefinition(DataDeclaration.class, "Success", module.functional());
         assertThat(data.fields()).isEmpty();
@@ -842,7 +842,7 @@ class CapybaraParserTest {
                 union T1 { a: int, b: String, c: int, } = D1 | D2
                 data D1 { d: int, e: int, }
                 data D2 { f: int, g: int, }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var type = findDefinition(TypeDeclaration.class, "T1", module.functional());
         var d1 = findDefinition(DataDeclaration.class, "D1", module.functional());
@@ -865,7 +865,7 @@ class CapybaraParserTest {
                     fun parse_positive_digit(value: int): int = value + 1
                     ---
                     0
-                """);
+                """, SourceKind.FUNCTIONAL);
 
         var error = (CompilerError) method.invoke(
                 parser,
@@ -889,7 +889,7 @@ class CapybaraParserTest {
                         if n <= 0 then acc else __accumulate(n-1, acc+n)
                     ---
                     __accumulate(n, 0)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var localFunction = findFunction("__accumulate__scope_1_0__local_fun_0_accumulate", module.functional());
         assertThat(localFunction.comments()).containsExactly("Internal accumulate");
@@ -902,7 +902,7 @@ class CapybaraParserTest {
                 @Recursive
                 fun sum(n: int, acc: int): int =
                     if n <= 0 then acc else sum(n - 1, acc + n)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("sum", module.functional());
         assertThat(function.annotations()).extracting(AnnotationUsage::name).containsExactly("Recursive");
@@ -916,7 +916,7 @@ class CapybaraParserTest {
                 @Recursive()
                 fun sum(n: int, acc: int): int =
                     if n <= 0 then acc else sum(n - 1, acc + n)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("sum", module.functional());
         assertThat(function.annotations()).extracting(AnnotationUsage::name).containsExactly("Recursive");
@@ -933,7 +933,7 @@ class CapybaraParserTest {
                         if n <= 0 then acc else __sum(n - 1, acc + n)
                     ---
                     __sum(n, 0)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var localFunction = findFunction("__sum__scope_1_0__local_fun_0_sum", module.functional());
         assertThat(localFunction.annotations()).extracting(AnnotationUsage::name).containsExactly("Recursive");
@@ -946,7 +946,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun rec(x: int): int = x
                 fun call_rec(x: int): int = rec(x)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(findFunction("rec", module.functional()).tailRecursive()).isFalse();
         var call = (FunctionCall) findFunction("call_rec", module.functional()).expression();
@@ -965,7 +965,7 @@ class CapybaraParserTest {
                     const __threshold: int = THRESHOLD
                     ---
                     __threshold
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var globalConst = findFunction("THRESHOLD", module.functional());
         var localConst = findFunction("__config__scope_4_0__local_const_0_threshold", module.functional());
@@ -981,7 +981,7 @@ class CapybaraParserTest {
                 fun foo(n: int): int =
                     fun __inc(x: int): int = x + 1
                     __inc(n)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
     }
@@ -992,7 +992,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Box { failed: bool }
                 fun test(box: Box): bool = !box.failed
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1014,7 +1014,7 @@ class CapybaraParserTest {
                 data Box { failed: bool }
                 fun Box.has_failed(): bool = this.failed
                 fun test(box: Box): bool = !box.has_failed()
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1037,7 +1037,7 @@ class CapybaraParserTest {
                 data Buffer { done: bool }
                 data Parse { buffer: Buffer }
                 fun test(parse: Parse): bool = !parse.buffer.done
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1061,7 +1061,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Parse { buffer: String }
                 fun test(parse: Parse): String = parse.buffer[0]
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(IndexExpression.class);
@@ -1082,7 +1082,7 @@ class CapybaraParserTest {
                 data Cell { name: String }
                 data Matrix { cell: Cell }
                 fun test(matrix: Matrix): String = matrix[1, 2].name
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(FieldAccess.class);
@@ -1103,7 +1103,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Box { value: String }
                 fun test(box: Box): String = box[]
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(IndexExpression.class);
@@ -1120,7 +1120,7 @@ class CapybaraParserTest {
                         | supplier => supplier()
                         .drop_until(value => value == "failed")
                         .first()
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Error.class);
         assertThat(CompilerErrors.from((Result.Error<dev.capylang.compiler.parser.Module>) result))
@@ -1142,7 +1142,7 @@ class CapybaraParserTest {
                         | (supplier => supplier())
                         .drop_until(value => value == "failed")
                         .first()
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(FunctionCall.class);
@@ -1170,7 +1170,7 @@ class CapybaraParserTest {
                         | value =>
                             value
                                 .trim()
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(result).isInstanceOf(Result.Success.class);
     }
@@ -1181,7 +1181,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Foo { a: int, b: String }
                 fun test(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "x")
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(WithExpression.class);
@@ -1197,7 +1197,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Foo { a: int, b: String }
                 fun test(foo: Foo): Foo = foo.with(a: 1).with(b: "x")
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(WithExpression.class);
@@ -1218,7 +1218,7 @@ class CapybaraParserTest {
                     case Some { char } when char == "-" -> "minus"
                     case Some { char } -> "other"
                     case None -> "none"
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(MatchExpression.class);
@@ -1235,7 +1235,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun leap_year(year: int): bool =
                     (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("leap_year", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1263,7 +1263,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun precedence(): bool =
                     1 + 2 * 3 > 6 == true & 2 * 3 ^ 2 == 18 | false
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("precedence", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1309,7 +1309,7 @@ class CapybaraParserTest {
                     match char with
                     case "1" | "2" | "3" -> "digit"
                     case _ -> "other"
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(MatchExpression.class);
@@ -1337,7 +1337,7 @@ class CapybaraParserTest {
                     case Set s -> 2
                     case Dict _ -> 3
                     case _ -> 0
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(MatchExpression.class);
@@ -1363,7 +1363,7 @@ class CapybaraParserTest {
                         case v when v > 0 -> Success { v + 1 }
                         case _ -> Error { "invalid" }
                     }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1387,7 +1387,7 @@ class CapybaraParserTest {
                         case v when v > 0 -> Success { v }
                         case _ -> Error { "invalid" }
                     }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
@@ -1430,7 +1430,7 @@ class CapybaraParserTest {
                         }
                     }
                     case _ -> Success { raw_sem_ver }
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         var expression = function.expression();
@@ -1483,7 +1483,7 @@ class CapybaraParserTest {
                         | parse_build => Success { "plus:" + parse_build.value }
                     case Some { ch } -> "other:" + ch
                     case None -> "none"
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var function = findFunction("test", module.functional());
         var expression = function.expression();

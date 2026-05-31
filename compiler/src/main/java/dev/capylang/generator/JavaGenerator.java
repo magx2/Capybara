@@ -231,7 +231,10 @@ public final class JavaGenerator implements Generator {
         if (providers.isEmpty()) {
             return List.of();
         }
-        return List.of(new GeneratedModule(Path.of("dev", "capylang", "NativeProviderBootstrap.java"), renderNativeProviderBootstrap(providers)));
+        return List.of(new GeneratedModule(
+                Generator.generatedRelativePath(Path.of("dev", "capylang", "NativeProviderBootstrap.java")),
+                renderNativeProviderBootstrap(providers)
+        ));
     }
 
     private String renderNativeProviderBootstrap(List<NativeProviderInfo> providers) {
@@ -325,7 +328,7 @@ public final class JavaGenerator implements Generator {
         try {
             if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
                 return List.of(new GeneratedModule(
-                        relativePath(javaClass, javaClass.name().toString()),
+                        Generator.generatedRelativePath(relativePath(javaClass, javaClass.name().toString())),
                         time(timings::addSourceRenderNanos, () -> code(javaClass, javaClass.name().toString(), true, nativeProvidersByFunction))
                 ));
             }
@@ -335,7 +338,7 @@ public final class JavaGenerator implements Generator {
                     .findFirst();
             if (ownerInterface.isPresent()) {
                 return List.of(new GeneratedModule(
-                        relativePath(javaClass, javaClass.name().toString()),
+                        Generator.generatedRelativePath(relativePath(javaClass, javaClass.name().toString())),
                         time(timings::addSourceRenderNanos, () -> codeNestedInOwnerInterface(
                                 javaClass,
                                 ownerInterface.get(),
@@ -349,7 +352,7 @@ public final class JavaGenerator implements Generator {
             var compiled = new ArrayList<GeneratedModule>();
             for (var declaration : topLevelDeclarations(javaClass, helperCallOwnerName)) {
                 compiled.add(new GeneratedModule(
-                        relativePath(javaClass, declaration.name()),
+                        Generator.generatedRelativePath(relativePath(javaClass, declaration.name())),
                         time(timings::addSourceRenderNanos, () -> codeTopLevelDeclaration(javaClass, declaration.code()))
                 ));
             }
@@ -369,7 +372,7 @@ public final class JavaGenerator implements Generator {
                         javaClass.enumValueOwnerOverrides()
                 );
                 compiled.add(new GeneratedModule(
-                        relativePath(javaClass, utilityClass.name().toString()),
+                        Generator.generatedRelativePath(relativePath(javaClass, utilityClass.name().toString())),
                         time(timings::addSourceRenderNanos, () -> code(utilityClass, utilityClass.name().toString(), false, nativeProvidersByFunction))
                 ));
             }

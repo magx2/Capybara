@@ -45,6 +45,7 @@ public class CapybaraCompiler {
     private static final String RECURSIVE_ANNOTATION_NAME = "Recursive";
     private static final String RECURSIVE_ANNOTATION_MODULE_NAME = "Recursive";
     private static final String RECURSIVE_ANNOTATION_MODULE_PATH = "capy/meta_prog";
+    private static final String EXPRESSION_PASS_PROPERTY = "capybara.compiler.useCapybaraExpressionCompilationPass";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
@@ -60,10 +61,11 @@ public class CapybaraCompiler {
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
     private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
+    private static final SourcePosition EMPTY_SOURCE_POSITION = new SourcePosition(0, 0, Optional.empty());
     private static volatile SortedSet<CompiledModule> bundledLibrariesCache;
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
-        return compile(rawModules, libraries, NativeProviderManifest.empty());
+        return compile(rawModules, libraries, new NativeProviderManifest(List.of(), null));
     }
 
     public Result<CompiledProgram> compile(
@@ -71,7 +73,7 @@ public class CapybaraCompiler {
             SortedSet<CompiledModule> libraries,
             NativeProviderManifest nativeProviders
     ) {
-        return compile(rawModules, libraries, nativeProviders, NativeProviderManifest.empty());
+        return compile(rawModules, libraries, nativeProviders, new NativeProviderManifest(List.of(), null));
     }
 
     public Result<CompiledProgram> compile(
@@ -81,14 +83,14 @@ public class CapybaraCompiler {
             NativeProviderManifest nativeImplementationProviders
     ) {
         try {
-            var providerManifest = nativeProviders == null ? NativeProviderManifest.empty() : nativeProviders;
-            var implementationManifest = nativeImplementationProviders == null ? NativeProviderManifest.empty() : nativeImplementationProviders;
+            var providerManifest = nativeProviders == null ? new NativeProviderManifest(List.of(), null) : nativeProviders;
+            var implementationManifest = nativeImplementationProviders == null ? new NativeProviderManifest(List.of(), null) : nativeImplementationProviders;
             var objectOrientedModules = rawModules.stream()
                     .filter(rawModule -> rawModule.sourceKind() == SourceKind.OBJECT_ORIENTED)
                     .toList();
             var parsedObjectOrientedModules = List.<ObjectOrientedModule>of();
             if (!objectOrientedModules.isEmpty()) {
-                var ooParseResult = ObjectOrientedParser.INSTANCE.parseModules(objectOrientedModules);
+                var ooParseResult = CapybaraParser.INSTANCE.parseObjectOrientedModules(objectOrientedModules);
                 if (ooParseResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
                     return ResultOps.error(error);
                 }
@@ -143,12 +145,12 @@ public class CapybaraCompiler {
     }
 
     private NativeProviderManifest mergeNativeProviderManifests(NativeProviderManifest first, NativeProviderManifest second) {
-        first = first == null ? NativeProviderManifest.empty() : first;
-        second = second == null ? NativeProviderManifest.empty() : second;
-        if (first.isEmpty()) {
+        first = first == null ? new NativeProviderManifest(List.of(), null) : first;
+        second = second == null ? new NativeProviderManifest(List.of(), null) : second;
+        if (NativeProviderManifestModule.nativeProviderManifestEmpty(first)) {
             return second;
         }
-        if (second.isEmpty()) {
+        if (NativeProviderManifestModule.nativeProviderManifestEmpty(second)) {
             return first;
         }
         var merged = new LinkedHashMap<NativeProviderKey, NativeProviderBinding>();
@@ -190,7 +192,7 @@ public class CapybaraCompiler {
         }
         throw new IllegalArgumentException(
                 "DuplicateProvider: Duplicate native provider binding for interface `" + key.interfaceId()
-                + "` with qualifier `" + key.qualifier() + "` and backend `" + backend.jsonValue() + "`"
+                + "` with qualifier `" + key.qualifier() + "` and backend `" + NativeProviderBackendModule.jsonValue(backend) + "`"
         );
     }
 
@@ -718,6 +720,26 @@ public class CapybaraCompiler {
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Boolean> moduleHelperClassRequiredByModule
     ) {
+        if (useCapybaraModuleLinkingPass()) {
+            return buildModuleLinkIndexWithCapybaraPass(
+                    allModuleRefs,
+                    linkedTypesByModule,
+                    moduleHelperClassRequiredByModule
+            );
+        }
+        return buildModuleLinkIndexLegacy(allModuleRefs, linkedTypesByModule, moduleHelperClassRequiredByModule);
+    }
+
+    private boolean useCapybaraModuleLinkingPass() {
+        return Boolean.parseBoolean(System.getProperty("capybara.compiler.useCapybaraModuleLinkingPass", "true"))
+               && moduleLinkingPassAvailable();
+    }
+
+    private ModuleLinkIndex buildModuleLinkIndexLegacy(
+            List<ModuleRef> allModuleRefs,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Boolean> moduleHelperClassRequiredByModule
+    ) {
         var modulesByExactName = new LinkedHashMap<String, ModuleRef>();
         var modulesByQualifiedName = new LinkedHashMap<String, ModuleRef>();
         var modulesByTailName = new LinkedHashMap<String, ModuleRef>();
@@ -753,6 +775,157 @@ public class CapybaraCompiler {
                 Map.copyOf(linkedTypesByModuleName),
                 Map.copyOf(moduleJavaClassNameByModuleName)
         );
+    }
+
+    private ModuleLinkIndex buildModuleLinkIndexWithCapybaraPass(
+            List<ModuleRef> allModuleRefs,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Boolean> moduleHelperClassRequiredByModule
+    ) {
+        var descriptorTuples = new ArrayList<List<?>>();
+        var linkedTypesByModuleEntryKey = new LinkedHashMap<String, SortedMap<String, GenericDataType>>();
+
+        for (var module : allModuleRefs) {
+            var linkedTypes = getModuleEntry(linkedTypesByModule, module);
+            linkedTypesByModuleEntryKey.putIfAbsent(module.name(), linkedTypes);
+            linkedTypesByModuleEntryKey.put(qualifiedModuleName(module), linkedTypes);
+            var moduleHelperClassRequired = Boolean.TRUE.equals(getModuleEntry(moduleHelperClassRequiredByModule, module));
+            descriptorTuples.add(moduleLinkingPassModuleDescriptor(
+                    moduleLinkingPassModuleRef(module.name(), module.path()),
+                    List.of(),
+                    linkedTypes == null ? List.of() : List.copyOf(linkedTypes.keySet()),
+                    moduleOwnerTypeShape(module, linkedTypes),
+                    moduleHelperClassRequired,
+                    List.of()
+            ));
+        }
+
+        var index = moduleLinkingPassBuildModuleLinkIndexUnchecked(descriptorTuples);
+        return new ModuleLinkIndex(
+                moduleRefEntryMap(tupleElement(index, 0)),
+                moduleRefEntryMap(tupleElement(index, 1)),
+                moduleRefEntryMap(tupleElement(index, 2)),
+                Set.copyOf(stringList(tupleElement(index, 3))),
+                linkedTypesEntryMap(tupleElement(index, 4), linkedTypesByModuleEntryKey),
+                stringEntryMap(tupleElement(index, 5))
+        );
+    }
+
+    private String moduleOwnerTypeShape(ModuleRef module, SortedMap<String, GenericDataType> linkedTypes) {
+        if (linkedTypes == null) {
+            return "NONE";
+        }
+        var ownerType = linkedTypes.get(module.name());
+        if (ownerType instanceof CompiledDataParentType parentType && !parentType.enumType()) {
+            return "PARENT_NON_ENUM";
+        }
+        if (ownerType instanceof CompiledDataType dataType && dataType.nativeType()) {
+            return "DATA_NATIVE";
+        }
+        return ownerType == null ? "NONE" : "OTHER";
+    }
+
+    private Map<String, ModuleRef> moduleRefEntryMap(List<?> entries) {
+        var result = new LinkedHashMap<String, ModuleRef>();
+        for (var rawEntry : entries) {
+            var entry = tuple(rawEntry);
+            result.put(stringElement(entry, 0), moduleRefFromTuple(tupleElement(entry, 1)));
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, SortedMap<String, GenericDataType>> linkedTypesEntryMap(
+            List<?> entries,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModuleEntryKey
+    ) {
+        var result = new LinkedHashMap<String, SortedMap<String, GenericDataType>>();
+        for (var rawEntry : entries) {
+            var entry = tuple(rawEntry);
+            result.put(stringElement(entry, 0), linkedTypesByModuleEntryKey.get(stringElement(entry, 0)));
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, String> stringEntryMap(List<?> entries) {
+        var result = new LinkedHashMap<String, String>();
+        for (var rawEntry : entries) {
+            var entry = tuple(rawEntry);
+            result.put(stringElement(entry, 0), stringElement(entry, 1));
+        }
+        return Map.copyOf(result);
+    }
+
+    private ModuleRef moduleRefFromTuple(List<?> tuple) {
+        return new ModuleRef(stringElement(tuple, 0), stringElement(tuple, 1));
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> List<T> tupleElement(List<?> tuple, int index) {
+        return (List<T>) tuple.get(index);
+    }
+
+    private List<?> tuple(Object value) {
+        return (List<?>) value;
+    }
+
+    private String stringElement(List<?> tuple, int index) {
+        return (String) tuple.get(index);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Object value) {
+        return (List<String>) value;
+    }
+
+    private boolean moduleLinkingPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.linking.ModuleLinkingPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    private List<?> moduleLinkingPassModuleRef(String name, String path) {
+        return moduleLinkingPassList("moduleRef", new Class<?>[]{String.class, String.class}, name, path);
+    }
+
+    private List<?> moduleLinkingPassModuleDescriptor(
+            List<?> module,
+            List<?> members,
+            List<String> linkedTypeNames,
+            String ownerTypeShape,
+            boolean helperClassRequired,
+            List<?> imports
+    ) {
+        return moduleLinkingPassList(
+                "moduleDescriptor",
+                new Class<?>[]{List.class, List.class, List.class, String.class, boolean.class, List.class},
+                module,
+                members,
+                linkedTypeNames,
+                ownerTypeShape,
+                helperClassRequired,
+                imports
+        );
+    }
+
+    private List<?> moduleLinkingPassBuildModuleLinkIndexUnchecked(List<?> modules) {
+        return moduleLinkingPassList(
+                "buildModuleLinkIndexUnchecked",
+                new Class<?>[]{List.class},
+                modules
+        );
+    }
+
+    private List<?> moduleLinkingPassList(String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.linking.ModuleLinkingPass");
+            var method = passClass.getMethod(methodName, parameterTypes);
+            return (List<?>) method.invoke(null, args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara module linking pass method `" + methodName + "`", e);
+        }
     }
 
     private String qualifiedModuleName(ModuleRef module) {
@@ -1504,8 +1677,8 @@ public class CapybaraCompiler {
     }
 
     private String sourceLocation(String file, Optional<SourcePosition> position, String label) {
-        var sourcePosition = position.orElse(SourcePosition.EMPTY);
-        if (sourcePosition == SourcePosition.EMPTY) {
+        var sourcePosition = position.orElse(EMPTY_SOURCE_POSITION);
+        if (sourcePosition.equals(EMPTY_SOURCE_POSITION)) {
             return label + " in " + file;
         }
         return label + " at " + file + ":" + sourcePosition.line() + ":" + sourcePosition.column();
@@ -2993,7 +3166,7 @@ public class CapybaraCompiler {
     }
 
     private CompilerError errorAt(String message, Optional<SourcePosition> position, String file) {
-        var sourcePosition = position.orElse(SourcePosition.EMPTY);
+        var sourcePosition = position.orElse(EMPTY_SOURCE_POSITION);
         return new CompilerError(
                 sourcePosition.line(),
                 sourcePosition.column(),
@@ -3651,7 +3824,7 @@ public class CapybaraCompiler {
         var constructors = new LinkedHashMap<String, CapybaraExpressionCompiler.ObjectConstructorRef>();
         for (var definition : module.objectOriented().definitions()) {
             var objectType = (CompiledObjectType) moduleTypes.get(definition.name());
-            var kind = objectType.kind().displayName();
+            var kind = CompiledObjectKindModule.displayName(objectType.kind());
             var constructible = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
                                 && !classDeclaration.modifiers().contains("abstract");
             var parameters = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
@@ -4446,7 +4619,7 @@ public class CapybaraCompiler {
                 return CompilerErrors.result(new CompilerError(
                         0,
                         0,
-                        SourceKind.FUNCTIONAL.moduleFile(modulePath, moduleName),
+                        SourceKindModule.moduleFile(SourceKind.FUNCTIONAL, modulePath, moduleName),
                         "Module `" + moduleName + "` imports unknown module `" + importDeclaration.moduleName() + "`"
                 ));
             }
@@ -4596,8 +4769,8 @@ public class CapybaraCompiler {
         errors.add(nativeProviderError(
                 provider,
                 "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue() + "` has unsupported "
-                + backend.jsonValue() + " factory `" + binding.factory()
+                + "` with qualifier `" + provider.qualifier() + "` for backend `" + NativeProviderBackendModule.jsonValue(backend) + "` has unsupported "
+                + NativeProviderBackendModule.jsonValue(backend) + " factory `" + binding.factory()
                 + "`. Supported values: " + String.join(", ", allowed)
         ));
     }
@@ -4616,7 +4789,7 @@ public class CapybaraCompiler {
         errors.add(nativeProviderError(
                 provider,
                 "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                + "` with qualifier `" + provider.qualifier() + "` for backend `" + backend.jsonValue()
+                + "` with qualifier `" + provider.qualifier() + "` for backend `" + NativeProviderBackendModule.jsonValue(backend)
                 + "` requires field `" + fieldName + "`"
         ));
     }
@@ -4642,7 +4815,7 @@ public class CapybaraCompiler {
 
     private String nativeProviderTargetKind(GenericDataType type) {
         return switch (type) {
-            case CompiledObjectType objectType -> objectType.kind().displayName();
+            case CompiledObjectType objectType -> CompiledObjectKindModule.displayName(objectType.kind());
             case CompiledDataType ignored -> ".cfun data type";
             case CompiledDataParentType ignored -> ".cfun union type";
             case CompiledPrimitiveBackedType ignored -> ".cfun primitive-backed type";
@@ -4674,7 +4847,7 @@ public class CapybaraCompiler {
     }
 
     private String nativeProviderSourceFile(CompiledModule module) {
-        return SourceKind.FUNCTIONAL.moduleFile(module.path(), module.name()).replaceFirst("^/+", "/");
+        return SourceKindModule.moduleFile(SourceKind.FUNCTIONAL, module.path(), module.name()).replaceFirst("^/+", "/");
     }
 
     private String nativeProviderSourceFile(ObjectOrientedModule module) {
@@ -5661,7 +5834,7 @@ public class CapybaraCompiler {
             String moduleSourceFile,
             String details
     ) {
-        var sourcePosition = position.or(() -> function.position()).orElse(SourcePosition.EMPTY);
+        var sourcePosition = position.or(() -> function.position()).orElse(EMPTY_SOURCE_POSITION);
         var line = Math.max(sourcePosition.line(), 1);
         var column = Math.max(sourcePosition.column(), 0);
         var file = normalizeFile(moduleSourceFile);
@@ -5683,6 +5856,205 @@ public class CapybaraCompiler {
             CompiledExpression expression,
             boolean tailPosition
     ) {
+        if (tailPosition && useCapybaraExpressionCompilationPass()) {
+            return analyzeTailRecursionWithCapybaraPass(selfCallNames, parameters, expression);
+        }
+        return analyzeTailRecursionLegacy(selfCallNames, parameters, expression, tailPosition);
+    }
+
+    private TailRecursionAnalysis analyzeTailRecursionWithCapybaraPass(
+            Set<String> selfCallNames,
+            List<CompiledFunctionParameter> parameters,
+            CompiledExpression expression
+    ) {
+        var graph = new TailRecursionGraphBuilder();
+        var rootId = graph.add(expression);
+        var analysis = expressionCompilationPassAnalyzeTailRecursion(
+                graph.nodes(),
+                rootId,
+                new ArrayList<>(selfCallNames),
+                parameters.stream().map(parameter -> typeDescriptor(parameter.type())).toList()
+        );
+        var hasSelfCall = (Boolean) analysis.get(0);
+        var firstNonTailCallId = ((Number) analysis.get(1)).intValue();
+        if (firstNonTailCallId < 0) {
+            return new TailRecursionAnalysis(hasSelfCall, Optional.empty());
+        }
+        var firstNonTailCall = graph.callsById().get(firstNonTailCallId);
+        if (firstNonTailCall == null) {
+            return analyzeTailRecursionLegacy(selfCallNames, parameters, expression, true);
+        }
+        return new TailRecursionAnalysis(hasSelfCall, Optional.of(firstNonTailCall));
+    }
+
+    private final class TailRecursionGraphBuilder {
+        private final List<List<?>> nodes = new ArrayList<>();
+        private final Map<Integer, CompiledFunctionCall> callsById = new HashMap<>();
+
+        private List<List<?>> nodes() {
+            return nodes;
+        }
+
+        private Map<Integer, CompiledFunctionCall> callsById() {
+            return callsById;
+        }
+
+        private int add(CompiledExpression expression) {
+            var id = reserveNode();
+            switch (expression) {
+                case CompiledFunctionCall functionCall -> addFunctionCall(id, functionCall);
+                case CompiledIfExpression ifExpression -> setNode(id, "IF", "", List.of(), List.of(
+                        add(ifExpression.condition()),
+                        add(ifExpression.thenBranch()),
+                        add(ifExpression.elseBranch())
+                ));
+                case CompiledLetExpression letExpression -> setNode(id, "LET", "", List.of(), List.of(
+                        add(letExpression.value()),
+                        add(letExpression.rest())
+                ));
+                case CompiledMatchExpression matchExpression -> {
+                    var childIds = new ArrayList<Integer>();
+                    childIds.add(add(matchExpression.matchWith()));
+                    matchExpression.cases().stream().map(this::addMatchCase).forEach(childIds::add);
+                    setNode(id, "MATCH", "", List.of(), List.copyOf(childIds));
+                }
+                case CompiledFunctionInvoke functionInvoke -> setNode(id, "INVOKE", "", List.of(), mergeChildIds(
+                        List.of(add(functionInvoke.function())),
+                        addAll(functionInvoke.arguments())
+                ));
+                case CompiledObjectConstruction objectConstruction ->
+                        setNode(id, "OBJECT_CONSTRUCTION", "", List.of(), addAll(objectConstruction.arguments()));
+                case CompiledInfixExpression infixExpression -> setNode(id, "INFIX", "", List.of(), List.of(
+                        add(infixExpression.left()),
+                        add(infixExpression.right())
+                ));
+                case CompiledFieldAccess fieldAccess ->
+                        setNode(id, "FIELD_ACCESS", "", List.of(), List.of(add(fieldAccess.source())));
+                case CompiledIndexExpression indexExpression -> setNode(id, "INDEX", "", List.of(), List.of(
+                        add(indexExpression.source()),
+                        add(indexExpression.index())
+                ));
+                case CompiledSliceExpression sliceExpression -> {
+                    var childIds = new ArrayList<Integer>();
+                    childIds.add(add(sliceExpression.source()));
+                    sliceExpression.start().map(this::add).ifPresent(childIds::add);
+                    sliceExpression.end().map(this::add).ifPresent(childIds::add);
+                    setNode(id, "SLICE", "", List.of(), List.copyOf(childIds));
+                }
+                case CompiledLambdaExpression lambdaExpression ->
+                        setNode(id, "LAMBDA", "", List.of(), List.of(add(lambdaExpression.expression())));
+                case CompiledEffectExpression effectExpression ->
+                        setNode(id, "EFFECT", "", List.of(), List.of(add(effectExpression.body())));
+                case CompiledEffectBindExpression effectBindExpression -> setNode(id, "EFFECT_BIND", "", List.of(), List.of(
+                        add(effectBindExpression.source()),
+                        add(effectBindExpression.rest())
+                ));
+                case CompiledPipeExpression pipeExpression -> setNode(id, "PIPE", "", List.of(), List.of(
+                        add(pipeExpression.source()),
+                        add(pipeExpression.mapper())
+                ));
+                case CompiledPipeFlatMapExpression pipeFlatMapExpression -> setNode(id, "PIPE_FLAT_MAP", "", List.of(), List.of(
+                        add(pipeFlatMapExpression.source()),
+                        add(pipeFlatMapExpression.mapper())
+                ));
+                case CompiledPipeFilterOutExpression pipeFilterOutExpression -> setNode(id, "PIPE_FILTER_OUT", "", List.of(), List.of(
+                        add(pipeFilterOutExpression.source()),
+                        add(pipeFilterOutExpression.predicate())
+                ));
+                case CompiledPipeReduceExpression pipeReduceExpression -> setNode(id, "PIPE_REDUCE", "", List.of(), List.of(
+                        add(pipeReduceExpression.source()),
+                        add(pipeReduceExpression.initialValue()),
+                        add(pipeReduceExpression.reducerExpression())
+                ));
+                case CompiledReflectionValue reflectionValue ->
+                        setNode(id, "REFLECTION", "", List.of(), List.of(add(reflectionValue.target())));
+                case CompiledNumericWidening numericWidening ->
+                        setNode(id, "NUMERIC_WIDENING", "", List.of(), List.of(add(numericWidening.expression())));
+                case CompiledNewData newData -> setNode(
+                        id,
+                        "NEW_DATA",
+                        "",
+                        List.of(),
+                        addAll(newData.assignments().stream().map(CompiledNewData.FieldAssignment::value).toList())
+                );
+                case CompiledNewList newList -> setNode(id, "NEW_LIST", "", List.of(), addAll(newList.values()));
+                case CompiledNewSet newSet -> setNode(id, "NEW_SET", "", List.of(), addAll(newSet.values()));
+                case CompiledNewDict newDict -> {
+                    var childIds = new ArrayList<Integer>();
+                    for (var entry : newDict.entries()) {
+                        childIds.add(add(entry.key()));
+                        childIds.add(add(entry.value()));
+                    }
+                    setNode(id, "NEW_DICT", "", List.of(), List.copyOf(childIds));
+                }
+                case CompiledTupleExpression tupleExpression ->
+                        setNode(id, "TUPLE", "", List.of(), addAll(tupleExpression.values()));
+                case CompiledUnwrapExpression unwrapExpression ->
+                        setNode(id, "UNWRAP", "", List.of(), List.of(add(unwrapExpression.expression())));
+                case CompiledBooleanValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledByteValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledDoubleValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledFloatValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledIntValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledLongValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledNothingValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledStringValue ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+                case CompiledVariable ignored -> setNode(id, "LEAF", "", List.of(), List.of());
+            }
+            return id;
+        }
+
+        private void addFunctionCall(int id, CompiledFunctionCall functionCall) {
+            callsById.put(id, functionCall);
+            setNode(
+                    id,
+                    "CALL",
+                    functionCall.name(),
+                    functionCall.arguments().stream().map(argument -> typeDescriptor(argument.type())).toList(),
+                    addAll(functionCall.arguments())
+            );
+        }
+
+        private int addMatchCase(CompiledMatchExpression.MatchCase matchCase) {
+            var id = reserveNode();
+            var childIds = new ArrayList<Integer>();
+            matchCase.guard().map(this::add).ifPresent(childIds::add);
+            childIds.add(add(matchCase.expression()));
+            setNode(
+                    id,
+                    matchCase.guard().isPresent() ? "MATCH_CASE_GUARD" : "MATCH_CASE",
+                    "",
+                    List.of(),
+                    List.copyOf(childIds)
+            );
+            return id;
+        }
+
+        private List<Integer> addAll(List<CompiledExpression> expressions) {
+            return expressions.stream().map(this::add).toList();
+        }
+
+        private List<Integer> mergeChildIds(List<Integer> first, List<Integer> second) {
+            return Stream.concat(first.stream(), second.stream()).toList();
+        }
+
+        private int reserveNode() {
+            var id = nodes.size();
+            nodes.add(List.of());
+            return id;
+        }
+
+        private void setNode(int id, String kind, String name, List<String> argumentTypeDescriptors, List<Integer> childIds) {
+            nodes.set(id, List.of(id, kind, name, argumentTypeDescriptors, childIds));
+        }
+    }
+
+    private TailRecursionAnalysis analyzeTailRecursionLegacy(
+            Set<String> selfCallNames,
+            List<CompiledFunctionParameter> parameters,
+            CompiledExpression expression,
+            boolean tailPosition
+    ) {
         return switch (expression) {
             case CompiledFunctionCall functionCall -> {
                 var result = TailRecursionAnalysis.empty();
@@ -5692,100 +6064,100 @@ public class CapybaraCompiler {
                             ? TailRecursionAnalysis.tailCall()
                             : TailRecursionAnalysis.nonTailCall(functionCall);
                 }
-                yield merge(result, analyzeAll(selfCallNames, parameters, functionCall.arguments(), false));
+                yield merge(result, analyzeAllTailRecursionLegacy(selfCallNames, parameters, functionCall.arguments(), false));
             }
             case CompiledIfExpression ifExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, ifExpression.condition(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, ifExpression.thenBranch(), tailPosition),
-                    analyzeTailRecursion(selfCallNames, parameters, ifExpression.elseBranch(), tailPosition)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, ifExpression.condition(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, ifExpression.thenBranch(), tailPosition),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, ifExpression.elseBranch(), tailPosition)
             );
             case CompiledLetExpression letExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, letExpression.value(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, letExpression.rest(), tailPosition)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, letExpression.value(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, letExpression.rest(), tailPosition)
             );
             case CompiledMatchExpression matchExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, matchExpression.matchWith(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, matchExpression.matchWith(), false),
                     merge(matchExpression.cases().stream()
                             .map(matchCase -> merge(
                                     matchCase.guard()
-                                            .map(guard -> analyzeTailRecursion(selfCallNames, parameters, guard, false))
+                                            .map(guard -> analyzeTailRecursionLegacy(selfCallNames, parameters, guard, false))
                                             .orElseGet(TailRecursionAnalysis::empty),
-                                    analyzeTailRecursion(selfCallNames, parameters, matchCase.expression(), tailPosition)
+                                    analyzeTailRecursionLegacy(selfCallNames, parameters, matchCase.expression(), tailPosition)
                             ))
                             .toList())
             );
             case CompiledFunctionInvoke functionInvoke -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, functionInvoke.function(), false),
-                    analyzeAll(selfCallNames, parameters, functionInvoke.arguments(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, functionInvoke.function(), false),
+                    analyzeAllTailRecursionLegacy(selfCallNames, parameters, functionInvoke.arguments(), false)
             );
             case CompiledObjectConstruction objectConstruction ->
-                    analyzeAll(selfCallNames, parameters, objectConstruction.arguments(), false);
+                    analyzeAllTailRecursionLegacy(selfCallNames, parameters, objectConstruction.arguments(), false);
             case CompiledInfixExpression infixExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, infixExpression.left(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, infixExpression.right(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, infixExpression.left(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, infixExpression.right(), false)
             );
             case CompiledFieldAccess fieldAccess ->
-                    analyzeTailRecursion(selfCallNames, parameters, fieldAccess.source(), false);
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, fieldAccess.source(), false);
             case CompiledIndexExpression indexExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, indexExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, indexExpression.index(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, indexExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, indexExpression.index(), false)
             );
             case CompiledSliceExpression sliceExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, sliceExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, sliceExpression.source(), false),
                     sliceExpression.start()
-                            .map(start -> analyzeTailRecursion(selfCallNames, parameters, start, false))
+                            .map(start -> analyzeTailRecursionLegacy(selfCallNames, parameters, start, false))
                             .orElseGet(TailRecursionAnalysis::empty),
                     sliceExpression.end()
-                            .map(end -> analyzeTailRecursion(selfCallNames, parameters, end, false))
+                            .map(end -> analyzeTailRecursionLegacy(selfCallNames, parameters, end, false))
                             .orElseGet(TailRecursionAnalysis::empty)
             );
             case CompiledLambdaExpression lambdaExpression ->
-                    analyzeTailRecursion(selfCallNames, parameters, lambdaExpression.expression(), false);
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, lambdaExpression.expression(), false);
             case CompiledEffectExpression effectExpression ->
-                    analyzeTailRecursion(selfCallNames, parameters, effectExpression.body(), false);
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, effectExpression.body(), false);
             case CompiledEffectBindExpression effectBindExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, effectBindExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, effectBindExpression.rest(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, effectBindExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, effectBindExpression.rest(), false)
             );
             case CompiledPipeExpression pipeExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, pipeExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeExpression.mapper(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeExpression.mapper(), false)
             );
             case CompiledPipeFlatMapExpression pipeFlatMapExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, pipeFlatMapExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeFlatMapExpression.mapper(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeFlatMapExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeFlatMapExpression.mapper(), false)
             );
             case CompiledPipeFilterOutExpression pipeFilterOutExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, pipeFilterOutExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeFilterOutExpression.predicate(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeFilterOutExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeFilterOutExpression.predicate(), false)
             );
             case CompiledPipeReduceExpression pipeReduceExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.initialValue(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.reducerExpression(), false)
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeReduceExpression.source(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeReduceExpression.initialValue(), false),
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, pipeReduceExpression.reducerExpression(), false)
             );
             case CompiledReflectionValue reflectionValue ->
-                    analyzeTailRecursion(selfCallNames, parameters, reflectionValue.target(), false);
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, reflectionValue.target(), false);
             case CompiledNumericWidening numericWidening ->
-                    analyzeTailRecursion(selfCallNames, parameters, numericWidening.expression(), false);
-            case CompiledNewData newData -> analyzeAll(
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, numericWidening.expression(), false);
+            case CompiledNewData newData -> analyzeAllTailRecursionLegacy(
                     selfCallNames,
                     parameters,
                     newData.assignments().stream().map(CompiledNewData.FieldAssignment::value).toList(),
                     false
             );
-            case CompiledNewList newList -> analyzeAll(selfCallNames, parameters, newList.values(), false);
-            case CompiledNewSet newSet -> analyzeAll(selfCallNames, parameters, newSet.values(), false);
+            case CompiledNewList newList -> analyzeAllTailRecursionLegacy(selfCallNames, parameters, newList.values(), false);
+            case CompiledNewSet newSet -> analyzeAllTailRecursionLegacy(selfCallNames, parameters, newSet.values(), false);
             case CompiledNewDict newDict -> merge(newDict.entries().stream()
                     .map(entry -> merge(
-                            analyzeTailRecursion(selfCallNames, parameters, entry.key(), false),
-                            analyzeTailRecursion(selfCallNames, parameters, entry.value(), false)
+                            analyzeTailRecursionLegacy(selfCallNames, parameters, entry.key(), false),
+                            analyzeTailRecursionLegacy(selfCallNames, parameters, entry.value(), false)
                     ))
                     .toList());
             case CompiledTupleExpression tupleExpression ->
-                    analyzeAll(selfCallNames, parameters, tupleExpression.values(), false);
+                    analyzeAllTailRecursionLegacy(selfCallNames, parameters, tupleExpression.values(), false);
             case CompiledUnwrapExpression unwrapExpression ->
-                    analyzeTailRecursion(selfCallNames, parameters, unwrapExpression.expression(), false);
+                    analyzeTailRecursionLegacy(selfCallNames, parameters, unwrapExpression.expression(), false);
             case CompiledBooleanValue ignored -> TailRecursionAnalysis.empty();
             case CompiledByteValue ignored -> TailRecursionAnalysis.empty();
             case CompiledDoubleValue ignored -> TailRecursionAnalysis.empty();
@@ -5798,14 +6170,14 @@ public class CapybaraCompiler {
         };
     }
 
-    private TailRecursionAnalysis analyzeAll(
+    private TailRecursionAnalysis analyzeAllTailRecursionLegacy(
             Set<String> selfCallNames,
             List<CompiledFunctionParameter> parameters,
             List<CompiledExpression> expressions,
             boolean tailPosition
     ) {
         return merge(expressions.stream()
-                .map(expression -> analyzeTailRecursion(selfCallNames, parameters, expression, tailPosition))
+                .map(expression -> analyzeTailRecursionLegacy(selfCallNames, parameters, expression, tailPosition))
                 .toList());
     }
 
@@ -6298,7 +6670,7 @@ public class CapybaraCompiler {
         var position = returnExpressionPosition(returnExpression)
                 .or(() -> returnExpression.position())
                 .or(() -> function.position())
-                .orElse(SourcePosition.EMPTY);
+                .orElse(EMPTY_SOURCE_POSITION);
         var line = Math.max(position.line(), 1);
         var column = Math.max(position.column(), 1);
         var file = normalizeFile(moduleSourceFile);
@@ -6319,7 +6691,7 @@ public class CapybaraCompiler {
             SourcePosition position,
             CompiledType declaredReturnType
     ) {
-        var expressionPosition = function.expression().position().orElse(SourcePosition.EMPTY);
+        var expressionPosition = function.expression().position().orElse(EMPTY_SOURCE_POSITION);
         if (function.expression() instanceof LetExpression && expressionPosition.line() != position.line()) {
             return formatMultilineFunctionPreview(function, declaredReturnType);
         }
@@ -6716,7 +7088,7 @@ public class CapybaraCompiler {
             }
             case SliceExpression sliceExpression -> formatSliceExpressionPreview(sliceExpression);
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
-                                                    + previewOperator(infixExpression.operator().symbol())
+                                                    + previewOperator(InfixOperatorModule.symbol(infixExpression.operator()))
                                                     + formatExpressionPreview(infixExpression.right());
             case NothingValue value -> value.literal();
             case IfExpression ifExpression -> "if " + formatExpressionPreview(ifExpression.condition())
@@ -6736,7 +7108,7 @@ public class CapybaraCompiler {
     private String formatExpressionPreviewWithSpaces(Expression expression) {
         return switch (expression) {
             case InfixExpression infixExpression -> formatExpressionPreviewWithSpaces(infixExpression.left())
-                                                    + " " + previewOperator(infixExpression.operator().symbol()) + " "
+                                                    + " " + previewOperator(InfixOperatorModule.symbol(infixExpression.operator())) + " "
                                                     + formatExpressionPreviewWithSpaces(infixExpression.right());
             default -> formatExpressionPreview(expression);
         };
@@ -7277,6 +7649,16 @@ public class CapybaraCompiler {
     }
 
     private boolean isProgramMainSignature(String name, CompiledType returnType, List<CompiledType> parameterTypes) {
+        if (useCapybaraExpressionCompilationPass()) {
+            return expressionCompilationPassIsProgramMainSignature(
+                    name,
+                    returnType.name(),
+                    returnType instanceof GenericDataType genericDataType
+                            ? typeParameters(genericDataType)
+                            : List.of(),
+                    parameterTypes.stream().map(this::typeDescriptor).toList()
+            );
+        }
         if (!"main".equals(name)) {
             return false;
         }
@@ -7346,12 +7728,69 @@ public class CapybaraCompiler {
         return normalized;
     }
 
+    private static boolean useCapybaraExpressionCompilationPass() {
+        return Boolean.parseBoolean(System.getProperty(EXPRESSION_PASS_PROPERTY, "true"))
+               && expressionCompilationPassAvailable();
+    }
+
+    private static boolean expressionCompilationPassAvailable() {
+        try {
+            Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            return true;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean expressionCompilationPassIsProgramMainSignature(
+            String name,
+            String returnTypeName,
+            List<String> returnTypeParameters,
+            List<String> parameterTypeDescriptors
+    ) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            var method = passClass.getMethod(
+                    "isProgramMainSignature",
+                    String.class,
+                    String.class,
+                    List.class,
+                    List.class
+            );
+            return (boolean) method.invoke(null, name, returnTypeName, returnTypeParameters, parameterTypeDescriptors);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara expression compilation pass method `isProgramMainSignature`", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<?> expressionCompilationPassAnalyzeTailRecursion(
+            List<List<?>> nodes,
+            int rootId,
+            List<String> selfCallNames,
+            List<String> parameterTypeDescriptors
+    ) {
+        try {
+            var passClass = Class.forName("dev.capylang.compiler.expression.ExpressionCompilationPass");
+            var method = passClass.getMethod(
+                    "analyzeTailRecursion",
+                    List.class,
+                    int.class,
+                    List.class,
+                    List.class
+            );
+            return (List<?>) method.invoke(null, nodes, rootId, selfCallNames, parameterTypeDescriptors);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to call Capybara expression compilation pass method `analyzeTailRecursion`", e);
+        }
+    }
+
     private String moduleSourceFile(Module module) {
-        return module.sourceKind().moduleFile(module.path(), module.name());
+        return SourceKindModule.moduleFile(module.sourceKind(), module.path(), module.name());
     }
 
     private String moduleSourceFile(ObjectOrientedModule module) {
-        return module.sourceKind().moduleFile(module.path(), module.name());
+        return SourceKindModule.moduleFile(module.sourceKind(), module.path(), module.name());
     }
 
     private dev.capylang.compiler.expression.CompiledExpression enrichNothing(
@@ -8990,7 +9429,8 @@ public class CapybaraCompiler {
                         normalizedFile))
                 .collect(new ResultCollectionCollector<>());
         var linked = ResultOps.flatMap(ResultOps.join(
-                LinkedDataFields::new,
+                (List<List<CompiledDataType.CompiledField>> inherited) ->
+                        (List<CompiledDataType.CompiledField> own) -> new LinkedDataFields(inherited, own),
                 inheritedFields,
                 ownFields
         ), linkedFields -> {

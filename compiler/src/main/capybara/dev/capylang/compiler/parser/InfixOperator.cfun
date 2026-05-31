@@ -1,0 +1,160 @@
+from /capy/lang/Option import { Option }
+
+enum InfixOperator {
+    PLUS,
+    MINUS,
+    MUL,
+    DIV,
+    MOD,
+    POWER,
+    BITWISE_AND,
+    BITWISE_NAND,
+    BITWISE_OR,
+    BITWISE_XOR,
+    BITWISE_NOT,
+    GT,
+    LT,
+    EQUAL,
+    NOTEQUAL,
+    LE,
+    GE,
+    AND,
+    QUESTION,
+    TILDE,
+    TILDE_TILDE,
+    TILDE_GT,
+    DIV_GT,
+    PIPE,
+    PIPE_MINUS,
+    PIPE_FLATMAP,
+    PIPE_REDUCE
+}
+
+fun fromSymbol(value: String): Option[InfixOperator] =
+    if value == "+"
+    then Some { InfixOperator.PLUS }
+    else if value == "-"
+        then Some { InfixOperator.MINUS }
+        else if value == "*"
+            then Some { InfixOperator.MUL }
+            else if value == "/"
+                then Some { InfixOperator.DIV }
+                else if value == "%"
+                    then Some { InfixOperator.MOD }
+                    else if value == "^"
+                        then Some { InfixOperator.POWER }
+                        else if value == ".and."
+                            then Some { InfixOperator.BITWISE_AND }
+                            else if value == ".nand."
+                                then Some { InfixOperator.BITWISE_NAND }
+                                else if value == ".or."
+                                    then Some { InfixOperator.BITWISE_OR }
+                                    else if value == ".xor."
+                                        then Some { InfixOperator.BITWISE_XOR }
+                                        else if value == ".not."
+                                            then Some { InfixOperator.BITWISE_NOT }
+                                            else if value == ">"
+                                                then Some { InfixOperator.GT }
+                                                else if value == "<"
+                                                    then Some { InfixOperator.LT }
+                                                    else if value == "=="
+                                                        then Some { InfixOperator.EQUAL }
+                                                        else if value == "!="
+                                                            then Some { InfixOperator.NOTEQUAL }
+                                                            else if value == "<="
+                                                                then Some { InfixOperator.LE }
+                                                                else if value == ">="
+                                                                    then Some { InfixOperator.GE }
+                                                                    else if value == "&"
+                                                                        then Some { InfixOperator.AND }
+                                                                        else if value == "?"
+                                                                            then Some { InfixOperator.QUESTION }
+                                                                            else if value == "~"
+                                                                                then Some { InfixOperator.TILDE }
+                                                                                else if value == "~~"
+                                                                                    then Some { InfixOperator.TILDE_TILDE }
+                                                                                    else if value == "~>"
+                                                                                        then Some { InfixOperator.TILDE_GT }
+                                                                                        else if value == "/>"
+                                                                                            then Some { InfixOperator.DIV_GT }
+                                                                                            else if value == "|"
+                                                                                                then Some { InfixOperator.PIPE }
+                                                                                                else if value == "|-"
+                                                                                                    then Some { InfixOperator.PIPE_MINUS }
+                                                                                                    else if value == "|*"
+                                                                                                        then Some { InfixOperator.PIPE_FLATMAP }
+                                                                                                        else if value == "|>"
+                                                                                                            then Some { InfixOperator.PIPE_REDUCE }
+                                                                                                            else None {}
+
+fun symbol(operator: InfixOperator): String =
+    match operator with
+    case PLUS -> "+"
+    case MINUS -> "-"
+    case MUL -> "*"
+    case DIV -> "/"
+    case MOD -> "%"
+    case POWER -> "^"
+    case BITWISE_AND -> ".and."
+    case BITWISE_NAND -> ".nand."
+    case BITWISE_OR -> ".or."
+    case BITWISE_XOR -> ".xor."
+    case BITWISE_NOT -> ".not."
+    case GT -> ">"
+    case LT -> "<"
+    case EQUAL -> "=="
+    case NOTEQUAL -> "!="
+    case LE -> "<="
+    case GE -> ">="
+    case AND -> "&"
+    case QUESTION -> "?"
+    case TILDE -> "~"
+    case TILDE_TILDE -> "~~"
+    case TILDE_GT -> "~>"
+    case DIV_GT -> "/>"
+    case PIPE -> "|"
+    case PIPE_MINUS -> "|-"
+    case PIPE_FLATMAP -> "|*"
+    case PIPE_REDUCE -> "|>"
+
+fun quotedSymbol(operator: InfixOperator): String =
+    "\"" + symbol(operator) + "\""
+
+fun javaSymbol(operator: InfixOperator): String =
+    match operator with
+    case BITWISE_NOT -> "~"
+    case BITWISE_AND -> "&"
+    case BITWISE_NAND -> "&"
+    case BITWISE_OR -> "|"
+    case BITWISE_XOR -> "^"
+    case _ -> symbol(operator)
+
+fun precedence(operator: InfixOperator): int =
+    match operator with
+    case BITWISE_NOT -> 8
+    case POWER -> 7
+    case MUL -> 6
+    case DIV -> 6
+    case MOD -> 6
+    case PLUS -> 5
+    case MINUS -> 5
+    case BITWISE_AND -> 5
+    case BITWISE_NAND -> 5
+    case BITWISE_OR -> 5
+    case BITWISE_XOR -> 5
+    case GT -> 4
+    case LT -> 4
+    case LE -> 4
+    case GE -> 4
+    case EQUAL -> 3
+    case NOTEQUAL -> 3
+    case AND -> 2
+    case QUESTION -> 2
+    case TILDE -> 2
+    case TILDE_TILDE -> 2
+    case TILDE_GT -> 2
+    case DIV_GT -> 2
+    case PIPE -> 1
+    case PIPE_MINUS -> 1
+    case PIPE_FLATMAP -> 1
+    case PIPE_REDUCE -> 1

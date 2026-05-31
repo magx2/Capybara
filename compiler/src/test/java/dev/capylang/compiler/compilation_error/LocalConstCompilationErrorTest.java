@@ -1,5 +1,6 @@
 package dev.capylang.compiler.compilation_error;
 
+import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
@@ -22,7 +23,7 @@ class LocalConstCompilationErrorTest {
                             const white_space = 2
                             ---
                             white_space
-                        """)),
+                        """, SourceKind.FUNCTIONAL)),
                 new TreeSet<>()
         );
 

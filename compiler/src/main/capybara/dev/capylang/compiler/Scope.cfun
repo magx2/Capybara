@@ -1,0 +1,35 @@
+data CompiledType { <native> }
+data Dict[T] { <native> }
+data Set[T] { <native> }
+
+fun Dict[T].`+`(entry: Tuple[String, T]): Dict[T] = <native>
+fun Set[T].`+`(value: T): Set[T] = <native>
+fun Set[T].`-`(value: T): Set[T] = <native>
+fun Set[T].contains(value: T): bool = <native>
+
+data Scope {
+    localValues: Dict[CompiledType],
+    variableNameToUniqueName: Dict[String],
+    emptyShapeCompatibleValues: Set[String]
+}
+
+const EMPTY: Scope = Scope {
+    localValues: {:},
+    variableNameToUniqueName: {:},
+    emptyShapeCompatibleValues: {}
+}
+
+fun Scope.is_empty_shape_compatible_value(name: String): bool =
+    this.emptyShapeCompatibleValues.contains(name)
+
+fun Scope.add(name: String, value: CompiledType): Scope =
+    this.add(name, value, false)
+
+fun Scope.add(name: String, value: CompiledType, emptyShapeCompatible: bool): Scope =
+    Scope {
+        localValues: this.localValues + (name, value),
+        variableNameToUniqueName: this.variableNameToUniqueName,
+        emptyShapeCompatibleValues: if emptyShapeCompatible
+            then this.emptyShapeCompatibleValues + name
+            else this.emptyShapeCompatibleValues - name
+    }

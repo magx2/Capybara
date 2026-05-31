@@ -1,0 +1,11 @@
+enum CompiledObjectKind { CLASS, ABSTRACT_CLASS, TRAIT, INTERFACE }
+
+fun jsonValue(kind: CompiledObjectKind): String =
+    match kind with
+    case CLASS -> "class"
+    case ABSTRACT_CLASS -> "abstract class"
+    case TRAIT -> "trait"
+    case INTERFACE -> "interface"
+
+fun displayName(kind: CompiledObjectKind): String =
+    jsonValue(kind)

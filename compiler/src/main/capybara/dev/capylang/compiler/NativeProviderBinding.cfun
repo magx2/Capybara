@@ -1,0 +1,9 @@
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
+
+data NativeProviderBinding {
+    interfaceId: String,
+    qualifier: String,
+    javaBinding: NativeProviderBackendBinding,
+    javascriptBinding: NativeProviderBackendBinding,
+    pythonBinding: NativeProviderBackendBinding
+}

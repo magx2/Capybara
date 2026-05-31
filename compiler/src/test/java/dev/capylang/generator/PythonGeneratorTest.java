@@ -56,9 +56,9 @@ class PythonGeneratorTest {
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(
-                        Path.of("foo", "Main.py"),
-                        Path.of("dev", "capylang", "capybara.py"),
-                        Path.of("capy", "lang", "Option.py")
+                        "foo/Main.py",
+                        "dev/capylang/capybara.py",
+                        "capy/lang/Option.py"
                 );
 
         var output = runPython("""
@@ -174,9 +174,9 @@ class PythonGeneratorTest {
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(
-                        Path.of("foo", "Base.py"),
-                        Path.of("foo", "Bracket.py"),
-                        Path.of("foo", "User.py")
+                        "foo/Base.py",
+                        "foo/Bracket.py",
+                        "foo/User.py"
                 );
 
         var output = runPython("""
@@ -319,13 +319,13 @@ class PythonGeneratorTest {
         var generated = new PythonGenerator().generate(program);
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
-                .contains(Path.of("dev", "capylang", "native_providers.py"));
+                .contains("dev/capylang/native_providers.py");
         var providerModule = generated.modules().stream()
                 .filter(module -> module.relativePath().endsWith("ProvidersNative.py"))
                 .findFirst()
                 .orElseThrow();
         var bootstrap = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("dev", "capylang", "native_providers.py")))
+                .filter(module -> module.relativePath().equals("dev/capylang/native_providers.py"))
                 .findFirst()
                 .orElseThrow();
 
@@ -395,7 +395,7 @@ class PythonGeneratorTest {
 
         var generated = new PythonGenerator().generate(program);
         var consumerModule = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("ClockConsumer.py")))
+                .filter(module -> module.relativePath().equals("ClockConsumer.py"))
                 .findFirst()
                 .orElseThrow();
 
@@ -784,7 +784,7 @@ class PythonGeneratorTest {
 
         var generated = new PythonGenerator().generate(program);
         var main = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.py")))
+                .filter(module -> module.relativePath().equals("foo/Main.py"))
                 .map(GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -807,7 +807,7 @@ class PythonGeneratorTest {
         var program = compileProgram(List.of(
                 new RawModule("Modes", "/foo/lib", """
                         enum RoundMode { FLOOR, HALF_EVEN }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/lib/Modes import { RoundMode }
                         from /capy/lang/Result import { * }
@@ -816,14 +816,14 @@ class PythonGeneratorTest {
                             match RoundMode.parse('HALF_EVEN') with
                             case Success _ -> 'parsed'
                             case Error _ -> 'error'
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var generated = new PythonGenerator().generate(program);
         writeGenerated(generated);
 
         var consumer = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.py")))
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.py"))
                 .findFirst()
                 .orElseThrow();
         assertThat(consumer.code()).contains("capy_module_foo_lib_Modes.RoundMode.parse(\"HALF_EVEN\")");
@@ -842,13 +842,13 @@ class PythonGeneratorTest {
                 type seed -> long
 
                 fun seed(): seed = <native>
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var generated = new PythonGenerator().generate(program);
         writeGenerated(generated);
 
         var random = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("capy", "lang", "Random.py")))
+                .filter(module -> module.relativePath().equals("capy/lang/Random.py"))
                 .findFirst()
                 .orElseThrow();
         assertThat(random.code())
@@ -954,7 +954,7 @@ class PythonGeneratorTest {
         writeGenerated(generated);
 
         var main = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.py")))
+                .filter(module -> module.relativePath().equals("foo/Main.py"))
                 .findFirst()
                 .orElseThrow();
         assertThat(main.code()).containsSubsequence(
@@ -982,13 +982,13 @@ class PythonGeneratorTest {
                             if args.size() > 0
                             then pure(/capy/lang/Program.Success {})
                             else pure(/capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("SecondaryMain", "/foo", """
                         from /capy/collection/List import { * }
 
                         fun main(args: List[String]): /capy/lang/Program =
                             /capy/lang/Program.Success {}
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         writeGenerated(generated);
 
@@ -1009,11 +1009,11 @@ class PythonGeneratorTest {
     }
 
     private static CompiledProgram compileProgram(String source) {
-        return compileProgram(List.of(new RawModule("Main", "/foo", source)));
+        return compileProgram(List.of(new RawModule("Main", "/foo", source, SourceKind.FUNCTIONAL)));
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
-        return compileProgram(modules, NativeProviderManifest.empty());
+        return compileProgram(modules, new NativeProviderManifest(List.of(), null));
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
@@ -1031,7 +1031,7 @@ class PythonGeneratorTest {
     }
 
     private static NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
-        return new NativeProviderManifest(List.of(bindings));
+        return new NativeProviderManifest(List.of(bindings), null);
     }
 
     private static NativeProviderBinding pythonProviderBinding(String interfaceId, String qualifier) {
@@ -1050,7 +1050,7 @@ class PythonGeneratorTest {
                                 """,
                         SourceKind.OBJECT_ORIENTED
                 ),
-                new RawModule("ProvidersNative", "", providerSource)
+                new RawModule("ProvidersNative", "", providerSource, SourceKind.FUNCTIONAL)
         );
     }
 
@@ -1089,7 +1089,7 @@ class PythonGeneratorTest {
 
                         @NativeProvider(qualifier: "system")
                         fun system_clock(): Effect[Clock] = <native>
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), providerManifest(binding));
     }
 
@@ -1108,7 +1108,7 @@ class PythonGeneratorTest {
                 annotation NativeProvider on fun {
                     qualifier: String = ""
                 }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {

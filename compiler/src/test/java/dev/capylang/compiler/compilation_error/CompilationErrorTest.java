@@ -1,5 +1,6 @@
 package dev.capylang.compiler.compilation_error;
 
+import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -315,12 +316,12 @@ public class CompilationErrorTest {
                             else
                                 Success { value: * { age: age } }
                         }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/model/UserModel import { * }
 
                         fun broken(): User = User! { age: 1 }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
@@ -434,11 +435,11 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectUnimportedAnnotation() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
-                new RawModule("Annotations", "/foo/meta", "annotation Test on fun {}"),
+                new RawModule("Annotations", "/foo/meta", "annotation Test on fun {}", SourceKind.FUNCTIONAL),
                 new RawModule("Tests", "/foo/boo", """
                         @Test()
                         fun should_run(): bool = true
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
@@ -888,7 +889,7 @@ public class CompilationErrorTest {
                         data Box { value: int }
                         fun Box.unsafe_run(): int = this.value
                         fun ok(): int = Box { value: 1 }.unsafe_run()
-                        """));
+                        """, SourceKind.FUNCTIONAL));
 
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
 
@@ -937,7 +938,7 @@ public class CompilationErrorTest {
                             match this with
                             case Error e -> e
                             case Success s -> map(s.value)
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -949,13 +950,13 @@ public class CompilationErrorTest {
 
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value }
                         fun assert_that(value: data): DataAssert = DataAssert { value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Widget", "/foo/model", """
                         from /capy/lang/Result import { * }
 
                         data Widget { size: int }
                         fun Widget.wrap(): Result[Widget] = Success { value: this }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/lang/Result import { * }
                         from /capy/test/Assert import { * }
@@ -965,7 +966,7 @@ public class CompilationErrorTest {
                             let source: Result[Widget] = Success { value: Widget { size: 1 } }
                             assert_that(source | widget => Success { value: widget.wrap() })
                                 .is_equal_to(Success { value: Widget { size: 2 } })
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Error.class);
@@ -1060,7 +1061,7 @@ public class CompilationErrorTest {
                                 fun Name[T].foo(map: T => Name[Y]): Name[Y] =
                                             ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
                                 """,
-                        List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of()))
+                        List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of(), false))
                 ),
                 Arguments.of(
                         "infix_special_operator_outside_of_package",
@@ -1077,7 +1078,7 @@ public class CompilationErrorTest {
                                 fun Name[T].`+`(map: T => Name[Y]): Name[Y] =
                                              ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
                                 """,
-                        List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of()))
+                        List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of(), false))
                 )
         );
     }
@@ -2121,8 +2122,8 @@ public class CompilationErrorTest {
                 fun Effect[T].unsafe_run(): T =
                     match this with
                     case UnsafeEffect { unsafe_thunk } -> unsafe_thunk()
-                """));
-        rawModules.add(new RawModule(moduleName, "/foo/boo", fun));
+                """, SourceKind.FUNCTIONAL));
+        rawModules.add(new RawModule(moduleName, "/foo/boo", fun, SourceKind.FUNCTIONAL));
         var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
@@ -2147,20 +2148,20 @@ public class CompilationErrorTest {
             new RawModule("String", "/capy/lang", """
                     data String { <native> }
                     fun String.size(): int = <native>
-                    """),
+                    """, SourceKind.FUNCTIONAL),
             new RawModule("Name", "/capy/compilation_test", """
                     union Name[T] = Foo[T] | Boo
                     data Foo[T] { value: T }
                     data Boo { message: String }
-                    """),
+                    """, SourceKind.FUNCTIONAL),
             new RawModule("Recursive", "/capy/meta_prog", """
                     annotation Recursive on fun {}
-                    """)
+                    """, SourceKind.FUNCTIONAL)
     );
 
     private static SortedSet<CompilerError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
         var rawModules = new ArrayList<>(DEFAULT_MODULES);
-        rawModules.add(new RawModule(moduleName, "/foo/boo", prependImports(imports, fun)));
+        rawModules.add(new RawModule(moduleName, "/foo/boo", prependImports(imports, fun), SourceKind.FUNCTIONAL));
         var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);

@@ -135,7 +135,7 @@ class ObjectOrientedCompilerTest {
 
                                 @NativeProvider(qualifier: "system")
                                 fun app_clock(): Effect[Clock] = <native>
-                                """)
+                                """, SourceKind.FUNCTIONAL)
                 ),
                 providerManifest(providerBinding("/dev/capylang/time/Clock", "system"))
         );
@@ -158,7 +158,7 @@ class ObjectOrientedCompilerTest {
 
                 @NativeProvider(qualifier: "system")
                 fun system_clock(): Effect[Clock] = <native>
-                """)), new TreeSet<>(), NativeProviderManifest.empty());
+                """, SourceKind.FUNCTIONAL)), new TreeSet<>(), new NativeProviderManifest(List.of(), null));
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
@@ -197,7 +197,7 @@ class ObjectOrientedCompilerTest {
                     def now(zone: String): String = zone
                 }
                 """, SourceKind.OBJECT_ORIENTED)
-        ), new TreeSet<>(), NativeProviderManifest.empty());
+        ), new TreeSet<>(), new NativeProviderManifest(List.of(), null));
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message).contains("Annotation NativeProvider").contains("is not valid on class declarations"))
@@ -213,7 +213,7 @@ class ObjectOrientedCompilerTest {
 
                 @NativeProvider(qualifier: "system")
                 fun system_clock(zone: String): Effect[Clock] = <native>
-                """, NativeProviderManifest.empty());
+                """, new NativeProviderManifest(List.of(), null));
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
@@ -283,7 +283,7 @@ class ObjectOrientedCompilerTest {
 
     @Test
     void shouldRejectMissingNativeProviderManifestEntry() {
-        var result = compileProviders(clockProviderSource(), NativeProviderManifest.empty());
+        var result = compileProviders(clockProviderSource(), new NativeProviderManifest(List.of(), null));
 
         assertThat(errorMessages(result))
                 .anySatisfy(message -> assertThat(message)
@@ -434,7 +434,7 @@ class ObjectOrientedCompilerTest {
                                     let person <- Person(name)
                                     person
                                 """
-                )
+                , SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Success.class);
@@ -473,7 +473,7 @@ class ObjectOrientedCompilerTest {
                                     let label <- person.label()
                                     label
                                 """
-                )
+                , SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Success.class);
@@ -538,7 +538,7 @@ class ObjectOrientedCompilerTest {
 
                         fun parse(input: String): String =
                             PARSER(input)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Success.class);
@@ -565,7 +565,7 @@ class ObjectOrientedCompilerTest {
                                 fun trait_info(): TraitInfo =
                                     NamedTrait.type()
                                 """
-                )
+                , SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
 
         assertThat(result).isInstanceOf(Result.Success.class);
@@ -650,7 +650,7 @@ class ObjectOrientedCompilerTest {
                 constructiblesModule(),
                 new RawModule("InvalidObjectUse", "/foo/app", """
                         from /capy/lang/Effect import { * }
-                        """ + source)
+                        """ + source, SourceKind.FUNCTIONAL)
         ), new TreeSet<>());
     }
 
@@ -674,7 +674,7 @@ class ObjectOrientedCompilerTest {
         return CapybaraCompiler.INSTANCE.compile(List.of(
                 nativeProviderAnnotationModule(),
                 clockObjectInterfaceModule(),
-                new RawModule("ClockProvider", "/dev/capylang/test", source)
+                new RawModule("ClockProvider", "/dev/capylang/test", source, SourceKind.FUNCTIONAL)
         ), new TreeSet<>(), manifest);
     }
 
@@ -690,7 +690,7 @@ class ObjectOrientedCompilerTest {
     }
 
     private NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
-        return new NativeProviderManifest(List.of(bindings));
+        return new NativeProviderManifest(List.of(bindings), null);
     }
 
     private NativeProviderBinding providerBinding(String interfaceId, String qualifier) {
@@ -708,7 +708,7 @@ class ObjectOrientedCompilerTest {
     }
 
     private RawModule clockProviderModule() {
-        return new RawModule("ClockProvider", "/dev/capylang/test", clockProviderSource());
+        return new RawModule("ClockProvider", "/dev/capylang/test", clockProviderSource(), SourceKind.FUNCTIONAL);
     }
 
     private String clockProviderSource() {
@@ -743,7 +743,7 @@ class ObjectOrientedCompilerTest {
                 annotation NativeProvider on fun {
                     qualifier: String = ""
                 }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private ObjectMapper objectMapper() {
@@ -765,7 +765,7 @@ class ObjectOrientedCompilerTest {
         return new RawModule("Effect", "/capy/lang", """
                 union Effect[T] = UnsafeEffect[T]
                 private data UnsafeEffect[T] { unsafe_thunk: () => T }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private RawModule reflectionModule() {
@@ -789,7 +789,7 @@ class ObjectOrientedCompilerTest {
                 data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
                 data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
                 data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private RawModule constructiblesModule() {

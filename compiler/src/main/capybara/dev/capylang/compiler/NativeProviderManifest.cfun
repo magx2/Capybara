@@ -1,0 +1,10 @@
+from /capy/collection/List import { * }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+
+data NativeProviderManifest {
+    providers: List[NativeProviderBinding],
+    sourceFile: String
+}
+
+fun nativeProviderManifestEmpty(manifest: NativeProviderManifest): bool =
+    manifest.providers.is_empty()

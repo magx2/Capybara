@@ -1,5 +1,6 @@
 package dev.capylang.compiler.compilation_error;
 
+import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -33,7 +34,7 @@ class LocalVisibilityCompilationErrorTest {
                     private fun private_add(x: int): int = x + 2
                     fun public_value(x: int): int = local_add(x) + LOCAL_OFFSET
                     """
-    );
+    , SourceKind.FUNCTIONAL);
 
     @ParameterizedTest(name = "{index}: should fail when local visibility is violated in `{0}.cfun`")
     @MethodSource
@@ -63,7 +64,7 @@ class LocalVisibilityCompilationErrorTest {
                                     1
                                 """,
                         "/foo/boo",
-                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("local_add"), List.of())),
+                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("local_add"), List.of(), false)),
                         "/foo/boo/local_function_not_visible_from_parent_package.cfun",
                         "imports unknown symbol `local_add` from module `" + SUPPORT_MODULE_IMPORT + "`"
                 ),
@@ -74,7 +75,7 @@ class LocalVisibilityCompilationErrorTest {
                                     1
                                 """,
                         "/foo/boo",
-                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("LocalNumber"), List.of())),
+                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("LocalNumber"), List.of(), false)),
                         "/foo/boo/local_type_not_visible_from_parent_package.cfun",
                         "imports unknown symbol `LocalNumber` from module `" + SUPPORT_MODULE_IMPORT + "`"
                 ),
@@ -85,7 +86,7 @@ class LocalVisibilityCompilationErrorTest {
                                     1
                                 """,
                         "/foo/boo/internal/child",
-                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("private_add"), List.of())),
+                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("private_add"), List.of(), false)),
                         "/foo/boo/internal/child/private_function_not_visible_from_sibling_module.cfun",
                         "imports unknown symbol `private_add` from module `" + SUPPORT_MODULE_IMPORT + "`"
                 )
@@ -104,7 +105,7 @@ class LocalVisibilityCompilationErrorTest {
                 moduleName,
                 modulePath,
                 prependImports(imports, fun)
-        ));
+        , SourceKind.FUNCTIONAL));
         var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Success<CompiledProgram> value) {
             throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);

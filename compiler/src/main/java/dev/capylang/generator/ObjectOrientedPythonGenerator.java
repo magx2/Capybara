@@ -52,7 +52,7 @@ final class ObjectOrientedPythonGenerator {
                 .map(definition -> {
                     var typeName = PythonGenerator.simpleTypeName(definition.name());
                     return new GeneratedModule(
-                            relativePath(module, typeName),
+                            Generator.generatedRelativePath(relativePath(module, typeName)),
                             renderType(new RenderContext(module, definition, definitionsByName))
                     );
                 })

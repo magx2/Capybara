@@ -1,0 +1,6 @@
+from /capy/collection/List import { * }
+from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
+
+data GeneratedProgram {
+    modules: List[GeneratedModule]
+}

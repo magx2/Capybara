@@ -98,14 +98,14 @@ class MainDetectionCompilerTest {
                 new RawModule("Program", "/cap/lang", """
                         union Program = Success
                         data Success {}
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Effect", "/cap/lang", """
                         union Effect[T] = UnsafeEffect[T]
                         private data UnsafeEffect[T] { unsafe_thunk: () => T }
 
                         fun pure(value: T): Effect[T] =
                             UnsafeEffect { unsafe_thunk: () => value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("MainDetection", "/foo/bar", """
                         from /cap/lang/Effect import { * }
                         from /capy/collection/List import { * }
@@ -114,7 +114,7 @@ class MainDetectionCompilerTest {
 
                         fun main(args: List[String]): /cap/lang/Effect[/cap/lang/Program] =
                             pure(/cap/lang/Program.Success {})
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(function(program, "main").programMain()).isFalse();
@@ -144,7 +144,7 @@ class MainDetectionCompilerTest {
     }
 
     private static CompiledProgram compileFunctional(String source) {
-        return compileModules(List.of(new RawModule("MainDetection", "/foo/bar", source)));
+        return compileModules(List.of(new RawModule("MainDetection", "/foo/bar", source, SourceKind.FUNCTIONAL)));
     }
 
     private static CompiledProgram compileModules(List<RawModule> modules) {
@@ -160,7 +160,7 @@ class MainDetectionCompilerTest {
 
     private static CompilerError compileFailure(String source) {
         var result = CapybaraCompiler.INSTANCE.compile(
-                List.of(new RawModule("MainDetection", "/foo/bar", source)),
+                List.of(new RawModule("MainDetection", "/foo/bar", source, SourceKind.FUNCTIONAL)),
                 new TreeSet<>()
         );
         assertThat(result).isInstanceOf(Result.Error.class);

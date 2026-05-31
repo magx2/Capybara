@@ -1,0 +1,7 @@
+from /capy/lang/Option import { Option }
+from /dev/capylang/compiler/parser/SourcePosition import { SourcePosition }
+
+data AnnotationTarget {
+    name: String,
+    position: Option[SourcePosition]
+}

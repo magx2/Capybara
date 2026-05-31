@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Result;
 
 import dev.capylang.compiler.expression.CompiledFunctionCall;
@@ -21,7 +22,7 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldReturnErrorInsteadOfThrowingForSyntaxError() {
         var result = CapybaraCompiler.INSTANCE.compile(
-                List.of(new RawModule("Broken", "/foo/app", "fun broken(): int = if true then {")),
+                List.of(new RawModule("Broken", "/foo/app", "fun broken(): int = if true then {", SourceKind.FUNCTIONAL)),
                 new java.util.TreeSet<>()
         );
 
@@ -34,14 +35,14 @@ class CapybaraCompilerLibrariesTest {
                 data Message { value: String }
                 fun make_message(value: String): Message = Message { value: value }
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
                 fun consume(value: String): Message = make_message(value)
                 fun unwrap(message: Message): String = message.value
                 """;
-        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiled.modules()).extracting(CompiledModule::name).containsExactly("Consumer");
         assertThat(compiled.modules().first().functions())
@@ -55,7 +56,7 @@ class CapybaraCompilerLibrariesTest {
                 data Handle[T] { <native> }
 
                 fun identity(handle: Handle[int]): Handle[int] = handle
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
 
         var identity = compiledFunction(compiled, "NativeHandle", "identity");
         assertThat(identity.returnType()).isInstanceOfSatisfying(CompiledDataType.class, dataType ->
@@ -71,10 +72,10 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("String", "/capy/lang", """
                         data String { <native> }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Primitives", "/capy/lang", """
                         from /capy/lang/Result import { * }
 
@@ -83,12 +84,12 @@ class CapybaraCompilerLibrariesTest {
                         fun to_double(s: String): Result[double] = <native>
                         fun to_float(s: String): Result[float] = <native>
                         fun to_bool(s: String): Result[bool] = <native>
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/lang/Result import { * }
 
                         fun parse(s: String): Result[int] = s.to_int()
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         var primitives = compiled.modules().stream()
@@ -120,7 +121,7 @@ class CapybaraCompilerLibrariesTest {
                         let info: DataValueInfo = reflection(receiver)
                         info.name
                 }
-                """)), reflectionLibraries).modules();
+                """, SourceKind.FUNCTIONAL)), reflectionLibraries).modules();
         var libraries = new java.util.TreeSet<CompiledModule>();
         libraries.addAll(reflectionLibraries);
         libraries.addAll(serdeLibraries);
@@ -131,7 +132,7 @@ class CapybaraCompilerLibrariesTest {
                 data User { name: String } derive TypeName
 
                 fun render(): String = User { name: "Ada" }.type_name()
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiled.modules().first().functions())
                 .extracting(CompiledFunction::name)
@@ -181,7 +182,7 @@ class CapybaraCompilerLibrariesTest {
                 fun mixed_parameters(extra: int, limit: AgeLimit): bool =
                     User { name: "Ada", age: 42 }.matches_age_metadata(extra, limit)
                 fun render_named(named: Named): String = named.show()
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiled.modules().first().functions())
                 .extracting(CompiledFunction::name)
@@ -222,7 +223,7 @@ class CapybaraCompilerLibrariesTest {
                 fun read_box(box: Box): String = box[1]
                 fun read_bag(bag: Bag): double = bag["age"]
                 fun read_cell(matrix: Matrix): String = matrix[1, 2].name
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "read_box").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
@@ -257,10 +258,10 @@ class CapybaraCompilerLibrariesTest {
                         data User { name: String } derive Show
 
                         fun render(): String = User { name: "Ada" }.show()
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Serde", "/bar", """
                         data User { name: String }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         var fooSerde = compiled.modules().stream()
@@ -291,7 +292,7 @@ class CapybaraCompilerLibrariesTest {
                 data User { name: String, age: int }
 
                 fun reflect_user(): DataValueInfo = reflection(User { name: "Ada", age: 42 })
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         var function = compiledFunction(compiled, "Consumer", "reflect_user");
         assertThat(function.returnType().name()).endsWith("DataValueInfo");
@@ -313,7 +314,7 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 fun reflect_data(obj: data): DataValueInfo = reflection(obj)
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         var function = compiledFunction(compiled, "Consumer", "reflect_data");
         assertThat(function.returnType().name()).endsWith("DataValueInfo");
@@ -332,7 +333,7 @@ class CapybaraCompilerLibrariesTest {
                 data User { name: String }
 
                 fun reflect_user(user: User): DataValueInfo = reflection(user)
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "reflect_user").expression())
                 .isInstanceOf(CompiledReflectionValue.class);
@@ -350,7 +351,7 @@ class CapybaraCompilerLibrariesTest {
 
                 fun reflect_string(): String = reflection("x")
                 fun reflect_user(user: User): DataValueInfo = reflection(user)
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "reflect_string").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
@@ -377,7 +378,7 @@ class CapybaraCompilerLibrariesTest {
                 data User { name: String }
 
                 fun reflect_user(user: User): DataValueInfo = reflection(user)
-                """)), libraries);
+                """, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "reflect_user").expression())
                 .isInstanceOf(CompiledFunctionCall.class)
@@ -410,7 +411,7 @@ class CapybaraCompilerLibrariesTest {
                 }
 
                 data User { name: String } derive Shadow
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
 
         assertThat(compiled.modules().first().functions())
                 .extracting(CompiledFunction::name)
@@ -422,7 +423,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectUnknownDeriver() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 data User { name: String } derive Missing
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Deriver `Missing` not found for `User`");
@@ -436,7 +437,7 @@ class CapybaraCompilerLibrariesTest {
                 }
 
                 data User { name: String } derive Show
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Deriver method parameter cannot be named `receiver`");
@@ -449,7 +450,7 @@ class CapybaraCompilerLibrariesTest {
                     fun show(): String = "first"
                     fun show(): String = "second"
                 }
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Duplicate deriver method signature `show`");
@@ -459,7 +460,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectCollectionSizeFieldAccessWithoutParentheses() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 fun broken(values: List[int]): int = values.size
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Field access requires data type, was `List[int]`");
@@ -469,7 +470,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectStringIsEmptyFieldAccessWithoutParentheses() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 fun broken(value: String): bool = value.is_empty
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Field access requires data type, was `String`");
@@ -479,7 +480,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectStringSizeFieldAccessWithoutParentheses() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 fun broken(value: String): int = value.size
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Field access requires data type, was `String`");
@@ -495,7 +496,7 @@ class CapybaraCompilerLibrariesTest {
                 data User { name: String } derive Show
 
                 fun User.show(): String = "manual"
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(error.message())
                 .contains("Duplicate function signature `User.show`");
@@ -511,13 +512,13 @@ class CapybaraCompilerLibrariesTest {
                         * { number: number }
                 }
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
                 fun build(value: int): OddInt = OddInt { number: value }
                 """;
-        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "build").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
@@ -537,7 +538,7 @@ class CapybaraCompilerLibrariesTest {
                 }
 
                 fun fallback(): User = User! { age: 1 }
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "fallback").expression())
                 .isInstanceOfSatisfying(CompiledNewData.class, newData ->
@@ -557,7 +558,7 @@ class CapybaraCompilerLibrariesTest {
                 }
 
                 fun fallback(): User = User! { age: 1 }
-                """)), new java.util.TreeSet<>());
+                """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "fallback").expression())
                 .isInstanceOfSatisfying(CompiledNewData.class, newData ->
@@ -579,7 +580,7 @@ class CapybaraCompilerLibrariesTest {
 
                 data NamedUser { name: String, role: String }
                 """;
-        var libraries = compileProgram(List.of(stringModule(), new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(stringModule(), new RawModule("Library", "/foo/lib", librarySource, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
@@ -587,7 +588,7 @@ class CapybaraCompilerLibrariesTest {
                 fun build(name: String, role: String): Result[NamedUser] =
                     NamedUser { name: name, role: role }
                 """;
-        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "build").expression())
                 .isInstanceOf(CompiledMatchExpression.class);
@@ -610,7 +611,7 @@ class CapybaraCompilerLibrariesTest {
 
                 data NamedUser { name: String, role: String }
                 """;
-        var libraries = compileProgram(List.of(stringModule(), new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(stringModule(), new RawModule("Library", "/foo/lib", librarySource, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
@@ -618,7 +619,7 @@ class CapybaraCompilerLibrariesTest {
                 fun build(name: String, role: String): Result[NamedUser] =
                     NamedUser { name: name, role: role }
                 """;
-        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "build").expression())
                 .isInstanceOf(CompiledMatchExpression.class);
@@ -639,7 +640,7 @@ class CapybaraCompilerLibrariesTest {
                         fun use_parent(): Result[String] =
                             let parent: Parent <- child()
                             parent.name
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "use_parent").expression())
@@ -658,7 +659,7 @@ class CapybaraCompilerLibrariesTest {
                         data Assertion { result: bool, message: String }
                         union Assert { assertions: List[Assertion] } = StringAssert
                         data StringAssert { value: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("CapyTest", "/capy/test", """
                         from Assert import { * }
                         from /capy/collection/List import { * }
@@ -669,7 +670,7 @@ class CapybaraCompilerLibrariesTest {
                         fun assertion_count(test_case: TestCase): int =
                             test_case.asserts
                                 |> 0, (acc, a) => acc + a.assertions.size()
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules())
@@ -692,7 +693,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("CapyTest", "/capy/test", """
                         data TestCase { asserts: List[String] }
                         data TestFile { test_cases: List[TestCase] }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Runtime", "/capy/test", """
                         from CapyTest import { * }
                         from /capy/collection/List import { * }
@@ -701,7 +702,7 @@ class CapybaraCompilerLibrariesTest {
 
                         fun assertion_count(test_file: TestFile): int =
                             test_file.test_cases | tc => tc.asserts.size() |> 0, (acc, count) => acc + count
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules())
@@ -722,7 +723,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("WithData", "/foo/with", """
                         data Foo { a: int, b: String }
                         fun update(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "x")
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules().stream()
@@ -742,7 +743,7 @@ class CapybaraCompilerLibrariesTest {
                         data A { a: String }
                         data B { b: int }
                         fun update(letter: Letter): Letter = letter.with(x: letter.x + 1)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules().stream()
@@ -759,13 +760,13 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(
                 new RawModule("Types", "/foo/lib", """
                         data Thing { value: int }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         data Thing { label: String }
 
                         fun local_thing(): Thing = Thing { label: "local" }
                         fun imported_thing(value: int): Types.Thing = Types.Thing { value: value }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "local_thing").returnType().name()).isEqualTo("Thing");
@@ -777,10 +778,10 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(
                 new RawModule("Types", "/foo/bar", """
                         data Thing { value: int }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         fun imported_thing(value: int): /foo/bar/Types.Thing = /foo/bar/Types.Thing { value: value }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "imported_thing").returnType().name())
@@ -792,10 +793,10 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(
                 new RawModule("Program", "/foo/bar", """
                         data Program { value: int }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         fun build(value: int): /foo/bar/Program = /foo/bar/Program { value: value }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "build").returnType().name()).isEqualTo("/foo/bar/Program");
@@ -808,7 +809,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -819,7 +820,7 @@ class CapybaraCompilerLibrariesTest {
 
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
                         fun assert_that(value: data): DataAssert = DataAssert { value: value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Date", "/capy/date_time", """
                         from /capy/lang/Result import { * }
 
@@ -828,13 +829,13 @@ class CapybaraCompilerLibrariesTest {
                             then Success { value: * { day: day } }
                             else Error { message: "invalid" }
                         }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/test/Assert import { * }
                         from /capy/date_time/Date import { * }
 
                         fun prefer_result(): bool = assert_that(Date { day: 1 }).succeeds()
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "prefer_result").returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
@@ -847,7 +848,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -856,7 +857,7 @@ class CapybaraCompilerLibrariesTest {
 
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
                         fun assert_that(value: data): DataAssert = DataAssert { value: value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Date", "/capy/date_time", """
                         from /capy/lang/Result import { * }
 
@@ -865,7 +866,7 @@ class CapybaraCompilerLibrariesTest {
                             then Success { value: * { day: day } }
                             else Error { message: "invalid" }
                         }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>()).modules();
 
         var compiled = compileProgram(List.of(
@@ -874,7 +875,7 @@ class CapybaraCompilerLibrariesTest {
                         from /capy/date_time/Date import { * }
 
                         fun prefer_result(): ResultAssert[Date] = assert_that(Date { day: 1 })
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "prefer_result").returnType().name())
@@ -888,7 +889,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -903,7 +904,7 @@ class CapybaraCompilerLibrariesTest {
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
                         fun assert_that(value: data): DataAssert = DataAssert { value: value }
                         fun assert_that(value: List[T]): ListAssert[T] = ListAssert { value: value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/lang/Result import { * }
                         from /capy/test/Assert import { * }
@@ -915,7 +916,7 @@ class CapybaraCompilerLibrariesTest {
                         fun result_assert(value: Result[Seed]): ResultAssert[Seed] = assert_that(value)
                         fun data_chain(seed: Seed): DataAssert = assert_that(seed).is_equal_to(seed)
                         fun list_chain(values: List[int]): ListAssert[int] = assert_that(values).is_equal_to(values)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "data_assert").returnType().name())
@@ -939,7 +940,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Date", "capy/date_time", """
                         from /capy/lang/Result import { * }
 
@@ -948,7 +949,7 @@ class CapybaraCompilerLibrariesTest {
                             then Success { value: * { day: day } }
                             else Error { message: "invalid" }
                         }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules()).extracting(CompiledModule::name)
@@ -962,7 +963,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -974,13 +975,13 @@ class CapybaraCompilerLibrariesTest {
 
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
                         fun assert_that(value: data): DataAssert = DataAssert { value: value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Widget", "/foo/model", """
                         from /capy/lang/Result import { * }
 
                         data Widget { size: int }
                         fun Widget.wrap(): Result[Widget] = Success { value: this }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/lang/Result import { * }
                         from /capy/test/Assert import { * }
@@ -989,7 +990,7 @@ class CapybaraCompilerLibrariesTest {
                         fun broken() =
                             assert_that(Success { value: Widget { size: 1 }.wrap() })
                                 .is_equal_to(Success { value: Widget { size: 2 } })
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(error.message()).contains("Expected `Result[Widget]`, but got `Widget`");
@@ -1002,7 +1003,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -1012,7 +1013,7 @@ class CapybaraCompilerLibrariesTest {
                         fun ResultAssert[T].fails(): bool = true
 
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Date", "/capy/date_time", """
                         from /capy/lang/Result import { * }
 
@@ -1022,7 +1023,7 @@ class CapybaraCompilerLibrariesTest {
                             else
                                 Error { message: "invalid" }
                         }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>()).modules();
 
         var compiled = compileProgram(List.of(
@@ -1041,7 +1042,7 @@ class CapybaraCompilerLibrariesTest {
 
                         fun invalid_date_assert_fails(): bool =
                             assert_that(Date { day: 0 }).fails()
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "valid_date_assert_succeeds").returnType())
@@ -1057,7 +1058,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
@@ -1076,7 +1077,7 @@ class CapybaraCompilerLibrariesTest {
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
                         fun assert_that(value: int): IntAssert = IntAssert { value: value }
                         fun assert_that(value: data): DataAssert = DataAssert { value: value }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Date", "/capy/date_time", """
                         from /capy/lang/Result import { * }
 
@@ -1087,7 +1088,7 @@ class CapybaraCompilerLibrariesTest {
                             then Success { value: * { day: day, month: month, year: year } }
                             else Error { message: "invalid" }
                         }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/test/Assert import { * }
                         from /capy/date_time/Date import { * }
@@ -1102,7 +1103,7 @@ class CapybaraCompilerLibrariesTest {
                                     ]))
                                 else assert_that(Date { day: day, month: JANUARY, year: 2020 }).fails()
                             assert
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "helper").returnType().name())
@@ -1116,7 +1117,7 @@ class CapybaraCompilerLibrariesTest {
                         union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Json", "/capy/serialization", """
                         from /capy/lang/Result import { * }
 
@@ -1130,7 +1131,7 @@ class CapybaraCompilerLibrariesTest {
                                 then JsonObject { value: { : } }
                                 else JsonBool { value: true }
                             decoded
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Json", "deserialize").returnType().name())
@@ -1144,7 +1145,7 @@ class CapybaraCompilerLibrariesTest {
                         data OutcomeAssert { value: bool }
                         fun OutcomeAssert.ok(): bool = this.value
                         fun check(value: bool): OutcomeAssert = OutcomeAssert { value: value }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>()).modules();
 
         var compiled = compileProgram(List.of(
@@ -1152,7 +1153,7 @@ class CapybaraCompilerLibrariesTest {
                         from /foo/test/FooAssert import { * }
 
                         fun use_method(): bool = check(true).ok()
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "use_method").returnType())
@@ -1166,7 +1167,7 @@ class CapybaraCompilerLibrariesTest {
                         data OutcomeAssert { value: bool }
                         fun OutcomeAssert.ok(): bool = this.value
                         fun check(value: bool): OutcomeAssert = OutcomeAssert { value: value }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>()).modules();
 
         var compiled = compileProgram(List.of(
@@ -1174,7 +1175,7 @@ class CapybaraCompilerLibrariesTest {
                         from /foo/test/Assert import { * }
 
                         fun use_method(): bool = check(true).ok()
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "use_method").returnType())
@@ -1190,7 +1191,7 @@ class CapybaraCompilerLibrariesTest {
 
                         fun use_int(value: int): int = pick(value)
                         fun use_long(value: int): long = pick(10L * value)
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "use_int").expression())
@@ -1207,7 +1208,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Consumer", "/foo/app", """
                         union Duration { seconds: long } = DateDuration
                         data DateDuration { seconds: int }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(error.message())
@@ -1229,7 +1230,7 @@ class CapybaraCompilerLibrariesTest {
                             match this with
                             case DateDuration { seconds } -> seconds
                             case WeekDuration -> 0L
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(error.message())
@@ -1261,7 +1262,7 @@ class CapybaraCompilerLibrariesTest {
         return new RawModule("String", "/capy/lang", """
                 data String { <native> }
                 fun String.size(): int = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static RawModule collectionsModule() {
@@ -1270,7 +1271,7 @@ class CapybaraCompilerLibrariesTest {
                 fun List[T].size(): int = <native>
                 fun List[T].`|`(map: T => Y): List[Y] = <native>
                 fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static RawModule reflectionMetadataModule() {
@@ -1329,7 +1330,7 @@ class CapybaraCompilerLibrariesTest {
                 data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo], annotations: List[AnnotationInfo] }
 
                 fun reflection(obj: data): DataValueInfo = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static CompiledFunction compiledFunction(CompiledProgram program, String moduleName, String functionName) {

@@ -56,9 +56,9 @@ class JavaScriptGeneratorTest {
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(
-                        Path.of("foo", "Main.js"),
-                        Path.of("dev", "capylang", "capybara.js"),
-                        Path.of("capy", "lang", "Option.js")
+                        "foo/Main.js",
+                        "dev/capylang/capybara.js",
+                        "capy/lang/Option.js"
                 );
 
         var output = runNode("""
@@ -168,9 +168,9 @@ class JavaScriptGeneratorTest {
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
                 .contains(
-                        Path.of("foo", "Base.js"),
-                        Path.of("foo", "Bracket.js"),
-                        Path.of("foo", "User.js")
+                        "foo/Base.js",
+                        "foo/Bracket.js",
+                        "foo/User.js"
                 );
 
         var output = runNode("""
@@ -208,13 +208,13 @@ class JavaScriptGeneratorTest {
         var generated = new JavaScriptGenerator().generate(program);
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
-                .contains(Path.of("dev", "capylang", "native_providers.js"));
+                .contains("dev/capylang/native_providers.js");
         var providerModule = generated.modules().stream()
                 .filter(module -> module.relativePath().endsWith("ProvidersNative.js"))
                 .findFirst()
                 .orElseThrow();
         var bootstrap = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("dev", "capylang", "native_providers.js")))
+                .filter(module -> module.relativePath().equals("dev/capylang/native_providers.js"))
                 .findFirst()
                 .orElseThrow();
 
@@ -285,7 +285,7 @@ class JavaScriptGeneratorTest {
 
         var generated = new JavaScriptGenerator().generate(program);
         var consumerModule = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("ClockConsumer.js")))
+                .filter(module -> module.relativePath().equals("ClockConsumer.js"))
                 .findFirst()
                 .orElseThrow();
 
@@ -624,7 +624,7 @@ class JavaScriptGeneratorTest {
         writeGenerated(generated);
 
         var main = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .filter(module -> module.relativePath().equals("foo/Main.js"))
                 .findFirst()
                 .orElseThrow();
         assertThat(main.code())
@@ -695,7 +695,7 @@ class JavaScriptGeneratorTest {
         writeGenerated(generated);
 
         var thing = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Thing.js")))
+                .filter(module -> module.relativePath().equals("foo/Thing.js"))
                 .findFirst()
                 .orElseThrow();
         assertThat(thing.code())
@@ -760,7 +760,7 @@ class JavaScriptGeneratorTest {
 
         var generated = new JavaScriptGenerator().generate(program);
         var main = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .filter(module -> module.relativePath().equals("foo/Main.js"))
                 .map(GeneratedModule::code)
                 .findFirst()
                 .orElseThrow();
@@ -783,7 +783,7 @@ class JavaScriptGeneratorTest {
         var program = compileProgram(List.of(
                 new RawModule("Modes", "/foo/lib", """
                         enum RoundMode { FLOOR, HALF_EVEN }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/lib/Modes import { RoundMode }
                         from /capy/lang/Result import { * }
@@ -792,14 +792,14 @@ class JavaScriptGeneratorTest {
                             match RoundMode.parse('HALF_EVEN') with
                             case Success _ -> 'parsed'
                             case Error _ -> 'error'
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var generated = new JavaScriptGenerator().generate(program);
         writeGenerated(generated);
 
         var consumer = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.js")))
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.js"))
                 .findFirst()
                 .orElseThrow();
         assertThat(consumer.code()).contains("__module_foo_lib_Modes.RoundMode.parse(\"HALF_EVEN\")");
@@ -818,23 +818,23 @@ class JavaScriptGeneratorTest {
                 new RawModule("A", "/foo", """
                         data Value { amount: int }
                         fun value(x: int): Value = Value { amount: x }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Pipe", "/foo", """
                         data Value { x: int }
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("Main", "/foo", """
                         import /foo/A
                         import /foo/Pipe
 
                         fun qualified_import_data(x: int): A.Value = A.Value { amount: x }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         var generated = new JavaScriptGenerator().generate(program);
         writeGenerated(generated);
 
         var main = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .filter(module -> module.relativePath().equals("foo/Main.js"))
                 .findFirst()
                 .orElseThrow();
         assertThat(main.code()).contains("new __module_foo_A.Value({ amount: x })");
@@ -853,13 +853,13 @@ class JavaScriptGeneratorTest {
                 type seed -> long
 
                 fun seed(): seed = <native>
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         var generated = new JavaScriptGenerator().generate(program);
         writeGenerated(generated);
 
         var random = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("capy", "lang", "Random.js")))
+                .filter(module -> module.relativePath().equals("capy/lang/Random.js"))
                 .findFirst()
                 .orElseThrow();
         assertThat(random.code())
@@ -887,7 +887,7 @@ class JavaScriptGeneratorTest {
         writeGenerated(generated);
 
         var main = generated.modules().stream()
-                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .filter(module -> module.relativePath().equals("foo/Main.js"))
                 .findFirst()
                 .orElseThrow();
         assertThat(main.code()).containsSubsequence(
@@ -915,13 +915,13 @@ class JavaScriptGeneratorTest {
                             if args.size() > 0
                             then pure(/capy/lang/Program.Success {})
                             else pure(/capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                        """),
+                        """, SourceKind.FUNCTIONAL),
                 new RawModule("SecondaryMain", "/foo", """
                         from /capy/collection/List import { * }
 
                         fun main(args: List[String]): /capy/lang/Program =
                             /capy/lang/Program.Success {}
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )));
         writeGenerated(generated);
 
@@ -958,16 +958,16 @@ class JavaScriptGeneratorTest {
 
         assertThat(paths)
                 .contains(
-                        Path.of("capy", "collection", "List.js"),
-                        Path.of("capy", "lang", "String.js"),
-                        Path.of("capy", "lang", "Primitives.js"),
-                        Path.of("capy", "io", "IO.js"),
-                        Path.of("capy", "date_time", "DateModule.js"),
-                        Path.of("capy", "lang", "RegexModule.js")
+                        "capy/collection/List.js",
+                        "capy/lang/String.js",
+                        "capy/lang/Primitives.js",
+                        "capy/io/IO.js",
+                        "capy/date_time/DateModule.js",
+                        "capy/lang/RegexModule.js"
                 )
                 .doesNotContain(
-                        Path.of("capy", "date_time", "Date.js"),
-                        Path.of("capy", "lang", "Regex.js")
+                        "capy/date_time/Date.js",
+                        "capy/lang/Regex.js"
                 )
                 .doesNotHaveDuplicates();
     }
@@ -983,12 +983,12 @@ class JavaScriptGeneratorTest {
                 .map(GeneratedModule::relativePath)
                 .toList();
 
-        assertThat(paths).filteredOn(Path.of("capy", "lang", "Math.js")::equals).hasSize(2);
-        assertThat(paths).filteredOn(Path.of("capy", "lang", "Seq.js")::equals).hasSize(2);
+        assertThat(paths).filteredOn("capy/lang/Math.js"::equals).hasSize(2);
+        assertThat(paths).filteredOn("capy/lang/Seq.js"::equals).hasSize(2);
     }
 
     private static CompiledProgram compileProgram(String source) {
-        return compileProgram(List.of(new RawModule("Main", "/foo", source)));
+        return compileProgram(List.of(new RawModule("Main", "/foo", source, SourceKind.FUNCTIONAL)));
     }
 
     private static dev.capylang.compiler.CompiledModule runtimeModule(String name, String path) {
@@ -996,7 +996,7 @@ class JavaScriptGeneratorTest {
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
-        return compileProgram(modules, NativeProviderManifest.empty());
+        return compileProgram(modules, new NativeProviderManifest(List.of(), null));
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules, NativeProviderManifest nativeProviders) {
@@ -1014,7 +1014,7 @@ class JavaScriptGeneratorTest {
     }
 
     private static NativeProviderManifest providerManifest(NativeProviderBinding... bindings) {
-        return new NativeProviderManifest(List.of(bindings));
+        return new NativeProviderManifest(List.of(bindings), null);
     }
 
     private static NativeProviderBinding javascriptProviderBinding(String interfaceId, String qualifier) {
@@ -1033,7 +1033,7 @@ class JavaScriptGeneratorTest {
                                 """,
                         SourceKind.OBJECT_ORIENTED
                 ),
-                new RawModule("ProvidersNative", "", providerSource)
+                new RawModule("ProvidersNative", "", providerSource, SourceKind.FUNCTIONAL)
         );
     }
 
@@ -1072,7 +1072,7 @@ class JavaScriptGeneratorTest {
 
                         @NativeProvider(qualifier: "system")
                         fun system_clock(): Effect[Clock] = <native>
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ), providerManifest(binding));
     }
 
@@ -1091,7 +1091,7 @@ class JavaScriptGeneratorTest {
                 annotation NativeProvider on fun {
                     qualifier: String = ""
                 }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private void writeGenerated(GeneratedProgram program) throws Exception {

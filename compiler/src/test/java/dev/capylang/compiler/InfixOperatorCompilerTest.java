@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Result;
 
 import dev.capylang.compiler.parser.RawModule;
@@ -171,7 +172,7 @@ class InfixOperatorCompilerTest {
                         data None {}
                         fun to_seq(values: List[T]): Seq[T] = End {}
                         fun Seq[T].first_match(pred: T => bool): Option[T] = None {}
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )).modules();
 
         var compiled = compileProgram(
@@ -181,7 +182,7 @@ class InfixOperatorCompilerTest {
                         fun has_even(): Option[int] =
                             let seq = to_seq([1, 3, 4, 7])
                             seq.first_match(x => x % 2 == 0)
-                        """)),
+                        """, SourceKind.FUNCTIONAL)),
                 libraries
         );
 
@@ -196,7 +197,7 @@ class InfixOperatorCompilerTest {
                         data Cons[T] { value: T, rest: () => Seq[T] }
                         data End {}
                         fun to_seq(values: List[T]): Seq[T] = End {}
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         )).modules();
 
         var compiled = compileProgram(
@@ -205,7 +206,7 @@ class InfixOperatorCompilerTest {
 
                         fun make_seq() =
                             to_seq([1, 3, 4, 7])
-                        """)),
+                        """, SourceKind.FUNCTIONAL)),
                 libraries
         );
 
@@ -281,7 +282,7 @@ class InfixOperatorCompilerTest {
     }
 
     private static CompiledProgram compileProgram(String code) {
-        return compileProgram(List.of(new RawModule("InfixOperators", "/foo/boo", code)));
+        return compileProgram(List.of(new RawModule("InfixOperators", "/foo/boo", code, SourceKind.FUNCTIONAL)));
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
@@ -301,7 +302,7 @@ class InfixOperatorCompilerTest {
 
     private static CompilerError compileFailure(String code) {
         var result = CapybaraCompiler.INSTANCE.compile(
-                List.of(new RawModule("InfixOperators", "/foo/boo", code)),
+                List.of(new RawModule("InfixOperators", "/foo/boo", code, SourceKind.FUNCTIONAL)),
                 new java.util.TreeSet<>()
         );
         if (result instanceof Result.Success<CompiledProgram> value) {

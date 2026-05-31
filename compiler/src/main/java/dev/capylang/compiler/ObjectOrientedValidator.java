@@ -1,508 +1,372 @@
 package dev.capylang.compiler;
 
 import capy.lang.Result;
-
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
-import java.util.HashSet;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
-import java.util.regex.Pattern;
 
 public final class ObjectOrientedValidator {
     public static final ObjectOrientedValidator INSTANCE = new ObjectOrientedValidator();
-    private static final Pattern IDENTIFIER_REFERENCE = Pattern.compile("\\b[_a-z][_A-Za-z0-9]*\\b");
-    private static final Pattern STRING_LITERAL = Pattern.compile("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'");
-    // OO expressions are raw strings until backend generation, so reject the unsafe escape hatch by call name.
-    private static final Pattern UNSAFE_RUN_CALL = Pattern.compile(
-            "(?s)(?:\\.\\s*|(?:^|[^A-Za-z0-9_\\.]))(?:unsafe_run|unsafeRun)\\s*\\("
-    );
+
+    private static final String PASS_CLASS_NAME = "dev.capylang.compiler.linking.ObjectOrientedValidationPass";
 
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
+        if (modules.isEmpty()) {
+            return Results.success(modules);
+        }
+
+        var validationErrors = ValidationPassAdapter.load().validateModules(modules.stream()
+                .map(ModuleDtoBuilder::new)
+                .map(ModuleDtoBuilder::module)
+                .toList());
+
+        if (validationErrors.isEmpty()) {
+            return Results.success(modules);
+        }
+
         var errors = new TreeSet<CompilerError>();
-        modules.forEach(module -> validateModule(module, errors));
-        return errors.isEmpty() ? Results.success(modules) : CompilerErrors.result(errors);
+        validationErrors.forEach(error -> errors.add(error(error)));
+        return CompilerErrors.result(errors);
     }
 
-    private void validateModule(ObjectOrientedModule module, TreeSet<CompilerError> errors) {
-        module.objectOriented().definitions().forEach(definition -> validateDefinition(module, definition, errors));
+    private static CompilerError error(Object error) {
+        var tuple = (List<?>) error;
+        return new CompilerError(
+                intAt(tuple, 0),
+                intAt(tuple, 1),
+                stringAt(tuple, 2),
+                stringAt(tuple, 3)
+        );
     }
 
-    private void validateDefinition(
-            ObjectOrientedModule module,
-            ObjectOriented.TypeDeclaration definition,
-            TreeSet<CompilerError> errors
-    ) {
-        var constructorParameters = definition instanceof ObjectOriented.ClassDeclaration classDeclaration
-                ? classDeclaration.constructorParameters().stream().map(ObjectOriented.Parameter::name).toList()
-                : List.<String>of();
-        definition.members().forEach(member -> validateMember(module, definition.name(), member, constructorParameters, errors));
+    private static int intAt(List<?> tuple, int index) {
+        return ((Number) tuple.get(index)).intValue();
     }
 
-    private void validateMember(
-            ObjectOrientedModule module,
-            String typeName,
-            ObjectOriented.MemberDeclaration member,
-            List<String> constructorParameters,
-            TreeSet<CompilerError> errors
-    ) {
-        if (member instanceof ObjectOriented.MethodDeclaration method
-            && method.body().isPresent()) {
-            var owner = typeName + "." + method.name();
-            var body = method.body().orElseThrow();
-            validateUnsafeEffectRunUsage(module, owner, body, errors);
-            if (body instanceof ObjectOriented.StatementBlock block) {
-                validateBlock(module, owner, block, Scope.root(method.parameters().stream().map(ObjectOriented.Parameter::name).toList()), errors);
+    private static String stringAt(List<?> tuple, int index) {
+        return (String) tuple.get(index);
+    }
+
+    private static final class ValidationPassAdapter {
+        private final Method validateModules;
+
+        private ValidationPassAdapter() throws ReflectiveOperationException {
+            var pass = Class.forName(PASS_CLASS_NAME);
+            validateModules = pass.getMethod("validateModules", List.class);
+        }
+
+        static ValidationPassAdapter load() {
+            try {
+                return new ValidationPassAdapter();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Object-oriented validation pass is unavailable", e);
             }
         }
-        if (member instanceof ObjectOriented.InitBlock initBlock) {
-            validateUnsafeEffectRunUsage(module, typeName + ".init", initBlock.body(), errors);
-            validateBlock(module, typeName + ".init", initBlock.body(), Scope.root(constructorParameters), errors);
-        }
-    }
 
-    private void validateBlock(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.StatementBlock block,
-            Scope parentScope,
-            TreeSet<CompilerError> errors
-    ) {
-        var scope = parentScope.child();
-        for (var statement : block.statements()) {
-            switch (statement) {
-                case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
-                case ObjectOriented.LocalMethodStatement localMethodStatement -> {
-                    validateLocalMethod(module, owner, localMethodStatement, scope, errors);
-                    scope.declareImmutable(localMethodStatement.name());
-                }
-                case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
-                case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
-                case ObjectOriented.ExpressionStatement expressionStatement -> validateExpressionStatement(module, owner, expressionStatement, errors);
-                case ObjectOriented.ThrowStatement ignored -> {
-                }
-                case ObjectOriented.IfStatement ifStatement -> {
-                    validateBlock(module, owner, ifStatement.thenBranch(), scope, errors);
-                    ifStatement.elseBranch().ifPresent(elseBranch -> validateNestedStatement(module, owner, elseBranch, scope, errors));
-                }
-                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                    validateBlock(module, owner, tryCatchStatement.tryBlock(), scope, errors);
-                    for (var catchClause : tryCatchStatement.catches()) {
-                        var catchScope = scope.child();
-                        catchScope.declareImmutable(catchClause.name());
-                        validateBlock(module, owner, catchClause.body(), catchScope, errors);
-                    }
-                }
-                case ObjectOriented.WhileStatement whileStatement -> validateBlock(module, owner, whileStatement.body(), scope, errors);
-                case ObjectOriented.DoWhileStatement doWhileStatement -> validateBlock(module, owner, doWhileStatement.body(), scope, errors);
-                case ObjectOriented.ForEachStatement forEachStatement -> {
-                    var loopScope = scope.child();
-                    loopScope.declareImmutable(forEachStatement.name());
-                    validateBlock(module, owner, forEachStatement.body(), loopScope, errors);
-                }
-                case ObjectOriented.StatementBlock nestedBlock -> validateBlock(module, owner, nestedBlock, scope, errors);
-                case ObjectOriented.ReturnStatement ignored -> {
-                }
+        List<?> validateModules(List<Object> modules) {
+            try {
+                return (List<?>) validateModules.invoke(null, modules);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("Object-oriented validation pass is unavailable", e);
+            } catch (InvocationTargetException e) {
+                throw rethrow("Object-oriented validation pass failed", e.getCause());
             }
+        }
+
+        private IllegalStateException rethrow(String message, Throwable cause) {
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(message, cause);
         }
     }
 
-    private void validateNestedStatement(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.Statement statement,
-            Scope scope,
-            TreeSet<CompilerError> errors
-    ) {
-        switch (statement) {
-            case ObjectOriented.StatementBlock block -> validateBlock(module, owner, block, scope, errors);
-            case ObjectOriented.IfStatement ifStatement -> {
-                validateBlock(module, owner, ifStatement.thenBranch(), scope, errors);
-                ifStatement.elseBranch().ifPresent(elseBranch -> validateNestedStatement(module, owner, elseBranch, scope, errors));
-            }
-            case ObjectOriented.WhileStatement whileStatement -> validateBlock(module, owner, whileStatement.body(), scope, errors);
-            case ObjectOriented.DoWhileStatement doWhileStatement -> validateBlock(module, owner, doWhileStatement.body(), scope, errors);
-            case ObjectOriented.ForEachStatement forEachStatement -> {
-                var loopScope = scope.child();
-                loopScope.declareImmutable(forEachStatement.name());
-                validateBlock(module, owner, forEachStatement.body(), loopScope, errors);
-            }
-            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                validateBlock(module, owner, tryCatchStatement.tryBlock(), scope, errors);
-                for (var catchClause : tryCatchStatement.catches()) {
-                    var catchScope = scope.child();
-                    catchScope.declareImmutable(catchClause.name());
-                    validateBlock(module, owner, catchClause.body(), catchScope, errors);
-                }
-            }
-            case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
-            case ObjectOriented.ExpressionStatement expressionStatement -> validateExpressionStatement(module, owner, expressionStatement, errors);
-            case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
-            case ObjectOriented.LocalMethodStatement localMethodStatement -> {
-                validateLocalMethod(module, owner, localMethodStatement, scope, errors);
-                scope.declareImmutable(localMethodStatement.name());
-            }
-            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
-            case ObjectOriented.ThrowStatement ignored -> {
-            }
-            case ObjectOriented.ReturnStatement ignored -> {
-            }
-        }
-    }
+    private static final class ModuleDtoBuilder {
+        private final ObjectOrientedModule module;
+        private final List<Object> blocks = new ArrayList<>();
+        private final List<Object> statements = new ArrayList<>();
+        private int nextBlockId;
+        private int nextStatementId;
 
-    private void validateAssignment(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.AssignmentStatement assignmentStatement,
-            Scope scope,
-            TreeSet<CompilerError> errors
-    ) {
-        var resolution = scope.resolve(assignmentStatement.name());
-        if (resolution == Resolution.MUTABLE) {
-            return;
-        }
-        var message = switch (resolution) {
-            case IMMUTABLE -> "Cannot assign to immutable local `" + assignmentStatement.name() + "` in `" + owner + "`; use `def` for mutable locals";
-            case UNDECLARED -> "Assignment target `" + assignmentStatement.name() + "` in `" + owner + "` is not a mutable local variable";
-            case MUTABLE -> throw new IllegalStateException("unreachable");
-        };
-        errors.add(new CompilerError(0, 0, module.moduleFile(), message));
-    }
-
-    private void validateLocalMethod(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.LocalMethodStatement localMethodStatement,
-            Scope scope,
-            TreeSet<CompilerError> errors
-    ) {
-        var mutableCaptures = new TreeSet<String>();
-        var localScope = scope.child();
-        localMethodStatement.parameters().forEach(parameter -> localScope.declareImmutable(parameter.name()));
-        localScope.declareImmutable(localMethodStatement.name());
-        collectMutableCaptures(localMethodStatement.body(), localScope, mutableCaptures);
-        if (!mutableCaptures.isEmpty()) {
-            errors.add(new CompilerError(
-                    0,
-                    0,
-                    module.moduleFile(),
-                    "Local method `" + owner + "." + localMethodStatement.name() + "` cannot capture mutable locals: " + String.join(", ", mutableCaptures)
-            ));
-        }
-        if (localMethodStatement.body() instanceof ObjectOriented.StatementBlock block) {
-            validateBlock(module, owner + "." + localMethodStatement.name(), block, localScope, errors);
-        }
-    }
-
-    private void validateExpressionStatement(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.ExpressionStatement expressionStatement,
-            TreeSet<CompilerError> errors
-    ) {
-        if (isCallExpression(expressionStatement.expression())) {
-            return;
-        }
-        errors.add(new CompilerError(
-                0,
-                0,
-                module.moduleFile(),
-                "Only call expressions can be used as stand-alone statements in `" + owner + "`"
-        ));
-    }
-
-    private boolean isCallExpression(String expression) {
-        var trimmed = expression.trim();
-        if (trimmed.isBlank()) {
-            return false;
-        }
-        if (!trimmed.endsWith(")")) {
-            return false;
-        }
-        var depth = 0;
-        char stringDelimiter = 0;
-        var outerCallOpenParen = -1;
-        for (int i = 0; i < trimmed.length(); i++) {
-            var current = trimmed.charAt(i);
-            if (stringDelimiter != 0) {
-                if (current == '\\') {
-                    i++;
-                    continue;
-                }
-                if (current == stringDelimiter) {
-                    stringDelimiter = 0;
-                }
-                continue;
-            }
-            if (current == '"' || current == '\'') {
-                stringDelimiter = current;
-                continue;
-            }
-            switch (current) {
-                case '(' -> {
-                    if (depth == 0) {
-                        outerCallOpenParen = i;
-                    }
-                    depth++;
-                }
-                case ')' -> {
-                    depth--;
-                    if (depth < 0) {
-                        return false;
-                    }
-                }
-                default -> {
-                }
-            }
-        }
-        if (depth != 0 || outerCallOpenParen <= 0) {
-            return false;
-        }
-        var callee = trimmed.substring(0, outerCallOpenParen).trim();
-        return callee.endsWith(")")
-               || callee.endsWith("]")
-               || IDENTIFIER_REFERENCE.matcher(callee).matches();
-    }
-
-    private void validateUnsafeEffectRunUsage(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.MethodBody body,
-            TreeSet<CompilerError> errors
-    ) {
-        switch (body) {
-            case ObjectOriented.ExpressionBody expressionBody -> validateUnsafeEffectRunUsage(module, owner, expressionBody.expression(), errors);
-            case ObjectOriented.StatementBlock statementBlock -> validateUnsafeEffectRunUsage(module, owner, statementBlock, errors);
-        }
-    }
-
-    private void validateUnsafeEffectRunUsage(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.StatementBlock block,
-            TreeSet<CompilerError> errors
-    ) {
-        for (var statement : block.statements()) {
-            validateUnsafeEffectRunUsage(module, owner, statement, errors);
-        }
-    }
-
-    private void validateUnsafeEffectRunUsage(
-            ObjectOrientedModule module,
-            String owner,
-            ObjectOriented.Statement statement,
-            TreeSet<CompilerError> errors
-    ) {
-        switch (statement) {
-            case ObjectOriented.LetStatement letStatement -> validateUnsafeEffectRunUsage(module, owner, letStatement.expression(), errors);
-            case ObjectOriented.LocalMethodStatement localMethodStatement ->
-                    validateUnsafeEffectRunUsage(module, owner + "." + localMethodStatement.name(), localMethodStatement.body(), errors);
-            case ObjectOriented.MutableVariableStatement mutableVariableStatement ->
-                    validateUnsafeEffectRunUsage(module, owner, mutableVariableStatement.expression(), errors);
-            case ObjectOriented.AssignmentStatement assignmentStatement -> validateUnsafeEffectRunUsage(module, owner, assignmentStatement.expression(), errors);
-            case ObjectOriented.ExpressionStatement expressionStatement -> validateUnsafeEffectRunUsage(module, owner, expressionStatement.expression(), errors);
-            case ObjectOriented.ThrowStatement throwStatement -> validateUnsafeEffectRunUsage(module, owner, throwStatement.expression(), errors);
-            case ObjectOriented.ReturnStatement returnStatement -> validateUnsafeEffectRunUsage(module, owner, returnStatement.expression(), errors);
-            case ObjectOriented.IfStatement ifStatement -> {
-                validateUnsafeEffectRunUsage(module, owner, ifStatement.condition(), errors);
-                validateUnsafeEffectRunUsage(module, owner, ifStatement.thenBranch(), errors);
-                ifStatement.elseBranch().ifPresent(elseBranch -> validateUnsafeEffectRunUsage(module, owner, elseBranch, errors));
-            }
-            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                validateUnsafeEffectRunUsage(module, owner, tryCatchStatement.tryBlock(), errors);
-                tryCatchStatement.catches().forEach(catchClause -> validateUnsafeEffectRunUsage(module, owner, catchClause.body(), errors));
-            }
-            case ObjectOriented.WhileStatement whileStatement -> {
-                validateUnsafeEffectRunUsage(module, owner, whileStatement.condition(), errors);
-                validateUnsafeEffectRunUsage(module, owner, whileStatement.body(), errors);
-            }
-            case ObjectOriented.DoWhileStatement doWhileStatement -> {
-                validateUnsafeEffectRunUsage(module, owner, doWhileStatement.body(), errors);
-                validateUnsafeEffectRunUsage(module, owner, doWhileStatement.condition(), errors);
-            }
-            case ObjectOriented.ForEachStatement forEachStatement -> {
-                validateUnsafeEffectRunUsage(module, owner, forEachStatement.iterable(), errors);
-                validateUnsafeEffectRunUsage(module, owner, forEachStatement.body(), errors);
-            }
-            case ObjectOriented.StatementBlock nestedBlock -> validateUnsafeEffectRunUsage(module, owner, nestedBlock, errors);
-        }
-    }
-
-    private void validateUnsafeEffectRunUsage(
-            ObjectOrientedModule module,
-            String owner,
-            String expression,
-            TreeSet<CompilerError> errors
-    ) {
-        var withoutStrings = STRING_LITERAL.matcher(expression).replaceAll(" ");
-        if (!UNSAFE_RUN_CALL.matcher(withoutStrings).find()) {
-            return;
-        }
-        errors.add(new CompilerError(
-                0,
-                0,
-                module.moduleFile(),
-                "`unsafe_run` cannot be called from Capybara OO source in `" + owner + "`; use effect binding or return `Effect[...]` to the runtime/test runner."
-        ));
-    }
-
-    private void collectMutableCaptures(ObjectOriented.MethodBody body, Scope scope, TreeSet<String> mutableCaptures) {
-        switch (body) {
-            case ObjectOriented.ExpressionBody expressionBody -> collectMutableCaptures(expressionBody.expression(), scope, mutableCaptures);
-            case ObjectOriented.StatementBlock statementBlock -> collectMutableCaptures(statementBlock, scope, mutableCaptures);
-        }
-    }
-
-    private void collectMutableCaptures(ObjectOriented.StatementBlock block, Scope parentScope, TreeSet<String> mutableCaptures) {
-        var scope = parentScope.child();
-        for (var statement : block.statements()) {
-            switch (statement) {
-                case ObjectOriented.LetStatement letStatement -> {
-                    collectMutableCaptures(letStatement.expression(), scope, mutableCaptures);
-                    scope.declareImmutable(letStatement.name());
-                }
-                case ObjectOriented.LocalMethodStatement localMethodStatement -> {
-                    var localMethodScope = scope.child();
-                    localMethodStatement.parameters().forEach(parameter -> localMethodScope.declareImmutable(parameter.name()));
-                    localMethodScope.declareImmutable(localMethodStatement.name());
-                    collectMutableCaptures(localMethodStatement.body(), localMethodScope, mutableCaptures);
-                    scope.declareImmutable(localMethodStatement.name());
-                }
-                case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
-                    collectMutableCaptures(mutableVariableStatement.expression(), scope, mutableCaptures);
-                    scope.declareMutable(mutableVariableStatement.name());
-                }
-                case ObjectOriented.AssignmentStatement assignmentStatement -> collectMutableCaptures(assignmentStatement.expression(), scope, mutableCaptures);
-                case ObjectOriented.ExpressionStatement expressionStatement -> collectMutableCaptures(expressionStatement.expression(), scope, mutableCaptures);
-                case ObjectOriented.ThrowStatement throwStatement -> collectMutableCaptures(throwStatement.expression(), scope, mutableCaptures);
-                case ObjectOriented.ReturnStatement returnStatement -> collectMutableCaptures(returnStatement.expression(), scope, mutableCaptures);
-                case ObjectOriented.IfStatement ifStatement -> {
-                    collectMutableCaptures(ifStatement.condition(), scope, mutableCaptures);
-                    collectMutableCaptures(ifStatement.thenBranch(), scope, mutableCaptures);
-                    ifStatement.elseBranch().ifPresent(elseBranch -> collectMutableCaptures(elseBranch, scope, mutableCaptures));
-                }
-                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                    collectMutableCaptures(tryCatchStatement.tryBlock(), scope, mutableCaptures);
-                    for (var catchClause : tryCatchStatement.catches()) {
-                        var catchScope = scope.child();
-                        catchScope.declareImmutable(catchClause.name());
-                        collectMutableCaptures(catchClause.body(), catchScope, mutableCaptures);
-                    }
-                }
-                case ObjectOriented.WhileStatement whileStatement -> {
-                    collectMutableCaptures(whileStatement.condition(), scope, mutableCaptures);
-                    collectMutableCaptures(whileStatement.body(), scope, mutableCaptures);
-                }
-                case ObjectOriented.DoWhileStatement doWhileStatement -> {
-                    collectMutableCaptures(doWhileStatement.body(), scope, mutableCaptures);
-                    collectMutableCaptures(doWhileStatement.condition(), scope, mutableCaptures);
-                }
-                case ObjectOriented.ForEachStatement forEachStatement -> {
-                    collectMutableCaptures(forEachStatement.iterable(), scope, mutableCaptures);
-                    var loopScope = scope.child();
-                    loopScope.declareImmutable(forEachStatement.name());
-                    collectMutableCaptures(forEachStatement.body(), loopScope, mutableCaptures);
-                }
-                case ObjectOriented.StatementBlock nestedBlock -> collectMutableCaptures(nestedBlock, scope, mutableCaptures);
-            }
-        }
-    }
-
-    private void collectMutableCaptures(ObjectOriented.Statement statement, Scope scope, TreeSet<String> mutableCaptures) {
-        switch (statement) {
-            case ObjectOriented.StatementBlock block -> collectMutableCaptures(block, scope, mutableCaptures);
-            case ObjectOriented.IfStatement ifStatement -> {
-                collectMutableCaptures(ifStatement.condition(), scope, mutableCaptures);
-                collectMutableCaptures(ifStatement.thenBranch(), scope, mutableCaptures);
-                ifStatement.elseBranch().ifPresent(elseBranch -> collectMutableCaptures(elseBranch, scope, mutableCaptures));
-            }
-            case ObjectOriented.WhileStatement whileStatement -> {
-                collectMutableCaptures(whileStatement.condition(), scope, mutableCaptures);
-                collectMutableCaptures(whileStatement.body(), scope, mutableCaptures);
-            }
-            case ObjectOriented.DoWhileStatement doWhileStatement -> {
-                collectMutableCaptures(doWhileStatement.body(), scope, mutableCaptures);
-                collectMutableCaptures(doWhileStatement.condition(), scope, mutableCaptures);
-            }
-            case ObjectOriented.ForEachStatement forEachStatement -> {
-                collectMutableCaptures(forEachStatement.iterable(), scope, mutableCaptures);
-                var loopScope = scope.child();
-                loopScope.declareImmutable(forEachStatement.name());
-                collectMutableCaptures(forEachStatement.body(), loopScope, mutableCaptures);
-            }
-            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
-                collectMutableCaptures(tryCatchStatement.tryBlock(), scope, mutableCaptures);
-                for (var catchClause : tryCatchStatement.catches()) {
-                    var catchScope = scope.child();
-                    catchScope.declareImmutable(catchClause.name());
-                    collectMutableCaptures(catchClause.body(), catchScope, mutableCaptures);
-                }
-            }
-            case ObjectOriented.LetStatement letStatement -> collectMutableCaptures(letStatement.expression(), scope, mutableCaptures);
-            case ObjectOriented.LocalMethodStatement localMethodStatement -> collectMutableCaptures(localMethodStatement.body(), scope.child(), mutableCaptures);
-            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> collectMutableCaptures(mutableVariableStatement.expression(), scope, mutableCaptures);
-            case ObjectOriented.AssignmentStatement assignmentStatement -> collectMutableCaptures(assignmentStatement.expression(), scope, mutableCaptures);
-            case ObjectOriented.ExpressionStatement expressionStatement -> collectMutableCaptures(expressionStatement.expression(), scope, mutableCaptures);
-            case ObjectOriented.ThrowStatement throwStatement -> collectMutableCaptures(throwStatement.expression(), scope, mutableCaptures);
-            case ObjectOriented.ReturnStatement returnStatement -> collectMutableCaptures(returnStatement.expression(), scope, mutableCaptures);
-        }
-    }
-
-    private void collectMutableCaptures(String expression, Scope scope, TreeSet<String> mutableCaptures) {
-        var withoutStrings = expression.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", " ");
-        var matcher = IDENTIFIER_REFERENCE.matcher(withoutStrings);
-        while (matcher.find()) {
-            var name = matcher.group();
-            if (scope.resolve(name) == Resolution.MUTABLE) {
-                mutableCaptures.add(name);
-            }
-        }
-    }
-
-    private enum Resolution {
-        MUTABLE,
-        IMMUTABLE,
-        UNDECLARED
-    }
-
-    private static final class Scope {
-        private final Scope parent;
-        private final HashSet<String> mutable = new HashSet<>();
-        private final HashSet<String> immutable = new HashSet<>();
-
-        private Scope(Scope parent) {
-            this.parent = parent;
+        private ModuleDtoBuilder(ObjectOrientedModule module) {
+            this.module = module;
         }
 
-        static Scope root(List<String> immutableNames) {
-            var root = new Scope(null);
-            immutableNames.forEach(root::declareImmutable);
-            return root;
+        Object module() {
+            var definitions = module.objectOriented().definitions().stream()
+                    .map(this::definition)
+                    .toList();
+            var members = module.objectOriented().definitions().stream()
+                    .flatMap(definition -> definition.members().stream().map(member -> member(definition.name(), member)))
+                    .toList();
+            return List.of(module.moduleFile(), definitions, members, List.copyOf(blocks), List.copyOf(statements));
         }
 
-        Scope child() {
-            return new Scope(this);
-        }
-
-        void declareMutable(String name) {
-            mutable.add(name);
-            immutable.remove(name);
-        }
-
-        void declareImmutable(String name) {
-            immutable.add(name);
-            mutable.remove(name);
-        }
-
-        Resolution resolve(String name) {
-            if (mutable.contains(name)) {
-                return Resolution.MUTABLE;
+        private Object definition(ObjectOriented.TypeDeclaration definition) {
+            if (definition instanceof ObjectOriented.ClassDeclaration classDeclaration) {
+                return List.of(
+                        "class",
+                        classDeclaration.name(),
+                        parameters(classDeclaration.constructorParameters()),
+                        parents(classDeclaration.parents()),
+                        classDeclaration.modifiers()
+                );
             }
-            if (immutable.contains(name)) {
-                return Resolution.IMMUTABLE;
+            if (definition instanceof ObjectOriented.TraitDeclaration traitDeclaration) {
+                return List.of(
+                        "trait",
+                        traitDeclaration.name(),
+                        List.of(),
+                        parents(traitDeclaration.parents()),
+                        List.of()
+                );
             }
-            return parent == null ? Resolution.UNDECLARED : parent.resolve(name);
+            if (definition instanceof ObjectOriented.InterfaceDeclaration interfaceDeclaration) {
+                return List.of(
+                        "interface",
+                        interfaceDeclaration.name(),
+                        List.of(),
+                        parents(interfaceDeclaration.parents()),
+                        List.of()
+                );
+            }
+            throw new IllegalArgumentException("Unsupported object-oriented definition: " + definition.getClass().getName());
+        }
+
+        private Object member(String owner, ObjectOriented.MemberDeclaration member) {
+            if (member instanceof ObjectOriented.FieldDeclaration fieldDeclaration) {
+                return List.of(
+                        owner,
+                        "field",
+                        fieldDeclaration.name(),
+                        fieldDeclaration.type(),
+                        fieldDeclaration.visibility(),
+                        List.of(),
+                        false,
+                        emptyBody(),
+                        fieldDeclaration.initializer().isPresent(),
+                        fieldDeclaration.initializer().orElse(""),
+                        List.of()
+                );
+            }
+            if (member instanceof ObjectOriented.MethodDeclaration methodDeclaration) {
+                return List.of(
+                        owner,
+                        "method",
+                        methodDeclaration.name(),
+                        methodDeclaration.returnType(),
+                        methodDeclaration.visibility(),
+                        methodDeclaration.modifiers(),
+                        methodDeclaration.body().isPresent(),
+                        methodDeclaration.body().map(this::body).orElseGet(this::emptyBody),
+                        false,
+                        "",
+                        parameters(methodDeclaration.parameters())
+                );
+            }
+            if (member instanceof ObjectOriented.InitBlock initBlock) {
+                return List.of(
+                        owner,
+                        "init",
+                        "init",
+                        "void",
+                        "public",
+                        List.of(),
+                        true,
+                        blockBody(initBlock.body()),
+                        false,
+                        "",
+                        List.of()
+                );
+            }
+            throw new IllegalArgumentException("Unsupported object-oriented member: " + member.getClass().getName());
+        }
+
+        private Object body(ObjectOriented.MethodBody body) {
+            if (body instanceof ObjectOriented.ExpressionBody expressionBody) {
+                return List.of("expression", expressionBody.expression(), -1);
+            }
+            if (body instanceof ObjectOriented.StatementBlock statementBlock) {
+                return blockBody(statementBlock);
+            }
+            throw new IllegalArgumentException("Unsupported object-oriented method body: " + body.getClass().getName());
+        }
+
+        private Object blockBody(ObjectOriented.StatementBlock block) {
+            return List.of("block", "", block(block));
+        }
+
+        private Object emptyBody() {
+            return List.of("none", "", -1);
+        }
+
+        private int block(ObjectOriented.StatementBlock block) {
+            var id = nextBlockId++;
+            var statementIds = block.statements().stream()
+                    .map(this::statement)
+                    .toList();
+            blocks.add(List.of(id, statementIds));
+            return id;
+        }
+
+        private int statement(ObjectOriented.Statement statement) {
+            var id = nextStatementId++;
+            statements.add(statementRow(id, statement));
+            return id;
+        }
+
+        private Object statementRow(int id, ObjectOriented.Statement statement) {
+            if (statement instanceof ObjectOriented.LetStatement letStatement) {
+                return statement(
+                        id,
+                        "let",
+                        letStatement.name(),
+                        letStatement.type().orElse(""),
+                        letStatement.expression(),
+                        List.of(),
+                        emptyBody(),
+                        -1,
+                        -1,
+                        List.of(),
+                        ""
+                );
+            }
+            if (statement instanceof ObjectOriented.LocalMethodStatement localMethodStatement) {
+                return statement(
+                        id,
+                        "local_method",
+                        localMethodStatement.name(),
+                        "",
+                        "",
+                        parameters(localMethodStatement.parameters()),
+                        body(localMethodStatement.body()),
+                        -1,
+                        -1,
+                        List.of(),
+                        localMethodStatement.returnType()
+                );
+            }
+            if (statement instanceof ObjectOriented.MutableVariableStatement mutableVariableStatement) {
+                return statement(
+                        id,
+                        "mutable",
+                        mutableVariableStatement.name(),
+                        mutableVariableStatement.type().orElse(""),
+                        mutableVariableStatement.expression(),
+                        List.of(),
+                        emptyBody(),
+                        -1,
+                        -1,
+                        List.of(),
+                        ""
+                );
+            }
+            if (statement instanceof ObjectOriented.AssignmentStatement assignmentStatement) {
+                return statement(id, "assignment", assignmentStatement.name(), "", assignmentStatement.expression(), List.of(), emptyBody(), -1, -1, List.of(), "");
+            }
+            if (statement instanceof ObjectOriented.ExpressionStatement expressionStatement) {
+                return statement(id, "expression", "", "", expressionStatement.expression(), List.of(), emptyBody(), -1, -1, List.of(), "");
+            }
+            if (statement instanceof ObjectOriented.ThrowStatement throwStatement) {
+                return statement(id, "throw", "", "", throwStatement.expression(), List.of(), emptyBody(), -1, -1, List.of(), "");
+            }
+            if (statement instanceof ObjectOriented.ReturnStatement returnStatement) {
+                return statement(id, "return", "", "", returnStatement.expression(), List.of(), emptyBody(), -1, -1, List.of(), "");
+            }
+            if (statement instanceof ObjectOriented.IfStatement ifStatement) {
+                return statement(
+                        id,
+                        "if",
+                        "",
+                        "",
+                        ifStatement.condition(),
+                        List.of(),
+                        emptyBody(),
+                        block(ifStatement.thenBranch()),
+                        ifStatement.elseBranch().map(this::statement).orElse(-1),
+                        List.of(),
+                        ""
+                );
+            }
+            if (statement instanceof ObjectOriented.TryCatchStatement tryCatchStatement) {
+                return statement(
+                        id,
+                        "try",
+                        "",
+                        "",
+                        "",
+                        List.of(),
+                        emptyBody(),
+                        block(tryCatchStatement.tryBlock()),
+                        -1,
+                        tryCatchStatement.catches().stream().map(this::catchClause).toList(),
+                        ""
+                );
+            }
+            if (statement instanceof ObjectOriented.WhileStatement whileStatement) {
+                return statement(id, "while", "", "", whileStatement.condition(), List.of(), emptyBody(), block(whileStatement.body()), -1, List.of(), "");
+            }
+            if (statement instanceof ObjectOriented.DoWhileStatement doWhileStatement) {
+                return statement(id, "do_while", "", "", doWhileStatement.condition(), List.of(), emptyBody(), block(doWhileStatement.body()), -1, List.of(), "");
+            }
+            if (statement instanceof ObjectOriented.ForEachStatement forEachStatement) {
+                return statement(
+                        id,
+                        "foreach",
+                        forEachStatement.name(),
+                        forEachStatement.type().orElse(""),
+                        forEachStatement.iterable(),
+                        List.of(),
+                        emptyBody(),
+                        block(forEachStatement.body()),
+                        -1,
+                        List.of(),
+                        ""
+                );
+            }
+            if (statement instanceof ObjectOriented.StatementBlock statementBlock) {
+                return statement(id, "block", "", "", "", List.of(), emptyBody(), block(statementBlock), -1, List.of(), "");
+            }
+            throw new IllegalArgumentException("Unsupported object-oriented statement: " + statement.getClass().getName());
+        }
+
+        private Object statement(
+                int id,
+                String kind,
+                String name,
+                String declaredType,
+                String rawExpression,
+                List<Object> parameters,
+                Object body,
+                int bodyId,
+                int elseStatementId,
+                List<Object> catches,
+                String returnType
+        ) {
+            return List.of(id, kind, name, declaredType, rawExpression, parameters, body, bodyId, elseStatementId, catches, returnType);
+        }
+
+        private Object catchClause(ObjectOriented.CatchClause catchClause) {
+            return List.of(catchClause.name(), block(catchClause.body()));
+        }
+
+        private List<Object> parameters(List<ObjectOriented.Parameter> parameters) {
+            return parameters.stream()
+                    .map(parameter -> List.of(parameter.name(), parameter.type()))
+                    .map(Object.class::cast)
+                    .toList();
+        }
+
+        private List<String> parents(List<ObjectOriented.TypeReference> parents) {
+            return parents.stream().map(ObjectOriented.TypeReference::name).toList();
         }
     }
 }

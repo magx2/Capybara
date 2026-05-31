@@ -1,5 +1,8 @@
 package dev.capylang;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -14,7 +17,13 @@ import dev.capylang.compiler.CompiledFunction;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.NativeProviderCatalog;
+import dev.capylang.compiler.NativeProviderCatalogModule;
+import dev.capylang.compiler.NativeProviderBackend;
+import dev.capylang.compiler.NativeProviderBackendBinding;
+import dev.capylang.compiler.NativeProviderBackendModule;
+import dev.capylang.compiler.NativeProviderBinding;
 import dev.capylang.compiler.NativeProviderManifest;
+import dev.capylang.compiler.NativeProviderManifestModule;
 import dev.capylang.compiler.NativeImplementationScanner;
 import dev.capylang.compiler.OutputType;
 import capy.lang.Result;
@@ -26,6 +35,7 @@ import dev.capylang.compiler.expression.CompiledNewList;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.InfixOperator;
 import dev.capylang.compiler.parser.SourceKind;
+import dev.capylang.compiler.parser.SourceKindModule;
 import dev.capylang.generator.Generator;
 import dev.capylang.generator.GeneratedProgram;
 
@@ -123,7 +133,7 @@ public class Capy {
             PrintStream err,
             String compilerVersion
     ) {
-        return compile(input, linkedOutputDir, libraries, compileTests, NativeProviderManifest.empty(), err, compilerVersion);
+        return compile(input, linkedOutputDir, libraries, compileTests, new NativeProviderManifest(List.of(), null), err, compilerVersion);
     }
 
     public static int compile(
@@ -194,7 +204,7 @@ public class Capy {
                 libraries,
                 compileTests,
                 includeJavaLibResources,
-                NativeProviderManifest.empty(),
+                new NativeProviderManifest(List.of(), null),
                 readCompilerVersion(),
                 err
         );
@@ -252,7 +262,7 @@ public class Capy {
                 libraries,
                 compileTests,
                 includeJavaLibResources,
-                NativeProviderManifest.empty(),
+                new NativeProviderManifest(List.of(), null),
                 compilerVersion,
                 err
         );
@@ -574,17 +584,146 @@ public class Capy {
 
     static NativeProviderManifest readNativeProviderManifest(Path manifestFile) {
         if (manifestFile == null) {
-            return NativeProviderManifest.empty();
+            return new NativeProviderManifest(List.of(), null);
         }
         if (!Files.isRegularFile(manifestFile)) {
             throw new CliException("Native wiring manifest is not a file: " + manifestFile);
         }
         try (var input = Files.newInputStream(manifestFile)) {
-            return NATIVE_MANIFEST_OBJECT_MAPPER.readValue(input, NativeProviderManifest.class)
-                    .withSourceFile(manifestFile.toString());
-        } catch (IOException e) {
+            return nativeProviderManifestFromJson(
+                    NATIVE_MANIFEST_OBJECT_MAPPER.readValue(input, Object.class),
+                    manifestFile.toString()
+            );
+        } catch (IOException | IllegalArgumentException e) {
             throw new CliException("Unable to read native wiring manifest `" + manifestFile + "`: " + rootCauseMessage(e));
         }
+    }
+
+    private static NativeProviderManifest nativeProviderManifestFromJson(Object value, String sourceFile) {
+        var root = objectMap(value, "TypeMismatch: Native provider manifest must be a JSON object.");
+        var providersValue = root.get("providers");
+        if (providersValue == null) {
+            return new NativeProviderManifest(List.of(), blankToNull(sourceFile));
+        }
+        if (!(providersValue instanceof List<?> providerValues)) {
+            throw new IllegalArgumentException("TypeMismatch: Native provider manifest `providers` must be an array.");
+        }
+        var providers = new ArrayList<NativeProviderBinding>();
+        for (var providerValue : providerValues) {
+            if (providerValue == null) {
+                throw new IllegalArgumentException("TypeMismatch: Native provider manifest cannot contain null providers.");
+            }
+            providers.add(nativeProviderBindingFromJson(providerValue));
+        }
+        return new NativeProviderManifest(List.copyOf(providers), blankToNull(sourceFile));
+    }
+
+    private static NativeProviderBinding nativeProviderBindingFromJson(Object value) {
+        var provider = objectMap(value, "TypeMismatch: Native provider manifest provider must be a JSON object.");
+        var interfaceId = requiredText(provider.get("interface"), "TypeMismatch: Native provider `interface` is required.");
+        var qualifier = optionalText(provider.get("qualifier"), "qualifier");
+        return new NativeProviderBinding(
+                interfaceId,
+                qualifier == null ? "" : qualifier,
+                nativeProviderBackendBindingFromJson(provider.get("java"), NativeProviderBackend.JAVA),
+                nativeProviderBackendBindingFromJson(provider.get("javascript"), NativeProviderBackend.JAVASCRIPT),
+                nativeProviderBackendBindingFromJson(provider.get("python"), NativeProviderBackend.PYTHON)
+        );
+    }
+
+    private static NativeProviderBackendBinding nativeProviderBackendBindingFromJson(Object value, NativeProviderBackend backend) {
+        if (value == null) {
+            return null;
+        }
+        var backendValue = NativeProviderBackendModule.jsonValue(backend);
+        var binding = objectMap(value, "TypeMismatch: Native provider backend `" + backendValue + "` must be a JSON object.");
+        var result = new NativeProviderBackendBinding(
+                optionalText(binding.get("className"), backendValue + ".className"),
+                optionalText(binding.get("module"), backendValue + ".module"),
+                optionalText(binding.get("export"), backendValue + ".export"),
+                optionalText(binding.get("factory"), backendValue + ".factory")
+        );
+        if (result.factory() == null) {
+            result = new NativeProviderBackendBinding(
+                    result.className(),
+                    result.moduleName(),
+                    result.exportName(),
+                    NativeProviderBackendModule.defaultFactory(backend)
+            );
+        }
+        validateNativeProviderBackendBinding(backend, result);
+        return result;
+    }
+
+    private static void validateNativeProviderBackendBinding(NativeProviderBackend backend, NativeProviderBackendBinding binding) {
+        switch (backend) {
+            case JAVA -> {
+                requireBackendText(backend, "java.className", binding.className());
+                requireFactory(backend, binding.factory(), "constructor");
+            }
+            case JAVASCRIPT -> {
+                requireBackendText(backend, "javascript.module", binding.moduleName());
+                requireBackendText(backend, "javascript.export", binding.exportName());
+                requireFactory(backend, binding.factory(), "new", "call");
+            }
+            case PYTHON -> {
+                requireBackendText(backend, "python.module", binding.moduleName());
+                requireBackendText(backend, "python.className", binding.className());
+                requireFactory(backend, binding.factory(), "call");
+            }
+        }
+    }
+
+    private static void requireBackendText(NativeProviderBackend backend, String fieldName, String value) {
+        if (value != null && !value.isBlank()) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "UnsupportedBackend: Native provider backend `" + NativeProviderBackendModule.jsonValue(backend)
+                + "` requires manifest field `" + fieldName + "`."
+        );
+    }
+
+    private static void requireFactory(NativeProviderBackend backend, String actual, String... supported) {
+        for (var candidate : supported) {
+            if (candidate.equals(actual)) {
+                return;
+            }
+        }
+        var backendValue = NativeProviderBackendModule.jsonValue(backend);
+        throw new IllegalArgumentException(
+                "UnsupportedBackend: Native provider backend `" + backendValue + "` manifest field `"
+                + backendValue + ".factory` has unsupported value `" + actual
+                + "`. Supported values: " + String.join(", ", supported) + "."
+        );
+    }
+
+    private static Map<?, ?> objectMap(Object value, String message) {
+        if (value instanceof Map<?, ?> map) {
+            return map;
+        }
+        throw new IllegalArgumentException(message);
+    }
+
+    private static String requiredText(Object value, String message) {
+        if (value instanceof String string && !string.isBlank()) {
+            return string;
+        }
+        throw new IllegalArgumentException(message);
+    }
+
+    private static String optionalText(Object value, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String string) {
+            return string;
+        }
+        throw new IllegalArgumentException("TypeMismatch: Native provider manifest field `" + fieldName + "` must be a string.");
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static String rootCauseMessage(Throwable throwable) {
@@ -747,16 +886,18 @@ public class Capy {
         modules.addAll(second.modules());
         var objectOrientedModules = new ArrayList<>(first.objectOrientedModules());
         objectOrientedModules.addAll(second.objectOrientedModules());
-        var nativeProviders = first.nativeProviders().isEmpty() ? second.nativeProviders() : first.nativeProviders();
+        var nativeProviders = NativeProviderManifestModule.nativeProviderManifestEmpty(first.nativeProviders())
+                ? second.nativeProviders()
+                : first.nativeProviders();
         var nativeProviderCatalog = mergeNativeProviderCatalog(first.nativeProviderCatalog(), second.nativeProviderCatalog());
         return new CompiledProgram(modules, objectOrientedModules, nativeProviders, nativeProviderCatalog);
     }
 
     private static NativeProviderCatalog mergeNativeProviderCatalog(NativeProviderCatalog first, NativeProviderCatalog second) {
-        if (first.isEmpty()) {
+        if (NativeProviderCatalogModule.nativeProviderCatalogEmpty(first)) {
             return second;
         }
-        if (second.isEmpty()) {
+        if (NativeProviderCatalogModule.nativeProviderCatalogEmpty(second)) {
             return first;
         }
         var declarations = new ArrayList<>(first.declarations());
@@ -767,8 +908,11 @@ public class Capy {
     }
 
     private static NativeProviderManifest withoutCatalogBindings(NativeProviderManifest manifest, NativeProviderCatalog catalog) {
-        if (manifest == null || manifest.isEmpty() || catalog == null || catalog.isEmpty()) {
-            return manifest == null ? NativeProviderManifest.empty() : manifest;
+        if (manifest == null
+            || NativeProviderManifestModule.nativeProviderManifestEmpty(manifest)
+            || catalog == null
+            || NativeProviderCatalogModule.nativeProviderCatalogEmpty(catalog)) {
+            return manifest == null ? new NativeProviderManifest(List.of(), null) : manifest;
         }
         var catalogKeys = catalog.bindings().stream()
                 .map(binding -> new NativeProviderBindingKey(binding.interfaceId(), binding.qualifier()))
@@ -780,13 +924,13 @@ public class Capy {
             return manifest;
         }
         if (providers.isEmpty()) {
-            return NativeProviderManifest.empty();
+            return new NativeProviderManifest(List.of(), null);
         }
         return new NativeProviderManifest(providers, manifest.sourceFile());
     }
 
     static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
-        return compileSources(input, libraries, compileTests, NativeProviderManifest.empty(), err);
+        return compileSources(input, libraries, compileTests, new NativeProviderManifest(List.of(), null), err);
     }
 
     static CompilationArtifacts compileSources(
@@ -854,7 +998,7 @@ public class Capy {
         }
 
         var tempDir = Files.createTempDirectory("capy-package-");
-        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), false, NativeProviderManifest.empty(), err, readCompilerVersion());
+        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), false, new NativeProviderManifest(List.of(), null), err, readCompilerVersion());
         if (exitCode != EXIT_SUCCESS) {
             throw new CliException("Unable to compile package input from: " + options.input());
         }
@@ -933,7 +1077,7 @@ public class Capy {
 
     private static void writeGeneratedProgram(Path outputDir, GeneratedProgram program, Set<Path> writtenFiles) {
         program.modules().forEach(module -> {
-            var relativePath = module.relativePath().normalize();
+            var relativePath = Path.of(module.relativePath()).normalize();
             if (writtenFiles.add(relativePath)) {
                 writeCompiledModule(outputDir, relativePath, module.code());
             }
@@ -1009,7 +1153,7 @@ public class Capy {
 
     private static List<SuiteResult> executeTestMethods(GeneratedProgram program, Path classesDir) throws IOException {
         var classNames = program.modules().stream()
-                .map(module -> toClassName(module.relativePath()))
+                .map(module -> toClassName(Path.of(module.relativePath())))
                 .filter(name -> !name.isBlank())
                 .distinct()
                 .toList();
@@ -1202,7 +1346,7 @@ public class Capy {
 
     private static String suiteNameFromTestFile(String fileName) {
         var normalized = fileName.replace('\\', '/');
-        normalized = SourceKind.stripKnownExtension(normalized);
+        normalized = SourceKindModule.stripKnownExtension(normalized);
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
         }
@@ -1811,6 +1955,8 @@ public class Capy {
     private static ObjectMapper createObjectMapper() {
         var mapper = new ObjectMapper();
         mapper.registerModule(new Jdk8Module());
+        mapper.addMixIn(NativeProviderBinding.class, NativeProviderBindingJsonMixin.class);
+        mapper.addMixIn(NativeProviderManifest.class, NativeProviderManifestJsonMixin.class);
         mapper.activateDefaultTyping(
                 BasicPolymorphicTypeValidator.builder()
                         .allowIfSubType("dev.capylang")
@@ -1820,6 +1966,35 @@ public class Capy {
                 JsonTypeInfo.As.PROPERTY
         );
         return mapper;
+    }
+
+    private abstract static class NativeProviderBindingJsonMixin {
+        @JsonCreator
+        NativeProviderBindingJsonMixin(
+                @JsonProperty("interface") String interfaceId,
+                @JsonProperty("qualifier") String qualifier,
+                @JsonProperty("java") NativeProviderBackendBinding javaBinding,
+                @JsonProperty("javascript") NativeProviderBackendBinding javascriptBinding,
+                @JsonProperty("python") NativeProviderBackendBinding pythonBinding
+        ) {
+        }
+
+        @JsonProperty("interface")
+        abstract String interfaceId();
+
+        @JsonProperty("java")
+        abstract NativeProviderBackendBinding javaBinding();
+
+        @JsonProperty("javascript")
+        abstract NativeProviderBackendBinding javascriptBinding();
+
+        @JsonProperty("python")
+        abstract NativeProviderBackendBinding pythonBinding();
+    }
+
+    private abstract static class NativeProviderManifestJsonMixin {
+        @JsonIgnore
+        abstract String sourceFile();
     }
 
     static String readCompilerVersion() {
@@ -1948,9 +2123,9 @@ public class Capy {
         log.info("Building module from file: " + sourceFile.path());
         var startedAt = System.nanoTime();
         var fileName = sourceFile.path().getFileName().toString();
-        var sourceKind = SourceKind.fromFileName(fileName)
+        var sourceKind = SourceKindModule.fromFileName(fileName)
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported Capybara source file: " + fileName));
-        var fileNameWithoutExtension = SourceKind.stripKnownExtension(fileName);
+        var fileNameWithoutExtension = SourceKindModule.stripKnownExtension(fileName);
         var module = new RawModule(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
@@ -1975,7 +2150,7 @@ public class Capy {
     }
 
     private static boolean isCapybaraSourceFile(Path path) {
-        return SourceKind.fromPath(path).isPresent();
+        return SourceKindModule.fromFileName(path.getFileName().toString()).isPresent();
     }
 
     private static String findModulePath(SourceFile sourceFile) {

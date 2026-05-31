@@ -243,7 +243,7 @@ class ObjectOrientedCompilationErrorTest {
     @Test
     void shouldRejectObjectOrientedAnnotationTargetMismatch() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
-                new RawModule("Annotations", "/foo/meta", "annotation Entity on class {}"),
+                new RawModule("Annotations", "/foo/meta", "annotation Entity on class {}", SourceKind.FUNCTIONAL),
                 new RawModule(
                         "User",
                         "/foo/boo",
@@ -302,7 +302,7 @@ class ObjectOrientedCompilationErrorTest {
                             def run(): int = this.run()
                         }
                         """,
-                List.of(new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}"))
+                List.of(new RawModule("Recursive", "/capy/meta_prog", "annotation Recursive on fun {}", SourceKind.FUNCTIONAL))
         );
 
         assertThat(errors)
@@ -413,7 +413,7 @@ class ObjectOrientedCompilationErrorTest {
     @Test
     void shouldRejectUnimportedObjectOrientedAnnotation() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
-                new RawModule("Annotations", "/foo/meta", "annotation Entity on class {}"),
+                new RawModule("Annotations", "/foo/meta", "annotation Entity on class {}", SourceKind.FUNCTIONAL),
                 new RawModule(
                         "User",
                         "/foo/boo",
@@ -454,7 +454,7 @@ class ObjectOrientedCompilationErrorTest {
                         annotation Label on class {
                             value: String
                         }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(errors)
@@ -575,7 +575,7 @@ class ObjectOrientedCompilationErrorTest {
                 fun Effect[T].unsafe_run(): T =
                     match this with
                     case UnsafeEffect { unsafe_thunk } -> unsafe_thunk()
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
 }

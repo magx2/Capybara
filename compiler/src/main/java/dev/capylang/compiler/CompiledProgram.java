@@ -14,11 +14,11 @@ public record CompiledProgram(
         NativeProviderCatalog nativeProviderCatalog
 ) {
     public CompiledProgram(Collection<CompiledModule> modules) {
-        this(new TreeSet<>(modules), List.of(), NativeProviderManifest.empty(), NativeProviderCatalog.empty());
+        this(new TreeSet<>(modules), List.of(), new NativeProviderManifest(List.of(), null), new NativeProviderCatalog(List.of(), List.of()));
     }
 
     public CompiledProgram(Collection<CompiledModule> modules, Collection<ObjectOrientedModule> objectOrientedModules) {
-        this(new TreeSet<>(modules), List.copyOf(objectOrientedModules), NativeProviderManifest.empty(), NativeProviderCatalog.empty());
+        this(new TreeSet<>(modules), List.copyOf(objectOrientedModules), new NativeProviderManifest(List.of(), null), new NativeProviderCatalog(List.of(), List.of()));
     }
 
     public CompiledProgram(
@@ -26,7 +26,7 @@ public record CompiledProgram(
             Collection<ObjectOrientedModule> objectOrientedModules,
             NativeProviderManifest nativeProviders
     ) {
-        this(new TreeSet<>(modules), List.copyOf(objectOrientedModules), nativeProviders, NativeProviderCatalog.empty());
+        this(new TreeSet<>(modules), List.copyOf(objectOrientedModules), nativeProviders, new NativeProviderCatalog(List.of(), List.of()));
     }
 
     public CompiledProgram(
@@ -41,7 +41,7 @@ public record CompiledProgram(
     public CompiledProgram {
         modules = new TreeSet<>(modules);
         objectOrientedModules = List.copyOf(objectOrientedModules);
-        nativeProviders = nativeProviders == null ? NativeProviderManifest.empty() : nativeProviders;
-        nativeProviderCatalog = nativeProviderCatalog == null ? NativeProviderCatalog.empty() : nativeProviderCatalog;
+        nativeProviders = nativeProviders == null ? new NativeProviderManifest(List.of(), null) : nativeProviders;
+        nativeProviderCatalog = nativeProviderCatalog == null ? new NativeProviderCatalog(List.of(), List.of()) : nativeProviderCatalog;
     }
 }

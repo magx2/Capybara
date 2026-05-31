@@ -614,7 +614,7 @@ public class CapybaraTypeCompiler {
 
     private static Result<CompiledType> linkFunctionType(FunctionType type, Map<String, GenericDataType> dataTypes, LinkCache linkCache) {
         return ResultOps.join(
-                (CompiledType argumentType, CompiledType returnType) -> new CompiledFunctionType(argumentType, returnType),
+                (CompiledType argumentType) -> (CompiledType returnType) -> new CompiledFunctionType(argumentType, returnType),
                 linkType(type.argumentType(), dataTypes, linkCache),
                 linkType(type.returnType(), dataTypes, linkCache)
         );

@@ -1,0 +1,540 @@
+/// Pure validation helpers for annotation declarations and usages.
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+
+fun annotation_declaration(
+    name: String,
+    targets: List[Tuple[String, int, int]],
+    fields: List[Tuple[String, String, bool, String, int, int, int, int]],
+    multiple: bool,
+    owner_module_name: String,
+    owner_module_path: String
+): Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String] =
+    (name, targets, fields, multiple, owner_module_name, owner_module_path)
+
+fun annotation_target(name: String, line: int, column: int): Tuple[String, int, int] =
+    (name, line, column)
+
+fun annotation_field(
+    name: String,
+    type: String,
+    has_default: bool,
+    default_value_kind: String,
+    field_line: int,
+    field_column: int,
+    default_line: int,
+    default_column: int
+): Tuple[String, String, bool, String, int, int, int, int] =
+    (name, type, has_default, default_value_kind, field_line, field_column, default_line, default_column)
+
+fun annotation_usage(name: String, arguments: List[Tuple[String, String, int, int, int, int]], line: int, column: int): Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int] =
+    (name, arguments, line, column)
+
+fun annotation_argument(
+    name: String,
+    value_kind: String,
+    argument_line: int,
+    argument_column: int,
+    value_line: int,
+    value_column: int
+): Tuple[String, String, int, int, int, int] =
+    (name, value_kind, argument_line, argument_column, value_line, value_column)
+
+fun available_annotation(
+    alias: String,
+    owner_module_name: String,
+    owner_module_path: String,
+    declaration: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]
+): Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]] =
+    (alias, owner_module_name, owner_module_path, declaration)
+
+fun validate_annotation_definition(
+    annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]
+): List[Tuple[int, int, String]] =
+    let target_errors = validate_annotation_targets(annotation_name(annotation), annotation_targets(annotation), 0, [])
+    validate_annotation_fields(annotation_name(annotation), annotation_fields(annotation), 0, [], target_errors)
+
+fun validate_annotation_usage_list(
+    usages: List[Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]],
+    available_annotations: List[Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]],
+    target_name: String,
+    target_display_name: String
+): List[Tuple[int, int, String]] =
+    validate_annotation_usage_scan(usages, available_annotations, target_name, target_display_name, 0, [], [])
+
+fun annotation_value_matches_field_type(expected_type: String, value_kind: String): bool =
+    let normalized_expected_type = av_remove_spaces(expected_type)
+    if normalized_expected_type == "String"
+    then value_kind == "STRING"
+    else if normalized_expected_type == "byte" | normalized_expected_type == "int"
+        then value_kind == "INT"
+        else if normalized_expected_type == "long"
+            then value_kind == "INT" | value_kind == "LONG"
+            else if normalized_expected_type == "float"
+                then value_kind == "INT" | value_kind == "LONG" | value_kind == "FLOAT"
+                else if normalized_expected_type == "double"
+                    then value_kind == "INT" | value_kind == "LONG" | value_kind == "FLOAT" | value_kind == "DOUBLE"
+                    else if normalized_expected_type == "bool"
+                        then value_kind == "BOOL"
+                        else if normalized_expected_type == "nothing"
+                            then value_kind == "NOTHING"
+                            else value_kind == "TYPE_NAME"
+
+fun annotation_value_type_name(value_kind: String): String =
+    if value_kind == "STRING"
+    then "String"
+    else if value_kind == "INT"
+        then "int"
+        else if value_kind == "LONG"
+            then "long"
+            else if value_kind == "FLOAT"
+                then "float"
+                else if value_kind == "DOUBLE"
+                    then "double"
+                    else if value_kind == "BOOL"
+                        then "bool"
+                        else if value_kind == "NOTHING"
+                            then "nothing"
+                            else "type"
+
+fun unknown_annotation_message(name: String): String =
+    if name == "Recursive"
+    then "Unknown annotation Recursive. Import it from /capy/meta_prog/Recursive to use the tail-recursion contract"
+    else "Unknown annotation " + name
+
+private fun validate_annotation_targets(
+    annotation_name: String,
+    targets: List[Tuple[String, int, int]],
+    idx: int,
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    match targets[idx] with
+    case Some { target } ->
+        let next_errors =
+            if annotation_semantic_target_from_source_name(annotation_target_name(target)) == ""
+            then errors + error_at(annotation_target_line(target), annotation_target_column(target), "Unknown annotation target " + annotation_target_name(target) + " for " + annotation_name)
+            else errors
+        validate_annotation_targets(annotation_name, targets, idx + 1, next_errors)
+    case _ -> errors
+
+private fun validate_annotation_fields(
+    annotation_name: String,
+    fields: List[Tuple[String, String, bool, String, int, int, int, int]],
+    idx: int,
+    seen_fields: List[String],
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    match fields[idx] with
+    case Some { field } ->
+        if av_list_contains_string(seen_fields, annotation_field_name(field))
+        then validate_annotation_fields(
+            annotation_name,
+            fields,
+            idx + 1,
+            seen_fields,
+            errors + error_at(annotation_field_line(field), annotation_field_column(field), "Duplicate annotation field " + annotation_field_name(field) + " for " + annotation_name)
+        )
+        else
+            let next_errors =
+                if annotation_field_has_default(field) & !annotation_value_matches_field_type(annotation_field_type(field), annotation_field_default_kind(field))
+                then errors + error_at(
+                    annotation_field_default_line(field),
+                    annotation_field_default_column(field),
+                    "Annotation argument " + annotation_field_name(field) + " for " + annotation_name
+                        + " expects " + annotation_field_type(field) + ", got " + annotation_value_type_name(annotation_field_default_kind(field))
+                )
+                else errors
+            validate_annotation_fields(annotation_name, fields, idx + 1, seen_fields + annotation_field_name(field), next_errors)
+    case _ -> errors
+
+private fun validate_annotation_usage_scan(
+    usages: List[Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]],
+    available_annotations: List[Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]],
+    target_name: String,
+    target_display_name: String,
+    idx: int,
+    single_use_keys: List[String],
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    if idx >= av_list_size(usages)
+    then errors
+    else
+        let usage = annotation_usage_at(usages, idx)
+        match get_available_annotation(available_annotations, annotation_usage_name(usage), 0) with
+        case Some { available } ->
+            validate_known_annotation_usage(
+                usages,
+                available_annotations,
+                target_name,
+                target_display_name,
+                idx,
+                usage,
+                available,
+                single_use_keys,
+                errors
+            )
+        case None ->
+            validate_annotation_usage_scan(
+                usages,
+                available_annotations,
+                target_name,
+                target_display_name,
+                idx + 1,
+                single_use_keys,
+                errors + error_at(annotation_usage_line(usage), annotation_usage_column(usage), unknown_annotation_message(annotation_usage_name(usage)))
+            )
+
+private fun validate_known_annotation_usage(
+    usages: List[Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]],
+    available_annotations: List[Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]],
+    target_name: String,
+    target_display_name: String,
+    idx: int,
+    usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int],
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]],
+    single_use_keys: List[String],
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    let declaration = available_annotation_declaration(available)
+    if is_recursive_annotation(available) & target_name != "FUNCTION"
+    then validate_annotation_usage_scan(
+        usages,
+        available_annotations,
+        target_name,
+        target_display_name,
+        idx + 1,
+        single_use_keys,
+        errors + error_at(annotation_usage_line(usage), annotation_usage_column(usage), "`@Recursive` is supported for functions, not " + target_display_name + " declarations")
+    )
+    else if !annotation_allows_target(declaration, target_name)
+        then validate_annotation_usage_scan(
+            usages,
+            available_annotations,
+            target_name,
+            target_display_name,
+            idx + 1,
+            single_use_keys,
+            errors + error_at(annotation_usage_line(usage), annotation_usage_column(usage), "Annotation " + annotation_usage_name(usage) + " is not valid on " + target_display_name + " declarations")
+        )
+        else
+            let usage_key = annotation_usage_key(available)
+            let duplicate_single_use = !annotation_multiple(declaration) & av_list_contains_string(single_use_keys, usage_key)
+            let duplicate_errors =
+                if duplicate_single_use
+                then errors + error_at(annotation_usage_line(usage), annotation_usage_column(usage), "Annotation " + annotation_name(declaration) + " cannot be applied multiple times")
+                else errors
+            let argument_errors = validate_annotation_arguments(usage, declaration, duplicate_errors)
+            let next_single_use_keys =
+                if annotation_multiple(declaration) | duplicate_single_use
+                then single_use_keys
+                else single_use_keys + usage_key
+            validate_annotation_usage_scan(usages, available_annotations, target_name, target_display_name, idx + 1, next_single_use_keys, argument_errors)
+
+private fun validate_annotation_arguments(
+    usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int],
+    annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String],
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    let argument_result = validate_annotation_argument_scan(annotation_usage_arguments(usage), annotation, 0, [], errors)
+    validate_required_annotation_fields(annotation_fields(annotation), annotation_usage_name(usage), argument_result[0], 0, usage, argument_result[1])
+
+private fun validate_annotation_argument_scan(
+    arguments: List[Tuple[String, String, int, int, int, int]],
+    annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String],
+    idx: int,
+    provided: List[String],
+    errors: List[Tuple[int, int, String]]
+): Tuple[List[String], List[Tuple[int, int, String]]] =
+    if idx >= av_list_size(arguments)
+    then (provided, errors)
+    else
+        let argument = annotation_argument_at(arguments, idx)
+        if av_list_contains_string(provided, annotation_argument_name(argument))
+        then validate_annotation_argument_scan(
+            arguments,
+            annotation,
+            idx + 1,
+            provided,
+            errors + error_at(annotation_argument_line(argument), annotation_argument_column(argument), "Duplicate annotation argument " + annotation_argument_name(argument) + " for " + annotation_name(annotation))
+        )
+        else
+            match get_annotation_field(annotation_fields(annotation), annotation_argument_name(argument), 0) with
+            case Some { field } ->
+                let next_errors =
+                    if annotation_value_matches_field_type(annotation_field_type(field), annotation_argument_value_kind(argument))
+                    then errors
+                    else errors + error_at(
+                        annotation_argument_value_line(argument),
+                        annotation_argument_value_column(argument),
+                        "Annotation argument " + annotation_argument_name(argument) + " for " + annotation_name(annotation)
+                            + " expects " + annotation_field_type(field) + ", got " + annotation_value_type_name(annotation_argument_value_kind(argument))
+                    )
+                validate_annotation_argument_scan(arguments, annotation, idx + 1, provided + annotation_argument_name(argument), next_errors)
+            case None ->
+                validate_annotation_argument_scan(
+                    arguments,
+                    annotation,
+                    idx + 1,
+                    provided + annotation_argument_name(argument),
+                    errors + error_at(annotation_argument_line(argument), annotation_argument_column(argument), "Unknown annotation argument " + annotation_argument_name(argument) + " for " + annotation_name(annotation))
+                )
+
+private fun validate_required_annotation_fields(
+    fields: List[Tuple[String, String, bool, String, int, int, int, int]],
+    usage_name: String,
+    provided: List[String],
+    idx: int,
+    usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int],
+    errors: List[Tuple[int, int, String]]
+): List[Tuple[int, int, String]] =
+    match fields[idx] with
+    case Some { field } ->
+        let next_errors =
+            if !annotation_field_has_default(field) & !av_list_contains_string(provided, annotation_field_name(field))
+            then errors + error_at(annotation_usage_line(usage), annotation_usage_column(usage), "Missing required annotation argument " + annotation_field_name(field) + " for " + usage_name)
+            else errors
+        validate_required_annotation_fields(fields, usage_name, provided, idx + 1, usage, next_errors)
+    case _ -> errors
+
+private fun annotation_allows_target(
+    annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String],
+    target_name: String
+): bool =
+    av_annotation_targets_contain_target(annotation_targets(annotation), target_name, 0)
+
+private fun annotation_semantic_target_from_source_name(source_name: String): String =
+    if source_name == "fun"
+    then "FUNCTION"
+    else if source_name == "method"
+        then "METHOD"
+        else if source_name == "const"
+            then "CONST"
+            else if source_name == "data"
+                then "DATA"
+                else if source_name == "union"
+                    then "UNION"
+                    else if source_name == "enum"
+                        then "ENUM"
+                        else if source_name == "type"
+                            then "PRIMITIVE_TYPE"
+                            else if source_name == "deriver"
+                                then "DERIVER"
+                                else if source_name == "class"
+                                    then "CLASS"
+                                    else if source_name == "interface"
+                                        then "INTERFACE"
+                                        else if source_name == "trait"
+                                            then "TRAIT"
+                                            else if source_name == "field"
+                                                then "FIELD"
+                                                else if source_name == "init"
+                                                    then "INIT"
+                                                    else ""
+
+private fun is_recursive_annotation(
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]
+): bool =
+    annotation_name(available_annotation_declaration(available)) == "Recursive"
+        & available_annotation_owner_module_name(available) == "Recursive"
+        & normalized_annotation_module_path(available_annotation_owner_module_path(available)) == "capy/meta_prog"
+
+private fun annotation_usage_key(
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]
+): String =
+    normalized_annotation_module_path(available_annotation_owner_module_path(available))
+        + "/" + available_annotation_owner_module_name(available)
+        + "." + annotation_name(available_annotation_declaration(available))
+
+private fun normalized_annotation_module_path(path: String): String =
+    if av_string_starts_with(path, "/")
+    then path[1, av_string_size(path)]
+    else path
+
+private fun get_available_annotation(
+    annotations: List[Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]],
+    alias: String,
+    idx: int
+): Option[Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]] =
+    match annotations[idx] with
+    case Some { annotation } ->
+        if available_annotation_alias(annotation) == alias
+        then Some { annotation }
+        else get_available_annotation(annotations, alias, idx + 1)
+    case _ -> None {}
+
+private fun get_annotation_field(
+    fields: List[Tuple[String, String, bool, String, int, int, int, int]],
+    name: String,
+    idx: int
+): Option[Tuple[String, String, bool, String, int, int, int, int]] =
+    match fields[idx] with
+    case Some { field } ->
+        if annotation_field_name(field) == name
+        then Some { field }
+        else get_annotation_field(fields, name, idx + 1)
+    case _ -> None {}
+
+private fun error_at(line: int, column: int, message: String): Tuple[int, int, String] =
+    (line, column, message)
+
+private fun annotation_name(annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]): String =
+    annotation[0]
+
+private fun annotation_targets(annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]): List[Tuple[String, int, int]] =
+    annotation[1]
+
+private fun annotation_fields(annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]): List[Tuple[String, String, bool, String, int, int, int, int]] =
+    annotation[2]
+
+private fun annotation_multiple(annotation: Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]): bool =
+    annotation[3]
+
+private fun annotation_target_name(target: Tuple[String, int, int]): String =
+    target[0]
+
+private fun annotation_target_line(target: Tuple[String, int, int]): int =
+    target[1]
+
+private fun annotation_target_column(target: Tuple[String, int, int]): int =
+    target[2]
+
+private fun annotation_field_name(field: Tuple[String, String, bool, String, int, int, int, int]): String =
+    field[0]
+
+private fun annotation_field_type(field: Tuple[String, String, bool, String, int, int, int, int]): String =
+    field[1]
+
+private fun annotation_field_has_default(field: Tuple[String, String, bool, String, int, int, int, int]): bool =
+    field[2]
+
+private fun annotation_field_default_kind(field: Tuple[String, String, bool, String, int, int, int, int]): String =
+    field[3]
+
+private fun annotation_field_line(field: Tuple[String, String, bool, String, int, int, int, int]): int =
+    field[4]
+
+private fun annotation_field_column(field: Tuple[String, String, bool, String, int, int, int, int]): int =
+    field[5]
+
+private fun annotation_field_default_line(field: Tuple[String, String, bool, String, int, int, int, int]): int =
+    field[6]
+
+private fun annotation_field_default_column(field: Tuple[String, String, bool, String, int, int, int, int]): int =
+    field[7]
+
+private fun annotation_usage_name(usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]): String =
+    usage[0]
+
+private fun annotation_usage_at(usages: List[Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]], idx: int): Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int] =
+    match usages[idx] with
+    case Some { usage } -> usage
+    case _ -> ("", [], 0, 0)
+
+private fun annotation_usage_arguments(usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]): List[Tuple[String, String, int, int, int, int]] =
+    usage[1]
+
+private fun annotation_usage_line(usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]): int =
+    usage[2]
+
+private fun annotation_usage_column(usage: Tuple[String, List[Tuple[String, String, int, int, int, int]], int, int]): int =
+    usage[3]
+
+private fun annotation_argument_name(argument: Tuple[String, String, int, int, int, int]): String =
+    argument[0]
+
+private fun annotation_argument_at(arguments: List[Tuple[String, String, int, int, int, int]], idx: int): Tuple[String, String, int, int, int, int] =
+    match arguments[idx] with
+    case Some { argument } -> argument
+    case _ -> ("", "", 0, 0, 0, 0)
+
+private fun annotation_argument_value_kind(argument: Tuple[String, String, int, int, int, int]): String =
+    argument[1]
+
+private fun annotation_argument_line(argument: Tuple[String, String, int, int, int, int]): int =
+    argument[2]
+
+private fun annotation_argument_column(argument: Tuple[String, String, int, int, int, int]): int =
+    argument[3]
+
+private fun annotation_argument_value_line(argument: Tuple[String, String, int, int, int, int]): int =
+    argument[4]
+
+private fun annotation_argument_value_column(argument: Tuple[String, String, int, int, int, int]): int =
+    argument[5]
+
+private fun available_annotation_alias(
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]
+): String =
+    available[0]
+
+private fun available_annotation_owner_module_name(
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]
+): String =
+    available[1]
+
+private fun available_annotation_owner_module_path(
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]
+): String =
+    available[2]
+
+private fun available_annotation_declaration(
+    available: Tuple[String, String, String, Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String]]
+): Tuple[String, List[Tuple[String, int, int]], List[Tuple[String, String, bool, String, int, int, int, int]], bool, String, String] =
+    available[3]
+
+private fun av_list_contains_string(values: List[String], value: String): bool =
+    match values[0] with
+    case Some _ -> av_list_contains_string_scan(values, value, 0)
+    case _ -> false
+
+private fun av_list_contains_string_scan(values: List[String], value: String, idx: int): bool =
+    match values[idx] with
+    case Some { current } ->
+        if current == value
+        then true
+        else av_list_contains_string_scan(values, value, idx + 1)
+    case _ -> false
+
+private fun av_annotation_targets_contain_target(targets: List[Tuple[String, int, int]], target_name: String, idx: int): bool =
+    match targets[idx] with
+    case Some { target } ->
+        if annotation_semantic_target_from_source_name(annotation_target_name(target)) == target_name
+        then true
+        else av_annotation_targets_contain_target(targets, target_name, idx + 1)
+    case _ -> false
+
+private fun av_remove_spaces(value: String): String =
+    fun scan(value: String, idx: int, output: String): String =
+        match value[idx] with
+        case Some { char } ->
+            if char == " "
+            then scan(value, idx + 1, output)
+            else scan(value, idx + 1, output + char)
+        case _ -> output
+    ---
+    scan(value, 0, "")
+
+private fun av_string_size(value: String): int =
+    fun scan(value: String, idx: int): int =
+        match value[idx] with
+        case Some _ -> scan(value, idx + 1)
+        case _ -> idx
+    ---
+    scan(value, 0)
+
+private fun av_list_size(values: List[T]): int =
+    fun scan(values: List[T], idx: int): int =
+        match values[idx] with
+        case Some _ -> scan(values, idx + 1)
+        case _ -> idx
+    ---
+    scan(values, 0)
+
+private fun av_string_starts_with(value: String, prefix: String): bool =
+    let prefix_size = av_string_size(prefix)
+    if av_string_size(value) < prefix_size
+    then false
+    else value[0, prefix_size] == prefix

@@ -1,0 +1,3 @@
+/// Bootstrap smoke test for compiler self-hosting source-set wiring.
+/// This is intentionally not used by production code.
+fun self_hosting_bootstrap_smoke(): int = 184

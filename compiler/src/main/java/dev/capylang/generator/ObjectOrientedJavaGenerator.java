@@ -3,6 +3,7 @@ package dev.capylang.generator;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
+import dev.capylang.compiler.parser.SourceKindModule;
 import dev.capylang.generator.java.ReflectionValueInfoJava;
 
 import java.nio.file.Path;
@@ -74,7 +75,7 @@ public final class ObjectOrientedJavaGenerator {
                 ));
         return module.objectOriented().definitions().stream()
                 .map(definition -> new GeneratedModule(
-                        relativePath(module, definition.name()),
+                        Generator.generatedRelativePath(relativePath(module, definition.name())),
                         renderType(module, definition, definitionsByName)
                 ))
                 .toList();
@@ -2349,7 +2350,7 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private IllegalArgumentException unsupported(ObjectOrientedModule module, String message) {
-        var file = module == null ? ".coo" : module.sourceKind().moduleFile(module.path(), module.name());
+        var file = module == null ? ".coo" : SourceKindModule.moduleFile(module.sourceKind(), module.path(), module.name());
         return new IllegalArgumentException(file + ": " + message);
     }
 

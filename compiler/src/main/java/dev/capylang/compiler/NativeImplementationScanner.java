@@ -39,7 +39,7 @@ public final class NativeImplementationScanner {
 
     public static NativeProviderManifest scan(Path capybaraInputDir) throws IOException {
         if (capybaraInputDir == null) {
-            return NativeProviderManifest.empty();
+            return new NativeProviderManifest(List.of(), null);
         }
         var candidates = new ArrayList<NativeImplementationCandidate>();
         for (var root : nativeSourceRoots(capybaraInputDir, NativeProviderBackend.JAVA)) {

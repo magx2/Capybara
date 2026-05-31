@@ -2,9 +2,9 @@ package dev.capylang.parser;
 
 import capy.lang.Result;
 import dev.capylang.compiler.CompilerErrors;
+import dev.capylang.compiler.parser.CapybaraParser;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
-import dev.capylang.compiler.parser.ObjectOrientedParser;
 import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -13,11 +13,11 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class ObjectOrientedParserTest {
+class CapybaraObjectOrientedParserTest {
     @Test
     @DisplayName("should parse declaration annotations")
     void parseDeclarationAnnotations() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "User",
                 "/parser",
                 """
@@ -96,7 +96,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject comma-separated declaration annotations")
     void rejectCommaSeparatedDeclarationAnnotations() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -112,7 +112,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse class trait and interface declarations from .coo source")
     void parseObjectOrientedModule() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "User",
                 "/parser",
                 """
@@ -186,7 +186,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse object-oriented annotations for semantic validation")
     void parseObjectOrientedAnnotationsForSemanticValidation() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "App",
                 "/parser",
                 """
@@ -222,7 +222,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject legacy native provider declarations")
     void rejectLegacyNativeProviderDeclaration() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -244,7 +244,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse native provider annotation syntax on class members for semantic validation")
     void parseNativeProviderAnnotationAsClassMember() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -268,7 +268,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse primitive-backed functional type references")
     void parsePrimitiveBackedFunctionalTypeReferences() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Ids",
                 "/parser",
                 """
@@ -313,7 +313,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse doc comments for types methods and local methods")
     void parseDocComments() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Docs",
                 "/parser",
                 """
@@ -348,7 +348,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should report .coo file names in parser diagnostics")
     void reportObjectOrientedFileNameInSyntaxErrors() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -368,7 +368,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject fun keyword for OO methods")
     void rejectFunKeywordForMethods() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -388,7 +388,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject super bracket parent call syntax")
     void rejectSuperBracketParentCalls() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -412,7 +412,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse call statements in method blocks")
     void parseCallStatements() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Calls",
                 "/parser",
                 """
@@ -451,7 +451,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject non-call expression statements in method blocks")
     void rejectNonCallExpressionStatements() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -478,7 +478,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse expression-bodied and block-bodied return forms")
     void parseMethodReturns() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Returns",
                 "/parser",
                 """
@@ -564,7 +564,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse mutable local declarations and assignments")
     void parseMutableLocalDeclarations() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "MutableLocals",
                 "/parser",
                 """
@@ -604,7 +604,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse local methods inside method blocks")
     void parseLocalMethods() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "LocalMethods",
                 "/parser",
                 """
@@ -656,7 +656,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse loop statements in method blocks")
     void parseLoopStatements() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Loops",
                 "/parser",
                 """
@@ -720,7 +720,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse throw and try catch statements")
     void parseExceptionStatements() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Exceptions",
                 "/parser",
                 """
@@ -770,7 +770,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse array types in fields and method signatures")
     void parseArrayTypes() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Arrays",
                 "/parser",
                 """
@@ -819,7 +819,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should parse array creation expressions")
     void parseArrayCreationExpressions() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "ArrayCreation",
                 "/parser",
                 """
@@ -854,7 +854,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject return without expression")
     void rejectReturnWithoutExpression() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -876,7 +876,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject try without catch clauses")
     void rejectTryWithoutCatch() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -900,7 +900,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject if branches without statement blocks")
     void rejectIfWithoutStatementBlocks() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
@@ -925,7 +925,7 @@ class ObjectOrientedParserTest {
     @Test
     @DisplayName("should reject while body without statement block")
     void rejectWhileWithoutStatementBlock() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+        var result = CapybaraParser.INSTANCE.parseObjectOrientedModule(new RawModule(
                 "Broken",
                 "/parser",
                 """

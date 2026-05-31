@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Result;
 
 import dev.capylang.compiler.expression.CompiledFunctionCall;
@@ -30,7 +31,7 @@ class PrimitiveBackedTypeCompilerTest {
                 fun user_id.`+`(other: user_id): user_id = user_id! { this.value + other.value }
                 fun call_plus(a: user_id, b: user_id): user_id = a.plus(b)
                 fun call_op(a: user_id, b: user_id): user_id = a + b
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         var module = compiled.modules().first();
         assertThat(module.types().get("user_id")).isInstanceOfSatisfying(CompiledPrimitiveBackedType.class, type -> {
@@ -85,7 +86,7 @@ class PrimitiveBackedTypeCompilerTest {
 
                 fun make_meter(value: double): meter = meter { value }
                 fun new_user(id: int): Result[user_id] = user_id { id }
-                """)));
+                """, SourceKind.FUNCTIONAL)));
 
         assertThat(function(compiled, "Ids", "make_meter").expression()).isInstanceOfSatisfying(
                 CompiledFunctionCall.class,
@@ -109,12 +110,12 @@ class PrimitiveBackedTypeCompilerTest {
     @Test
     void shouldRejectRawConstructorOutsideDefiningModule() {
         var error = compileFailure(List.of(
-                new RawModule("Types", "/foo/lib", "type user_id -> int"),
+                new RawModule("Types", "/foo/lib", "type user_id -> int", SourceKind.FUNCTIONAL),
                 new RawModule("Consumer", "/foo/app", """
                         from /foo/lib/Types import { * }
 
                         const FIRST_USER_ID = user_id! { 1 }
-                        """)
+                        """, SourceKind.FUNCTIONAL)
         ));
 
         assertThat(error.message()).contains("Constructor bypass `user_id! { ... }` can only be used in module `foo/lib/Types`");
@@ -126,13 +127,13 @@ class PrimitiveBackedTypeCompilerTest {
                 type user_id -> int
                 fun takes_foo(id: user_id): user_id = id
                 fun bad(): user_id = takes_foo(1)
-                """)).message()).contains("Expected `user_id`, got `int`");
+                """, SourceKind.FUNCTIONAL)).message()).contains("Expected `user_id`, got `int`");
 
         assertThat(compileFailure(new RawModule("Ids", "/foo/app", """
                 type user_id -> int
                 type order_id -> int
                 fun bad(id: user_id): order_id = id
-                """)).message()).contains("Expected `order_id`, got `user_id`");
+                """, SourceKind.FUNCTIONAL)).message()).contains("Expected `order_id`, got `user_id`");
     }
 
     @Test
@@ -148,7 +149,7 @@ class PrimitiveBackedTypeCompilerTest {
                 fun boo(idx: index): int = foo(idx)
                 fun baz(s: String, idx: index): Option[String] = s[idx]
                 fun widened(idx: index): long = idx
-                """)));
+                """, SourceKind.FUNCTIONAL)));
     }
 
     @Test
@@ -160,7 +161,7 @@ class PrimitiveBackedTypeCompilerTest {
                 fun unwrap(value: token): String = value.value
                 fun append_suffix(value: String): String = value + "-suffix"
                 fun pass_to_string(value: token): String = append_suffix(value)
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(compiled.modules().first().types().get("token")).isInstanceOfSatisfying(
                 CompiledPrimitiveBackedType.class,
@@ -185,7 +186,7 @@ class PrimitiveBackedTypeCompilerTest {
                 fun takes_char(value: char): char = value
                 fun single_literal(): char = takes_char("a")
                 fun single_quoted_literal(): char = takes_char('b')
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(function(compiled, "String", "stringify").expression()).isInstanceOfSatisfying(
                 CompiledUnwrapExpression.class,
@@ -203,13 +204,13 @@ class PrimitiveBackedTypeCompilerTest {
                 type token -> String
                 fun takes_token(value: token): token = value
                 fun bad(): token = takes_token("raw")
-                """)).message()).contains("Expected `token`, got `String`");
+                """, SourceKind.FUNCTIONAL)).message()).contains("Expected `token`, got `String`");
 
         assertThat(compileFailure(new RawModule("Chars", "/foo/app", """
                 type char -> String
                 fun takes_char(value: char): char = value
                 fun bad(): char = takes_char("ab")
-                """)).message()).contains("Expected `char`, got `String`");
+                """, SourceKind.FUNCTIONAL)).message()).contains("Expected `char`, got `String`");
     }
 
     @Test
@@ -250,14 +251,14 @@ class PrimitiveBackedTypeCompilerTest {
                     match value with
                     case Some { idx } -> idx
                     case None -> 0
-                """)));
+                """, SourceKind.FUNCTIONAL)));
     }
 
     @Test
     void shouldRejectRawValueAccessForNonPrimitiveBackedValues() {
         var error = compileFailure(new RawModule("Ids", "/foo/app", """
                 fun bad(id: int): int = id.value
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("`.value` can only unwrap primitive-backed types, got `int`");
     }
@@ -267,7 +268,7 @@ class PrimitiveBackedTypeCompilerTest {
         var error = compileFailure(new RawModule("Ids", "/foo/app", """
                 type user_id -> int
                 fun bad(id: user_id): int = @id
-                """));
+                """, SourceKind.FUNCTIONAL));
 
         assertThat(error.message()).contains("@");
     }
@@ -312,7 +313,7 @@ class PrimitiveBackedTypeCompilerTest {
                 union Result[T] = Success[T] | Error
                 data Success[T] { value: T }
                 data Error { message: String }
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static RawModule optionModule() {
@@ -320,6 +321,6 @@ class PrimitiveBackedTypeCompilerTest {
                 union Option[T] = Some[T] | None
                 data Some[T] { value: T }
                 data None {}
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 }
