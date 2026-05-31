@@ -30,6 +30,15 @@ final class ObjectOrientedJavaScriptGenerator {
     private final JavaScriptGenerator.ProgramContext programContext;
     private int syntheticCounter = 0;
 
+    @SuppressWarnings("unchecked")
+    private static <T> Optional<T> typedOptional(Optional value) {
+        return (Optional<T>) value;
+    }
+
+    private static Optional<String> optionalString(Optional value) {
+        return typedOptional(value);
+    }
+
     ObjectOrientedJavaScriptGenerator(JavaScriptGenerator.ProgramContext programContext) {
         this.programContext = programContext;
     }
@@ -170,11 +179,11 @@ final class ObjectOrientedJavaScriptGenerator {
         code.append("        this.__capybaraTypes = ").append(JavaScriptGenerator.jsArray(capybaraTypeNames(context, declaration))).append(";\n");
         for (var field : fields) {
             var fieldName = jsIdentifier(field.name());
-            if (field.initializer().isPresent()) {
+            if (optionalString(field.initializer()).isPresent()) {
                 code.append("        this.")
                         .append(fieldName)
                         .append(" = ")
-                        .append(renderExpression(context, field.initializer().orElseThrow(), scope, Set.of()))
+                        .append(renderExpression(context, optionalString(field.initializer()).orElseThrow(), scope, Set.of()))
                         .append(";\n");
             } else if (constructorParameters.contains(field.name())) {
                 code.append("        this.")

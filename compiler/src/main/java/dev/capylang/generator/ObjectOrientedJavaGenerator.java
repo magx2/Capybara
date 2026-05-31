@@ -29,6 +29,23 @@ public final class ObjectOrientedJavaGenerator {
     private final Map<String, List<NativeProviderInfo>> nativeProvidersByModule;
     private int syntheticCounter = 0;
 
+    @SuppressWarnings("unchecked")
+    private static <T> Optional<T> typedOptional(Optional value) {
+        return (Optional<T>) value;
+    }
+
+    private static Optional<String> optionalString(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<ObjectOriented.MethodBody> methodBody(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<ObjectOriented.Statement> statementOptional(Optional value) {
+        return typedOptional(value);
+    }
+
     public ObjectOrientedJavaGenerator() {
         this(Map.of(), Map.of(), List.of());
     }
@@ -215,6 +232,7 @@ public final class ObjectOrientedJavaGenerator {
                 .collect(Collectors.toUnmodifiableSet());
         var explicitlyImportedSymbols = module.imports().stream()
                 .flatMap(importDeclaration -> importDeclaration.symbols().stream())
+                .map(String.class::cast)
                 .filter(symbol -> !"*".equals(symbol))
                 .filter(symbol -> !symbol.isBlank())
                 .collect(Collectors.toUnmodifiableSet());
@@ -245,12 +263,12 @@ public final class ObjectOrientedJavaGenerator {
                 switch (member) {
                     case ObjectOriented.FieldDeclaration field -> {
                         collectTypeTokens(field.type(), references);
-                        field.initializer().ifPresent(initializer -> collectTypeTokens(initializer, references));
+                        optionalString(field.initializer()).ifPresent(initializer -> collectTypeTokens(initializer, references));
                     }
                     case ObjectOriented.MethodDeclaration method -> {
                         method.parameters().forEach(parameter -> collectTypeTokens(parameter.type(), references));
                         collectTypeTokens(method.returnType(), references);
-                        method.body().ifPresent(body -> collectTypeTokens(body, references));
+                        methodBody(method.body()).ifPresent(body -> collectTypeTokens(body, references));
                     }
                     case ObjectOriented.InitBlock initBlock -> collectTypeTokens(initBlock.body(), references);
                 }
@@ -296,7 +314,7 @@ public final class ObjectOrientedJavaGenerator {
     private void collectTypeTokens(ObjectOriented.Statement statement, Set<String> references) {
         switch (statement) {
             case ObjectOriented.LetStatement letStatement -> {
-                letStatement.type().ifPresent(type -> collectTypeTokens(type, references));
+                optionalString(letStatement.type()).ifPresent(type -> collectTypeTokens(type, references));
                 collectTypeTokens(letStatement.expression(), references);
             }
             case ObjectOriented.LocalMethodStatement localMethodStatement -> {
@@ -305,7 +323,7 @@ public final class ObjectOrientedJavaGenerator {
                 collectTypeTokens(localMethodStatement.body(), references);
             }
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
-                mutableVariableStatement.type().ifPresent(type -> collectTypeTokens(type, references));
+                optionalString(mutableVariableStatement.type()).ifPresent(type -> collectTypeTokens(type, references));
                 collectTypeTokens(mutableVariableStatement.expression(), references);
             }
             case ObjectOriented.AssignmentStatement assignmentStatement -> collectTypeTokens(assignmentStatement.expression(), references);
@@ -315,7 +333,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.IfStatement ifStatement -> {
                 collectTypeTokens(ifStatement.condition(), references);
                 collectTypeTokens(ifStatement.thenBranch(), references);
-                ifStatement.elseBranch().ifPresent(elseBranch -> collectTypeTokens(elseBranch, references));
+                statementOptional(ifStatement.elseBranch()).ifPresent(elseBranch -> collectTypeTokens(elseBranch, references));
             }
             case ObjectOriented.TryCatchStatement tryCatchStatement -> {
                 collectTypeTokens(tryCatchStatement.tryBlock(), references);
@@ -330,7 +348,7 @@ public final class ObjectOrientedJavaGenerator {
                 collectTypeTokens(doWhileStatement.condition(), references);
             }
             case ObjectOriented.ForEachStatement forEachStatement -> {
-                forEachStatement.type().ifPresent(type -> collectTypeTokens(type, references));
+                optionalString(forEachStatement.type()).ifPresent(type -> collectTypeTokens(type, references));
                 collectTypeTokens(forEachStatement.iterable(), references);
                 collectTypeTokens(forEachStatement.body(), references);
             }
@@ -380,7 +398,7 @@ public final class ObjectOrientedJavaGenerator {
         var constructorParameterNames = declaration.constructorParameters().stream()
                 .map(ObjectOriented.Parameter::name)
                 .collect(Collectors.toCollection(HashSet::new));
-        return fields.stream().anyMatch(field -> field.initializer()
+        return fields.stream().anyMatch(field -> optionalString(field.initializer())
                 .filter(initializer -> referencesAny(initializer, constructorParameterNames))
                 .isPresent());
     }
@@ -409,20 +427,21 @@ public final class ObjectOrientedJavaGenerator {
                 .withParameters(constructorBindingNames);
 
         for (var field : fields) {
-            if (field.initializer().isPresent() && referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
+            var initializer = optionalString(field.initializer());
+            if (initializer.isPresent() && referencesAny(initializer.orElseThrow(), constructorParameterNames)) {
                 code.append("        this.")
                         .append(sanitizeIdentifier(field.name()))
                         .append(" = ")
                         .append(renderExpression(
                                 module,
-                                field.initializer().orElseThrow(),
+                                initializer.orElseThrow(),
                                 Set.of(),
                                 constructorBindings
                         ))
                         .append(";\n");
                 continue;
             }
-            if (field.initializer().isEmpty() && constructorParameterNames.contains(field.name())) {
+            if (initializer.isEmpty() && constructorParameterNames.contains(field.name())) {
                 code.append("        this.")
                         .append(sanitizeIdentifier(field.name()))
                         .append(" = ")
@@ -458,10 +477,11 @@ public final class ObjectOrientedJavaGenerator {
             code.append(visibility).append(' ');
         }
         code.append(renderType(module, field.type(), false)).append(' ').append(sanitizeIdentifier(field.name()));
-        if (field.initializer().isPresent() && !referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
+        var initializer = optionalString(field.initializer());
+        if (initializer.isPresent() && !referencesAny(initializer.orElseThrow(), constructorParameterNames)) {
             code.append(" = ").append(renderExpression(
                     module,
-                    field.initializer().orElseThrow(),
+                    initializer.orElseThrow(),
                     Set.of(),
                     LocalMethodBindings.empty().withLocals(memberBindingNames)
             ));
@@ -487,11 +507,11 @@ public final class ObjectOrientedJavaGenerator {
         if (!visibility.isBlank()) {
             code.append(visibility).append(' ');
         }
-        var abstractMethod = method.modifiers().contains("abstract") || method.body().isEmpty();
+        var abstractMethod = method.modifiers().contains("abstract") || methodBody(method.body()).isEmpty();
         if (method.modifiers().contains("final")) {
             code.append("final ");
         } else if ((owner.modifiers().contains("open") || owner.modifiers().contains("abstract"))
-                   && method.body().isPresent()
+                   && methodBody(method.body()).isPresent()
                    && !method.modifiers().contains("open")
                    && !method.modifiers().contains("override")
                    && !"private".equals(method.visibility())) {
@@ -853,7 +873,7 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private String renderInterfaceMethod(ObjectOrientedModule module, String ownerName, ObjectOriented.MethodDeclaration method) {
-        if (method.body().isPresent()) {
+        if (methodBody(method.body()).isPresent()) {
             throw unsupported(module, "Interface `" + ownerName + "` default methods are not supported in v1");
         }
         if (!"public".equals(method.visibility())) {
@@ -887,7 +907,7 @@ public final class ObjectOrientedJavaGenerator {
             throw unsupported(module, "Trait method `" + ownerName + "." + method.name() + "` cannot be `final` in the Java backend v1");
         }
         if ("private".equals(method.visibility())) {
-            if (method.body().isEmpty()) {
+            if (methodBody(method.body()).isEmpty()) {
                 throw unsupported(module, "Private trait method `" + method.name() + "` must have a body");
             }
             code.append("private ");
@@ -895,7 +915,7 @@ public final class ObjectOrientedJavaGenerator {
             throw unsupported(module, "Trait method `" + ownerName + "." + method.name() + "` must be public or private");
         }
 
-        if (method.body().isPresent() && !"private".equals(method.visibility())) {
+        if (methodBody(method.body()).isPresent() && !"private".equals(method.visibility())) {
             code.append("default ");
         }
         code.append(renderType(module, method.returnType(), false))
@@ -904,7 +924,7 @@ public final class ObjectOrientedJavaGenerator {
                 .append('(')
                 .append(renderParameters(module, method.parameters()))
                 .append(')');
-        if (method.body().isEmpty()) {
+        if (methodBody(method.body()).isEmpty()) {
             code.append(";\n");
             return code.toString();
         }
@@ -924,7 +944,7 @@ public final class ObjectOrientedJavaGenerator {
     ) {
         var methodBindings = ownerBindings
                 .withParameters(method.parameters().stream().map(ObjectOriented.Parameter::name).toList());
-        method.body().ifPresent(body -> {
+        methodBody(method.body()).ifPresent(body -> {
             if (body instanceof ObjectOriented.ExpressionBody expressionBody) {
                 if ("void".equals(renderType(module, method.returnType(), false))) {
                     code.append(indent(indentLevel))
@@ -1055,7 +1075,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.LetStatement letStatement -> {
                 code.append(indent(indentLevel))
                         .append("final ")
-                        .append(letStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
+                        .append(optionalString(letStatement.type()).map(type -> renderType(module, type, false)).orElse("var"))
                         .append(' ')
                         .append(sanitizeIdentifier(letStatement.name()))
                         .append(" = ")
@@ -1068,7 +1088,7 @@ public final class ObjectOrientedJavaGenerator {
             }
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
                 code.append(indent(indentLevel))
-                        .append(mutableVariableStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
+                        .append(optionalString(mutableVariableStatement.type()).map(type -> renderType(module, type, false)).orElse("var"))
                         .append(' ')
                         .append(sanitizeIdentifier(mutableVariableStatement.name()))
                         .append(" = ")
@@ -1099,7 +1119,7 @@ public final class ObjectOrientedJavaGenerator {
                         .append(") {\n");
                 appendStatementBlockContents(code, module, ifStatement.thenBranch(), indentLevel + 1, parentNames, localMethodBindings);
                 code.append(indent(indentLevel)).append('}');
-                ifStatement.elseBranch().ifPresent(elseBranch -> {
+                statementOptional(ifStatement.elseBranch()).ifPresent(elseBranch -> {
                     if (elseBranch instanceof ObjectOriented.IfStatement nestedIf) {
                         code.append(" else ");
                         appendInlineIf(code, module, nestedIf, indentLevel, parentNames, localMethodBindings);
@@ -1143,7 +1163,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.ForEachStatement forEachStatement -> {
                 code.append(indent(indentLevel))
                         .append("for (")
-                        .append(forEachStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
+                        .append(optionalString(forEachStatement.type()).map(type -> renderType(module, type, false)).orElse("var"))
                         .append(' ')
                         .append(sanitizeIdentifier(forEachStatement.name()))
                         .append(" : ")
@@ -1174,7 +1194,7 @@ public final class ObjectOrientedJavaGenerator {
                 .append(") {\n");
         appendStatementBlockContents(code, module, statement.thenBranch(), indentLevel + 1, parentNames, localMethodBindings);
         code.append(indent(indentLevel)).append('}');
-        statement.elseBranch().ifPresent(elseBranch -> {
+        statementOptional(statement.elseBranch()).ifPresent(elseBranch -> {
             if (elseBranch instanceof ObjectOriented.IfStatement nestedIf) {
                 code.append(" else ");
                 appendInlineIf(code, module, nestedIf, indentLevel, parentNames, localMethodBindings);
@@ -1210,7 +1230,7 @@ public final class ObjectOrientedJavaGenerator {
                 case ObjectOriented.IfStatement ifStatement -> {
                     expressions.add(ifStatement.condition());
                     collectExpressions(ifStatement.thenBranch(), expressions);
-                    ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+                    statementOptional(ifStatement.elseBranch()).ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
                 }
                 case ObjectOriented.TryCatchStatement tryCatchStatement -> {
                     collectExpressions(tryCatchStatement.tryBlock(), expressions);
@@ -1239,7 +1259,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.IfStatement ifStatement -> {
                 expressions.add(ifStatement.condition());
                 collectExpressions(ifStatement.thenBranch(), expressions);
-                ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+                statementOptional(ifStatement.elseBranch()).ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
             }
             case ObjectOriented.WhileStatement whileStatement -> {
                 expressions.add(whileStatement.condition());
@@ -1279,7 +1299,7 @@ public final class ObjectOrientedJavaGenerator {
     private boolean containsThrow(ObjectOriented.MemberDeclaration member) {
         return switch (member) {
             case ObjectOriented.FieldDeclaration ignored -> false;
-            case ObjectOriented.MethodDeclaration method -> method.body().stream().anyMatch(this::containsThrow);
+            case ObjectOriented.MethodDeclaration method -> methodBody(method.body()).stream().anyMatch(this::containsThrow);
             case ObjectOriented.InitBlock initBlock -> containsThrow(initBlock.body());
         };
     }
@@ -1303,7 +1323,7 @@ public final class ObjectOrientedJavaGenerator {
                 case ObjectOriented.StatementBlock statementBlock -> containsThrow(statementBlock);
             };
             case ObjectOriented.IfStatement ifStatement ->
-                    containsThrow(ifStatement.thenBranch()) || ifStatement.elseBranch().stream().anyMatch(this::containsThrow);
+                    containsThrow(ifStatement.thenBranch()) || statementOptional(ifStatement.elseBranch()).stream().anyMatch(this::containsThrow);
             case ObjectOriented.TryCatchStatement tryCatchStatement ->
                     containsThrow(tryCatchStatement.tryBlock())
                     || tryCatchStatement.catches().stream().anyMatch(catchClause -> containsThrow(catchClause.body()));
@@ -1337,8 +1357,8 @@ public final class ObjectOrientedJavaGenerator {
 
     private boolean containsMatch(ObjectOriented.MemberDeclaration member) {
         return switch (member) {
-            case ObjectOriented.FieldDeclaration field -> field.initializer().stream().anyMatch(this::containsMatch);
-            case ObjectOriented.MethodDeclaration method -> method.body().stream().anyMatch(this::containsMatch);
+            case ObjectOriented.FieldDeclaration field -> optionalString(field.initializer()).stream().anyMatch(this::containsMatch);
+            case ObjectOriented.MethodDeclaration method -> methodBody(method.body()).stream().anyMatch(this::containsMatch);
             case ObjectOriented.InitBlock initBlock -> containsMatch(initBlock.body());
         };
     }

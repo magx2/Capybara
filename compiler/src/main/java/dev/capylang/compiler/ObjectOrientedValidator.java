@@ -15,6 +15,23 @@ public final class ObjectOrientedValidator {
 
     private static final String PASS_CLASS_NAME = "dev.capylang.compiler.linking.ObjectOrientedValidationPass";
 
+    @SuppressWarnings("unchecked")
+    private static <T> java.util.Optional<T> typedOptional(java.util.Optional value) {
+        return (java.util.Optional<T>) value;
+    }
+
+    private static java.util.Optional<String> optionalString(java.util.Optional value) {
+        return typedOptional(value);
+    }
+
+    private static java.util.Optional<ObjectOriented.MethodBody> methodBody(java.util.Optional value) {
+        return typedOptional(value);
+    }
+
+    private static java.util.Optional<ObjectOriented.Statement> statementOptional(java.util.Optional value) {
+        return typedOptional(value);
+    }
+
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
         if (modules.isEmpty()) {
             return Results.success(modules);
@@ -152,8 +169,8 @@ public final class ObjectOrientedValidator {
                         List.of(),
                         false,
                         emptyBody(),
-                        fieldDeclaration.initializer().isPresent(),
-                        fieldDeclaration.initializer().orElse(""),
+                        optionalString(fieldDeclaration.initializer()).isPresent(),
+                        optionalString(fieldDeclaration.initializer()).orElse(""),
                         List.of()
                 );
             }
@@ -165,8 +182,8 @@ public final class ObjectOrientedValidator {
                         methodDeclaration.returnType(),
                         methodDeclaration.visibility(),
                         methodDeclaration.modifiers(),
-                        methodDeclaration.body().isPresent(),
-                        methodDeclaration.body().map(this::body).orElseGet(this::emptyBody),
+                        methodBody(methodDeclaration.body()).isPresent(),
+                        methodBody(methodDeclaration.body()).map(this::body).orElseGet(this::emptyBody),
                         false,
                         "",
                         parameters(methodDeclaration.parameters())
@@ -229,7 +246,7 @@ public final class ObjectOrientedValidator {
                         id,
                         "let",
                         letStatement.name(),
-                        letStatement.type().orElse(""),
+                        optionalString(letStatement.type()).orElse(""),
                         letStatement.expression(),
                         List.of(),
                         emptyBody(),
@@ -259,7 +276,7 @@ public final class ObjectOrientedValidator {
                         id,
                         "mutable",
                         mutableVariableStatement.name(),
-                        mutableVariableStatement.type().orElse(""),
+                        optionalString(mutableVariableStatement.type()).orElse(""),
                         mutableVariableStatement.expression(),
                         List.of(),
                         emptyBody(),
@@ -291,7 +308,7 @@ public final class ObjectOrientedValidator {
                         List.of(),
                         emptyBody(),
                         block(ifStatement.thenBranch()),
-                        ifStatement.elseBranch().map(this::statement).orElse(-1),
+                        statementOptional(ifStatement.elseBranch()).map(this::statement).orElse(-1),
                         List.of(),
                         ""
                 );
@@ -322,7 +339,7 @@ public final class ObjectOrientedValidator {
                         id,
                         "foreach",
                         forEachStatement.name(),
-                        forEachStatement.type().orElse(""),
+                        optionalString(forEachStatement.type()).orElse(""),
                         forEachStatement.iterable(),
                         List.of(),
                         emptyBody(),

@@ -30,6 +30,15 @@ final class ObjectOrientedPythonGenerator {
     private final PythonGenerator.ProgramContext programContext;
     private int syntheticCounter = 0;
 
+    @SuppressWarnings("unchecked")
+    private static <T> Optional<T> typedOptional(Optional value) {
+        return (Optional<T>) value;
+    }
+
+    private static Optional<String> optionalString(Optional value) {
+        return typedOptional(value);
+    }
+
     ObjectOrientedPythonGenerator(PythonGenerator.ProgramContext programContext) {
         this.programContext = programContext;
     }
@@ -161,11 +170,11 @@ final class ObjectOrientedPythonGenerator {
         code.append("        self.__capybaraTypes = ").append(PythonGenerator.pyArray(capybaraTypeNames(context, declaration))).append("\n");
         for (var field : fields) {
             var fieldName = pyIdentifier(field.name());
-            if (field.initializer().isPresent()) {
+            if (optionalString(field.initializer()).isPresent()) {
                 code.append("        self.")
                         .append(fieldName)
                         .append(" = ")
-                        .append(renderExpression(context, field.initializer().orElseThrow(), scope, Set.of()))
+                        .append(renderExpression(context, optionalString(field.initializer()).orElseThrow(), scope, Set.of()))
                         .append("\n");
             } else if (constructorParameters.contains(field.name())) {
                 code.append("        self.")

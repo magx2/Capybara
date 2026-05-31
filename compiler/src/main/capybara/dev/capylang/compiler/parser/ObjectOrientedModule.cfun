@@ -1,0 +1,37 @@
+from /dev/capylang/compiler/ImportDeclaration import { * }
+from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
+from /dev/capylang/compiler/parser/SourceKind import { * }
+
+union ObjectOrientedModule =
+    ObjectOrientedModuleSource
+
+data ObjectOrientedModuleSource {
+    name: String,
+    path: String,
+    objectOriented: ObjectOriented,
+    imports: List[ImportDeclaration],
+    sourceKind: SourceKind
+}
+
+fun ObjectOrientedModule.name(): String =
+    match this with
+    case ObjectOrientedModuleSource { name, path, objectOriented, imports, sourceKind } -> name
+
+fun ObjectOrientedModule.path(): String =
+    match this with
+    case ObjectOrientedModuleSource { name, path, objectOriented, imports, sourceKind } -> path
+
+fun ObjectOrientedModule.objectOriented(): ObjectOriented =
+    match this with
+    case ObjectOrientedModuleSource { name, path, objectOriented, imports, sourceKind } -> objectOriented
+
+fun ObjectOrientedModule.imports(): List[ImportDeclaration] =
+    match this with
+    case ObjectOrientedModuleSource { name, path, objectOriented, imports, sourceKind } -> imports
+
+fun ObjectOrientedModule.sourceKind(): SourceKind =
+    match this with
+    case ObjectOrientedModuleSource { name, path, objectOriented, imports, sourceKind } -> sourceKind
+
+fun ObjectOrientedModule.moduleFile(): String =
+    moduleFile(this.sourceKind(), this.path(), this.name())

@@ -5,7 +5,7 @@ import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.parser.CapybaraParser;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
-import dev.capylang.compiler.parser.ParserAst.AnnotationStringValue;
+import dev.capylang.compiler.parser.ObjectOriented.AnnotationStringValue;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.DisplayName;

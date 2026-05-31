@@ -62,6 +62,11 @@ public class CapybaraCompiler {
         return (Optional<T>) value;
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> List<T> typedList(List value) {
+        return (List<T>) value;
+    }
+
     private static Optional<SourcePosition> sourcePosition(Optional value) {
         return typedOptional(value);
     }
@@ -80,6 +85,18 @@ public class CapybaraCompiler {
 
     private static Optional<String> optionalString(Optional value) {
         return typedOptional(value);
+    }
+
+    private static Optional<ObjectOriented.MethodBody> objectMethodBody(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static Optional<ObjectOriented.Statement> objectStatement(Optional value) {
+        return typedOptional(value);
+    }
+
+    private static List<ObjectOriented.TypeDeclaration> objectTypeDeclarations(List value) {
+        return typedList(value);
     }
 
     private static Optional<dev.capylang.compiler.expression.CompiledExpression> compiledExpression(Optional value) {
@@ -2533,7 +2550,7 @@ public class CapybaraCompiler {
         for (var definition : module.objectOriented().definitions()) {
             switch (definition) {
                 case ObjectOriented.ClassDeclaration classDeclaration -> validateAnnotationUsageList(
-                        classDeclaration.annotations(),
+                        parserAnnotationUsages(classDeclaration.annotations()),
                         Optional.of(AnnotationSemanticTarget.CLASS),
                         AnnotationSemanticTarget.CLASS.displayName,
                         availableAnnotations,
@@ -2541,7 +2558,7 @@ public class CapybaraCompiler {
                         errors
                 );
                 case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> validateAnnotationUsageList(
-                        interfaceDeclaration.annotations(),
+                        parserAnnotationUsages(interfaceDeclaration.annotations()),
                         Optional.of(AnnotationSemanticTarget.INTERFACE),
                         AnnotationSemanticTarget.INTERFACE.displayName,
                         availableAnnotations,
@@ -2549,7 +2566,7 @@ public class CapybaraCompiler {
                         errors
                 );
                 case ObjectOriented.TraitDeclaration traitDeclaration -> validateAnnotationUsageList(
-                        traitDeclaration.annotations(),
+                        parserAnnotationUsages(traitDeclaration.annotations()),
                         Optional.of(AnnotationSemanticTarget.TRAIT),
                         AnnotationSemanticTarget.TRAIT.displayName,
                         availableAnnotations,
@@ -2560,7 +2577,7 @@ public class CapybaraCompiler {
             for (var member : definition.members()) {
                 switch (member) {
                     case ObjectOriented.FieldDeclaration fieldDeclaration -> validateAnnotationUsageList(
-                            fieldDeclaration.annotations(),
+                            parserAnnotationUsages(fieldDeclaration.annotations()),
                             Optional.of(AnnotationSemanticTarget.FIELD),
                             AnnotationSemanticTarget.FIELD.displayName,
                             availableAnnotations,
@@ -2568,7 +2585,7 @@ public class CapybaraCompiler {
                             errors
                     );
                     case ObjectOriented.MethodDeclaration methodDeclaration -> validateAnnotationUsageList(
-                            methodDeclaration.annotations(),
+                            parserAnnotationUsages(methodDeclaration.annotations()),
                             Optional.of(AnnotationSemanticTarget.METHOD),
                             AnnotationSemanticTarget.METHOD.displayName,
                             availableAnnotations,
@@ -2576,7 +2593,7 @@ public class CapybaraCompiler {
                             errors
                     );
                     case ObjectOriented.InitBlock initBlock -> validateAnnotationUsageList(
-                            initBlock.annotations(),
+                            parserAnnotationUsages(initBlock.annotations()),
                             Optional.of(AnnotationSemanticTarget.INIT),
                             AnnotationSemanticTarget.INIT.displayName,
                             availableAnnotations,
@@ -2586,6 +2603,49 @@ public class CapybaraCompiler {
                 }
             }
         }
+    }
+
+    private List<AnnotationUsage> parserAnnotationUsages(List<ObjectOriented.AnnotationUsage> usages) {
+        return usages.stream()
+                .map(this::parserAnnotationUsage)
+                .toList();
+    }
+
+    private AnnotationUsage parserAnnotationUsage(ObjectOriented.AnnotationUsage usage) {
+        return new AnnotationUsage(
+                usage.name(),
+                usage.arguments().stream().map(this::parserAnnotationArgument).toList(),
+                sourcePosition(usage.position())
+        );
+    }
+
+    private AnnotationArgument parserAnnotationArgument(ObjectOriented.AnnotationArgument argument) {
+        return new AnnotationArgument(
+                argument.name(),
+                parserAnnotationValue(argument.value()),
+                sourcePosition(argument.position())
+        );
+    }
+
+    private AnnotationValue parserAnnotationValue(ObjectOriented.AnnotationValue value) {
+        return switch (value) {
+            case ObjectOriented.AnnotationStringValue stringValue ->
+                    new AnnotationStringValue(stringValue.value(), sourcePosition(stringValue.position()));
+            case ObjectOriented.AnnotationIntValue intValue ->
+                    new AnnotationIntValue(intValue.value(), sourcePosition(intValue.position()));
+            case ObjectOriented.AnnotationLongValue longValue ->
+                    new AnnotationLongValue(longValue.value(), sourcePosition(longValue.position()));
+            case ObjectOriented.AnnotationFloatValue floatValue ->
+                    new AnnotationFloatValue(floatValue.value(), sourcePosition(floatValue.position()));
+            case ObjectOriented.AnnotationDoubleValue doubleValue ->
+                    new AnnotationDoubleValue(doubleValue.value(), sourcePosition(doubleValue.position()));
+            case ObjectOriented.AnnotationBoolValue boolValue ->
+                    new AnnotationBoolValue(boolValue.value(), sourcePosition(boolValue.position()));
+            case ObjectOriented.AnnotationNothingValue nothingValue ->
+                    new AnnotationNothingValue(sourcePosition(nothingValue.position()));
+            case ObjectOriented.AnnotationTypeNameValue typeNameValue ->
+                    new AnnotationTypeNameValue(typeNameValue.name(), sourcePosition(typeNameValue.position()));
+        };
     }
 
     private void validateAnnotationUsageList(
@@ -3053,13 +3113,13 @@ public class CapybaraCompiler {
                             annotationsByModule,
                             moduleLinkIndex
                     );
-                    var definitions = module.objectOriented().definitions().stream()
+                    List<ObjectOriented.TypeDeclaration> definitions = objectTypeDeclarations(module.objectOriented().definitions()).stream()
                             .map(definition -> linkObjectOrientedAnnotationMetadata(definition, availableAnnotations))
                             .toList();
-                    return new ObjectOrientedModule(
+                    return (ObjectOrientedModule) new ObjectOrientedModule.ObjectOrientedModuleSource(
                             module.name(),
                             module.path(),
-                            new ObjectOriented(definitions),
+                            new ObjectOriented.ObjectOrientedSource(definitions, module.objectOriented().nativeProviders()),
                             module.imports(),
                             module.sourceKind()
                     );
@@ -3083,7 +3143,7 @@ public class CapybaraCompiler {
                     classDeclaration.modifiers(),
                     classDeclaration.comments(),
                     classDeclaration.annotations(),
-                    linkAnnotations(classDeclaration.annotations(), availableAnnotations)
+                    linkAnnotations(parserAnnotationUsages(classDeclaration.annotations()), availableAnnotations)
             );
             case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> new ObjectOriented.InterfaceDeclaration(
                     interfaceDeclaration.name(),
@@ -3091,7 +3151,7 @@ public class CapybaraCompiler {
                     linkedMembers,
                     interfaceDeclaration.comments(),
                     interfaceDeclaration.annotations(),
-                    linkAnnotations(interfaceDeclaration.annotations(), availableAnnotations)
+                    linkAnnotations(parserAnnotationUsages(interfaceDeclaration.annotations()), availableAnnotations)
             );
             case ObjectOriented.TraitDeclaration traitDeclaration -> new ObjectOriented.TraitDeclaration(
                     traitDeclaration.name(),
@@ -3099,7 +3159,7 @@ public class CapybaraCompiler {
                     linkedMembers,
                     traitDeclaration.comments(),
                     traitDeclaration.annotations(),
-                    linkAnnotations(traitDeclaration.annotations(), availableAnnotations)
+                    linkAnnotations(parserAnnotationUsages(traitDeclaration.annotations()), availableAnnotations)
             );
         };
     }
@@ -3116,7 +3176,7 @@ public class CapybaraCompiler {
                     fieldDeclaration.initializer(),
                     fieldDeclaration.comments(),
                     fieldDeclaration.annotations(),
-                    linkAnnotations(fieldDeclaration.annotations(), availableAnnotations)
+                    linkAnnotations(parserAnnotationUsages(fieldDeclaration.annotations()), availableAnnotations)
             );
             case ObjectOriented.MethodDeclaration methodDeclaration -> new ObjectOriented.MethodDeclaration(
                     methodDeclaration.name(),
@@ -3127,13 +3187,13 @@ public class CapybaraCompiler {
                     methodDeclaration.body(),
                     methodDeclaration.comments(),
                     methodDeclaration.annotations(),
-                    linkAnnotations(methodDeclaration.annotations(), availableAnnotations)
+                    linkAnnotations(parserAnnotationUsages(methodDeclaration.annotations()), availableAnnotations)
             );
             case ObjectOriented.InitBlock initBlock -> new ObjectOriented.InitBlock(
                     initBlock.body(),
                     initBlock.comments(),
                     initBlock.annotations(),
-                    linkAnnotations(initBlock.annotations(), availableAnnotations)
+                    linkAnnotations(parserAnnotationUsages(initBlock.annotations()), availableAnnotations)
             );
         };
     }
@@ -4289,9 +4349,9 @@ public class CapybaraCompiler {
     ) {
         switch (member) {
             case ObjectOriented.FieldDeclaration fieldDeclaration ->
-                    fieldDeclaration.initializer().ifPresent(expression -> validateNativeProviderCalls(module, providersByName, expression, scope, errors));
-            case ObjectOriented.MethodDeclaration methodDeclaration ->
-                    methodDeclaration.body().ifPresent(body -> validateNativeProviderCalls(
+                    optionalString(fieldDeclaration.initializer()).ifPresent(expression -> validateNativeProviderCalls(module, providersByName, expression, scope, errors));
+                case ObjectOriented.MethodDeclaration methodDeclaration ->
+                    objectMethodBody(methodDeclaration.body()).ifPresent(body -> validateNativeProviderCalls(
                             module,
                             providersByName,
                             body,
@@ -4375,7 +4435,7 @@ public class CapybaraCompiler {
             case ObjectOriented.IfStatement ifStatement -> {
                 validateNativeProviderCalls(module, providersByName, ifStatement.condition(), scope, errors);
                 validateNativeProviderCalls(module, providersByName, ifStatement.thenBranch(), scope, errors);
-                ifStatement.elseBranch().ifPresent(elseBranch -> validateNativeProviderCalls(module, providersByName, elseBranch, scope, errors));
+                objectStatement(ifStatement.elseBranch()).ifPresent(elseBranch -> validateNativeProviderCalls(module, providersByName, elseBranch, scope, errors));
             }
             case ObjectOriented.TryCatchStatement tryCatchStatement -> {
                 validateNativeProviderCalls(module, providersByName, tryCatchStatement.tryBlock(), scope, errors);

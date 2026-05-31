@@ -177,10 +177,10 @@ public class CapybaraParser {
             var definitions = program.definition().stream()
                     .map(this::objectOrientedTypeDeclaration)
                     .toList();
-            return Results.success(new ObjectOrientedModule(
+            return Results.success(new ObjectOrientedModule.ObjectOrientedModuleSource(
                     module.name(),
                     module.path(),
-                    new ObjectOriented(definitions),
+                    new ObjectOriented.ObjectOrientedSource(definitions, List.of()),
                     parsedSource.imports(),
                     module.sourceKind()
             ));
@@ -3763,7 +3763,8 @@ public class CapybaraParser {
                 objectOrientedMembers(context.typeBody().memberDeclaration()),
                 context.classModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
@@ -3775,7 +3776,8 @@ public class CapybaraParser {
                 objectOrientedTypeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 objectOrientedMembers(context.typeBody().memberDeclaration()),
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
@@ -3790,7 +3792,8 @@ public class CapybaraParser {
                 objectOrientedTypeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 members,
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
@@ -3819,7 +3822,8 @@ public class CapybaraParser {
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.expression() == null ? Optional.empty() : Optional.of(context.expression().getText()),
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
@@ -3834,7 +3838,8 @@ public class CapybaraParser {
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 context.methodBody() == null ? Optional.empty() : Optional.of(objectOrientedMethodBody(context.methodBody())),
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
@@ -3849,7 +3854,8 @@ public class CapybaraParser {
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 Optional.empty(),
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
@@ -3859,11 +3865,12 @@ public class CapybaraParser {
         return new ObjectOriented.InitBlock(
                 objectOrientedStatementBlock(context.statementBlock()),
                 comments(context.docComment()),
-                objectOrientedAnnotations(context.annotationBlock())
+                objectOrientedAnnotations(context.annotationBlock()),
+                List.of()
         );
     }
 
-    private List<AnnotationUsage> objectOrientedAnnotations(
+    private List<ObjectOriented.AnnotationUsage> objectOrientedAnnotations(
             List<dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext> contexts
     ) {
         return contexts.stream()
@@ -3871,15 +3878,15 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private AnnotationUsage annotationBlock(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext context) {
-        return new AnnotationUsage(
+    private ObjectOriented.AnnotationUsage annotationBlock(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext context) {
+        return new ObjectOriented.AnnotationUsage(
                 context.annotationName().getText(),
                 annotationArguments(context.annotationArgumentList()),
                 position(context)
         );
     }
 
-    private List<AnnotationArgument> annotationArguments(
+    private List<ObjectOriented.AnnotationArgument> annotationArguments(
             dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentListContext context
     ) {
         if (context == null) {
@@ -3890,37 +3897,37 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private AnnotationArgument annotationArgument(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentContext context) {
-        return new AnnotationArgument(
+    private ObjectOriented.AnnotationArgument annotationArgument(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentContext context) {
+        return new ObjectOriented.AnnotationArgument(
                 context.identifier().getText(),
                 annotationValue(context.annotationValue()),
                 position(context)
         );
     }
 
-    private AnnotationValue annotationValue(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationValueContext context) {
+    private ObjectOriented.AnnotationValue annotationValue(dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationValueContext context) {
         if (context.STRING_LITERAL() != null) {
-            return new ParserAst.AnnotationStringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
+            return new ObjectOriented.AnnotationStringValue(context.STRING_LITERAL().getText(), position(context.STRING_LITERAL()));
         }
         if (context.INT_LITERAL() != null) {
-            return new ParserAst.AnnotationIntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
+            return new ObjectOriented.AnnotationIntValue(context.INT_LITERAL().getText(), position(context.INT_LITERAL()));
         }
         if (context.LONG_LITERAL() != null) {
-            return new ParserAst.AnnotationLongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
+            return new ObjectOriented.AnnotationLongValue(context.LONG_LITERAL().getText(), position(context.LONG_LITERAL()));
         }
         if (context.FLOAT_LITERAL() != null) {
-            return new ParserAst.AnnotationFloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
+            return new ObjectOriented.AnnotationFloatValue(context.FLOAT_LITERAL().getText(), position(context.FLOAT_LITERAL()));
         }
         if (context.DOUBLE_LITERAL() != null) {
-            return new ParserAst.AnnotationDoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
+            return new ObjectOriented.AnnotationDoubleValue(context.DOUBLE_LITERAL().getText(), position(context.DOUBLE_LITERAL()));
         }
         if (context.BOOL_LITERAL() != null) {
-            return new ParserAst.AnnotationBoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
+            return new ObjectOriented.AnnotationBoolValue(Boolean.parseBoolean(context.BOOL_LITERAL().getText()), position(context.BOOL_LITERAL()));
         }
         if (context.NOTHING_LITERAL() != null) {
-            return new ParserAst.AnnotationNothingValue(position(context.NOTHING_LITERAL()));
+            return new ObjectOriented.AnnotationNothingValue(position(context.NOTHING_LITERAL()));
         }
-        return new ParserAst.AnnotationTypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
+        return new ObjectOriented.AnnotationTypeNameValue(context.annotationTypeReference().getText(), position(context.annotationTypeReference()));
     }
 
     private ObjectOriented.MethodBody objectOrientedMethodBody(

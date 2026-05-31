@@ -1287,6 +1287,10 @@ public final class JavaGenerator implements Generator {
     private String codeTopLevelDeclaration(JavaClass javaClass, String declarationCode) {
         var code = new StringBuilder();
         code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
+        appendImports(code, javaClass.staticImports());
+        if (!javaClass.staticImports().isEmpty()) {
+            code.append('\n');
+        }
         javaClass.annotations().forEach(annotation -> code.append(annotation).append("\n"));
         code.append(declarationCode);
         return code.toString();
