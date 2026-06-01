@@ -9,6 +9,8 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import dev.capylang.compiler.CompiledFunctionParameter;
 import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
 import dev.capylang.compiler.expression.*;
+import dev.capylang.compiler.linking.ModuleLinkingPass;
+import dev.capylang.compiler.linking.NativeProviderValidationPass;
 import dev.capylang.compiler.linking.ObjectOrientedValidationPass;
 import dev.capylang.compiler.linking.TypeLinkingPass;
 import dev.capylang.compiler.parser.*;
@@ -134,6 +136,10 @@ public class CapybaraCompiler {
 
     private static String tupleStringAt(List<?> tuple, int index) {
         return (String) tuple.get(index);
+    }
+
+    private static String textOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private static Optional<ObjectOriented.MethodBody> objectMethodBody(Optional value) {
@@ -302,19 +308,11 @@ public class CapybaraCompiler {
     }
 
     private String canonicalModuleIdentity(String path, String name) {
-        var normalizedPath = normalizeModulePath(path);
-        if (normalizedPath.isBlank()) {
-            return name;
-        }
-        return normalizedPath + "/" + name;
+        return ModuleLinkingPass.canonicalModuleIdentity(path, name);
     }
 
     private String moduleKey(String path, String name) {
-        var normalizedPath = normalizeModulePath(path);
-        if (normalizedPath.isBlank() || ".".equals(normalizedPath)) {
-            return name;
-        }
-        return normalizedPath + "/" + name;
+        return ModuleLinkingPass.moduleKey(path, name);
     }
 
     private static SortedSet<CompiledModule> loadBundledLibraries(Collection<RawModule> rawModules) {
@@ -2181,15 +2179,7 @@ public class CapybaraCompiler {
     }
 
     private String normalizeModulePath(String modulePath) {
-        var normalized = modulePath.replace('\\', '/');
-        var parts = new java.util.ArrayList<String>();
-        for (var part : normalized.split("/+")) {
-            if (part.isBlank() || part.equals(".")) {
-                continue;
-            }
-            parts.add(part);
-        }
-        return String.join("/", parts);
+        return ModuleLinkingPass.normalizeModulePath(modulePath);
     }
 
     private List<CapybaraExpressionCompiler.FunctionSignature> mergeSignatures(
@@ -4062,77 +4052,27 @@ public class CapybaraCompiler {
             }
             var visibleTypes = ((Result.Success<Map<String, NativeProviderTarget>>) availableTypes).value();
             for (var provider : nativeProviders) {
-                if (!provider.parameters().isEmpty()) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "TypeMismatch: Native provider `" + provider.name()
-                            + "` must not declare parameters; provider functions are called as `" + provider.name() + "()`"
-                    ));
+                NativeProviderTarget resolvedTarget = null;
+                var targetKind = "UNKNOWN";
+                var interfaceId = "";
+                if (provider.parameters().isEmpty() && provider.effectReturnType() && provider.nativeBody()) {
+                    resolvedTarget = resolveNativeProviderTarget(provider.targetType(), visibleTypes);
+                    targetKind = nativeProviderTargetKindForValidation(provider.targetType(), resolvedTarget);
+                    interfaceId = nativeProviderInterfaceIdForValidation(resolvedTarget);
+                }
+                var validationProvider = nativeProviderValidationProvider(provider, module.name(), interfaceId, targetKind);
+                var declarationValidation = NativeProviderValidationPass.validateProviderDeclaration(
+                        validationProvider,
+                        nativeProviderValidationKeys(declaredProviderKeys),
+                        List.copyOf(declaredProviderSymbols)
+                );
+                if (!nativeProviderValidationSucceeded(declarationValidation)) {
+                    errors.add(nativeProviderError(provider, nativeProviderValidationMessage(declarationValidation)));
                     continue;
                 }
-                if (!provider.effectReturnType()) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "TypeMismatch: Native provider `" + provider.name()
-                            + "` must return `Effect[Interface]`, got `" + provider.targetType() + "`"
-                    ));
-                    continue;
-                }
-                if (!provider.nativeBody()) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "TypeMismatch: Native provider `" + provider.name()
-                            + "` must use `<native>` as its function body"
-                    ));
-                    continue;
-                }
-                if (isBuiltinOrCompositeNativeProviderTarget(provider.targetType())) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "TypeMismatch: Native provider `" + provider.name() + "` target type `" + provider.targetType()
-                            + "` with qualifier `" + provider.qualifier() + "` is not an interface"
-                    ));
-                    continue;
-                }
-                var resolvedTarget = resolveNativeProviderTarget(provider.targetType(), visibleTypes);
-                if (resolvedTarget == null) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "TypeMismatch: Native provider `" + provider.name() + "` targets unknown type `" + provider.targetType()
-                            + "` with qualifier `" + provider.qualifier() + "`"
-                    ));
-                    continue;
-                }
-                if (!(resolvedTarget.type() instanceof CompiledObjectType objectType)
-                    || objectType.kind() != CompiledObjectKind.INTERFACE) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "TypeMismatch: Native provider `" + provider.name() + "` target type `" + provider.targetType()
-                            + "` resolves to " + nativeProviderTargetKind(resolvedTarget.type())
-                            + " and is not an interface; qualifier `" + provider.qualifier() + "`"
-                    ));
-                    continue;
-                }
-
-                var interfaceId = nativeProviderInterfaceId(resolvedTarget.ownerModule(), objectType.name());
                 var key = new NativeProviderKey(interfaceId, provider.qualifier());
-                if (!declaredProviderKeys.add(key)) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "DuplicateProvider: Duplicate native provider declaration for native provider `" + provider.name()
-                            + "` and interface `" + interfaceId
-                            + "` with qualifier `" + provider.qualifier() + "`"
-                    ));
-                    continue;
-                }
-                if (!declaredProviderSymbols.add(provider.name())) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "DuplicateProvider: Native provider `" + provider.name() + "` duplicates another provider symbol in module `" + module.name()
-                            + "` for target `" + provider.targetType() + "` with qualifier `" + provider.qualifier() + "`"
-                    ));
-                    continue;
-                }
+                declaredProviderKeys.add(key);
+                declaredProviderSymbols.add(provider.name());
                 declarations.add(new CompiledNativeProviderDeclaration(
                         provider.name(),
                         module.path(),
@@ -4144,11 +4084,7 @@ public class CapybaraCompiler {
                 ));
                 var manifestBinding = manifestBindingsByKey.get(key);
                 if (manifestBinding == null) {
-                    errors.add(nativeProviderError(
-                            provider,
-                            "NotWired: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                            + "` with qualifier `" + provider.qualifier() + "` has no matching @NativeImplementation backend class or manifest entry"
-                    ));
+                    errors.add(nativeProviderError(provider, NativeProviderValidationPass.notWiredError(validationProvider)));
                     continue;
                 }
                 var selectedBinding = manifestBinding;
@@ -4172,9 +4108,11 @@ public class CapybaraCompiler {
                         0,
                         0,
                         nativeProviderManifestSource(manifest),
-                        "NotWired: Native provider manifest entry for interface `" + key.interfaceId()
-                        + "` with qualifier `" + key.qualifier()
-                        + "` has no matching provider declaration" + nativeProviderManifestSourceSuffix(manifest)
+                        NativeProviderValidationPass.unusedManifestEntryError(
+                                key.interfaceId(),
+                                key.qualifier(),
+                                nativeProviderManifestSource(manifest)
+                        )
                 ));
             }
         });
@@ -4293,51 +4231,61 @@ public class CapybaraCompiler {
         return null;
     }
 
-    private String nativeProviderSymbolName(String interfaceName, String qualifier) {
-        var typeName = lowerSnakeIdentifier(interfaceName);
-        if (qualifier == null || qualifier.isBlank()) {
-            return typeName;
+    private String nativeProviderTargetKindForValidation(String targetType, NativeProviderTarget resolvedTarget) {
+        if (NativeProviderValidationPass.isBuiltinOrCompositeNativeProviderTarget(targetType)) {
+            return "BUILTIN_OR_COMPOSITE";
         }
-        return lowerSnakeIdentifier(qualifier) + "_" + typeName;
+        if (resolvedTarget == null) {
+            return "UNKNOWN";
+        }
+        if (resolvedTarget.type() instanceof CompiledObjectType objectType
+            && objectType.kind() == CompiledObjectKind.INTERFACE) {
+            return "INTERFACE";
+        }
+        return nativeProviderTargetKind(resolvedTarget.type());
     }
 
-    private String lowerSnakeIdentifier(String value) {
-        var builder = new StringBuilder();
-        var previousWasUnderscore = false;
-        for (var index = 0; index < value.length(); index++) {
-            var current = value.charAt(index);
-            if (!Character.isLetterOrDigit(current)) {
-                if (!builder.isEmpty() && !previousWasUnderscore) {
-                    builder.append('_');
-                    previousWasUnderscore = true;
-                }
-                continue;
-            }
-            if (Character.isUpperCase(current)
-                && !builder.isEmpty()
-                && !previousWasUnderscore
-                && shouldSeparateUppercase(value, index)) {
-                builder.append('_');
-            }
-            builder.append(Character.toLowerCase(current));
-            previousWasUnderscore = false;
+    private String nativeProviderInterfaceIdForValidation(NativeProviderTarget resolvedTarget) {
+        if (resolvedTarget != null && resolvedTarget.type() instanceof CompiledObjectType objectType) {
+            return nativeProviderInterfaceId(resolvedTarget.ownerModule(), objectType.name());
         }
-        while (!builder.isEmpty() && builder.charAt(builder.length() - 1) == '_') {
-            builder.deleteCharAt(builder.length() - 1);
-        }
-        if (builder.isEmpty() || Character.isDigit(builder.charAt(0))) {
-            builder.insert(0, '_');
-        }
-        return builder.toString();
+        return "";
     }
 
-    private boolean shouldSeparateUppercase(String value, int index) {
-        var previous = value.charAt(index - 1);
-        if (Character.isLowerCase(previous) || Character.isDigit(previous)) {
-            return true;
+    private List<?> nativeProviderValidationProvider(
+            NativeProviderDeclaration provider,
+            String moduleName,
+            String interfaceId,
+            String targetKind
+    ) {
+        return NativeProviderValidationPass.providerDeclaration(
+                provider.name(),
+                provider.targetType(),
+                provider.qualifier(),
+                provider.sourceFile(),
+                provider.parameters().size(),
+                provider.effectReturnType(),
+                provider.nativeBody(),
+                interfaceId,
+                targetKind,
+                moduleName
+        );
+    }
+
+    private List<List<?>> nativeProviderValidationKeys(Collection<NativeProviderKey> keys) {
+        var values = new ArrayList<List<?>>();
+        for (var key : keys) {
+            values.add(NativeProviderValidationPass.providerKey(key.interfaceId(), key.qualifier()));
         }
-        var nextIndex = index + 1;
-        return nextIndex < value.length() && Character.isLowerCase(value.charAt(nextIndex));
+        return List.copyOf(values);
+    }
+
+    private boolean nativeProviderValidationSucceeded(List<?> validation) {
+        return (Boolean) validation.get(0);
+    }
+
+    private String nativeProviderValidationMessage(List<?> validation) {
+        return (String) validation.get(1);
     }
 
     private record NativeProviderDeclaration(
@@ -4541,90 +4489,7 @@ public class CapybaraCompiler {
     }
 
     private boolean callsProviderWithArguments(String expression, String providerName) {
-        var index = 0;
-        while (index < expression.length()) {
-            var current = expression.charAt(index);
-            if (current == '"' || current == '\'') {
-                index = skipStringLiteral(expression, index);
-                continue;
-            }
-            if (!matchesDirectIdentifier(expression, index, providerName)) {
-                index++;
-                continue;
-            }
-            var openParen = skipWhitespace(expression, index + providerName.length());
-            if (openParen < expression.length() && expression.charAt(openParen) == '(') {
-                var closeParen = matchingParen(expression, openParen);
-                if (closeParen > openParen && !expression.substring(openParen + 1, closeParen).trim().isEmpty()) {
-                    return true;
-                }
-            }
-            index += providerName.length();
-        }
-        return false;
-    }
-
-    private int skipStringLiteral(String expression, int start) {
-        var delimiter = expression.charAt(start);
-        var index = start + 1;
-        while (index < expression.length()) {
-            var current = expression.charAt(index);
-            if (current == '\\') {
-                index += 2;
-                continue;
-            }
-            index++;
-            if (current == delimiter) {
-                break;
-            }
-        }
-        return index;
-    }
-
-    private boolean matchesDirectIdentifier(String expression, int index, String identifier) {
-        if (!expression.startsWith(identifier, index)) {
-            return false;
-        }
-        if (index + identifier.length() < expression.length()
-            && isIdentifierPart(expression.charAt(index + identifier.length()))) {
-            return false;
-        }
-        var previous = index - 1;
-        while (previous >= 0 && Character.isWhitespace(expression.charAt(previous))) {
-            previous--;
-        }
-        return previous < 0 || (!isIdentifierPart(expression.charAt(previous)) && expression.charAt(previous) != '.');
-    }
-
-    private boolean isIdentifierPart(char value) {
-        return Character.isLetterOrDigit(value) || value == '_';
-    }
-
-    private int skipWhitespace(String expression, int index) {
-        while (index < expression.length() && Character.isWhitespace(expression.charAt(index))) {
-            index++;
-        }
-        return index;
-    }
-
-    private int matchingParen(String expression, int openParen) {
-        var depth = 0;
-        for (var index = openParen; index < expression.length(); index++) {
-            var current = expression.charAt(index);
-            if (current == '"' || current == '\'') {
-                index = skipStringLiteral(expression, index) - 1;
-                continue;
-            }
-            if (current == '(') {
-                depth++;
-            } else if (current == ')') {
-                depth--;
-                if (depth == 0) {
-                    return index;
-                }
-            }
-        }
-        return -1;
+        return NativeProviderValidationPass.callsProviderWithArguments(expression, providerName);
     }
 
     private record NativeProviderCallScope(Set<String> bindings) {
@@ -4659,29 +4524,57 @@ public class CapybaraCompiler {
             NativeProviderManifest manifest,
             TreeSet<CompilerError> errors
     ) {
+        var manifestSource = nativeProviderManifestSource(manifest);
+        NativeProviderValidationPass.validateManifestEntries(nativeProviderManifestEntries(manifest), manifestSource)
+                .forEach(error -> errors.add(nativeProviderManifestValidationError(error, manifestSource)));
         var bindingsByKey = new LinkedHashMap<NativeProviderKey, NativeProviderBinding>();
         for (var binding : manifest.providers()) {
             var key = new NativeProviderKey(binding.interfaceId(), binding.qualifier());
-            var existing = bindingsByKey.putIfAbsent(key, binding);
-            if (existing != null) {
-                errors.add(new CompilerError(
-                        0,
-                        0,
-                        nativeProviderManifestSource(manifest),
-                        duplicateNativeProviderManifestMessage(manifest, binding)
-                ));
-            }
+            bindingsByKey.putIfAbsent(key, binding);
         }
         return Map.copyOf(bindingsByKey);
     }
 
-    private String duplicateNativeProviderManifestMessage(NativeProviderManifest manifest, NativeProviderBinding binding) {
-        if ("native source annotations".equals(nativeProviderManifestSource(manifest))) {
-            return "DuplicateProvider: Duplicate @NativeImplementation for interface `" + binding.interfaceId()
-                   + "` with qualifier `" + binding.qualifier() + "`" + nativeProviderManifestSourceSuffix(manifest);
+    private List<List<?>> nativeProviderManifestEntries(NativeProviderManifest manifest) {
+        var entries = new ArrayList<List<?>>();
+        for (var binding : manifest.providers()) {
+            entries.add(NativeProviderValidationPass.manifestEntry(
+                        binding.interfaceId(),
+                        binding.qualifier(),
+                        optionalNativeProviderBackendBinding(binding.javaBinding()),
+                        optionalNativeProviderBackendBinding(binding.javascriptBinding()),
+                        optionalNativeProviderBackendBinding(binding.pythonBinding())
+            ));
         }
-        return "DuplicateProvider: Duplicate native provider manifest entry for interface `" + binding.interfaceId()
-               + "` with qualifier `" + binding.qualifier() + "`" + nativeProviderManifestSourceSuffix(manifest);
+        return List.copyOf(entries);
+    }
+
+    private List<?> optionalNativeProviderBackendBinding(NativeProviderBackendBinding binding) {
+        if (binding == null) {
+            return NativeProviderValidationPass.noBackendBinding();
+        }
+        return NativeProviderValidationPass.someBackendBinding(nativeProviderBackendBinding(binding));
+    }
+
+    private List<?> nativeProviderBackendBinding(NativeProviderBackendBinding binding) {
+        if (binding == null) {
+            return NativeProviderValidationPass.backendBinding("", "", "", "");
+        }
+        return NativeProviderValidationPass.backendBinding(
+                textOrEmpty(binding.className()),
+                textOrEmpty(binding.moduleName()),
+                textOrEmpty(binding.exportName()),
+                textOrEmpty(binding.factory())
+        );
+    }
+
+    private CompilerError nativeProviderManifestValidationError(List<?> tuple, String sourceFile) {
+        return new CompilerError(
+                tupleIntAt(tuple, 0),
+                tupleIntAt(tuple, 1),
+                sourceFile,
+                tupleStringAt(tuple, 2)
+        );
     }
 
     private Map<NativeProviderKey, NativeProviderBinding> aliasedNativeProviderManifestBindings(
@@ -4735,10 +4628,6 @@ public class CapybaraCompiler {
 
     private String nativeProviderManifestSource(NativeProviderManifest manifest) {
         return manifest.sourceFile() == null ? "" : manifest.sourceFile();
-    }
-
-    private String nativeProviderManifestSourceSuffix(NativeProviderManifest manifest) {
-        return manifest.sourceFile() == null ? "" : " in manifest `" + manifest.sourceFile() + "`";
     }
 
     private Result<Map<String, NativeProviderTarget>> availableNativeProviderTypes(
@@ -4868,9 +4757,9 @@ public class CapybaraCompiler {
             TreeSet<CompilerError> errors
     ) {
         var errorCount = errors.size();
-        validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
-        validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.JAVASCRIPT, javascriptBinding, errors);
-        validateNativeProviderBackendFactory(provider, interfaceId, NativeProviderBackend.PYTHON, pythonBinding, errors);
+        validateNativeProviderBackendBinding(provider, interfaceId, NativeProviderBackend.JAVA, javaBinding, errors);
+        validateNativeProviderBackendBinding(provider, interfaceId, NativeProviderBackend.JAVASCRIPT, javascriptBinding, errors);
+        validateNativeProviderBackendBinding(provider, interfaceId, NativeProviderBackend.PYTHON, pythonBinding, errors);
         if (errors.size() != errorCount) {
             return Optional.empty();
         }
@@ -4883,76 +4772,22 @@ public class CapybaraCompiler {
         ));
     }
 
-    private void validateNativeProviderBackendFactory(
+    private void validateNativeProviderBackendBinding(
             NativeProviderDeclaration provider,
             String interfaceId,
             NativeProviderBackend backend,
             NativeProviderBackendBinding binding,
             TreeSet<CompilerError> errors
     ) {
-        if (binding == null) {
-            return;
+        var validation = NativeProviderValidationPass.validateBackendBinding(
+                nativeProviderValidationProvider(provider, "", interfaceId, "INTERFACE"),
+                NativeProviderBackendModule.jsonValue(backend),
+                binding != null,
+                nativeProviderBackendBinding(binding)
+        );
+        if (!nativeProviderValidationSucceeded(validation)) {
+            errors.add(nativeProviderError(provider, nativeProviderValidationMessage(validation)));
         }
-        switch (backend) {
-            case JAVA -> requireNativeProviderBackendText(provider, interfaceId, backend, "java.className", binding.className(), errors);
-            case JAVASCRIPT -> {
-                requireNativeProviderBackendText(provider, interfaceId, backend, "javascript.module", binding.moduleName(), errors);
-                requireNativeProviderBackendText(provider, interfaceId, backend, "javascript.export", binding.exportName(), errors);
-            }
-            case PYTHON -> {
-                requireNativeProviderBackendText(provider, interfaceId, backend, "python.module", binding.moduleName(), errors);
-                requireNativeProviderBackendText(provider, interfaceId, backend, "python.className", binding.className(), errors);
-            }
-        }
-        var allowed = supportedNativeProviderFactories(backend);
-        if (allowed.contains(binding.factory())) {
-            return;
-        }
-        errors.add(nativeProviderError(
-                provider,
-                "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                + "` with qualifier `" + provider.qualifier() + "` for backend `" + NativeProviderBackendModule.jsonValue(backend) + "` has unsupported "
-                + NativeProviderBackendModule.jsonValue(backend) + " factory `" + binding.factory()
-                + "`. Supported values: " + String.join(", ", allowed)
-        ));
-    }
-
-    private void requireNativeProviderBackendText(
-            NativeProviderDeclaration provider,
-            String interfaceId,
-            NativeProviderBackend backend,
-            String fieldName,
-            String value,
-            TreeSet<CompilerError> errors
-    ) {
-        if (value != null && !value.isBlank()) {
-            return;
-        }
-        errors.add(nativeProviderError(
-                provider,
-                "UnsupportedBackend: Native provider `" + provider.name() + "` for interface `" + interfaceId
-                + "` with qualifier `" + provider.qualifier() + "` for backend `" + NativeProviderBackendModule.jsonValue(backend)
-                + "` requires field `" + fieldName + "`"
-        ));
-    }
-
-    private List<String> supportedNativeProviderFactories(NativeProviderBackend backend) {
-        return switch (backend) {
-            case JAVA -> List.of("constructor");
-            case JAVASCRIPT -> List.of("new", "call");
-            case PYTHON -> List.of("call");
-        };
-    }
-
-    private boolean isBuiltinOrCompositeNativeProviderTarget(String targetType) {
-        var trimmed = targetType.trim();
-        if (trimmed.contains("=>") || trimmed.contains("[") || trimmed.endsWith("[]")) {
-            return true;
-        }
-        return switch (trimmed) {
-            case "byte", "int", "long", "double", "bool", "float", "String", "any", "data", "void" -> true;
-            default -> false;
-        };
     }
 
     private String nativeProviderTargetKind(GenericDataType type) {
