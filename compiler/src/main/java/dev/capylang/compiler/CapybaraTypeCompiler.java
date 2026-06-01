@@ -2,9 +2,9 @@ package dev.capylang.compiler;
 
 import capy.lang.Result;
 
-import dev.capylang.compiler.CollectionLinkedType.CompiledDict;
-import dev.capylang.compiler.CollectionLinkedType.CompiledList;
-import dev.capylang.compiler.CollectionLinkedType.CompiledSet;
+import dev.capylang.compiler.CompiledDict;
+import dev.capylang.compiler.CompiledList;
+import dev.capylang.compiler.CompiledSet;
 import dev.capylang.compiler.parser.ParserAst;
 import dev.capylang.compiler.parser.ParserAst.*;
 
@@ -221,7 +221,7 @@ public class CapybaraTypeCompiler {
                 yield new CompiledDataParentType(
                         parentType.name(),
                         parentType.fields().stream()
-                                .map(field -> new CompiledDataType.CompiledField(
+                                .map(field -> new CompiledField(
                                         field.name(),
                                         substituteTypeParameters(field.type(), substitutions),
                                         field.annotations()
@@ -254,7 +254,7 @@ public class CapybaraTypeCompiler {
                 }
                 var substitutions = substitutionsFor(dataType.typeParameters(), typeArguments);
                 var substitutedFields = dataType.fields().stream()
-                        .map(field -> new CompiledDataType.CompiledField(
+                        .map(field -> new CompiledField(
                                 field.name(),
                                 substituteTypeParameters(field.type(), substitutions),
                                 field.annotations()
@@ -315,7 +315,11 @@ public class CapybaraTypeCompiler {
     }
 
     private static String primitiveDescriptor(PrimitiveLinkedType primitive) {
-        return primitive == PrimitiveLinkedType.STRING ? "String" : primitive.name().toLowerCase();
+        return sameType(primitive, CompiledIrModule.STRING) ? "String" : primitive.name().toLowerCase();
+    }
+
+    private static boolean sameType(CompiledType actual, CompiledType expected) {
+        return expected.equals(actual);
     }
 
     private static CompiledType substituteTypeParameters(CompiledType type, Map<String, CompiledType> substitutions) {
@@ -338,7 +342,7 @@ public class CapybaraTypeCompiler {
             case CompiledDataType linkedDataType -> new CompiledDataType(
                     linkedDataType.name(),
                     linkedDataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     substituteTypeParameters(field.type(), substitutions),
                                     field.annotations()
@@ -360,7 +364,7 @@ public class CapybaraTypeCompiler {
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     substituteTypeParameters(field.type(), substitutions),
                                     field.annotations()
@@ -583,17 +587,17 @@ public class CapybaraTypeCompiler {
 
     private static CompiledType linkPrimitiveType(PrimitiveType primitiveType) {
         return switch (primitiveType.name()) {
-            case "BYTE" -> PrimitiveLinkedType.BYTE;
-            case "INT" -> PrimitiveLinkedType.INT;
-            case "LONG" -> PrimitiveLinkedType.LONG;
-            case "DOUBLE" -> PrimitiveLinkedType.DOUBLE;
-            case "STRING" -> PrimitiveLinkedType.STRING;
-            case "BOOL" -> PrimitiveLinkedType.BOOL;
-            case "FLOAT" -> PrimitiveLinkedType.FLOAT;
-            case "ANY" -> PrimitiveLinkedType.ANY;
-            case "DATA" -> PrimitiveLinkedType.DATA;
-            case "ENUM" -> PrimitiveLinkedType.ENUM;
-            case "NOTHING" -> PrimitiveLinkedType.NOTHING;
+            case "BYTE" -> CompiledIrModule.BYTE;
+            case "INT" -> CompiledIrModule.INT;
+            case "LONG" -> CompiledIrModule.LONG;
+            case "DOUBLE" -> CompiledIrModule.DOUBLE;
+            case "STRING" -> CompiledIrModule.STRING;
+            case "BOOL" -> CompiledIrModule.BOOL;
+            case "FLOAT" -> CompiledIrModule.FLOAT;
+            case "ANY" -> CompiledIrModule.ANY;
+            case "DATA" -> CompiledIrModule.DATA;
+            case "ENUM" -> CompiledIrModule.ENUM;
+            case "NOTHING" -> CompiledIrModule.NOTHING;
             default -> throw new IllegalStateException("Unknown primitive type: " + primitiveType.name());
         };
     }

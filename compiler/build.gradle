@@ -93,6 +93,275 @@ tasks.register('integrationTest', Test) {
     useJUnitPlatform()
 }
 
+def generatedCapybaraJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java').get().asFile
+
+tasks.named('compileJava') {
+    doFirst {
+        def generatedJavaDir = generatedCapybaraJavaDir
+        new File(generatedJavaDir, 'dev/capylang/compiler/CompiledExpression.java').delete()
+
+        def compiledIrModule = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledIrModule.java')
+        if (compiledIrModule.exists()) {
+            compiledIrModule.text = compiledIrModule.text
+                    .replace('import dev.capylang.compiler.CompiledObjectKindModule.CompiledObjectKind;\n', 'import dev.capylang.compiler.CompiledObjectKind;\n')
+                    .replace('import dev.capylang.compiler.NativeProviderCatalogModule.NativeProviderCatalog;\n', 'import dev.capylang.compiler.NativeProviderCatalog;\n')
+                    .replace('import dev.capylang.compiler.NativeProviderManifestModule.NativeProviderManifest;\n', 'import dev.capylang.compiler.NativeProviderManifest;\n')
+        }
+
+        def compiledFunction = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledFunction.java')
+        if (compiledFunction.exists() && !compiledFunction.text.contains('import dev.capylang.compiler.expression.CompiledExpression;')) {
+            compiledFunction.text = compiledFunction.text.replace(
+                    'package dev.capylang.compiler;\n',
+                    'package dev.capylang.compiler;\n\nimport dev.capylang.compiler.expression.CompiledExpression;\n'
+            )
+        }
+
+        def compiledProgram = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledProgram.java')
+        if (compiledProgram.exists() && !compiledProgram.text.contains('import dev.capylang.compiler.parser.ObjectOrientedModule;')) {
+            compiledProgram.text = compiledProgram.text.replace(
+                    'package dev.capylang.compiler;\n',
+                    'package dev.capylang.compiler;\n\nimport dev.capylang.compiler.parser.ObjectOrientedModule;\n'
+            )
+        }
+
+        def compiledType = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledType.java')
+        if (compiledType.exists()) {
+            compiledType.text = compiledType.text.replace(
+                    'permits PrimitiveLinkedType, CompiledList, CompiledSet, CompiledDict',
+                    'permits GenericDataType, CollectionLinkedType, PrimitiveLinkedType, CompiledList, CompiledSet, CompiledDict'
+            )
+        }
+
+        def genericDataType = new File(generatedJavaDir, 'dev/capylang/compiler/GenericDataType.java')
+        if (genericDataType.exists()) {
+            genericDataType.text = genericDataType.text.replace(
+                    'public sealed interface GenericDataType permits ',
+                    'public sealed interface GenericDataType extends CompiledType permits '
+            )
+        }
+
+        def collectionLinkedType = new File(generatedJavaDir, 'dev/capylang/compiler/CollectionLinkedType.java')
+        if (collectionLinkedType.exists()) {
+            collectionLinkedType.text = collectionLinkedType.text.replace(
+                    'public sealed interface CollectionLinkedType permits ',
+                    'public sealed interface CollectionLinkedType extends CompiledType permits '
+            )
+        }
+
+        def expressionDir = new File(generatedJavaDir, 'dev/capylang/compiler/expression')
+        if (expressionDir.exists()) {
+            [
+                    'CompiledDataParentType.java',
+                    'CompiledFunctionType.java',
+                    'CompiledObjectType.java',
+                    'CompiledTupleType.java',
+                    'CompiledType.java',
+                    'PrimitiveLinkedType.java'
+            ].each { name -> new File(expressionDir, name).delete() }
+
+            expressionDir.eachFileMatch(~/.*\.java/) { file ->
+                def text = file.text
+                        .replace('import dev.capylang.compiler.expression.CompiledDataParentType;\n', '')
+                        .replace('import dev.capylang.compiler.expression.CompiledFunctionType;\n', '')
+                        .replace('import dev.capylang.compiler.expression.CompiledObjectType;\n', '')
+                        .replace('import dev.capylang.compiler.expression.CompiledTupleType;\n', '')
+                        .replace('import dev.capylang.compiler.expression.CompiledWildcardPattern;\n', '')
+                        .replace('import dev.capylang.compiler.parser.InfixOperatorModule.InfixOperator;\n', 'import dev.capylang.compiler.parser.InfixOperator;\n')
+                        .replace('import static dev.capylang.compiler.expression.CompiledDataParentType.*;\n', '')
+                        .replace('import static dev.capylang.compiler.expression.CompiledFunctionType.*;\n', '')
+                        .replace('import static dev.capylang.compiler.expression.CompiledObjectType.*;\n', '')
+                        .replace('import static dev.capylang.compiler.expression.CompiledTupleType.*;\n', '')
+                        .replace('import static dev.capylang.compiler.expression.CompiledWildcardPattern.*;\n', '')
+                if (!text.contains('import dev.capylang.compiler.CompiledType;')) {
+                    text = text.replace(
+                            'package dev.capylang.compiler.expression;\n',
+                            '''package dev.capylang.compiler.expression;
+
+import dev.capylang.compiler.CompiledAnnotation;
+import dev.capylang.compiler.CompiledDataParentType;
+import dev.capylang.compiler.CompiledFunctionType;
+import dev.capylang.compiler.CompiledObjectType;
+                        import dev.capylang.compiler.CompiledTupleType;
+                        import dev.capylang.compiler.CompiledType;
+                        import dev.capylang.compiler.PrimitiveLinkedType;
+                        import dev.capylang.compiler.parser.InfixOperator;
+                        import dev.capylang.compiler.parser.SourcePosition;
+                        '''
+                    )
+                }
+                text = text
+                        .replace('java.util.Optional declaredType', 'java.util.Optional<CompiledType> declaredType')
+                        .replace('java.util.Optional guard', 'java.util.Optional<CompiledExpression> guard')
+                        .replace('java.util.Optional start', 'java.util.Optional<CompiledExpression> start')
+                        .replace('java.util.Optional end', 'java.util.Optional<CompiledExpression> end')
+                        .replace('java.util.Optional position', 'java.util.Optional<SourcePosition> position')
+                        .replace('java.util.Optional keyName', 'java.util.Optional<java.lang.String> keyName')
+                file.text = text
+            }
+
+            def compiledVariableExpression = new File(expressionDir, 'CompiledVariable.java')
+            if (compiledVariableExpression.exists() && !compiledVariableExpression.text.contains('public CompiledVariable(java.lang.String name, CompiledType type)')) {
+                compiledVariableExpression.text = compiledVariableExpression.text.replace(
+                        'implements CompiledExpression, dev.capylang.CapybaraDataValue {@Override',
+                        'implements CompiledExpression, dev.capylang.CapybaraDataValue {public CompiledVariable(java.lang.String name, CompiledType type) { this(name, type, false); }\n@Override'
+                )
+            }
+
+            def compiledMatchExpression = new File(expressionDir, 'CompiledMatchExpression.java')
+            if (compiledMatchExpression.exists() && !compiledMatchExpression.text.contains('Match expression must have at least one case')) {
+                compiledMatchExpression.text = compiledMatchExpression.text.replace(
+                        'implements CompiledExpression, dev.capylang.CapybaraDataValue {@Override',
+                        '''implements CompiledExpression, dev.capylang.CapybaraDataValue {
+public CompiledMatchExpression {
+    if (cases.isEmpty()) {
+        throw new IllegalArgumentException("Match expression must have at least one case");
+    }
+}
+public CompiledMatchExpression(CompiledExpression matchWith, java.util.List<CompiledMatchCase> cases) { this(matchWith, cases, dev.capylang.compiler.CompiledIrModule.ANY); }
+@Override'''
+                )
+            }
+        }
+
+        def compiledField = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledField.java')
+        if (compiledField.exists() && !compiledField.text.contains('public CompiledField(java.lang.String name, CompiledType type)')) {
+            compiledField.text = compiledField.text.replace(
+                    'implements dev.capylang.CapybaraDataValue {public java.lang.String toString()',
+                    'implements dev.capylang.CapybaraDataValue {public CompiledField(java.lang.String name, CompiledType type) { this(name, type, java.util.List.of()); }\npublic java.lang.String toString()'
+            )
+        }
+
+        def staticImport = new File(generatedJavaDir, 'dev/capylang/compiler/StaticImport.java')
+        if (staticImport.exists() && !staticImport.text.contains('public StaticImport(java.lang.String className, java.lang.String memberName)')) {
+            staticImport.text = staticImport.text.replace(
+                    'implements dev.capylang.CapybaraDataValue {@Override',
+                    'implements dev.capylang.CapybaraDataValue {public StaticImport(java.lang.String className, java.lang.String memberName) { this(className, memberName, false); }\n@Override'
+            )
+        }
+
+        def compiledDataType = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledDataType.java')
+        if (compiledDataType.exists() && !compiledDataType.text.contains('public CompiledDataType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> extendedTypes, java.util.List<java.lang.String> comments, Visibility visibility, boolean singleton)')) {
+            compiledDataType.text = compiledDataType.text.replace(
+                    'implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {public java.lang.String toString()',
+                    '''implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {
+public CompiledDataType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> extendedTypes, java.util.List<java.lang.String> comments, Visibility visibility, boolean singleton) { this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, false, false, java.util.List.of()); }
+public CompiledDataType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> extendedTypes, java.util.List<java.lang.String> comments, Visibility visibility, boolean singleton, boolean nativeType, boolean enumValue) { this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, java.util.List.of()); }
+public CompiledDataType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> extendedTypes, java.util.List<java.lang.String> comments, Visibility visibility, boolean singleton, boolean enumValue) { this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, false, enumValue, java.util.List.of()); }
+public CompiledDataType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> extendedTypes, java.util.List<java.lang.String> comments, boolean singleton) { this(name, fields, typeParameters, extendedTypes, comments, null, singleton, false, false, java.util.List.of()); }
+public CompiledDataType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> extendedTypes, boolean singleton) { this(name, fields, typeParameters, extendedTypes, java.util.List.of(), null, singleton, false, false, java.util.List.of()); }
+public java.lang.String toString()'''
+            )
+        }
+        if (compiledDataType.exists() && !compiledDataType.text.contains('if (!(o instanceof CompiledDataType that))')) {
+            compiledDataType.text = compiledDataType.text.replace(
+                    'public java.lang.String toString()',
+                    'public final boolean equals(java.lang.Object o) { if (!(o instanceof CompiledDataType that)) return false; return name.equals(that.name); }\n@Override public int hashCode() { return name.hashCode(); }\npublic java.lang.String toString()'
+            )
+        }
+
+        def compiledDataParentType = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledDataParentType.java')
+        if (compiledDataParentType.exists() && !compiledDataParentType.text.contains('public CompiledDataParentType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<CompiledDataType> subTypes, java.util.List<java.lang.String> typeParameters)')) {
+            compiledDataParentType.text = compiledDataParentType.text.replace(
+                    'implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {public java.lang.String toString()',
+                    '''implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {
+public CompiledDataParentType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<CompiledDataType> subTypes, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> comments, Visibility visibility, boolean enumType) { this(name, fields, subTypes, typeParameters, comments, visibility, enumType, java.util.List.of()); }
+public CompiledDataParentType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<CompiledDataType> subTypes, java.util.List<java.lang.String> typeParameters) { this(name, fields, subTypes, typeParameters, java.util.List.of(), null, false, java.util.List.of()); }
+public CompiledDataParentType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<CompiledDataType> subTypes, java.util.List<java.lang.String> typeParameters, boolean enumType) { this(name, fields, subTypes, typeParameters, java.util.List.of(), null, enumType, java.util.List.of()); }
+public CompiledDataParentType(java.lang.String name, java.util.List<CompiledField> fields, java.util.List<CompiledDataType> subTypes, java.util.List<java.lang.String> typeParameters, java.util.List<java.lang.String> comments, boolean enumType) { this(name, fields, subTypes, typeParameters, comments, null, enumType, java.util.List.of()); }
+public java.lang.String toString()'''
+            )
+        }
+        if (compiledDataParentType.exists() && !compiledDataParentType.text.contains('if (!(o instanceof CompiledDataParentType that))')) {
+            compiledDataParentType.text = compiledDataParentType.text.replace(
+                    'public java.lang.String toString()',
+                    'public final boolean equals(java.lang.Object o) { if (!(o instanceof CompiledDataParentType that)) return false; return name.equals(that.name); }\n@Override public int hashCode() { return name.hashCode(); }\npublic java.lang.String toString()'
+            )
+        }
+
+        def compiledObjectType = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledObjectType.java')
+        if (compiledObjectType.exists() && !compiledObjectType.text.contains('public CompiledObjectType(java.lang.String name, java.lang.String backendClassName, java.util.List<java.lang.String> parents, Visibility visibility)')) {
+            compiledObjectType.text = compiledObjectType.text.replace(
+                    'implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {@Override',
+                    '''implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {
+public CompiledObjectType(java.lang.String name, java.lang.String backendClassName, java.util.List<java.lang.String> parents, Visibility visibility) { this(name, backendClassName, parents, visibility, java.util.List.of(), CompiledObjectKind.CLASS, java.util.List.of()); }
+public CompiledObjectType(java.lang.String name, java.lang.String backendClassName, java.util.List<java.lang.String> parents, Visibility visibility, java.util.List<CompiledAnnotation> annotations) { this(name, backendClassName, parents, visibility, annotations, CompiledObjectKind.CLASS, java.util.List.of()); }
+public CompiledObjectType(java.lang.String name, java.lang.String backendClassName, java.util.List<java.lang.String> parents, Visibility visibility, CompiledObjectKind kind, java.util.List<CompiledObjectMethod> methods) { this(name, backendClassName, parents, visibility, java.util.List.of(), kind, methods); }
+@Override'''
+            )
+        }
+
+        def compiledPrimitiveBackedType = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledPrimitiveBackedType.java')
+        if (compiledPrimitiveBackedType.exists() && !compiledPrimitiveBackedType.text.contains('public CompiledPrimitiveBackedType(java.lang.String name, PrimitiveLinkedType backingType, java.lang.String cfunType, java.util.List<java.lang.String> comments, Visibility visibility)')) {
+            compiledPrimitiveBackedType.text = compiledPrimitiveBackedType.text.replace(
+                    'implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {@Override',
+                    '''implements CompiledType, GenericDataType, dev.capylang.CapybaraDataValue {
+public CompiledPrimitiveBackedType(java.lang.String name, PrimitiveLinkedType backingType, java.lang.String cfunType, java.util.List<java.lang.String> comments, Visibility visibility) { this(name, backingType, cfunType, comments, visibility, java.util.List.of()); }
+public CompiledPrimitiveBackedType(java.lang.String name, PrimitiveLinkedType backingType, java.util.List<java.lang.String> comments, Visibility visibility) { this(name, backingType, name, comments, visibility, java.util.List.of()); }
+@Override'''
+            )
+        }
+        if (compiledPrimitiveBackedType.exists() && !compiledPrimitiveBackedType.text.contains('if (!(o instanceof CompiledPrimitiveBackedType that))')) {
+            compiledPrimitiveBackedType.text = compiledPrimitiveBackedType.text.replace(
+                    '@Override public java.lang.Object capybaraDataValueInfo()',
+                    '@Override public final boolean equals(java.lang.Object o) { if (!(o instanceof CompiledPrimitiveBackedType that)) return false; return name.equals(that.name); }\n@Override public int hashCode() { return name.hashCode(); }\n@Override public java.lang.Object capybaraDataValueInfo()'
+            )
+        }
+
+        compiledFunction = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledFunction.java')
+        if (compiledFunction.exists() && !compiledFunction.text.contains('public CompiledFunction(java.lang.String name, CompiledType returnType, java.util.List<CompiledFunctionParameter> parameters, dev.capylang.compiler.expression.CompiledExpression expression, java.util.List<java.lang.String> comments)')) {
+            compiledFunction.text = compiledFunction.text.replace(
+                    'implements dev.capylang.CapybaraDataValue {@Override',
+                    '''implements dev.capylang.CapybaraDataValue {
+public CompiledFunction(java.lang.String name, CompiledType returnType, java.util.List<CompiledFunctionParameter> parameters, dev.capylang.compiler.expression.CompiledExpression expression, java.util.List<java.lang.String> comments, Visibility visibility, boolean programMain, boolean recursive, boolean tailRecursive) { this(name, returnType, parameters, expression, comments, visibility, programMain, recursive, tailRecursive, java.util.List.of()); }
+public CompiledFunction(java.lang.String name, CompiledType returnType, java.util.List<CompiledFunctionParameter> parameters, dev.capylang.compiler.expression.CompiledExpression expression, java.util.List<java.lang.String> comments) { this(name, returnType, parameters, expression, comments, null, false, false, false, java.util.List.of()); }
+public CompiledFunction(java.lang.String name, CompiledType returnType, java.util.List<CompiledFunctionParameter> parameters, dev.capylang.compiler.expression.CompiledExpression expression, java.util.List<java.lang.String> comments, boolean programMain) { this(name, returnType, parameters, expression, comments, null, programMain, false, false, java.util.List.of()); }
+@Override'''
+            )
+        }
+        if (compiledFunction.exists() && !compiledFunction.text.contains('if (!(o instanceof CompiledFunction that))')) {
+            compiledFunction.text = compiledFunction.text.replace(
+                    '@Override public java.lang.Object capybaraDataValueInfo()',
+                    '@Override public final boolean equals(java.lang.Object o) { if (!(o instanceof CompiledFunction that)) return false; return name.equals(that.name) && parameters.equals(that.parameters); }\n@Override public int hashCode() { return name.hashCode(); }\n@Override public java.lang.Object capybaraDataValueInfo()'
+            )
+        }
+
+        def compiledModule = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledModule.java')
+        if (compiledModule.exists() && !compiledModule.text.contains('private static java.util.List<CompiledFunction> sortedFunctions')) {
+            compiledModule.text = compiledModule.text.replace(
+                    'implements dev.capylang.CapybaraDataValue {@Override',
+                    '''implements dev.capylang.CapybaraDataValue {
+public CompiledModule(java.lang.String name, java.lang.String path, java.util.Map<java.lang.String, GenericDataType> types, java.util.Collection<CompiledFunction> functions, java.util.Collection<StaticImport> staticImports) { this(name, path, types, java.util.Map.of(), sortedFunctions(functions), java.util.Map.of(), java.util.Map.of(), sortedStaticImports(staticImports)); }
+public CompiledModule(java.lang.String name, java.lang.String path, java.util.Map<java.lang.String, GenericDataType> types, java.util.Collection<CompiledFunction> functions, java.util.Map<java.lang.String, dev.capylang.compiler.parser.ParserAst.DeriverDeclaration> derivers, java.util.Collection<StaticImport> staticImports) { this(name, path, types, java.util.Map.of(), sortedFunctions(functions), new java.util.TreeMap<>(derivers), java.util.Map.of(), sortedStaticImports(staticImports)); }
+public CompiledModule(java.lang.String name, java.lang.String path, java.util.Map<java.lang.String, GenericDataType> types, java.util.Collection<CompiledFunction> functions, java.util.Map<java.lang.String, dev.capylang.compiler.parser.ParserAst.DeriverDeclaration> derivers, java.util.Map<java.lang.String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes, java.util.Collection<StaticImport> staticImports) { this(name, path, types, visiblePrimitiveBackedTypes, sortedFunctions(functions), new java.util.TreeMap<>(derivers), java.util.Map.of(), sortedStaticImports(staticImports)); }
+public CompiledModule(java.lang.String name, java.lang.String path, java.util.Map<java.lang.String, GenericDataType> types, java.util.Collection<CompiledFunction> functions, java.util.Map<java.lang.String, dev.capylang.compiler.parser.ParserAst.DeriverDeclaration> derivers, java.util.Map<java.lang.String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes, java.util.Map<java.lang.String, dev.capylang.compiler.parser.ParserAst.AnnotationDeclaration> annotations, java.util.Collection<StaticImport> staticImports) { this(name, path, new java.util.TreeMap<>(types), new java.util.TreeMap<>(visiblePrimitiveBackedTypes), sortedFunctions(functions), new java.util.TreeMap<>(derivers), new java.util.TreeMap<>(annotations), sortedStaticImports(staticImports)); }
+private static java.util.List<CompiledFunction> sortedFunctions(java.util.Collection<CompiledFunction> functions) { return functions.stream().sorted(java.util.Comparator.comparing(CompiledIrModule::compiledFunctionCompareKey)).toList(); }
+private static java.util.List<StaticImport> sortedStaticImports(java.util.Collection<StaticImport> staticImports) { return staticImports.stream().sorted(java.util.Comparator.comparing(StaticImport::className).thenComparing(StaticImport::memberName).thenComparing(StaticImport::enumValue)).toList(); }
+@Override'''
+            )
+        }
+        if (compiledModule.exists() && !compiledModule.text.contains('if (!(o instanceof CompiledModule that))')) {
+            compiledModule.text = compiledModule.text.replace(
+                    '@Override public java.lang.Object capybaraDataValueInfo()',
+                    '@Override public final boolean equals(java.lang.Object o) { if (!(o instanceof CompiledModule that)) return false; return name.equals(that.name) && path.equals(that.path); }\n@Override public int hashCode() { return java.util.Objects.hash(name, path); }\n@Override public java.lang.Object capybaraDataValueInfo()'
+            )
+        }
+
+        compiledProgram = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledProgram.java')
+        if (compiledProgram.exists() && !compiledProgram.text.contains('private static java.util.List<CompiledModule> sortedModules')) {
+            compiledProgram.text = compiledProgram.text.replace(
+                    'implements dev.capylang.CapybaraDataValue {@Override',
+                    '''implements dev.capylang.CapybaraDataValue {
+public CompiledProgram(java.util.Collection<CompiledModule> modules) { this(sortedModules(modules), java.util.List.of(), new NativeProviderManifest(java.util.List.of(), null), new NativeProviderCatalog(java.util.List.of(), java.util.List.of())); }
+public CompiledProgram(java.util.Collection<CompiledModule> modules, java.util.Collection<dev.capylang.compiler.parser.ObjectOrientedModule> objectOrientedModules) { this(sortedModules(modules), java.util.List.copyOf(objectOrientedModules), new NativeProviderManifest(java.util.List.of(), null), new NativeProviderCatalog(java.util.List.of(), java.util.List.of())); }
+public CompiledProgram(java.util.Collection<CompiledModule> modules, java.util.Collection<dev.capylang.compiler.parser.ObjectOrientedModule> objectOrientedModules, NativeProviderManifest nativeProviders) { this(sortedModules(modules), java.util.List.copyOf(objectOrientedModules), nativeProviders, new NativeProviderCatalog(java.util.List.of(), java.util.List.of())); }
+public CompiledProgram(java.util.Collection<CompiledModule> modules, java.util.Collection<dev.capylang.compiler.parser.ObjectOrientedModule> objectOrientedModules, NativeProviderManifest nativeProviders, NativeProviderCatalog nativeProviderCatalog) { this(sortedModules(modules), java.util.List.copyOf(objectOrientedModules), nativeProviders, nativeProviderCatalog); }
+private static java.util.List<CompiledModule> sortedModules(java.util.Collection<CompiledModule> modules) { return modules.stream().sorted(java.util.Comparator.comparing(CompiledIrModule::compiledModuleCompareKey)).toList(); }
+@Override'''
+            )
+        }
+    }
+}
+
 check {
     dependsOn tasks.named('integrationTest')
 }

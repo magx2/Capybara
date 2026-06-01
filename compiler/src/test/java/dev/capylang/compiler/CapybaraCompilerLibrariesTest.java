@@ -8,12 +8,13 @@ import dev.capylang.compiler.expression.CompiledFieldAccess;
 import dev.capylang.compiler.expression.CompiledLetExpression;
 import dev.capylang.compiler.expression.CompiledMatchExpression;
 import dev.capylang.compiler.expression.CompiledNewData;
+import dev.capylang.compiler.expression.CompiledReflectionField;
 import dev.capylang.compiler.expression.CompiledReflectionValue;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.SortedSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -45,7 +46,7 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries);
 
         assertThat(compiled.modules()).extracting(CompiledModule::name).containsExactly("Consumer");
-        assertThat(compiled.modules().first().functions())
+        assertThat(compiled.modules().getFirst().functions())
                 .extracting(CompiledFunction::name)
                 .containsExactlyInAnyOrder("consume", "unwrap");
     }
@@ -122,7 +123,7 @@ class CapybaraCompilerLibrariesTest {
                         info.name
                 }
                 """, SourceKind.FUNCTIONAL)), reflectionLibraries).modules();
-        var libraries = new java.util.TreeSet<CompiledModule>();
+        var libraries = new java.util.TreeSet<CompiledModule>(java.util.Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
         libraries.addAll(reflectionLibraries);
         libraries.addAll(serdeLibraries);
 
@@ -134,7 +135,7 @@ class CapybaraCompilerLibrariesTest {
                 fun render(): String = User { name: "Ada" }.type_name()
                 """, SourceKind.FUNCTIONAL)), libraries);
 
-        assertThat(compiled.modules().first().functions())
+        assertThat(compiled.modules().getFirst().functions())
                 .extracting(CompiledFunction::name)
                 .contains("__method__User__type_name", "render");
         assertThat(compiledFunction(compiled, "Consumer", "__method__User__type_name").expression())
@@ -184,28 +185,28 @@ class CapybaraCompilerLibrariesTest {
                 fun render_named(named: Named): String = named.show()
                 """, SourceKind.FUNCTIONAL)), libraries);
 
-        assertThat(compiled.modules().first().functions())
+        assertThat(compiled.modules().getFirst().functions())
                 .extracting(CompiledFunction::name)
                 .contains("__method__User__show", "__method__User__bigger_than",
                         "__method__User__matches_age_metadata", "__method__Named__show",
                         "render", "older_than", "mixed_parameters", "render_named");
         assertThat(compiledFunction(compiled, "Consumer", "__method__User__show").returnType())
-                .isEqualTo(PrimitiveLinkedType.STRING);
+                .isEqualTo(CompiledIrModule.STRING);
         assertThat(compiledFunction(compiled, "Consumer", "__method__Named__show").returnType())
-                .isEqualTo(PrimitiveLinkedType.STRING);
+                .isEqualTo(CompiledIrModule.STRING);
         var biggerThan = compiledFunction(compiled, "Consumer", "__method__User__bigger_than");
-        assertThat(biggerThan.parameters()).extracting(CompiledFunction.CompiledFunctionParameter::name)
+        assertThat(biggerThan.parameters()).extracting(CompiledFunctionParameter::name)
                 .containsExactly("this", "i");
-        assertThat(biggerThan.parameters()).extracting(CompiledFunction.CompiledFunctionParameter::type)
+        assertThat(biggerThan.parameters()).extracting(CompiledFunctionParameter::type)
                 .containsExactly(compiledFunction(compiled, "Consumer", "__method__User__show").parameters().getFirst().type(),
-                        PrimitiveLinkedType.INT);
-        assertThat(biggerThan.returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+                        CompiledIrModule.INT);
+        assertThat(biggerThan.returnType()).isEqualTo(CompiledIrModule.BOOL);
         var mixedParameters = compiledFunction(compiled, "Consumer", "__method__User__matches_age_metadata");
-        assertThat(mixedParameters.parameters()).extracting(CompiledFunction.CompiledFunctionParameter::name)
+        assertThat(mixedParameters.parameters()).extracting(CompiledFunctionParameter::name)
                 .containsExactly("this", "extra", "limit");
         assertThat(mixedParameters.parameters()).extracting(parameter -> parameter.type().name())
                 .containsExactly("User", "INT", "AgeLimit");
-        assertThat(mixedParameters.returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+        assertThat(mixedParameters.returnType()).isEqualTo(CompiledIrModule.BOOL);
     }
 
     @Test
@@ -229,13 +230,13 @@ class CapybaraCompilerLibrariesTest {
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
                     assertThat(call.name()).isEqualTo("__method__Box__get");
                     assertThat(call.arguments()).hasSize(2);
-                    assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.STRING);
+                    assertThat(call.returnType()).isEqualTo(CompiledIrModule.STRING);
                 });
         assertThat(compiledFunction(compiled, "Consumer", "read_bag").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
                     assertThat(call.name()).isEqualTo("__method__Bag__get");
                     assertThat(call.arguments()).hasSize(2);
-                    assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.DOUBLE);
+                    assertThat(call.returnType()).isEqualTo(CompiledIrModule.DOUBLE);
                 });
         assertThat(compiledFunction(compiled, "Consumer", "read_cell").expression())
                 .isInstanceOfSatisfying(CompiledFieldAccess.class, fieldAccess -> {
@@ -300,7 +301,7 @@ class CapybaraCompilerLibrariesTest {
             assertThat(reflectionValue.name()).isEqualTo("User");
             assertThat(reflectionValue.packageName()).isEqualTo("Consumer");
             assertThat(reflectionValue.packagePath()).isEqualTo("foo/app/Consumer");
-            assertThat(reflectionValue.fields()).extracting(CompiledReflectionValue.Field::name)
+            assertThat(reflectionValue.fields()).extracting(CompiledReflectionField::name)
                     .containsExactly("name", "age");
             assertThat(reflectionValue.fields()).extracting(field -> field.type().name())
                     .containsExactly("STRING", "INT");
@@ -319,7 +320,7 @@ class CapybaraCompilerLibrariesTest {
         var function = compiledFunction(compiled, "Consumer", "reflect_data");
         assertThat(function.returnType().name()).endsWith("DataValueInfo");
         assertThat(function.expression()).isInstanceOfSatisfying(CompiledReflectionValue.class, reflectionValue -> {
-            assertThat(reflectionValue.target().type()).isEqualTo(PrimitiveLinkedType.DATA);
+            assertThat(reflectionValue.target().type()).isEqualTo(CompiledIrModule.DATA);
             assertThat(reflectionValue.fields()).isEmpty();
         });
     }
@@ -355,7 +356,7 @@ class CapybaraCompilerLibrariesTest {
 
         assertThat(compiledFunction(compiled, "Consumer", "reflect_string").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
-                        assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.STRING))
+                        assertThat(call.returnType()).isEqualTo(CompiledIrModule.STRING))
                 .isNotInstanceOf(CompiledReflectionValue.class);
         assertThat(compiledFunction(compiled, "Consumer", "reflect_user").expression())
                 .isInstanceOf(CompiledReflectionValue.class);
@@ -413,7 +414,7 @@ class CapybaraCompilerLibrariesTest {
                 data User { name: String } derive Shadow
                 """, SourceKind.FUNCTIONAL)), new java.util.TreeSet<>());
 
-        assertThat(compiled.modules().first().functions())
+        assertThat(compiled.modules().getFirst().functions())
                 .extracting(CompiledFunction::name)
                 .contains("__method__User__shadow_let", "__method__User__shadow_lambda",
                         "__method__User__shadow_reduce", "__method__User__shadow_match");
@@ -838,7 +839,7 @@ class CapybaraCompilerLibrariesTest {
                         """, SourceKind.FUNCTIONAL)
         ), new java.util.TreeSet<>());
 
-        assertThat(compiledFunction(compiled, "Consumer", "prefer_result").returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+        assertThat(compiledFunction(compiled, "Consumer", "prefer_result").returnType()).isEqualTo(CompiledIrModule.BOOL);
     }
 
     @Test
@@ -1046,9 +1047,9 @@ class CapybaraCompilerLibrariesTest {
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "valid_date_assert_succeeds").returnType())
-                .isEqualTo(PrimitiveLinkedType.BOOL);
+                .isEqualTo(CompiledIrModule.BOOL);
         assertThat(compiledFunction(compiled, "Consumer", "invalid_date_assert_fails").returnType())
-                .isEqualTo(PrimitiveLinkedType.BOOL);
+                .isEqualTo(CompiledIrModule.BOOL);
     }
 
     @Test
@@ -1157,7 +1158,7 @@ class CapybaraCompilerLibrariesTest {
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "use_method").returnType())
-                .isEqualTo(PrimitiveLinkedType.BOOL);
+                .isEqualTo(CompiledIrModule.BOOL);
     }
 
     @Test
@@ -1179,7 +1180,7 @@ class CapybaraCompilerLibrariesTest {
         ), libraries);
 
         assertThat(compiledFunction(compiled, "Consumer", "use_method").returnType())
-                .isEqualTo(PrimitiveLinkedType.BOOL);
+                .isEqualTo(CompiledIrModule.BOOL);
     }
 
     @Test
@@ -1196,10 +1197,10 @@ class CapybaraCompilerLibrariesTest {
 
         assertThat(compiledFunction(compiled, "Consumer", "use_int").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
-                        assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.INT));
+                        assertThat(call.returnType()).isEqualTo(CompiledIrModule.INT));
         assertThat(compiledFunction(compiled, "Consumer", "use_long").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
-                        assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.LONG));
+                        assertThat(call.returnType()).isEqualTo(CompiledIrModule.LONG));
     }
 
     @Test
@@ -1240,8 +1241,11 @@ class CapybaraCompilerLibrariesTest {
                 .contains("Conflicting declaration: data `DateDuration` at /foo/app/Consumer.cfun:2:0");
     }
 
-    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
-        var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
+    private static CompiledProgram compileProgram(List<RawModule> rawModules, Collection<CompiledModule> libraries) {
+        var sortedLibraries = new java.util.TreeSet<CompiledModule>(
+                java.util.Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+        sortedLibraries.addAll(libraries);
+        var result = CapybaraCompiler.INSTANCE.compile(rawModules, sortedLibraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(CompilerErrors.from(error).toString());
         }

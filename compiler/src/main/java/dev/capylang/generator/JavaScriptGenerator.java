@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.*;
 import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledAnnotation;
 import dev.capylang.compiler.CompiledAnnotationValue;
@@ -93,6 +94,14 @@ public final class JavaScriptGenerator implements Generator {
             "switch", "static", "this", "throw", "try", "true", "typeof", "var", "void",
             "while", "with", "yield"
     );
+
+    private static boolean sameType(CompiledType actual, CompiledType expected) {
+        return expected.equals(actual);
+    }
+
+    private static boolean differentType(CompiledType actual, CompiledType expected) {
+        return !sameType(actual, expected);
+    }
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -575,13 +584,13 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String primitiveTypeName(PrimitiveLinkedType type) {
-            return switch (type) {
-                case BYTE -> "byte";
-                case INT -> "int";
-                case LONG -> "long";
-                case FLOAT -> "float";
-                case DOUBLE -> "double";
-                case STRING -> "String";
+            return switch (type.name()) {
+                case "BYTE" -> "byte";
+                case "INT" -> "int";
+                case "LONG" -> "long";
+                case "FLOAT" -> "float";
+                case "DOUBLE" -> "double";
+                case "STRING" -> "String";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
         }
@@ -668,13 +677,13 @@ public final class JavaScriptGenerator implements Generator {
 
         private String render(CompiledExpression expression, Scope scope) {
             return switch (expression) {
-                case CompiledBooleanValue booleanValue -> booleanValue.toString();
+                case CompiledBooleanValue booleanValue -> CompiledExpressionIrModule.compiledExpressionLiteralString(booleanValue);
                 case CompiledByteValue byteValue -> stripNumericSuffix(byteValue.byteValue());
                 case CompiledDoubleValue doubleValue -> stripNumericSuffix(doubleValue.doubleValue());
                 case CompiledFloatValue floatValue -> stripNumericSuffix(floatValue.floatValue());
                 case CompiledIntValue intValue -> stripNumericSuffix(intValue.intValue());
                 case CompiledLongValue longValue -> renderLongLiteral(longValue.longValue());
-                case CompiledStringValue stringValue -> stringValue.toString();
+                case CompiledStringValue stringValue -> CompiledExpressionIrModule.compiledExpressionLiteralString(stringValue);
                 case CompiledVariable variable -> scope.resolve(variable.name());
                 case CompiledNumericWidening numericWidening -> renderNumericWidening(numericWidening, scope);
                 case CompiledNewList newList -> renderNewList(newList, scope);
@@ -735,11 +744,13 @@ public final class JavaScriptGenerator implements Generator {
 
         private String renderNumericWidening(CompiledNumericWidening numericWidening, Scope scope) {
             var expression = render(numericWidening.expression(), scope);
-            if (numericWidening.type() == PrimitiveLinkedType.LONG && numericWidening.expression().type() != PrimitiveLinkedType.LONG) {
+            if (sameType(numericWidening.type(), CompiledIrModule.LONG)
+                && differentType(numericWidening.expression().type(), CompiledIrModule.LONG)) {
                 return "capy.toLong(" + expression + ")";
             }
-            if ((numericWidening.type() == PrimitiveLinkedType.FLOAT || numericWidening.type() == PrimitiveLinkedType.DOUBLE)
-                && numericWidening.expression().type() == PrimitiveLinkedType.LONG) {
+            if ((sameType(numericWidening.type(), CompiledIrModule.FLOAT)
+                 || sameType(numericWidening.type(), CompiledIrModule.DOUBLE))
+                && sameType(numericWidening.expression().type(), CompiledIrModule.LONG)) {
                 return "Number(" + expression + ")";
             }
             return expression;
@@ -855,7 +866,7 @@ public final class JavaScriptGenerator implements Generator {
             if ("unsafe_run".equals(methodName)) {
                 return "(" + receiver + ").unsafe_run()";
             }
-            if (receiverType == PrimitiveLinkedType.ENUM && tailArgs.isEmpty()) {
+            if (sameType(receiverType, CompiledIrModule.ENUM) && tailArgs.isEmpty()) {
                 if ("name".equals(methodName)) {
                     return "(" + receiver + ").name";
                 }
@@ -877,26 +888,26 @@ public final class JavaScriptGenerator implements Generator {
                 return moduleVar("capy.lang.String") + ".getChar(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
-                && receiverType == PrimitiveLinkedType.STRING
+                && sameType(receiverType, CompiledIrModule.STRING)
                 && tailArgs.size() == 1) {
                 return "String(" + receiver + ").startsWith(" + tailArgs.getFirst() + ")";
             }
             if (("end_with".equals(methodName) || "endWith".equals(methodName))
-                && receiverType == PrimitiveLinkedType.STRING
+                && sameType(receiverType, CompiledIrModule.STRING)
                 && tailArgs.size() == 1) {
                 return "String(" + receiver + ").endsWith(" + tailArgs.getFirst() + ")";
             }
             if ("size".equals(methodName) && isCollectionType(receiverType)) {
-                if (receiverType instanceof CollectionLinkedType.CompiledDict
-                    || receiverType instanceof CollectionLinkedType.CompiledSet) {
+                if (receiverType instanceof CompiledDict
+                    || receiverType instanceof CompiledSet) {
                     return "(" + receiver + ").size";
                 }
                 return "(" + receiver + ").length";
             }
-            if ("to_list".equals(methodName) && receiverType instanceof CollectionLinkedType.CompiledSet) {
+            if ("to_list".equals(methodName) && receiverType instanceof CompiledSet) {
                 return "Array.from(" + receiver + ")";
             }
-            if ("entries".equals(methodName) && receiverType instanceof CollectionLinkedType.CompiledDict) {
+            if ("entries".equals(methodName) && receiverType instanceof CompiledDict) {
                 return "Array.from((" + receiver + ").entries())";
             }
             if ("replace".equals(methodName) && tailArgs.size() == 2) {
@@ -906,7 +917,7 @@ public final class JavaScriptGenerator implements Generator {
                 && renderNativeCollectionMethod(functionCall, args, methodName).isPresent()) {
                 return renderNativeCollectionMethod(functionCall, args, methodName).orElseThrow();
             }
-            if (receiverType instanceof CollectionLinkedType.CompiledSet) {
+            if (receiverType instanceof CompiledSet) {
                 var nativeSetMethod = renderNativeSetMethod(methodName, receiver, tailArgs);
                 if (nativeSetMethod.isPresent()) {
                     return nativeSetMethod.orElseThrow();
@@ -1021,23 +1032,23 @@ public final class JavaScriptGenerator implements Generator {
                     if (receiverType instanceof CompiledTupleType) {
                         return Optional.of("capy.rawIndex(" + receiver + ", " + args.get(1) + ")");
                     }
-                    if (receiverType instanceof CollectionLinkedType.CompiledList
-                        || receiverType instanceof CollectionLinkedType.CompiledDict
-                        || receiverType == PrimitiveLinkedType.STRING) {
+                    if (receiverType instanceof CompiledList
+                        || receiverType instanceof CompiledDict
+                        || sameType(receiverType, CompiledIrModule.STRING)) {
                         return Optional.of("capy.getIndex(" + receiver + ", " + args.get(1) + ")");
                     }
                     return Optional.empty();
                 }
                 if (args.size() == 3) {
-                    if (receiverType instanceof CollectionLinkedType.CompiledList
-                        || receiverType == PrimitiveLinkedType.STRING) {
+                    if (receiverType instanceof CompiledList
+                        || sameType(receiverType, CompiledIrModule.STRING)) {
                         return Optional.of("capy.slice(" + receiver + ", " + args.get(1) + ", " + args.get(2) + ")");
                     }
                     return Optional.empty();
                 }
             }
             if (("_contains_native".equals(methodName) || "contains_native".equals(methodName))
-                && receiverType instanceof CollectionLinkedType.CompiledSet
+                && receiverType instanceof CompiledSet
                 && args.size() == 2) {
                 return Optional.of("capy.contains(" + receiver + ", " + args.get(1) + ")");
             }
@@ -1060,53 +1071,53 @@ public final class JavaScriptGenerator implements Generator {
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
                 case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
-                case MINUS -> expression.type() == PrimitiveLinkedType.STRING
+                case MINUS -> sameType(expression.type(), CompiledIrModule.STRING)
                         ? "(" + renderStringConcat(left, right) + ")"
                         : "(" + renderCollectionMinus(expression, left, right) + ")";
                 case MUL -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.longMul(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.intMul(" + left + ", " + right + ")";
                     }
                     yield "((" + left + ") * (" + right + "))";
                 }
                 case DIV -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.intDiv(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.longDiv(" + left + ", " + right + ")";
                     }
                     yield "((" + left + ") / (" + right + "))";
                 }
                 case MOD -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.longMod(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.intMod(" + left + ", " + right + ")";
                     }
                     yield "((" + left + ") % (" + right + "))";
                 }
                 case POWER -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.longPow(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.intPow(" + left + ", " + right + ")";
                     }
                     yield "Math.pow(" + left + ", " + right + ")";
@@ -1131,9 +1142,9 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {
-            var equality = (leftType == PrimitiveLinkedType.BOOL && rightType != PrimitiveLinkedType.BOOL)
+            var equality = (sameType(leftType, CompiledIrModule.BOOL) && differentType(rightType, CompiledIrModule.BOOL))
                     ? "(" + left + " === capy.truthy(" + right + "))"
-                    : (rightType == PrimitiveLinkedType.BOOL && leftType != PrimitiveLinkedType.BOOL)
+                    : (sameType(rightType, CompiledIrModule.BOOL) && differentType(leftType, CompiledIrModule.BOOL))
                             ? "(capy.truthy(" + left + ") === " + right + ")"
                             : "capy.equals(" + left + ", " + right + ")";
             return negated ? "(!" + equality + ")" : equality;
@@ -1147,7 +1158,7 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderLambda(CompiledLambdaExpression lambdaExpression, Scope scope) {
-            if (lambdaExpression.functionType().argumentType() == PrimitiveLinkedType.NOTHING) {
+            if (sameType(lambdaExpression.functionType().argumentType(), CompiledIrModule.NOTHING)) {
                 return "(() => (" + render(lambdaExpression.expression(), scope) + "))";
             }
             var tupleArgs = parseTuplePipeArguments(lambdaExpression.argumentName());
@@ -1230,21 +1241,21 @@ public final class JavaScriptGenerator implements Generator {
             return code.toString();
         }
 
-        private RenderedPattern renderPattern(String value, CompiledMatchExpression.Pattern pattern, Scope scope) {
+        private RenderedPattern renderPattern(String value, CompiledPattern pattern, Scope scope) {
             return switch (pattern) {
-                case CompiledMatchExpression.IntPattern intPattern ->
+                case CompiledIntPattern intPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + stripNumericSuffix(intPattern.value()) + ")", List.of(), scope);
-                case CompiledMatchExpression.LongPattern longPattern ->
+                case CompiledLongPattern longPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + renderLongLiteral(longPattern.value()) + ")", List.of(), scope);
-                case CompiledMatchExpression.FloatPattern floatPattern ->
+                case CompiledFloatPattern floatPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + stripNumericSuffix(floatPattern.value()) + ")", List.of(), scope);
-                case CompiledMatchExpression.StringPattern stringPattern ->
+                case CompiledStringPattern stringPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + stringPattern.value() + ")", List.of(), scope);
-                case CompiledMatchExpression.BoolPattern boolPattern ->
+                case CompiledBoolPattern boolPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + boolPattern.value() + ")", List.of(), scope);
-                case CompiledMatchExpression.WildcardPattern ignored ->
+                case CompiledWildcardPattern ignored ->
                         new RenderedPattern("true", List.of(), scope);
-                case CompiledMatchExpression.VariablePattern variablePattern -> {
+                case CompiledVariablePattern variablePattern -> {
                     if (isTypeLikeIdentifier(variablePattern.name())) {
                         yield new RenderedPattern(
                                 "capy.isType(" + value + ", " + jsString(typeNameReference(variablePattern.name())) + ")",
@@ -1254,8 +1265,8 @@ public final class JavaScriptGenerator implements Generator {
                     }
                     yield bindPatternValue(value, variablePattern.name(), scope);
                 }
-                case CompiledMatchExpression.WildcardBindingPattern wildcardBindingPattern -> bindPatternValue(value, wildcardBindingPattern.name(), scope);
-                case CompiledMatchExpression.TypedPattern typedPattern -> {
+                case CompiledWildcardBindingPattern wildcardBindingPattern -> bindPatternValue(value, wildcardBindingPattern.name(), scope);
+                case CompiledTypedPattern typedPattern -> {
                     var bound = bindPatternValue(value, typedPattern.name(), scope);
                     yield new RenderedPattern(
                             "capy.isType(" + value + ", " + jsString(typeNameReference(typedPattern.type().name())) + ")",
@@ -1263,12 +1274,12 @@ public final class JavaScriptGenerator implements Generator {
                             bound.scope()
                     );
                 }
-                case CompiledMatchExpression.ConstructorPattern constructorPattern ->
+                case CompiledConstructorPattern constructorPattern ->
                         renderConstructorPattern(value, constructorPattern, scope);
             };
         }
 
-        private RenderedPattern renderConstructorPattern(String value, CompiledMatchExpression.ConstructorPattern pattern, Scope scope) {
+        private RenderedPattern renderConstructorPattern(String value, CompiledConstructorPattern pattern, Scope scope) {
             var constructorName = typeNameReference(pattern.constructorName());
             var fields = programContext.fieldsForType(constructorName);
             var condition = new StringBuilder("capy.isType(")
@@ -1397,50 +1408,50 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderBoolean(CompiledExpression expression, Scope scope) {
-            if (expression.type() == PrimitiveLinkedType.BOOL) {
+            if (sameType(expression.type(), CompiledIrModule.BOOL)) {
                 return render(expression, scope);
             }
             return "capy.truthy(" + render(expression, scope) + ")";
         }
 
         private String renderSize(CompiledType type, String receiver) {
-            if (type instanceof CollectionLinkedType.CompiledSet) {
+            if (type instanceof CompiledSet) {
                 return "capy.size(" + receiver + ")";
             }
-            if (type instanceof CollectionLinkedType.CompiledDict) {
+            if (type instanceof CompiledDict) {
                 return "(" + receiver + ").size";
             }
             return "(" + receiver + ").length";
         }
 
         private boolean isCollectionType(CompiledType type) {
-            return type instanceof CollectionLinkedType.CompiledList
-                   || type instanceof CollectionLinkedType.CompiledSet
-                   || type instanceof CollectionLinkedType.CompiledDict
-                   || type == PrimitiveLinkedType.STRING;
+            return type instanceof CompiledList
+                   || type instanceof CompiledSet
+                   || type instanceof CompiledDict
+                   || sameType(type, CompiledIrModule.STRING);
         }
 
         private boolean isStringLike(CompiledType type) {
-            return type == PrimitiveLinkedType.STRING
+            return sameType(type, CompiledIrModule.STRING)
                    || (type instanceof CompiledPrimitiveBackedType primitiveBackedType
-                       && primitiveBackedType.backingType() == PrimitiveLinkedType.STRING);
+                       && sameType(primitiveBackedType.backingType(), CompiledIrModule.STRING));
         }
 
         private boolean isNativePlusType(CompiledType type) {
             return isCollectionType(type)
-                   || type == PrimitiveLinkedType.STRING
-                   || type == PrimitiveLinkedType.INT
-                   || type == PrimitiveLinkedType.LONG
-                   || type == PrimitiveLinkedType.FLOAT
-                   || type == PrimitiveLinkedType.DOUBLE;
+                   || sameType(type, CompiledIrModule.STRING)
+                   || sameType(type, CompiledIrModule.INT)
+                   || sameType(type, CompiledIrModule.LONG)
+                   || sameType(type, CompiledIrModule.FLOAT)
+                   || sameType(type, CompiledIrModule.DOUBLE);
         }
 
         private boolean isNativeMinusType(CompiledType type) {
             return isCollectionType(type)
-                   || type == PrimitiveLinkedType.INT
-                   || type == PrimitiveLinkedType.LONG
-                   || type == PrimitiveLinkedType.FLOAT
-                   || type == PrimitiveLinkedType.DOUBLE;
+                   || sameType(type, CompiledIrModule.INT)
+                   || sameType(type, CompiledIrModule.LONG)
+                   || sameType(type, CompiledIrModule.FLOAT)
+                   || sameType(type, CompiledIrModule.DOUBLE);
         }
 
         private boolean isPrimitiveConversion(String methodName) {
@@ -1448,13 +1459,13 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderContains(CompiledType leftType, String left, String right) {
-            if (leftType instanceof CollectionLinkedType.CompiledDict) {
+            if (leftType instanceof CompiledDict) {
                 return "(" + left + ").has(" + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledSet) {
+            if (leftType instanceof CompiledSet) {
                 return "capy.contains(" + left + ", " + right + ")";
             }
-            if (leftType == PrimitiveLinkedType.STRING) {
+            if (sameType(leftType, CompiledIrModule.STRING)) {
                 return "String(" + left + ").includes(" + right + ")";
             }
             return "capy.contains(" + left + ", " + right + ")";
@@ -1469,28 +1480,28 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderCollectionPlus(CompiledType leftType, String left, CompiledType rightType, String right, CompiledType resultType) {
-            if (leftType instanceof CollectionLinkedType.CompiledList) {
-                return rightType instanceof CollectionLinkedType.CompiledList
+            if (leftType instanceof CompiledList) {
+                return rightType instanceof CompiledList
                         ? "capy.listPlus(" + left + ", " + right + ")"
                         : "capy.listAppend(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledSet) {
-                return rightType instanceof CollectionLinkedType.CompiledSet
+            if (leftType instanceof CompiledSet) {
+                return rightType instanceof CompiledSet
                         ? "capy.setPlus(" + left + ", " + right + ")"
                         : "capy.setAppend(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledDict) {
+            if (leftType instanceof CompiledDict) {
                 return rightType instanceof CompiledTupleType
                         ? "capy.dictPut(" + left + ", " + right + ")"
                         : "capy.dictPlus(" + left + ", " + right + ")";
             }
-            if (leftType == PrimitiveLinkedType.STRING || rightType == PrimitiveLinkedType.STRING) {
+            if (sameType(leftType, CompiledIrModule.STRING) || sameType(rightType, CompiledIrModule.STRING)) {
                 return "capy.toStringValue(" + left + ") + capy.toStringValue(" + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.LONG) {
+            if (sameType(resultType, CompiledIrModule.LONG)) {
                 return "capy.longAdd(" + left + ", " + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.INT) {
+            if (sameType(resultType, CompiledIrModule.INT)) {
                 return "capy.intAdd(" + left + ", " + right + ")";
             }
             return "((" + left + ") + (" + right + "))";
@@ -1505,25 +1516,25 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderCollectionMinus(CompiledType leftType, String left, CompiledType rightType, String right, CompiledType resultType) {
-            if (leftType instanceof CollectionLinkedType.CompiledList) {
-                return rightType instanceof CollectionLinkedType.CompiledList
+            if (leftType instanceof CompiledList) {
+                return rightType instanceof CompiledList
                         ? "capy.listMinus(" + left + ", " + right + ")"
                         : "capy.listRemove(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledSet) {
-                return rightType instanceof CollectionLinkedType.CompiledSet
+            if (leftType instanceof CompiledSet) {
+                return rightType instanceof CompiledSet
                         ? "capy.setMinus(" + left + ", " + right + ")"
                         : "capy.setRemove(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledDict) {
-                return rightType instanceof CollectionLinkedType.CompiledDict
+            if (leftType instanceof CompiledDict) {
+                return rightType instanceof CompiledDict
                         ? "capy.dictMinus(" + left + ", " + right + ")"
                         : "capy.dictRemove(" + left + ", " + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.LONG) {
+            if (sameType(resultType, CompiledIrModule.LONG)) {
                 return "capy.longSub(" + left + ", " + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.INT) {
+            if (sameType(resultType, CompiledIrModule.INT)) {
                 return "capy.intSub(" + left + ", " + right + ")";
             }
             return "((" + left + ") - (" + right + "))";
@@ -1533,7 +1544,7 @@ public final class JavaScriptGenerator implements Generator {
             return switch (methodName) {
                 case "to_int" -> returnType instanceof GenericDataType
                         ? "capy.parseIntResult(" + receiver + ")"
-                        : receiverType == PrimitiveLinkedType.LONG
+                        : sameType(receiverType, CompiledIrModule.LONG)
                                 ? "capy.longToInt(" + receiver + ")"
                                 : "capy.floatToInt(" + receiver + ")";
                 case "to_long" -> returnType instanceof GenericDataType
@@ -1771,7 +1782,7 @@ public final class JavaScriptGenerator implements Generator {
                 .collect(joining(", ", "[", "]"));
     }
 
-    private static String renderReflectionFieldDescriptors(List<CompiledReflectionValue.Field> fields, String fallbackPackagePath) {
+    private static String renderReflectionFieldDescriptors(List<CompiledReflectionField> fields, String fallbackPackagePath) {
         if (fields.isEmpty()) {
             return "[]";
         }
@@ -1790,13 +1801,13 @@ public final class JavaScriptGenerator implements Generator {
         return switch (type) {
             case PrimitiveLinkedType primitive ->
                     renderDataInfo(primitiveReflectionTypeName(primitive), renderEmptyReflectionPackage(), List.of());
-            case CollectionLinkedType.CompiledList listType ->
+            case CompiledList listType ->
                     "{ kind: 'list', name: 'List', pkg: " + renderEmptyReflectionPackage()
                     + ", element_type: " + renderReflectionTypeInfo(listType.elementType(), fallbackPackagePath) + " }";
-            case CollectionLinkedType.CompiledSet setType ->
+            case CompiledSet setType ->
                     "{ kind: 'set', name: 'Set', pkg: " + renderEmptyReflectionPackage()
                     + ", element_type: " + renderReflectionTypeInfo(setType.elementType(), fallbackPackagePath) + " }";
-            case CollectionLinkedType.CompiledDict dictType ->
+            case CompiledDict dictType ->
                     "{ kind: 'dict', name: 'Dict', pkg: " + renderEmptyReflectionPackage()
                     + ", value_type: " + renderReflectionTypeInfo(dictType.valueType(), fallbackPackagePath) + " }";
             case CompiledTupleType tupleType -> {
@@ -1862,7 +1873,7 @@ public final class JavaScriptGenerator implements Generator {
     }
 
     private static String primitiveReflectionTypeName(PrimitiveLinkedType type) {
-        return type == PrimitiveLinkedType.STRING
+        return sameType(type, CompiledIrModule.STRING)
                 ? "String"
                 : type.name().toLowerCase(java.util.Locale.ROOT);
     }
@@ -2513,13 +2524,13 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private static String primitiveTypeName(PrimitiveLinkedType type) {
-            return switch (type) {
-                case BYTE -> "byte";
-                case INT -> "int";
-                case LONG -> "long";
-                case FLOAT -> "float";
-                case DOUBLE -> "double";
-                case STRING -> "String";
+            return switch (type.name()) {
+                case "BYTE" -> "byte";
+                case "INT" -> "int";
+                case "LONG" -> "long";
+                case "FLOAT" -> "float";
+                case "DOUBLE" -> "double";
+                case "STRING" -> "String";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
         }
@@ -6882,7 +6893,7 @@ public final class JavaScriptGenerator implements Generator {
                                 ? normalizedBaseName
                                 : normalizedBaseName + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix)
                         : normalizedBaseName + overloadSuffix;
-                var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
+                var parameterTypes = function.parameters().stream().map(CompiledFunctionParameter::type).toList();
                 overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
                 if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
                     overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
@@ -6897,7 +6908,7 @@ public final class JavaScriptGenerator implements Generator {
         }
         for (var function : primitiveBackedMethods) {
             var emittedName = primitiveBackedMethodName(function);
-            var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
+            var parameterTypes = function.parameters().stream().map(CompiledFunctionParameter::type).toList();
             overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
             overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
         }

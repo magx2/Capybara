@@ -1,8 +1,9 @@
 package dev.capylang.generator.java;
 
 import java.util.List;
+import java.util.Set;
 
-public record JavaSealedInterface(JavaType name, List<String> comments, List<JavaInterfaceMethod> methods,
+public record JavaSealedInterface(JavaType name, Set<JavaType> extendInterfaces, List<String> comments, List<JavaInterfaceMethod> methods,
                                   List<String> permits,
                                   List<String> typeParameters,
                                   List<JavaMethod> defaultMethods) implements JavaInterface {

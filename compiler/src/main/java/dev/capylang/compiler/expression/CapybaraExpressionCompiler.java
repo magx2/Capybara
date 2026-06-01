@@ -1,5 +1,7 @@
 package dev.capylang.compiler.expression;
 
+import dev.capylang.compiler.CompiledIrModule;
+
 import capy.lang.Result;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.ResultOps;
@@ -7,9 +9,9 @@ import dev.capylang.compiler.Results;
 import dev.capylang.compiler.CompilerError;
 
 import dev.capylang.compiler.*;
-import dev.capylang.compiler.CollectionLinkedType.CompiledDict;
-import dev.capylang.compiler.CollectionLinkedType.CompiledList;
-import dev.capylang.compiler.CollectionLinkedType.CompiledSet;
+import dev.capylang.compiler.CompiledDict;
+import dev.capylang.compiler.CompiledList;
+import dev.capylang.compiler.CompiledSet;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.ParserAst;
 import dev.capylang.compiler.parser.ParserAst.*;
@@ -20,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 import static dev.capylang.compiler.CapybaraTypeCompiler.linkType;
-import static dev.capylang.compiler.PrimitiveLinkedType.*;
+import static dev.capylang.compiler.CompiledIrModule.*;
 import static dev.capylang.compiler.expression.CapybaraTypeFinder.findHigherType;
 
 public class CapybaraExpressionCompiler {
@@ -56,6 +58,14 @@ public class CapybaraExpressionCompiler {
 
     private static Optional<String> optionalString(Optional value) {
         return typedOptional(value);
+    }
+
+    private static boolean sameType(CompiledType actual, CompiledType expected) {
+        return expected.equals(actual);
+    }
+
+    private static boolean differentType(CompiledType actual, CompiledType expected) {
+        return !sameType(actual, expected);
     }
 
     @SuppressWarnings("unchecked")
@@ -161,7 +171,7 @@ public class CapybaraExpressionCompiler {
     ) {
     }
 
-    private final List<CompiledFunction.CompiledFunctionParameter> parameters;
+    private final List<CompiledFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
     private final LinkCache linkCache;
     private final List<FunctionSignature> functionSignatures;
@@ -173,7 +183,7 @@ public class CapybaraExpressionCompiler {
     private final Optional<String> currentConstructorTypeName;
 
     public CapybaraExpressionCompiler(
-            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            List<CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
@@ -184,7 +194,7 @@ public class CapybaraExpressionCompiler {
     }
 
     public CapybaraExpressionCompiler(
-            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            List<CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
@@ -196,7 +206,7 @@ public class CapybaraExpressionCompiler {
     }
 
     public CapybaraExpressionCompiler(
-            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            List<CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
@@ -210,7 +220,7 @@ public class CapybaraExpressionCompiler {
     }
 
     public CapybaraExpressionCompiler(
-            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            List<CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
@@ -225,7 +235,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private CapybaraExpressionCompiler(
-            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            List<CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
@@ -360,7 +370,7 @@ public class CapybaraExpressionCompiler {
 
     private Result<CompiledExpression> linkSliceExpression(SliceExpression expression, Scope scope) {
         return ResultOps.flatMap(linkExpression(expression.source(), scope), source -> {
-                    if (source.type() == STRING) {
+                    if (sameType(source.type(), STRING)) {
                         return withPosition(
                                 Results.error("String slice syntax is not supported; use `string[from, to]` instead."),
                                 expression.position()
@@ -400,7 +410,7 @@ public class CapybaraExpressionCompiler {
                             index -> {
                                 var elementType = switch (source.type()) {
                                     case CompiledList linkedList -> Results.success(linkedList.elementType());
-                                    case PrimitiveLinkedType primitive when primitive == STRING -> Results.<CompiledType>success(STRING);
+                                    case PrimitiveLinkedType primitive when sameType(primitive, STRING) -> Results.<CompiledType>success(STRING);
                                     case CompiledTupleType tupleType -> tupleElementType(tupleType, index, expression.arguments().getFirst().position());
                                     default -> Results.<CompiledType>error("Unsupported index source `" + source.type() + "`");
                                 };
@@ -427,7 +437,7 @@ public class CapybaraExpressionCompiler {
 
     private boolean isBuiltinIndexSource(CompiledType sourceType) {
         return sourceType instanceof CompiledList
-               || sourceType == STRING
+               || sameType(sourceType, STRING)
                || sourceType instanceof CompiledTupleType;
     }
 
@@ -490,7 +500,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private String primitiveTypeName(PrimitiveLinkedType type) {
-        return type == STRING ? "String" : type.name().toLowerCase(Locale.ROOT);
+        return sameType(type, STRING) ? "String" : type.name().toLowerCase(Locale.ROOT);
     }
 
     private Result<CompiledExpression> linkTupleExpression(TupleExpression expression, Scope scope) {
@@ -517,7 +527,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkBooleanValue(BooleanValue booleanValue, Scope scope) {
-        return Results.success(booleanValue.value() ? CompiledBooleanValue.TRUE : CompiledBooleanValue.FALSE);
+        return Results.success(CompiledExpressionIrModule.compiledBooleanValue(booleanValue.value()));
     }
 
     private Result<CompiledExpression> linkFieldAccess(FieldAccess fieldAccess, Scope scope) {
@@ -526,20 +536,20 @@ public class CapybaraExpressionCompiler {
             return enumValuesCall.get();
         }
         return ResultOps.flatMap(linkExpression(fieldAccess.source(), scope), source -> {
-                    if (source.type() == PrimitiveLinkedType.ENUM) {
+                    if (sameType(source.type(), CompiledIrModule.ENUM)) {
                         if ("order".equals(fieldAccess.field())) {
-                            return Results.success(new CompiledFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
+                            return Results.success(new CompiledFieldAccess(source, "ordinal", CompiledIrModule.INT));
                         }
                         if ("name".equals(fieldAccess.field())) {
-                            return Results.success(new CompiledFieldAccess(source, "name", PrimitiveLinkedType.STRING));
+                            return Results.success(new CompiledFieldAccess(source, "name", CompiledIrModule.STRING));
                         }
                     }
                     if (source.type() instanceof CompiledDataParentType linkedDataParentType && linkedDataParentType.enumType()) {
                         if ("order".equals(fieldAccess.field())) {
-                            return Results.success(new CompiledFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
+                            return Results.success(new CompiledFieldAccess(source, "ordinal", CompiledIrModule.INT));
                         }
                         if ("name".equals(fieldAccess.field())) {
-                            return Results.success(new CompiledFieldAccess(source, "name", PrimitiveLinkedType.STRING));
+                            return Results.success(new CompiledFieldAccess(source, "name", CompiledIrModule.STRING));
                         }
                     }
                     if (source.type() instanceof CompiledDataType linkedDataType && linkedDataType.singleton()) {
@@ -547,10 +557,10 @@ public class CapybaraExpressionCompiler {
                         if (enumParent != null) {
 
                             if ("order".equals(fieldAccess.field())) {
-                                return Results.success(new CompiledFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
+                                return Results.success(new CompiledFieldAccess(source, "ordinal", CompiledIrModule.INT));
                             }
                             if ("name".equals(fieldAccess.field())) {
-                                return Results.success(new CompiledFieldAccess(source, "name", PrimitiveLinkedType.STRING));
+                                return Results.success(new CompiledFieldAccess(source, "name", CompiledIrModule.STRING));
                             }
                         }
                     }
@@ -596,31 +606,31 @@ public class CapybaraExpressionCompiler {
         if (type instanceof CompiledDict dict) {
             return "Dict[" + displayType(dict.valueType()) + "]";
         }
-        if (type == STRING) {
+        if (sameType(type, STRING)) {
             return "String";
         }
-        if (type == BOOL) {
+        if (sameType(type, BOOL)) {
             return "bool";
         }
-        if (type == INT) {
+        if (sameType(type, INT)) {
             return "int";
         }
-        if (type == LONG) {
+        if (sameType(type, LONG)) {
             return "long";
         }
-        if (type == FLOAT) {
+        if (sameType(type, FLOAT)) {
             return "float";
         }
-        if (type == DOUBLE) {
+        if (sameType(type, DOUBLE)) {
             return "double";
         }
-        if (type == BYTE) {
+        if (sameType(type, BYTE)) {
             return "byte";
         }
         return type.name();
     }
 
-    private CompiledType resolveFieldType(GenericDataType dataType, CompiledDataType.CompiledField field) {
+    private CompiledType resolveFieldType(GenericDataType dataType, CompiledField field) {
         var actualTypeDescriptors = switch (dataType) {
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
@@ -1103,7 +1113,7 @@ public class CapybaraExpressionCompiler {
             return Optional.of(ResultOps.error(error));
         }
         var argument = ((Result.Success<CompiledExpression>) linkedArgument).value();
-        if (argument.type() != STRING && argument.type() != INT) {
+        if (differentType(argument.type(), STRING) && differentType(argument.type(), INT)) {
             return Optional.of(withPosition(
                     Results.error("Enum `parse` expects `String` or `int`, got `" + argument.type() + "`"),
                     functionCall.arguments().getFirst().position()
@@ -1341,7 +1351,7 @@ public class CapybaraExpressionCompiler {
     private boolean isReflectionValueIntrinsicSignature(FunctionSignature signature) {
         return REFLECTION_INTRINSIC_FUNCTION.equals(signature.name())
                && signature.parameterTypes().size() == 1
-               && signature.parameterTypes().getFirst() == PrimitiveLinkedType.DATA
+               && sameType(signature.parameterTypes().getFirst(), CompiledIrModule.DATA)
                && signature.returnType() instanceof CompiledDataType dataType
                && REFLECTION_DATA_VALUE_INFO.equals(simpleTypeNameStatic(dataType.name()))
                && isSignatureOwnedByIntrinsicReflectionModule(signature);
@@ -1408,7 +1418,7 @@ public class CapybaraExpressionCompiler {
             return ResultOps.error(error);
         }
         var target = ((Result.Success<CompiledExpression>) linkedTarget).value();
-        if (target.type() == PrimitiveLinkedType.DATA) {
+        if (sameType(target.type(), CompiledIrModule.DATA)) {
             return Results.success(new CompiledReflectionValue(
                     target,
                     "",
@@ -1433,7 +1443,7 @@ public class CapybaraExpressionCompiler {
                 packageName,
                 packagePath,
                 dataType.fields().stream()
-                        .map(field -> new CompiledReflectionValue.Field(
+                        .map(field -> new CompiledReflectionField(
                                 field.name(),
                                 field.type(),
                                 field.annotations()
@@ -1646,7 +1656,7 @@ public class CapybaraExpressionCompiler {
             );
             case CompiledAnnotationValue.BoolValue boolValue -> newData(
                     reflectionDataType(anyInfo, "AnnotationBool"),
-                    "value", boolValue.value() ? CompiledBooleanValue.TRUE : CompiledBooleanValue.FALSE
+                    "value", CompiledExpressionIrModule.compiledBooleanValue(boolValue.value())
             );
             case CompiledAnnotationValue.TypeNameValue typeNameValue -> newData(
                     reflectionDataType(anyInfo, "AnnotationTypeName"),
@@ -1872,9 +1882,9 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledExpression newData(CompiledDataType type, Object... nameValuePairs) {
-        var assignments = new ArrayList<CompiledNewData.FieldAssignment>();
+        var assignments = new ArrayList<CompiledNewDataFieldAssignment>();
         for (var i = 0; i < nameValuePairs.length; i += 2) {
-            assignments.add(new CompiledNewData.FieldAssignment(
+            assignments.add(new CompiledNewDataFieldAssignment(
                     (String) nameValuePairs[i],
                     (CompiledExpression) nameValuePairs[i + 1]
             ));
@@ -2030,7 +2040,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isEnumLikeType(CompiledType type) {
-        if (type == PrimitiveLinkedType.ENUM) {
+        if (sameType(type, CompiledIrModule.ENUM)) {
             return true;
         }
         if (type instanceof CompiledDataParentType parentType) {
@@ -2486,10 +2496,10 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isUnsafeCollectionElementNarrowing(CompiledType actualElement, CompiledType expectedElement) {
-        if (expectedElement == ANY || expectedElement == DATA) {
+        if (sameType(expectedElement, ANY) || sameType(expectedElement, DATA)) {
             return false;
         }
-        return actualElement == ANY || actualElement == DATA;
+        return sameType(actualElement, ANY) || sameType(actualElement, DATA);
     }
 
     private CompiledType resolveReturnType(FunctionSignature signature, List<CompiledExpression> arguments) {
@@ -2632,8 +2642,8 @@ public class CapybaraExpressionCompiler {
         var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
         var actualFieldsByName = actualData.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        CompiledDataType.CompiledField::name,
-                        CompiledDataType.CompiledField::type,
+                        CompiledField::name,
+                        CompiledField::type,
                         (first, second) -> first,
                         java.util.LinkedHashMap::new
                 ));
@@ -2671,8 +2681,8 @@ public class CapybaraExpressionCompiler {
         var subtypeSubstitutions = new java.util.LinkedHashMap<String, CompiledType>();
         var actualFieldsByName = actualData.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        CompiledDataType.CompiledField::name,
-                        CompiledDataType.CompiledField::type,
+                        CompiledField::name,
+                        CompiledField::type,
                         (first, second) -> first,
                         java.util.LinkedHashMap::new
                 ));
@@ -2777,21 +2787,21 @@ public class CapybaraExpressionCompiler {
         }
         var args = value.value();
         if (supportsToInt) {
-            if (args.get(0).type() == LONG) {
+            if (sameType(args.get(0).type(), LONG)) {
                 return Optional.of(Results.success(new CompiledFunctionCall(
                         METHOD_DECL_PREFIX + "Long__to_int",
                         args,
                         INT
                 )));
             }
-            if (args.get(0).type() == FLOAT) {
+            if (sameType(args.get(0).type(), FLOAT)) {
                 return Optional.of(Results.success(new CompiledFunctionCall(
                         METHOD_DECL_PREFIX + "Float__to_int",
                         args,
                         INT
                 )));
             }
-            if (args.get(0).type() == DOUBLE) {
+            if (sameType(args.get(0).type(), DOUBLE)) {
                 return Optional.of(Results.success(new CompiledFunctionCall(
                         METHOD_DECL_PREFIX + "Double__to_int",
                         args,
@@ -2800,14 +2810,14 @@ public class CapybaraExpressionCompiler {
             }
         }
         if (supportsToLong) {
-            if (args.get(0).type() == FLOAT) {
+            if (sameType(args.get(0).type(), FLOAT)) {
                 return Optional.of(Results.success(new CompiledFunctionCall(
                         METHOD_DECL_PREFIX + "Float__to_long",
                         args,
                         LONG
                 )));
             }
-            if (args.get(0).type() == DOUBLE) {
+            if (sameType(args.get(0).type(), DOUBLE)) {
                 return Optional.of(Results.success(new CompiledFunctionCall(
                         METHOD_DECL_PREFIX + "Double__to_long",
                         args,
@@ -2816,7 +2826,7 @@ public class CapybaraExpressionCompiler {
             }
         }
         if (supportsStringThreeArgs) {
-            var allStrings = args.stream().allMatch(argument -> argument.type() == STRING);
+            var allStrings = args.stream().allMatch(argument -> sameType(argument.type(), STRING));
             if (!allStrings) {
                 return Optional.empty();
             }
@@ -2826,7 +2836,7 @@ public class CapybaraExpressionCompiler {
                     STRING
             )));
         }
-        if (args.get(0).type() != STRING) {
+        if (differentType(args.get(0).type(), STRING)) {
             return Optional.empty();
         }
         if (supportsToInt) {
@@ -2994,11 +3004,11 @@ public class CapybaraExpressionCompiler {
             return Optional.empty();
         }
         var receiver = value.value();
-        if (receiver.type() == STRING) {
+        if (sameType(receiver.type(), STRING)) {
             return Optional.of(Results.success(receiver));
         }
         if (receiver.type() instanceof CompiledPrimitiveBackedType primitiveBackedType
-            && primitiveBackedType.backingType() == STRING) {
+            && sameType(primitiveBackedType.backingType(), STRING)) {
             return Optional.of(Results.success(unwrapPrimitiveBackedExpression(receiver, primitiveBackedType)));
         }
         return Optional.empty();
@@ -3041,7 +3051,7 @@ public class CapybaraExpressionCompiler {
         }
         var source = ((Result.Success<CompiledExpression>) linkedSource).value();
         var sourceType = source.type();
-        if ((sourceType instanceof CompiledList || sourceType == STRING) && functionCall.arguments().size() == 3) {
+        if ((sourceType instanceof CompiledList || sameType(sourceType, STRING)) && functionCall.arguments().size() == 3) {
             var linkedIndex = linkArgumentForExpectedType(functionCall.arguments().get(1), scope, INT);
             if (linkedIndex instanceof Result.Error<CoercedArgument> error) {
                 return Optional.of(ResultOps.error(error));
@@ -3056,12 +3066,12 @@ public class CapybaraExpressionCompiler {
                     ((Result.Success<CoercedArgument>) linkedEnd).value().expression()
             );
             return Optional.of(Results.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + (sourceType == STRING ? "String" : "List") + "__get",
+                    METHOD_DECL_PREFIX + (sameType(sourceType, STRING) ? "String" : "List") + "__get",
                     args,
                     sourceType
             )));
         }
-        if (sourceType instanceof CompiledList || sourceType == STRING) {
+        if (sourceType instanceof CompiledList || sameType(sourceType, STRING)) {
             var linkedIndex = linkArgumentForExpectedType(functionCall.arguments().get(1), scope, INT);
             if (linkedIndex instanceof Result.Error<CoercedArgument> error) {
                 return Optional.of(ResultOps.error(error));
@@ -3088,7 +3098,7 @@ public class CapybaraExpressionCompiler {
         args.addAll(value.value());
         var index = args.get(1);
         if (sourceType instanceof CompiledTupleType tupleType) {
-            if (index.type() != INT) {
+            if (differentType(index.type(), INT)) {
                 return Optional.empty();
             }
             var elementType = tupleElementType(tupleType, index, functionCall.arguments().get(1).position());
@@ -3099,7 +3109,7 @@ public class CapybaraExpressionCompiler {
             return Optional.of(Results.success(new CompiledIndexExpression(source, index, resolvedElementType, resolvedElementType)));
         }
         if (sourceType instanceof CompiledDict linkedDict) {
-            if (index.type() != STRING) {
+            if (differentType(index.type(), STRING)) {
                 return Optional.empty();
             }
             var optionType = optionTypeFor(linkedDict.valueType());
@@ -3890,7 +3900,7 @@ public class CapybaraExpressionCompiler {
             case CompiledSet ignored -> "java.util.Set";
             case CompiledDict ignored -> "java.util.Map";
             case CompiledTupleType ignored -> "java.util.List";
-            case CompiledFunctionType functionType -> functionType.argumentType() == NOTHING
+            case CompiledFunctionType functionType -> sameType(functionType.argumentType(), NOTHING)
                     ? "java.util.function.Supplier"
                     : "java.util.function.Function";
             case PrimitiveLinkedType primitive -> primitive.name();
@@ -3960,7 +3970,7 @@ public class CapybaraExpressionCompiler {
         var inferredReturnType = expectedShape.returnType();
         var returnCoerced = coerceArgument(expression, expectedShape.returnType());
         if (returnCoerced == null) {
-            if (candidate.returnType() != ANY) {
+            if (differentType(candidate.returnType(), ANY)) {
                 return null;
             }
             // First linking pass can expose unknown return type (ANY); keep expected return so relinking can refine it.
@@ -4173,7 +4183,7 @@ public class CapybaraExpressionCompiler {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledPrimitiveBackedType expectedPrimitiveBacked
-            && expectedPrimitiveBacked.backingType() == STRING
+            && sameType(expectedPrimitiveBacked.backingType(), STRING)
             && isCharType(expectedPrimitiveBacked)
             && argument instanceof CompiledStringValue stringValue
             && isSingleCharacterStringLiteral(stringValue)) {
@@ -4182,7 +4192,7 @@ public class CapybaraExpressionCompiler {
         if (argument.type() instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
         }
-        if (expected == ANY) {
+        if (sameType(expected, ANY)) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledTupleType expectedTuple
@@ -4197,7 +4207,7 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledList expectedList
             && argument.type() instanceof CompiledList argumentList
-            && argumentList.elementType() == ANY
+            && sameType(argumentList.elementType(), ANY)
             && expectedList.elementType() instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
         }
@@ -4208,7 +4218,7 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledSet expectedSet
             && argument.type() instanceof CompiledSet argumentSet
-            && argumentSet.elementType() == ANY
+            && sameType(argumentSet.elementType(), ANY)
             && expectedSet.elementType() instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
         }
@@ -4219,7 +4229,7 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledDict expectedDict
             && argument.type() instanceof CompiledDict argumentDict
-            && argumentDict.valueType() == ANY
+            && sameType(argumentDict.valueType(), ANY)
             && expectedDict.valueType() instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
         }
@@ -4230,7 +4240,7 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledList expectedList
             && argument.type() instanceof CompiledList argumentList
-            && argumentList.elementType() != ANY
+            && differentType(argumentList.elementType(), ANY)
             && (isTypeCompatible(argumentList.elementType(), expectedList.elementType())
                 || canCoerceToExpectedType(argumentList.elementType(), expectedList.elementType()))) {
             return new CoercedArgument(argument, 1);
@@ -4243,7 +4253,7 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledSet expectedSet
             && argument.type() instanceof CompiledSet argumentSet
-            && argumentSet.elementType() != ANY
+            && differentType(argumentSet.elementType(), ANY)
             && (isTypeCompatible(argumentSet.elementType(), expectedSet.elementType())
                 || canCoerceToExpectedType(argumentSet.elementType(), expectedSet.elementType()))) {
             return new CoercedArgument(argument, 1);
@@ -4256,7 +4266,7 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledDict expectedDict
             && argument.type() instanceof CompiledDict argumentDict
-            && argumentDict.valueType() != ANY
+            && differentType(argumentDict.valueType(), ANY)
             && (isTypeCompatible(argumentDict.valueType(), expectedDict.valueType())
                 || canCoerceToExpectedType(argumentDict.valueType(), expectedDict.valueType()))) {
             return new CoercedArgument(argument, 1);
@@ -4281,15 +4291,15 @@ public class CapybaraExpressionCompiler {
                 return new CoercedArgument(invokedCoerced.expression(), invokedCoerced.coercions() + 1);
             }
         }
-        if (argument.type() == NOTHING) {
+        if (sameType(argument.type(), NOTHING)) {
             return new CoercedArgument(argument, 0);
         }
-        if (expected == PrimitiveLinkedType.DATA
+        if (sameType(expected, CompiledIrModule.DATA)
             && ((argument.type() instanceof GenericDataType && !(argument.type() instanceof CompiledPrimitiveBackedType))
-                || argument.type() == PrimitiveLinkedType.ENUM)) {
+                || sameType(argument.type(), CompiledIrModule.ENUM))) {
             return new CoercedArgument(argument, 1);
         }
-        if (expected == PrimitiveLinkedType.ENUM && isEnumLikeType(argument.type())) {
+        if (sameType(expected, CompiledIrModule.ENUM) && isEnumLikeType(argument.type())) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledObjectType expectedObject
@@ -4326,14 +4336,14 @@ public class CapybaraExpressionCompiler {
                 return new CoercedArgument(rebuildNewDataForExpectedType(newData, argumentData, expectedData), 1);
             }
         }
-        if (argument.type() == ANY) {
+        if (sameType(argument.type(), ANY)) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledDataType expectedDataType
             && argument.type() instanceof CompiledDataType argumentDataType
             && isSubtype(argumentDataType, expectedDataType.name(), new java.util.HashSet<>())) {
             var assignments = expectedDataType.fields().stream()
-                    .map(field -> new CompiledNewData.FieldAssignment(
+                    .map(field -> new CompiledNewDataFieldAssignment(
                             field.name(),
                             new CompiledFieldAccess(argument, field.name(), field.type())
                     ))
@@ -4411,7 +4421,7 @@ public class CapybaraExpressionCompiler {
     ) {
         var assignmentsByName = orderedAssignmentsByName(newData, sourceType);
         var rebuiltAssignments = expectedType.fields().stream()
-                .map(field -> new CompiledNewData.FieldAssignment(
+                .map(field -> new CompiledNewDataFieldAssignment(
                         field.name(),
                         coerceExpressionToType(assignmentsByName.get(field.name()), field.type())
                                 .orElse(assignmentsByName.get(field.name()))
@@ -4567,36 +4577,36 @@ public class CapybaraExpressionCompiler {
             return true;
         }
         if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
-            if (actualList.elementType() == ANY
-                && expectedList.elementType() != ANY
+            if (sameType(actualList.elementType(), ANY)
+                && differentType(expectedList.elementType(), ANY)
                 && !(expectedList.elementType() instanceof CompiledGenericTypeParameter)) {
                 return false;
             }
             return isTypeCompatible(actualList.elementType(), expectedList.elementType());
         }
         if (expected instanceof CompiledSet expectedSet && actual instanceof CompiledSet actualSet) {
-            if (actualSet.elementType() == ANY
-                && expectedSet.elementType() != ANY
+            if (sameType(actualSet.elementType(), ANY)
+                && differentType(expectedSet.elementType(), ANY)
                 && !(expectedSet.elementType() instanceof CompiledGenericTypeParameter)) {
                 return false;
             }
             return isTypeCompatible(actualSet.elementType(), expectedSet.elementType());
         }
         if (expected instanceof CompiledDict expectedDict && actual instanceof CompiledDict actualDict) {
-            if (actualDict.valueType() == ANY
-                && expectedDict.valueType() != ANY
+            if (sameType(actualDict.valueType(), ANY)
+                && differentType(expectedDict.valueType(), ANY)
                 && !(expectedDict.valueType() instanceof CompiledGenericTypeParameter)) {
                 return false;
             }
             return isTypeCompatible(actualDict.valueType(), expectedDict.valueType());
         }
-        if (expected == ANY || actual == ANY || actual == NOTHING) {
+        if (sameType(expected, ANY) || sameType(actual, ANY) || sameType(actual, NOTHING)) {
             return true;
         }
-        if (expected == DATA && actual == ENUM) {
+        if (sameType(expected, DATA) && sameType(actual, ENUM)) {
             return true;
         }
-        if (expected == ENUM) {
+        if (sameType(expected, ENUM)) {
             return isEnumLikeType(actual);
         }
         if (expected instanceof CompiledGenericTypeParameter || actual instanceof CompiledGenericTypeParameter) {
@@ -5443,7 +5453,7 @@ public class CapybaraExpressionCompiler {
 
     private boolean isBroadSpecificityType(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> primitive == ANY || primitive == DATA || primitive == ENUM;
+            case PrimitiveLinkedType primitive -> sameType(primitive, ANY) || sameType(primitive, DATA) || sameType(primitive, ENUM);
             case CompiledGenericTypeParameter ignored -> true;
             case CompiledDataType ignored -> false;
             case CompiledDataParentType ignored -> false;
@@ -5462,11 +5472,11 @@ public class CapybaraExpressionCompiler {
         var receiverBase = baseTypeName(receiverType.name());
         var receiverSimple = simpleTypeName(receiverBase);
         ownerNames.add(receiverBase);
-        if (receiverType == STRING) {
+        if (sameType(receiverType, STRING)) {
             ownerNames.add("String");
         }
         if (receiverType instanceof CompiledPrimitiveBackedType primitiveBackedType
-            && primitiveBackedType.backingType() == STRING) {
+            && sameType(primitiveBackedType.backingType(), STRING)) {
             ownerNames.add("String");
         }
         ownerNames.addAll(linkCache.methodOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
@@ -5503,7 +5513,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isCharType(CompiledPrimitiveBackedType type) {
-        return type.backingType() == STRING && simpleTypeName(type.name()).equals("char");
+        return sameType(type.backingType(), STRING) && simpleTypeName(type.name()).equals("char");
     }
 
     private static boolean isSingleCharacterStringLiteral(CompiledStringValue value) {
@@ -5543,7 +5553,7 @@ public class CapybaraExpressionCompiler {
                         case CompiledList linkedList -> linkedList.elementType();
                         case CompiledSet linkedSet -> linkedSet.elementType();
                         case CompiledDict linkedDict -> linkedDict.valueType();
-                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
+                        case PrimitiveLinkedType primitive when sameType(primitive, STRING) -> STRING;
                         default -> null;
                     };
                     if (elementType == null) {
@@ -5573,7 +5583,7 @@ public class CapybaraExpressionCompiler {
                         case CompiledList linkedList -> linkedList.elementType();
                         case CompiledSet linkedSet -> linkedSet.elementType();
                         case CompiledDict linkedDict -> linkedDict.valueType();
-                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
+                        case PrimitiveLinkedType primitive when sameType(primitive, STRING) -> STRING;
                         default -> null;
                     };
                     if (sourceElementType == null) {
@@ -5848,7 +5858,7 @@ public class CapybaraExpressionCompiler {
             return linkInfixExpression(reAssociated, scope);
         }
         return ResultOps.flatMap(linkExpression(expression.left(), scope), left -> {
-                    var elementType = left.type() == STRING ? STRING : collectionElementType(left.type());
+                    var elementType = sameType(left.type(), STRING) ? STRING : collectionElementType(left.type());
                     if (elementType == null) {
                         return withPosition(
                                 Results.error("Left side of `|>` has to be a collection, was `" + left.type() + "`"),
@@ -6149,21 +6159,21 @@ public class CapybaraExpressionCompiler {
 
     private CompiledType inferReduceResultType(CompiledType initialType, CompiledType reducerType) {
         if (initialType instanceof CompiledList initialList
-            && initialList.elementType() == ANY
+            && sameType(initialList.elementType(), ANY)
             && reducerType instanceof CompiledList reducerList
-            && reducerList.elementType() != ANY) {
+            && differentType(reducerList.elementType(), ANY)) {
             return reducerType;
         }
         if (initialType instanceof CompiledSet initialSet
-            && initialSet.elementType() == ANY
+            && sameType(initialSet.elementType(), ANY)
             && reducerType instanceof CompiledSet reducerSet
-            && reducerSet.elementType() != ANY) {
+            && differentType(reducerSet.elementType(), ANY)) {
             return reducerType;
         }
         if (initialType instanceof CompiledDict initialDict
-            && initialDict.valueType() == ANY
+            && sameType(initialDict.valueType(), ANY)
             && reducerType instanceof CompiledDict reducerDict
-            && reducerDict.valueType() != ANY) {
+            && differentType(reducerDict.valueType(), ANY)) {
             return reducerType;
         }
         if (initialType instanceof GenericDataType initialDataType) {
@@ -6376,7 +6386,7 @@ public class CapybaraExpressionCompiler {
                         case CompiledList linkedList -> linkedList.elementType();
                         case CompiledSet linkedSet -> linkedSet.elementType();
                         case CompiledDict linkedDict -> linkedDict.valueType();
-                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
+                        case PrimitiveLinkedType primitive when sameType(primitive, STRING) -> STRING;
                         default -> null;
                     };
                     if (elementType == null) {
@@ -6400,7 +6410,7 @@ public class CapybaraExpressionCompiler {
                             return ResultOps.flatMap(
                                     resolvePipeFunctionReference(functionReference, elementType),
                                     linked -> {
-                                        if (linked.expression().type() != BOOL) {
+                                        if (differentType(linked.expression().type(), BOOL)) {
                                             return withPosition(
                                                     Results.error("Function reference in `|-` has to return `BOOL`, was `" + linked.expression().type() + "`"),
                                                     functionReference.position()
@@ -6410,7 +6420,7 @@ public class CapybaraExpressionCompiler {
                                                 left,
                                                 linked.argumentName(),
                                                 linked.expression(),
-                                                left.type() == STRING
+                                                sameType(left.type(), STRING)
                                                         ? STRING
                                                         : left.type() instanceof CompiledSet
                                                         ? new CompiledSet(elementType)
@@ -6428,7 +6438,7 @@ public class CapybaraExpressionCompiler {
                             lambdaBinding -> ResultOps.flatMap(
                                     linkExpression(lambdaExpression.expression(), lambdaBinding.scope()),
                                     predicate -> {
-                                if (predicate.type() != BOOL) {
+                                if (differentType(predicate.type(), BOOL)) {
                                     return withPosition(
                                             Results.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
                                             lambdaExpression.position()
@@ -6438,7 +6448,7 @@ public class CapybaraExpressionCompiler {
                                         left,
                                         lambdaBinding.argumentName(),
                                         predicate,
-                                        left.type() == STRING
+                                        sameType(left.type(), STRING)
                                                 ? STRING
                                                 : left.type() instanceof CompiledSet
                                                 ? new CompiledSet(elementType)
@@ -6459,7 +6469,7 @@ public class CapybaraExpressionCompiler {
                 return ResultOps.flatMap(
                         resolvePipeFunctionReference(functionReference, dictType.valueType()),
                         linked -> {
-                            if (linked.expression().type() != BOOL) {
+                            if (differentType(linked.expression().type(), BOOL)) {
                                 return withPosition(
                                         Results.error("Function reference in `|-` has to return `BOOL`, was `" + linked.expression().type() + "`"),
                                         functionReference.position()
@@ -6483,7 +6493,7 @@ public class CapybaraExpressionCompiler {
             var valueName = argumentNames.get(0);
             var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
             return ResultOps.flatMap(linkExpression(lambdaExpression.expression(), lambdaScope), predicate -> {
-                        if (predicate.type() != BOOL) {
+                        if (differentType(predicate.type(), BOOL)) {
                             return withPosition(
                                     Results.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
                                     lambdaExpression.position()
@@ -6506,7 +6516,7 @@ public class CapybaraExpressionCompiler {
                     dictType.valueType()
             );
             return ResultOps.flatMap(linkExpression(lambdaExpression.expression(), lambdaScope), predicate -> {
-                        if (predicate.type() != BOOL) {
+                        if (differentType(predicate.type(), BOOL)) {
                             return withPosition(
                                     Results.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
                                     lambdaExpression.position()
@@ -6538,7 +6548,7 @@ public class CapybaraExpressionCompiler {
                 return ResultOps.flatMap(
                         resolvePipeFunctionReference(functionReference, elementType),
                         linked -> {
-                            if (linked.expression().type() != BOOL) {
+                            if (differentType(linked.expression().type(), BOOL)) {
                                 return withPosition(
                                         Results.error("Lambda in `|-` has to return `BOOL`, was `" + linked.expression().type() + "`"),
                                         expression.right().position()
@@ -6567,7 +6577,7 @@ public class CapybaraExpressionCompiler {
         }
         var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
         return ResultOps.flatMap(linkExpression(lambdaExpression.expression(), lambdaScope), predicate -> {
-                    if (predicate.type() != BOOL) {
+                    if (differentType(predicate.type(), BOOL)) {
                         return withPosition(
                                 Results.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
                                 lambdaExpression.position()
@@ -6666,10 +6676,10 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledType findPlusType(CompiledType left, CompiledType right) {
-        if (left == STRING && right != NOTHING) {
+        if (sameType(left, STRING) && differentType(right, NOTHING)) {
             return STRING;
         }
-        if (right == STRING && left != NOTHING) {
+        if (sameType(right, STRING) && differentType(left, NOTHING)) {
             return STRING;
         }
         if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
@@ -6693,10 +6703,10 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledType mergeCollectionElementType(CompiledType left, CompiledType right) {
-        if (left == ANY) {
+        if (sameType(left, ANY)) {
             return right;
         }
-        if (right == ANY) {
+        if (sameType(right, ANY)) {
             return left;
         }
         if (left.equals(right)) {
@@ -6774,8 +6784,8 @@ public class CapybaraExpressionCompiler {
 
     private static CompiledType findBitwiseNotType(CompiledType left) {
         if (left instanceof PrimitiveLinkedType leftPrimitive) {
-            return switch (leftPrimitive) {
-                case INT -> leftPrimitive;
+            return switch (leftPrimitive.name()) {
+                case "INT" -> leftPrimitive;
                 default -> null;
             };
         }
@@ -6790,10 +6800,10 @@ public class CapybaraExpressionCompiler {
     }
 
     private static boolean isBooleanConvertibleType(CompiledType type) {
-        if (type == BOOL) {
+        if (sameType(type, BOOL)) {
             return true;
         }
-        if (type == STRING) {
+        if (sameType(type, STRING)) {
             return true;
         }
         if (type instanceof CompiledList || type instanceof CompiledSet || type instanceof CompiledDict) {
@@ -6803,22 +6813,22 @@ public class CapybaraExpressionCompiler {
     }
 
     private static CompiledType findPlusPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
-        if (left == STRING) {
+        if (sameType(left, STRING)) {
             return isNumericPrimitive(right)
-                   || right == STRING
-                   || right == BOOL
-                   || right == PrimitiveLinkedType.DATA
-                   || right == PrimitiveLinkedType.ENUM
-                   || right == PrimitiveLinkedType.ANY ? STRING : null;
+                   || sameType(right, STRING)
+                   || sameType(right, BOOL)
+                   || sameType(right, CompiledIrModule.DATA)
+                   || sameType(right, CompiledIrModule.ENUM)
+                   || sameType(right, CompiledIrModule.ANY) ? STRING : null;
         }
-        if (right == STRING) {
+        if (sameType(right, STRING)) {
             return isNumericPrimitive(left)
-                   || left == BOOL
-                   || left == PrimitiveLinkedType.DATA
-                   || left == PrimitiveLinkedType.ENUM
-                   || left == PrimitiveLinkedType.ANY ? STRING : null;
+                   || sameType(left, BOOL)
+                   || sameType(left, CompiledIrModule.DATA)
+                   || sameType(left, CompiledIrModule.ENUM)
+                   || sameType(left, CompiledIrModule.ANY) ? STRING : null;
         }
-        if (left == BOOL || right == BOOL) {
+        if (sameType(left, BOOL) || sameType(right, BOOL)) {
             return null;
         }
         if (isNumericPrimitive(left) && isNumericPrimitive(right)) {
@@ -6828,17 +6838,17 @@ public class CapybaraExpressionCompiler {
     }
 
     private static boolean isDataLikeType(CompiledType type) {
-        return type == PrimitiveLinkedType.DATA || type == PrimitiveLinkedType.ENUM || type instanceof GenericDataType;
+        return sameType(type, CompiledIrModule.DATA) || sameType(type, CompiledIrModule.ENUM) || type instanceof GenericDataType;
     }
 
     private static CompiledType findMathPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
-        if (left == BOOL || right == BOOL) {
+        if (sameType(left, BOOL) || sameType(right, BOOL)) {
             return null;
         }
-        if (left == STRING) {
+        if (sameType(left, STRING)) {
             return isNumericPrimitive(right) ? STRING : null;
         }
-        if (right == STRING) {
+        if (sameType(right, STRING)) {
             return null;
         }
         if (isNumericPrimitive(left) && isNumericPrimitive(right)) {
@@ -6848,40 +6858,40 @@ public class CapybaraExpressionCompiler {
     }
 
     private static boolean isNumericPrimitive(PrimitiveLinkedType type) {
-        return switch (type) {
-            case BYTE, INT, LONG, FLOAT, DOUBLE -> true;
+        return switch (type.name()) {
+            case "BYTE", "INT", "LONG", "FLOAT", "DOUBLE" -> true;
             default -> false;
         };
     }
 
     private static CompiledType findBitwisePrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
-        if (left == PrimitiveLinkedType.INT && right == PrimitiveLinkedType.INT) {
-            return PrimitiveLinkedType.INT;
+        if (sameType(left, CompiledIrModule.INT) && sameType(right, CompiledIrModule.INT)) {
+            return CompiledIrModule.INT;
         }
         return null;
     }
 
     private static boolean isBitwisePrimitive(PrimitiveLinkedType type) {
-        return switch (type) {
-            case INT -> true;
+        return switch (type.name()) {
+            case "INT" -> true;
             default -> false;
         };
     }
 
     private static PrimitiveLinkedType promoteNumeric(PrimitiveLinkedType left, PrimitiveLinkedType right) {
-        if (left == PrimitiveLinkedType.DOUBLE || right == PrimitiveLinkedType.DOUBLE) {
-            return PrimitiveLinkedType.DOUBLE;
+        if (sameType(left, CompiledIrModule.DOUBLE) || sameType(right, CompiledIrModule.DOUBLE)) {
+            return CompiledIrModule.DOUBLE;
         }
-        if (left == PrimitiveLinkedType.FLOAT || right == PrimitiveLinkedType.FLOAT) {
-            return PrimitiveLinkedType.FLOAT;
+        if (sameType(left, CompiledIrModule.FLOAT) || sameType(right, CompiledIrModule.FLOAT)) {
+            return CompiledIrModule.FLOAT;
         }
-        if (left == PrimitiveLinkedType.LONG || right == PrimitiveLinkedType.LONG) {
-            return PrimitiveLinkedType.LONG;
+        if (sameType(left, CompiledIrModule.LONG) || sameType(right, CompiledIrModule.LONG)) {
+            return CompiledIrModule.LONG;
         }
-        if (left == PrimitiveLinkedType.INT || right == PrimitiveLinkedType.INT) {
-            return PrimitiveLinkedType.INT;
+        if (sameType(left, CompiledIrModule.INT) || sameType(right, CompiledIrModule.INT)) {
+            return CompiledIrModule.INT;
         }
-        return PrimitiveLinkedType.BYTE;
+        return CompiledIrModule.BYTE;
     }
 
     private static CompiledType findQuestionType(CompiledType left, CompiledType right) {
@@ -7119,7 +7129,7 @@ public class CapybaraExpressionCompiler {
         if (unsafeEffect instanceof Result.Success<CompiledDataType> success) {
             return success.value().fields().stream()
                     .filter(field -> "unsafe_thunk".equals(field.name()))
-                    .map(CompiledDataType.CompiledField::type)
+                    .map(CompiledField::type)
                     .filter(CompiledFunctionType.class::isInstance)
                     .map(CompiledFunctionType.class::cast)
                     .map(CompiledFunctionType::returnType)
@@ -7332,7 +7342,7 @@ public class CapybaraExpressionCompiler {
                     validateMatchExhaustiveness(matchExpression, matchWith.type(), cases),
                     ignored -> {
                             var matchType = cases.stream()
-                                    .map(CompiledMatchExpression.MatchCase::expression)
+                                    .map(CompiledMatchCase::expression)
                                     .map(CompiledExpression::type)
                                     .reduce(this::mergeBranchTypes)
                                     .orElse(ANY);
@@ -7407,39 +7417,39 @@ public class CapybaraExpressionCompiler {
 
     private CompiledType mergeCollectionBranchTypes(CompiledType left, CompiledType right) {
         if (left instanceof CompiledList leftList
-            && leftList.elementType() == ANY
+            && sameType(leftList.elementType(), ANY)
             && right instanceof CompiledList rightList
-            && rightList.elementType() != ANY) {
+            && differentType(rightList.elementType(), ANY)) {
             return right;
         }
         if (right instanceof CompiledList rightList
-            && rightList.elementType() == ANY
+            && sameType(rightList.elementType(), ANY)
             && left instanceof CompiledList leftList
-            && leftList.elementType() != ANY) {
+            && differentType(leftList.elementType(), ANY)) {
             return left;
         }
         if (left instanceof CompiledSet leftSet
-            && leftSet.elementType() == ANY
+            && sameType(leftSet.elementType(), ANY)
             && right instanceof CompiledSet rightSet
-            && rightSet.elementType() != ANY) {
+            && differentType(rightSet.elementType(), ANY)) {
             return right;
         }
         if (right instanceof CompiledSet rightSet
-            && rightSet.elementType() == ANY
+            && sameType(rightSet.elementType(), ANY)
             && left instanceof CompiledSet leftSet
-            && leftSet.elementType() != ANY) {
+            && differentType(leftSet.elementType(), ANY)) {
             return left;
         }
         if (left instanceof CompiledDict leftDict
-            && leftDict.valueType() == ANY
+            && sameType(leftDict.valueType(), ANY)
             && right instanceof CompiledDict rightDict
-            && rightDict.valueType() != ANY) {
+            && differentType(rightDict.valueType(), ANY)) {
             return right;
         }
         if (right instanceof CompiledDict rightDict
-            && rightDict.valueType() == ANY
+            && sameType(rightDict.valueType(), ANY)
             && left instanceof CompiledDict leftDict
-            && leftDict.valueType() != ANY) {
+            && differentType(leftDict.valueType(), ANY)) {
             return left;
         }
         return null;
@@ -7533,14 +7543,14 @@ public class CapybaraExpressionCompiler {
     private Result<Void> validateMatchExhaustiveness(
             MatchExpression matchExpression,
             CompiledType matchType,
-            List<CompiledMatchExpression.MatchCase> cases
+            List<CompiledMatchCase> cases
     ) {
         if (cases.stream().anyMatch(matchCase ->
-                matchCase.pattern() instanceof CompiledMatchExpression.WildcardPattern
-                || matchCase.pattern() instanceof CompiledMatchExpression.WildcardBindingPattern)) {
+                matchCase.pattern() instanceof CompiledWildcardPattern
+                || matchCase.pattern() instanceof CompiledWildcardBindingPattern)) {
             return Results.success(null);
         }
-        if (matchType == PrimitiveLinkedType.BOOL) {
+        if (sameType(matchType, CompiledIrModule.BOOL)) {
             return validateBoolMatchExhaustiveness(matchExpression, cases);
         }
         if (hasExhaustiveTypedPattern(matchType, cases)) {
@@ -7571,18 +7581,18 @@ public class CapybaraExpressionCompiler {
 
     private boolean hasExhaustiveTypedPattern(
             CompiledType matchType,
-            List<CompiledMatchExpression.MatchCase> cases
+            List<CompiledMatchCase> cases
     ) {
         return cases.stream()
                 .filter(matchCase -> matchCase.guard().isEmpty())
-                .map(CompiledMatchExpression.MatchCase::pattern)
-                .filter(CompiledMatchExpression.TypedPattern.class::isInstance)
-                .map(CompiledMatchExpression.TypedPattern.class::cast)
+                .map(CompiledMatchCase::pattern)
+                .filter(CompiledTypedPattern.class::isInstance)
+                .map(CompiledTypedPattern.class::cast)
                 .anyMatch(typedPattern -> typedPatternCoversStaticMatchType(matchType, typedPattern.type()));
     }
 
     private boolean typedPatternCoversStaticMatchType(CompiledType matchType, CompiledType patternType) {
-        if (patternType == ENUM && isEnumLikeType(matchType)) {
+        if (sameType(patternType, ENUM) && isEnumLikeType(matchType)) {
             return true;
         }
         if (matchType instanceof CompiledList matchList && patternType instanceof CompiledList patternList) {
@@ -7598,7 +7608,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean patternArgumentCoversStaticType(CompiledType matchArgument, CompiledType patternArgument) {
-        if (patternArgument == ANY || matchArgument.equals(patternArgument)) {
+        if (sameType(patternArgument, ANY) || matchArgument.equals(patternArgument)) {
             return true;
         }
         return typedPatternCoversStaticMatchType(matchArgument, patternArgument);
@@ -7606,7 +7616,7 @@ public class CapybaraExpressionCompiler {
 
     private Result<Void> validateBoolMatchExhaustiveness(
             MatchExpression matchExpression,
-            List<CompiledMatchExpression.MatchCase> cases
+            List<CompiledMatchCase> cases
     ) {
         var coveredBooleanValues = new java.util.LinkedHashSet<String>();
         for (var matchCase : cases) {
@@ -7614,14 +7624,14 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var pattern = matchCase.pattern();
-            if (pattern instanceof CompiledMatchExpression.VariablePattern) {
+            if (pattern instanceof CompiledVariablePattern) {
                 return Results.success(null);
             }
-            if (pattern instanceof CompiledMatchExpression.TypedPattern typedPattern
-                && typedPattern.type() == PrimitiveLinkedType.BOOL) {
+            if (pattern instanceof CompiledTypedPattern typedPattern
+                && sameType(typedPattern.type(), CompiledIrModule.BOOL)) {
                 return Results.success(null);
             }
-            if (pattern instanceof CompiledMatchExpression.BoolPattern boolPattern) {
+            if (pattern instanceof CompiledBoolPattern boolPattern) {
                 coveredBooleanValues.add(boolPattern.value().toLowerCase(java.util.Locale.ROOT));
             }
         }
@@ -7657,7 +7667,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private java.util.LinkedHashSet<String> coveredConstructors(
-            List<CompiledMatchExpression.MatchCase> cases,
+            List<CompiledMatchCase> cases,
             java.util.Set<String> requiredConstructors
     ) {
         var covered = new java.util.LinkedHashSet<String>();
@@ -7666,17 +7676,17 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var pattern = matchCase.pattern();
-            if (pattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
+            if (pattern instanceof CompiledVariablePattern variablePattern) {
                 if (requiredConstructors.contains(variablePattern.name())) {
                     covered.add(variablePattern.name());
                 }
                 continue;
             }
-            if (pattern instanceof CompiledMatchExpression.ConstructorPattern constructorPattern) {
+            if (pattern instanceof CompiledConstructorPattern constructorPattern) {
                 covered.add(constructorPattern.constructorName());
                 continue;
             }
-            if (pattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
+            if (pattern instanceof CompiledTypedPattern typedPattern) {
                 if (typedPattern.type() instanceof CompiledDataType dataType) {
                     covered.add(dataType.name());
                 } else if (typedPattern.type() instanceof CompiledDataParentType parentType) {
@@ -7689,7 +7699,7 @@ public class CapybaraExpressionCompiler {
         return covered;
     }
 
-    private Result<CompiledMatchExpression.MatchCase> linkMatchCase(
+    private Result<CompiledMatchCase> linkMatchCase(
             MatchCase matchCase,
             CompiledExpression matchWith,
             Scope scope
@@ -7697,7 +7707,7 @@ public class CapybaraExpressionCompiler {
         return linkMatchCase(matchCase, matchWith, scope, Optional.empty());
     }
 
-    private Result<CompiledMatchExpression.MatchCase> linkMatchCase(
+    private Result<CompiledMatchCase> linkMatchCase(
             MatchCase matchCase,
             CompiledExpression matchWith,
             Scope scope,
@@ -7705,7 +7715,7 @@ public class CapybaraExpressionCompiler {
     ) {
         return ResultOps.flatMap(linkPattern(matchCase.pattern(), matchWith.type(), scope), patternAndScope -> {
                     var branchScope = patternAndScope.scope();
-                    if (patternAndScope.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern
+                    if (patternAndScope.pattern() instanceof CompiledTypedPattern typedPattern
                         && matchWith instanceof CompiledVariable matchedVariable) {
                         // Flow typing: inside a typed match branch, treat the matched variable as narrowed too.
                         branchScope = branchScope.add(matchedVariable.name(), typedPattern.type());
@@ -7719,7 +7729,7 @@ public class CapybaraExpressionCompiler {
                                 .orElseGet(() -> linkExpression(matchCase.expression(), caseScope));
                         return ResultOps.map(
                                 expressionResult,
-                                expression -> new CompiledMatchExpression.MatchCase(patternAndScope.pattern(), guard, expression));
+                                expression -> new CompiledMatchCase(patternAndScope.pattern(), guard, expression));
                     });
                 });
     }
@@ -7729,7 +7739,7 @@ public class CapybaraExpressionCompiler {
             return Results.success(Optional.empty());
         }
         return ResultOps.flatMap(linkExpression(guard.get(), scope), linkedGuard -> {
-                    if (linkedGuard.type() != PrimitiveLinkedType.BOOL) {
+                    if (differentType(linkedGuard.type(), CompiledIrModule.BOOL)) {
                         return withPosition(
                                 Results.error("`when` guard has to be `bool`, was `" + linkedGuard.type() + "`"),
                                 guard.get().position()
@@ -7739,9 +7749,9 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
-    private List<CompiledMatchExpression.MatchCase> orderMatchCases(List<CompiledMatchExpression.MatchCase> cases) {
-        var guarded = new ArrayList<CompiledMatchExpression.MatchCase>();
-        var unguarded = new ArrayList<CompiledMatchExpression.MatchCase>();
+    private List<CompiledMatchCase> orderMatchCases(List<CompiledMatchCase> cases) {
+        var guarded = new ArrayList<CompiledMatchCase>();
+        var unguarded = new ArrayList<CompiledMatchCase>();
         for (var matchCase : cases) {
             if (matchCase.guard().isPresent()) {
                 guarded.add(matchCase);
@@ -7780,18 +7790,18 @@ public class CapybaraExpressionCompiler {
 
     private Result<PatternAndScope> linkPattern(Pattern pattern, CompiledType matchType, Scope scope) {
         return switch (pattern) {
-            case IntPattern intPattern -> validateLiteralPattern(intPattern, matchType, scope, PrimitiveLinkedType.INT);
-            case LongPattern longPattern -> validateLiteralPattern(longPattern, matchType, scope, PrimitiveLinkedType.LONG);
-            case StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, PrimitiveLinkedType.STRING);
-            case BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, PrimitiveLinkedType.BOOL);
-            case FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, PrimitiveLinkedType.FLOAT);
+            case IntPattern intPattern -> validateLiteralPattern(intPattern, matchType, scope, CompiledIrModule.INT);
+            case LongPattern longPattern -> validateLiteralPattern(longPattern, matchType, scope, CompiledIrModule.LONG);
+            case StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, CompiledIrModule.STRING);
+            case BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, CompiledIrModule.BOOL);
+            case FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, CompiledIrModule.FLOAT);
             case TypedPattern typedPattern -> linkTypedPattern(typedPattern, matchType, scope);
             case VariablePattern variablePattern -> linkVariablePattern(variablePattern, matchType, scope);
             case WildcardPattern wildcardPattern ->
-                    Results.success(new PatternAndScope(CompiledMatchExpression.WildcardPattern.WILDCARD, scope));
+                    Results.success(new PatternAndScope(CompiledWildcardPattern.INSTANCE, scope));
             case WildcardBindingPattern wildcardBindingPattern ->
                     Results.success(new PatternAndScope(
-                            new CompiledMatchExpression.WildcardBindingPattern(wildcardBindingPattern.name()),
+                            new CompiledWildcardBindingPattern(wildcardBindingPattern.name()),
                             scope.add(wildcardBindingPattern.name(), matchType)
                     ));
             case ConstructorPattern constructorPattern -> linkConstructorPattern(constructorPattern, matchType, scope);
@@ -7804,20 +7814,20 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             PrimitiveLinkedType expected
     ) {
-        if (matchType != expected) {
+        if (differentType(matchType, expected)) {
             return Results.error("Cannot match `" + matchType + "` with literal of type `" + expected + "`");
         }
         return switch (pattern) {
             case IntPattern intPattern ->
-                    Results.success(new PatternAndScope(new CompiledMatchExpression.IntPattern(intPattern.value()), scope));
+                    Results.success(new PatternAndScope(new CompiledIntPattern(intPattern.value()), scope));
             case LongPattern longPattern ->
-                    Results.success(new PatternAndScope(new CompiledMatchExpression.LongPattern(longPattern.value()), scope));
+                    Results.success(new PatternAndScope(new CompiledLongPattern(longPattern.value()), scope));
             case StringPattern stringPattern ->
-                    Results.success(new PatternAndScope(new CompiledMatchExpression.StringPattern(stringPattern.value()), scope));
+                    Results.success(new PatternAndScope(new CompiledStringPattern(stringPattern.value()), scope));
             case BoolPattern boolPattern ->
-                    Results.success(new PatternAndScope(new CompiledMatchExpression.BoolPattern(boolPattern.value()), scope));
+                    Results.success(new PatternAndScope(new CompiledBoolPattern(boolPattern.value()), scope));
             case FloatPattern floatPattern ->
-                    Results.success(new PatternAndScope(new CompiledMatchExpression.FloatPattern(floatPattern.value()), scope));
+                    Results.success(new PatternAndScope(new CompiledFloatPattern(floatPattern.value()), scope));
             default -> throw new IllegalStateException("Unexpected literal pattern: " + pattern);
         };
     }
@@ -7830,10 +7840,10 @@ public class CapybaraExpressionCompiler {
         if (matchType instanceof CompiledDataParentType parentType) {
             return ResultOps.map(
                     findSubtype(variablePattern.name(), parentType),
-                    ignored -> new PatternAndScope(new CompiledMatchExpression.VariablePattern(variablePattern.name()), scope));
+                    ignored -> new PatternAndScope(new CompiledVariablePattern(variablePattern.name()), scope));
         }
         if (matchType instanceof CompiledDataType dataType && dataType.name().equals(variablePattern.name())) {
-            return Results.success(new PatternAndScope(new CompiledMatchExpression.VariablePattern(variablePattern.name()), scope));
+            return Results.success(new PatternAndScope(new CompiledVariablePattern(variablePattern.name()), scope));
         }
         return Results.error("Cannot match `" + matchType + "` with constructor `" + variablePattern.name() + "`");
     }
@@ -7860,7 +7870,7 @@ public class CapybaraExpressionCompiler {
                         }
                     }
                     return Results.success(new PatternAndScope(
-                            new CompiledMatchExpression.TypedPattern(effectivePatternType, typedPattern.name()),
+                            new CompiledTypedPattern(effectivePatternType, typedPattern.name()),
                             scope.add(typedPattern.name(), effectivePatternType)
                     ));
                 });
@@ -7946,25 +7956,25 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isTypedPatternCompatible(CompiledType matchType, CompiledType patternType) {
-        if (matchType == ANY || patternType == ANY) {
+        if (sameType(matchType, ANY) || sameType(patternType, ANY)) {
             return true;
         }
         if (isGenericPatternCompatible(matchType, patternType)) {
             return true;
         }
-        if (patternType == PrimitiveLinkedType.DATA && matchType instanceof GenericDataType) {
+        if (sameType(patternType, CompiledIrModule.DATA) && matchType instanceof GenericDataType) {
             return true;
         }
-        if (patternType == PrimitiveLinkedType.DATA && matchType == PrimitiveLinkedType.ENUM) {
+        if (sameType(patternType, CompiledIrModule.DATA) && sameType(matchType, CompiledIrModule.ENUM)) {
             return true;
         }
-        if (matchType == PrimitiveLinkedType.DATA && patternType instanceof GenericDataType) {
+        if (sameType(matchType, CompiledIrModule.DATA) && patternType instanceof GenericDataType) {
             return true;
         }
-        if (patternType == PrimitiveLinkedType.ENUM && (matchType == PrimitiveLinkedType.DATA || isEnumLikeType(matchType))) {
+        if (sameType(patternType, CompiledIrModule.ENUM) && (sameType(matchType, CompiledIrModule.DATA) || isEnumLikeType(matchType))) {
             return true;
         }
-        if (matchType == PrimitiveLinkedType.ENUM && isEnumLikeType(patternType)) {
+        if (sameType(matchType, CompiledIrModule.ENUM) && isEnumLikeType(patternType)) {
             return true;
         }
         if (matchType.equals(patternType)) {
@@ -8014,7 +8024,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isGenericPatternArgumentCompatible(CompiledType matchArgument, CompiledType patternArgument) {
-        if (matchArgument == ANY || patternArgument == ANY) {
+        if (sameType(matchArgument, ANY) || sameType(patternArgument, ANY)) {
             return true;
         }
         if (matchArgument.equals(patternArgument)) {
@@ -8045,12 +8055,12 @@ public class CapybaraExpressionCompiler {
                                                   + constructorPattern.fieldPatterns().size());
                     }
                     var updatedScope = scope;
-                    var linkedFieldPatterns = new java.util.ArrayList<CompiledMatchExpression.Pattern>(constructorPattern.fieldPatterns().size());
+                    var linkedFieldPatterns = new java.util.ArrayList<CompiledPattern>(constructorPattern.fieldPatterns().size());
                     for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
                         var fieldPattern = constructorPattern.fieldPatterns().get(i);
                         if (fieldPattern instanceof VariablePattern variablePattern) {
                             updatedScope = updatedScope.add(variablePattern.name(), resolvedFields.get(i).type());
-                            linkedFieldPatterns.add(new CompiledMatchExpression.VariablePattern(variablePattern.name()));
+                            linkedFieldPatterns.add(new CompiledVariablePattern(variablePattern.name()));
                             continue;
                         }
                         var linkedPatternAndScope = linkPattern(fieldPattern, resolvedFields.get(i).type(), updatedScope);
@@ -8062,7 +8072,7 @@ public class CapybaraExpressionCompiler {
                         updatedScope = patternAndScope.scope();
                     }
                     return Results.success(new PatternAndScope(
-                            new CompiledMatchExpression.ConstructorPattern(
+                            new CompiledConstructorPattern(
                                     constructorPattern.constructorName(),
                                     List.copyOf(linkedFieldPatterns)
                             ),
@@ -8071,7 +8081,7 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
-    private List<CompiledDataType.CompiledField> resolveConstructorFields(CompiledDataType constructorType, CompiledType matchType) {
+    private List<CompiledField> resolveConstructorFields(CompiledDataType constructorType, CompiledType matchType) {
         if (!(matchType instanceof CompiledDataParentType parentType)) {
             return constructorType.fields();
         }
@@ -8079,7 +8089,7 @@ public class CapybaraExpressionCompiler {
         if (instantiatedParentFields != null) {
             return instantiatedParentFields;
         }
-        if (constructorType.fields().stream().map(CompiledDataType.CompiledField::type).noneMatch(this::containsGenericTypeParameter)) {
+        if (constructorType.fields().stream().map(CompiledField::type).noneMatch(this::containsGenericTypeParameter)) {
             return constructorType.fields();
         }
         var rawConstructorType = resolveRawConstructorType(constructorType);
@@ -8106,7 +8116,7 @@ public class CapybaraExpressionCompiler {
             return rawConstructorType.fields();
         }
         return rawConstructorType.fields().stream()
-                .map(field -> new CompiledDataType.CompiledField(
+                .map(field -> new CompiledField(
                         field.name(),
                         substituteTypeParameters(field.type(), substitutions),
                         field.annotations()
@@ -8119,7 +8129,7 @@ public class CapybaraExpressionCompiler {
         return resolvedType instanceof CompiledDataType linkedDataType ? linkedDataType : constructorType;
     }
 
-    private List<CompiledDataType.CompiledField> resolveFieldsFromInstantiatedParent(String constructorName, CompiledDataParentType parentType) {
+    private List<CompiledField> resolveFieldsFromInstantiatedParent(String constructorName, CompiledDataParentType parentType) {
         var rawParentType = resolveDataTypeByName(parentType.name());
         if (!(rawParentType instanceof CompiledDataParentType linkedParentType) || linkedParentType.typeParameters().isEmpty()) {
             return null;
@@ -8168,16 +8178,16 @@ public class CapybaraExpressionCompiler {
                     containsGenericTypeParameter(functionType.argumentType()) || containsGenericTypeParameter(functionType.returnType());
             case CompiledTupleType tupleType -> tupleType.elementTypes().stream().anyMatch(this::containsGenericTypeParameter);
             case CompiledDataType linkedDataType -> linkedDataType.fields().stream()
-                    .map(CompiledDataType.CompiledField::type)
+                    .map(CompiledField::type)
                     .anyMatch(this::containsGenericTypeParameter);
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.fields().stream()
-                    .map(CompiledDataType.CompiledField::type)
+                    .map(CompiledField::type)
                     .anyMatch(this::containsGenericTypeParameter);
             default -> false;
         };
     }
 
-    private List<String> inferGenericParameterNames(List<CompiledDataType.CompiledField> fields) {
+    private List<String> inferGenericParameterNames(List<CompiledField> fields) {
         var names = new java.util.LinkedHashSet<String>();
         fields.forEach(field -> collectGenericParameterNames(field.type(), names));
         return List.copyOf(names);
@@ -8236,7 +8246,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType linkedDataType -> new CompiledDataType(
                     linkedDataType.name(),
                     linkedDataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     substituteTypeParameters(field.type(), substitutions),
                                     field.annotations()
@@ -8258,7 +8268,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     substituteTypeParameters(field.type(), substitutions),
                                     field.annotations()
@@ -8305,13 +8315,13 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType linkedDataType ->
                     descriptorsContainSubstitutionTarget(linkedDataType.typeParameters(), targetNames, visited)
                     || linkedDataType.fields().stream()
-                            .map(CompiledDataType.CompiledField::type)
+                            .map(CompiledField::type)
                             .anyMatch(fieldType -> containsSubstitutionTarget(fieldType, targetNames, visited))
                     || descriptorsContainSubstitutionTarget(linkedDataType.extendedTypes(), targetNames, visited);
             case CompiledDataParentType linkedDataParentType ->
                     descriptorsContainSubstitutionTarget(linkedDataParentType.typeParameters(), targetNames, visited)
                     || linkedDataParentType.fields().stream()
-                            .map(CompiledDataType.CompiledField::type)
+                            .map(CompiledField::type)
                             .anyMatch(fieldType -> containsSubstitutionTarget(fieldType, targetNames, visited))
                     || linkedDataParentType.subTypes().stream()
                             .anyMatch(subType -> containsSubstitutionTarget(subType, targetNames, visited));
@@ -8482,7 +8492,7 @@ public class CapybaraExpressionCompiler {
                         substitutions.put(dataType.typeParameters().get(i), typeArguments.get(i));
                     }
                     var substitutedFields = dataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     substituteTypeParameters(field.type(), substitutions),
                                     field.annotations()
@@ -8509,10 +8519,9 @@ public class CapybaraExpressionCompiler {
                 );
             });
         }
-        try {
-            return Optional.of(PrimitiveLinkedType.valueOf(normalizedDescriptor.toUpperCase(java.util.Locale.ROOT)));
-        } catch (IllegalArgumentException ignored) {
-            // Not a primitive descriptor.
+        var primitive = CompiledIrModule.findPrimitiveLinkedType(normalizedDescriptor.toUpperCase(java.util.Locale.ROOT));
+        if (primitive.isPresent()) {
+            return primitive.map(type -> (CompiledType) type);
         }
         if (normalizedDescriptor.length() == 1
             && Character.isUpperCase(normalizedDescriptor.charAt(0))) {
@@ -8794,7 +8803,7 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             CompiledType expectedValueType
     ) {
-        var entries = new java.util.ArrayList<CompiledNewDict.Entry>();
+        var entries = new java.util.ArrayList<CompiledNewDictEntry>();
         for (var entry : expression.entries()) {
             var key = linkExpression(entry.key(), scope);
             if (key instanceof Result.Error<CompiledExpression> error) {
@@ -8808,11 +8817,11 @@ public class CapybaraExpressionCompiler {
             if (value instanceof Result.Error<CompiledExpression> error) {
                 return ResultOps.error(error);
             }
-            var linkedEntry = new CompiledNewDict.Entry(
+            var linkedEntry = new CompiledNewDictEntry(
                     ((Result.Success<CompiledExpression>) key).value(),
                     ((Result.Success<CompiledExpression>) value).value()
             );
-            if (linkedEntry.key().type() != STRING) {
+            if (differentType(linkedEntry.key().type(), STRING)) {
                 return withPosition(
                         Results.error("dict keys must be of type `STRING`"),
                         entry.key().position().or(() -> expression.position())
@@ -8822,7 +8831,7 @@ public class CapybaraExpressionCompiler {
         }
 
         var valueType = resolveCollectionElementType(
-                entries.stream().map(CompiledNewDict.Entry::value).toList(),
+                entries.stream().map(CompiledNewDictEntry::value).toList(),
                 expectedValueType
         );
         return Results.success((CompiledExpression) new CompiledNewDict(List.copyOf(entries), new CompiledDict(valueType)));
@@ -8917,7 +8926,7 @@ public class CapybaraExpressionCompiler {
             Map<String, CompiledExpression> linkedUpdates,
             Optional<SourcePosition> position
     ) {
-        var assignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(dataType.fields().size());
+        var assignments = new java.util.ArrayList<CompiledNewDataFieldAssignment>(dataType.fields().size());
         for (var field : dataType.fields()) {
             var fieldType = resolveFieldType(dataType, field);
             var updated = linkedUpdates.get(field.name());
@@ -8929,9 +8938,9 @@ public class CapybaraExpressionCompiler {
                             position
                     );
                 }
-                assignments.add(new CompiledNewData.FieldAssignment(field.name(), coerced.orElseThrow()));
+                assignments.add(new CompiledNewDataFieldAssignment(field.name(), coerced.orElseThrow()));
             } else {
-                assignments.add(new CompiledNewData.FieldAssignment(
+                assignments.add(new CompiledNewDataFieldAssignment(
                         field.name(),
                         new CompiledFieldAccess(source, field.name(), fieldType)
                 ));
@@ -8942,7 +8951,7 @@ public class CapybaraExpressionCompiler {
         }
         var args = new java.util.ArrayList<CompiledExpression>(assignments.size() + 1);
         args.add(source);
-        args.addAll(assignments.stream().map(CompiledNewData.FieldAssignment::value).toList());
+        args.addAll(assignments.stream().map(CompiledNewDataFieldAssignment::value).toList());
         return Results.success((CompiledExpression) new CompiledFunctionCall(
                 METHOD_DECL_PREFIX + dataType.name() + "__with",
                 List.copyOf(args),
@@ -8956,15 +8965,15 @@ public class CapybaraExpressionCompiler {
             Map<String, CompiledExpression> linkedUpdates,
             Optional<SourcePosition> position
     ) {
-        var cases = new java.util.ArrayList<CompiledMatchExpression.MatchCase>(parentType.subTypes().size());
+        var cases = new java.util.ArrayList<CompiledMatchCase>(parentType.subTypes().size());
         for (var subtype : parentType.subTypes()) {
             var subtypeFields = resolveConstructorFields(subtype, parentType);
-            var fieldPatterns = new java.util.ArrayList<CompiledMatchExpression.Pattern>(subtypeFields.size());
-            var constructorAssignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(subtypeFields.size());
+            var fieldPatterns = new java.util.ArrayList<CompiledPattern>(subtypeFields.size());
+            var constructorAssignments = new java.util.ArrayList<CompiledNewDataFieldAssignment>(subtypeFields.size());
             for (var i = 0; i < subtypeFields.size(); i++) {
                 var field = subtypeFields.get(i);
                 var variableName = "__with_" + field.name() + "_" + i;
-                fieldPatterns.add(new CompiledMatchExpression.VariablePattern(variableName));
+                fieldPatterns.add(new CompiledVariablePattern(variableName));
                 var updated = linkedUpdates.get(field.name());
                 if (updated != null) {
                     var coerced = coerceExpressionToType(updated, field.type());
@@ -8974,16 +8983,16 @@ public class CapybaraExpressionCompiler {
                                 position
                         );
                     }
-                    constructorAssignments.add(new CompiledNewData.FieldAssignment(field.name(), coerced.orElseThrow()));
+                    constructorAssignments.add(new CompiledNewDataFieldAssignment(field.name(), coerced.orElseThrow()));
                 } else {
-                    constructorAssignments.add(new CompiledNewData.FieldAssignment(
+                    constructorAssignments.add(new CompiledNewDataFieldAssignment(
                             field.name(),
                             new CompiledVariable(variableName, field.type())
                         ));
                 }
             }
-            cases.add(new CompiledMatchExpression.MatchCase(
-                    new CompiledMatchExpression.ConstructorPattern(subtype.name(), List.copyOf(fieldPatterns)),
+            cases.add(new CompiledMatchCase(
+                    new CompiledConstructorPattern(subtype.name(), List.copyOf(fieldPatterns)),
                     Optional.empty(),
                     new CompiledNewData(subtype, List.copyOf(constructorAssignments))
             ));
@@ -9174,19 +9183,19 @@ public class CapybaraExpressionCompiler {
                                         scope,
                                         newData
                                 ), positionalAssignments -> {
-                                    var allAssignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(
+                                    var allAssignments = new java.util.ArrayList<CompiledNewDataFieldAssignment>(
                                             spreadAssignments.size() + assignments.size() + positionalAssignments.size()
                                     );
                                     allAssignments.addAll(spreadAssignments);
                                     allAssignments.addAll(assignments);
                                     allAssignments.addAll(positionalAssignments);
                                     var validatedAssignments = validateRequiredAssignments(type, allAssignments, newData);
-                                    if (validatedAssignments instanceof Result.Error<List<CompiledNewData.FieldAssignment>> error) {
+                                    if (validatedAssignments instanceof Result.Error<List<CompiledNewDataFieldAssignment>> error) {
                                         return ResultOps.error(error);
                                     }
                                     return ResultOps.flatMap(coerceAssignmentsForType(
                                             type,
-                                            ((Result.Success<List<CompiledNewData.FieldAssignment>>) validatedAssignments).value(),
+                                            ((Result.Success<List<CompiledNewDataFieldAssignment>>) validatedAssignments).value(),
                                             newData
                                     ), coercedAssignments -> {
                                         var resolvedType = inferDataTypeFromAssignments(type, coercedAssignments);
@@ -9217,7 +9226,7 @@ public class CapybaraExpressionCompiler {
                 linkArgumentForExpectedType(newData.positionalArguments().getFirst(), scope, primitiveBackedType.backingType()),
                 coerced -> (CompiledExpression) new CompiledNewData(
                         primitiveBackedType,
-                        List.of(new CompiledNewData.FieldAssignment("value", coerced.expression()))
+                        List.of(new CompiledNewDataFieldAssignment("value", coerced.expression()))
                 ));
     }
 
@@ -9322,7 +9331,7 @@ public class CapybaraExpressionCompiler {
         }
         var value = newData.assignments().stream()
                 .filter(assignment -> "value".equals(assignment.name()))
-                .map(CompiledNewData.FieldAssignment::value)
+                .map(CompiledNewDataFieldAssignment::value)
                 .findFirst();
         if (value.isEmpty()) {
             return withPosition(
@@ -9452,18 +9461,18 @@ public class CapybaraExpressionCompiler {
         return Results.success(new CompiledMatchExpression(
                 callExpression,
                 List.of(
-                        new CompiledMatchExpression.MatchCase(
-                                new CompiledMatchExpression.ConstructorPattern(
+                        new CompiledMatchCase(
+                                new CompiledConstructorPattern(
                                         "Success",
-                                        List.of(new CompiledMatchExpression.VariablePattern(successVariable))
+                                        List.of(new CompiledVariablePattern(successVariable))
                                 ),
                                 Optional.empty(),
                                 ((Result.Success<CompiledExpression>) successResult).value()
                         ),
-                        new CompiledMatchExpression.MatchCase(
-                                new CompiledMatchExpression.ConstructorPattern(
+                        new CompiledMatchCase(
+                                new CompiledConstructorPattern(
                                         "Error",
-                                        List.of(new CompiledMatchExpression.VariablePattern(messageVariable))
+                                        List.of(new CompiledVariablePattern(messageVariable))
                                 ),
                                 Optional.empty(),
                                 errorResult
@@ -9526,7 +9535,7 @@ public class CapybaraExpressionCompiler {
         var arguments = orderedAssignments(fieldValues, targetType.fields());
         var signature = signatures.getFirst();
         var resolvedReturnType = resolveReturnType(signature, arguments);
-        if (resolvedReturnType == PrimitiveLinkedType.ANY) {
+        if (sameType(resolvedReturnType, CompiledIrModule.ANY)) {
             resolvedReturnType = constructorRef.resultReturning()
                     ? resultTypeFor(targetType)
                     : targetType;
@@ -9565,7 +9574,7 @@ public class CapybaraExpressionCompiler {
         var arguments = List.of(value);
         var signature = signatures.getFirst();
         var resolvedReturnType = resolveReturnType(signature, arguments);
-        if (resolvedReturnType == PrimitiveLinkedType.ANY) {
+        if (sameType(resolvedReturnType, CompiledIrModule.ANY)) {
             resolvedReturnType = constructorRef.resultReturning()
                     ? resultTypeFor(targetType)
                     : targetType;
@@ -9592,10 +9601,10 @@ public class CapybaraExpressionCompiler {
 
     private List<CompiledExpression> orderedAssignments(
             LinkedHashMap<String, CompiledExpression> fieldValues,
-            List<CompiledDataType.CompiledField> fields
+            List<CompiledField> fields
     ) {
         return fields.stream()
-                .map(CompiledDataType.CompiledField::name)
+                .map(CompiledField::name)
                 .map(fieldValues::get)
                 .toList();
     }
@@ -9619,7 +9628,7 @@ public class CapybaraExpressionCompiler {
         return new CompiledNewData(
                 dataType,
                 dataType.fields().stream()
-                        .map(field -> new CompiledNewData.FieldAssignment(field.name(), fieldValues.get(field.name())))
+                        .map(field -> new CompiledNewDataFieldAssignment(field.name(), fieldValues.get(field.name())))
                         .toList()
         );
     }
@@ -9649,7 +9658,7 @@ public class CapybaraExpressionCompiler {
         }
         return Results.success(new CompiledNewData(
                 linkedSuccessType,
-                List.of(new CompiledNewData.FieldAssignment("value", coerced.orElseThrow()))
+                List.of(new CompiledNewDataFieldAssignment("value", coerced.orElseThrow()))
         ));
     }
 
@@ -9710,9 +9719,9 @@ public class CapybaraExpressionCompiler {
         }
         return new CompiledNewData(
                 ((Result.Success<CompiledDataType>) errorType).value(),
-                List.of(new CompiledNewData.FieldAssignment(
+                List.of(new CompiledNewDataFieldAssignment(
                         "message",
-                        new CompiledVariable(messageVariable, PrimitiveLinkedType.STRING)
+                        new CompiledVariable(messageVariable, CompiledIrModule.STRING)
                 ))
         );
     }
@@ -9723,19 +9732,19 @@ public class CapybaraExpressionCompiler {
             byName.put(assignment.name(), assignment.value());
         }
         return dataType.fields().stream()
-                .map(CompiledDataType.CompiledField::name)
+                .map(CompiledField::name)
                 .map(byName::get)
                 .toList();
     }
 
-    private CompiledType inferDataTypeFromAssignments(CompiledType type, List<CompiledNewData.FieldAssignment> assignments) {
+    private CompiledType inferDataTypeFromAssignments(CompiledType type, List<CompiledNewDataFieldAssignment> assignments) {
         if (!(type instanceof GenericDataType genericDataType) || !containsGenericTypeParameter(type)) {
             return type;
         }
         var fieldsByName = genericDataType.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        CompiledDataType.CompiledField::name,
-                        CompiledDataType.CompiledField::type,
+                        CompiledField::name,
+                        CompiledField::type,
                         (a, b) -> a
                 ));
         var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
@@ -9768,7 +9777,7 @@ public class CapybaraExpressionCompiler {
             case CompiledNewDict newDict -> newDict.entries().isEmpty();
             case CompiledNewData newData ->
                     newData.assignments().stream()
-                            .map(CompiledNewData.FieldAssignment::value)
+                            .map(CompiledNewDataFieldAssignment::value)
                             .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
             case CompiledTupleExpression tupleExpression ->
                     tupleExpression.values().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
@@ -9821,11 +9830,11 @@ public class CapybaraExpressionCompiler {
     private boolean hasKnownEmptyCollectionShape(CompiledType type) {
         return switch (type) {
             case CompiledList linkedList ->
-                    linkedList.elementType() == ANY || hasKnownEmptyCollectionShape(linkedList.elementType());
+                    sameType(linkedList.elementType(), ANY) || hasKnownEmptyCollectionShape(linkedList.elementType());
             case CompiledSet linkedSet ->
-                    linkedSet.elementType() == ANY || hasKnownEmptyCollectionShape(linkedSet.elementType());
+                    sameType(linkedSet.elementType(), ANY) || hasKnownEmptyCollectionShape(linkedSet.elementType());
             case CompiledDict linkedDict ->
-                    linkedDict.valueType() == ANY || hasKnownEmptyCollectionShape(linkedDict.valueType());
+                    sameType(linkedDict.valueType(), ANY) || hasKnownEmptyCollectionShape(linkedDict.valueType());
             case CompiledTupleType linkedTupleType ->
                     linkedTupleType.elementTypes().stream().anyMatch(this::hasKnownEmptyCollectionShape);
             case CompiledFunctionType linkedFunctionType ->
@@ -9886,7 +9895,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isEmptyCollectionElementCompatible(CompiledType actual, CompiledType expected) {
-        if (actual == ANY) {
+        if (sameType(actual, ANY)) {
             return true;
         }
         return isEmptyShapeTypeArgumentCompatible(actual, expected);
@@ -9938,7 +9947,7 @@ public class CapybaraExpressionCompiler {
     private boolean isResolvedTypeForInference(CompiledType type) {
         return switch (type) {
             case CompiledGenericTypeParameter ignored -> false;
-            case PrimitiveLinkedType primitive -> primitive != ANY;
+            case PrimitiveLinkedType primitive -> differentType(primitive, ANY);
             case CompiledList linkedList -> isResolvedTypeForInference(linkedList.elementType());
             case CompiledSet linkedSet -> isResolvedTypeForInference(linkedSet.elementType());
             case CompiledDict linkedDict -> isResolvedTypeForInference(linkedDict.valueType());
@@ -9960,7 +9969,7 @@ public class CapybaraExpressionCompiler {
     private boolean isConcreteResolvedType(CompiledType type) {
         return switch (type) {
             case CompiledGenericTypeParameter ignored -> false;
-            case PrimitiveLinkedType primitive -> primitive != ANY;
+            case PrimitiveLinkedType primitive -> differentType(primitive, ANY);
             case CompiledList linkedList -> isConcreteResolvedType(linkedList.elementType());
             case CompiledSet linkedSet -> isConcreteResolvedType(linkedSet.elementType());
             case CompiledDict linkedDict -> isConcreteResolvedType(linkedDict.valueType());
@@ -10003,8 +10012,8 @@ public class CapybaraExpressionCompiler {
                 .isPresent();
     }
 
-    private Result<List<CompiledNewData.FieldAssignment>> linkSpreadAssignments(List<Expression> spreads, Scope scope) {
-        var assignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>();
+    private Result<List<CompiledNewDataFieldAssignment>> linkSpreadAssignments(List<Expression> spreads, Scope scope) {
+        var assignments = new java.util.ArrayList<CompiledNewDataFieldAssignment>();
         for (var spread : spreads) {
             var linkedSpread = linkExpression(spread, scope);
             if (linkedSpread instanceof Result.Error<CompiledExpression> error) {
@@ -10018,7 +10027,7 @@ public class CapybaraExpressionCompiler {
                 );
             }
             for (var field : dataType.fields()) {
-                assignments.add(new CompiledNewData.FieldAssignment(
+                assignments.add(new CompiledNewDataFieldAssignment(
                         field.name(),
                         new CompiledFieldAccess(spreadExpression, field.name(), field.type())
                 ));
@@ -10027,7 +10036,7 @@ public class CapybaraExpressionCompiler {
         return Results.success(List.copyOf(assignments));
     }
 
-    private Result<List<CompiledNewData.FieldAssignment>> linkFieldAssignment(
+    private Result<List<CompiledNewDataFieldAssignment>> linkFieldAssignment(
             List<FieldAssignment> assignments,
             Scope scope,
             CompiledType type
@@ -10039,19 +10048,19 @@ public class CapybaraExpressionCompiler {
                     if (expected == null || !requiresExpectedTypeLinking(assignment.value(), expected)) {
                         return ResultOps.map(
                                 linkExpression(assignment.value(), scope),
-                                ex -> new CompiledNewData.FieldAssignment(assignment.name(), ex));
+                                ex -> new CompiledNewDataFieldAssignment(assignment.name(), ex));
                     }
                     return ResultOps.map(
                             linkArgumentForExpectedType(assignment.value(), scope, expected),
-                            coerced -> new CompiledNewData.FieldAssignment(assignment.name(), coerced.expression()));
+                            coerced -> new CompiledNewDataFieldAssignment(assignment.name(), coerced.expression()));
                 })
                 .collect(new ResultCollectionCollector<>());
     }
 
-    private Result<List<CompiledNewData.FieldAssignment>> linkPositionalAssignments(
+    private Result<List<CompiledNewDataFieldAssignment>> linkPositionalAssignments(
             CompiledType type,
-            List<CompiledNewData.FieldAssignment> spreadAssignments,
-            List<CompiledNewData.FieldAssignment> namedAssignments,
+            List<CompiledNewDataFieldAssignment> spreadAssignments,
+            List<CompiledNewDataFieldAssignment> namedAssignments,
             List<Expression> positionalArguments,
             Scope scope,
             NewData source
@@ -10067,8 +10076,8 @@ public class CapybaraExpressionCompiler {
         }
 
         var assignedNames = new java.util.LinkedHashSet<String>();
-        spreadAssignments.stream().map(CompiledNewData.FieldAssignment::name).forEach(assignedNames::add);
-        namedAssignments.stream().map(CompiledNewData.FieldAssignment::name).forEach(assignedNames::add);
+        spreadAssignments.stream().map(CompiledNewDataFieldAssignment::name).forEach(assignedNames::add);
+        namedAssignments.stream().map(CompiledNewDataFieldAssignment::name).forEach(assignedNames::add);
         var availableFields = genericDataType.fields().stream()
                 .filter(field -> !assignedNames.contains(field.name()))
                 .toList();
@@ -10083,7 +10092,7 @@ public class CapybaraExpressionCompiler {
             );
         }
 
-        var mapped = new java.util.ArrayList<CompiledNewData.FieldAssignment>(positionalArguments.size());
+        var mapped = new java.util.ArrayList<CompiledNewDataFieldAssignment>(positionalArguments.size());
         for (var i = 0; i < positionalArguments.size(); i++) {
             var field = availableFields.get(i);
             CompiledExpression expression;
@@ -10100,7 +10109,7 @@ public class CapybaraExpressionCompiler {
                 }
                 expression = ((Result.Success<CompiledExpression>) linked).value();
             }
-            mapped.add(new CompiledNewData.FieldAssignment(
+            mapped.add(new CompiledNewDataFieldAssignment(
                     field.name(),
                     expression
             ));
@@ -10127,22 +10136,22 @@ public class CapybaraExpressionCompiler {
         }
         return genericDataType.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        CompiledDataType.CompiledField::name,
+                        CompiledField::name,
                         field -> resolveFieldType(genericDataType, field),
                         (first, second) -> first
                 ));
     }
 
-    private Result<List<CompiledNewData.FieldAssignment>> validateRequiredAssignments(
+    private Result<List<CompiledNewDataFieldAssignment>> validateRequiredAssignments(
             CompiledType type,
-            List<CompiledNewData.FieldAssignment> assignments,
+            List<CompiledNewDataFieldAssignment> assignments,
             NewData source
     ) {
         if (!(type instanceof GenericDataType genericDataType)) {
             return Results.success(List.copyOf(assignments));
         }
         var fieldNames = genericDataType.fields().stream()
-                .map(CompiledDataType.CompiledField::name)
+                .map(CompiledField::name)
                 .collect(java.util.stream.Collectors.toSet());
         var assignedNames = new java.util.LinkedHashSet<String>();
         for (var assignment : assignments) {
@@ -10160,7 +10169,7 @@ public class CapybaraExpressionCompiler {
             }
         }
         var missingField = genericDataType.fields().stream()
-                .map(CompiledDataType.CompiledField::name)
+                .map(CompiledField::name)
                 .filter(fieldName -> !assignedNames.contains(fieldName))
                 .findFirst();
         if (missingField.isPresent()) {
@@ -10172,9 +10181,9 @@ public class CapybaraExpressionCompiler {
         return Results.success(List.copyOf(assignments));
     }
 
-    private Result<List<CompiledNewData.FieldAssignment>> coerceAssignmentsForType(
+    private Result<List<CompiledNewDataFieldAssignment>> coerceAssignmentsForType(
             CompiledType type,
-            List<CompiledNewData.FieldAssignment> assignments,
+            List<CompiledNewDataFieldAssignment> assignments,
             NewData source
     ) {
         if (!(type instanceof GenericDataType genericDataType)) {
@@ -10182,11 +10191,11 @@ public class CapybaraExpressionCompiler {
         }
         var fieldsByName = genericDataType.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        CompiledDataType.CompiledField::name,
-                        CompiledDataType.CompiledField::type,
+                        CompiledField::name,
+                        CompiledField::type,
                         (a, b) -> a
                 ));
-        var coercedAssignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(assignments.size());
+        var coercedAssignments = new java.util.ArrayList<CompiledNewDataFieldAssignment>(assignments.size());
         for (var assignment : assignments) {
             var expectedType = fieldsByName.get(assignment.name());
             if (expectedType == null) {
@@ -10208,7 +10217,7 @@ public class CapybaraExpressionCompiler {
                 coercedAssignments.add(assignment);
                 continue;
             }
-            coercedAssignments.add(new CompiledNewData.FieldAssignment(assignment.name(), coerced.expression()));
+            coercedAssignments.add(new CompiledNewDataFieldAssignment(assignment.name(), coerced.expression()));
         }
         return Results.success(List.copyOf(coercedAssignments));
     }
@@ -10224,9 +10233,9 @@ public class CapybaraExpressionCompiler {
 
     private boolean isHardFieldTypeMismatch(CompiledType expected, CompiledType actual) {
         if ((!(expected instanceof GenericDataType) && !(actual instanceof GenericDataType) && expected.equals(actual))
-            || expected == ANY
-            || actual == ANY
-            || actual == NOTHING) {
+            || sameType(expected, ANY)
+            || sameType(actual, ANY)
+            || sameType(actual, NOTHING)) {
             return false;
         }
 
@@ -10251,7 +10260,7 @@ public class CapybaraExpressionCompiler {
                 if (isNumericPrimitive(expectedPrimitive) && isNumericPrimitive(actualPrimitive)) {
                     return !isImplicitNumericWidening(expectedPrimitive, actualPrimitive);
                 }
-                return expectedPrimitive != actualPrimitive;
+                return differentType(expectedPrimitive, actualPrimitive);
             }
             return true;
         }
@@ -10285,19 +10294,19 @@ public class CapybaraExpressionCompiler {
     }
 
     private static boolean isImplicitNumericWidening(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
-        return (actual == INT && (expected == LONG || expected == FLOAT || expected == DOUBLE))
-               || (actual == LONG && (expected == FLOAT || expected == DOUBLE))
-               || (actual == FLOAT && expected == DOUBLE);
+        return (sameType(actual, INT) && (sameType(expected, LONG) || sameType(expected, FLOAT) || sameType(expected, DOUBLE)))
+               || (sameType(actual, LONG) && (sameType(expected, FLOAT) || sameType(expected, DOUBLE)))
+               || (sameType(actual, FLOAT) && sameType(expected, DOUBLE));
     }
 
     private String renderTypeForError(CompiledType type) {
         return switch (type) {
             case PrimitiveLinkedType primitive -> primitiveTypeName(primitive);
-            case CollectionLinkedType.CompiledList listType ->
+            case CompiledList listType ->
                     "List[" + renderTypeForError(listType.elementType()) + "]";
-            case CollectionLinkedType.CompiledSet setType ->
+            case CompiledSet setType ->
                     "Set[" + renderTypeForError(setType.elementType()) + "]";
-            case CollectionLinkedType.CompiledDict dictType ->
+            case CompiledDict dictType ->
                     "Dict[" + renderTypeForError(dictType.valueType()) + "]";
             case CompiledTupleType tupleType -> "Tuple[" + tupleType.elementTypes().stream()
                     .map(this::renderTypeForError)
@@ -10663,18 +10672,18 @@ public class CapybaraExpressionCompiler {
                     return Results.success((CompiledExpression) new CompiledMatchExpression(
                             resultExpression,
                             List.of(
-                                    new CompiledMatchExpression.MatchCase(
-                                            new CompiledMatchExpression.ConstructorPattern(
+                                    new CompiledMatchCase(
+                                            new CompiledConstructorPattern(
                                                     "Success",
-                                                    List.of(new CompiledMatchExpression.VariablePattern(rawPayloadName))
+                                                    List.of(new CompiledVariablePattern(rawPayloadName))
                                             ),
                                             Optional.empty(),
                                             ((Result.Success<CompiledExpression>) wrappedSuccess).value()
                                     ),
-                                    new CompiledMatchExpression.MatchCase(
-                                            new CompiledMatchExpression.ConstructorPattern(
+                                    new CompiledMatchCase(
+                                            new CompiledConstructorPattern(
                                                     "Error",
-                                                    List.of(new CompiledMatchExpression.VariablePattern(messageVariable))
+                                                    List.of(new CompiledVariablePattern(messageVariable))
                                             ),
                                             Optional.empty(),
                                             errorResultExpression(
@@ -10849,7 +10858,7 @@ public class CapybaraExpressionCompiler {
                                     }
                                     return successDataType.value().fields().stream()
                                             .filter(field -> field.name().equals("value"))
-                                            .map(CompiledDataType.CompiledField::type)
+                                            .map(CompiledField::type)
                                             .findFirst();
                                 })
                                 .orElse(letType);
@@ -11079,7 +11088,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataType linkedDataType -> new CompiledDataType(
                     linkedDataType.name(),
                     linkedDataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     replaceScopeGenericPlaceholders(field.type(), genericTypeNames),
                                     field.annotations()
@@ -11097,7 +11106,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     replaceScopeGenericPlaceholders(field.type(), genericTypeNames),
                                     field.annotations()
@@ -11136,7 +11145,7 @@ public class CapybaraExpressionCompiler {
         return valueOrError;
     }
 
-    private record PatternAndScope(CompiledMatchExpression.Pattern pattern, Scope scope) {
+    private record PatternAndScope(CompiledPattern pattern, Scope scope) {
     }
 
     public record FunctionSignature(String name, List<CompiledType> parameterTypes, List<String> parameterNames, CompiledType returnType, Visibility visibility) {

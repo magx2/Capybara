@@ -1,14 +1,16 @@
 package dev.capylang.compiler.expression;
 
+import dev.capylang.compiler.CompiledIrModule;
+
 import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.PrimitiveLinkedType;
 
-import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
-import static dev.capylang.compiler.PrimitiveLinkedType.DATA;
-import static dev.capylang.compiler.PrimitiveLinkedType.ENUM;
-import static dev.capylang.compiler.PrimitiveLinkedType.NOTHING;
+import static dev.capylang.compiler.CompiledIrModule.ANY;
+import static dev.capylang.compiler.CompiledIrModule.DATA;
+import static dev.capylang.compiler.CompiledIrModule.ENUM;
+import static dev.capylang.compiler.CompiledIrModule.NOTHING;
 
 public class CapybaraTypeFinder {
     private static final String EXPRESSION_PASS_PROPERTY = "capybara.compiler.useCapybaraExpressionCompilationPass";
@@ -35,7 +37,7 @@ public class CapybaraTypeFinder {
         if ("RIGHT".equals(decision)) {
             return right;
         }
-        return PrimitiveLinkedType.find(decision).map(type -> (CompiledType) type).orElse(ANY);
+        return CompiledIrModule.findPrimitiveLinkedType(decision).map(type -> (CompiledType) type).orElse(ANY);
     }
 
     private static String typeDecisionName(CompiledType type) {
@@ -139,7 +141,7 @@ public class CapybaraTypeFinder {
             if ("RIGHT".equals(decision)) {
                 return right;
             }
-            return PrimitiveLinkedType.find(decision).map(type -> (CompiledType) type).orElse(ANY);
+            return CompiledIrModule.findPrimitiveLinkedType(decision).map(type -> (CompiledType) type).orElse(ANY);
         }
         return findHigherPrimitiveTypeLegacy(left, right);
     }

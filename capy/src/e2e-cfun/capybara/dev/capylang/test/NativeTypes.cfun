@@ -10,7 +10,7 @@ fun string_length(value: String) = value.size()
 
 fun string_trim(value: String): String = value.trim()
 
-fun string_get(value: String, idx: index): Option[String] = value.get(idx)
+fun string_get(value: String, idx: index): Option[char] = value.get(idx)
 
 fun string_get_range(value: String, from: int, to: int): String = value.get(from, to)
 

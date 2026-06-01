@@ -3,6 +3,7 @@ package dev.capylang.generator.java;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,6 +15,7 @@ class JavaInterfaceTest {
 
         interfaces.add(new JavaSealedInterface(
                 new JavaType("Payment"),
+                Set.of(),
                 List.of(),
                 List.of(),
                 List.of("CardPayment"),
@@ -22,6 +24,7 @@ class JavaInterfaceTest {
         ));
         interfaces.add(new JavaNormalInterface(
                 new JavaType("Auditable"),
+                Set.of(),
                 List.of(),
                 List.of(),
                 List.of()

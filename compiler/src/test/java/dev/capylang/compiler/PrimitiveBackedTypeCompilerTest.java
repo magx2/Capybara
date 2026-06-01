@@ -33,13 +33,13 @@ class PrimitiveBackedTypeCompilerTest {
                 fun call_op(a: user_id, b: user_id): user_id = a + b
                 """, SourceKind.FUNCTIONAL));
 
-        var module = compiled.modules().first();
+        var module = compiled.modules().getFirst();
         assertThat(module.types().get("user_id")).isInstanceOfSatisfying(CompiledPrimitiveBackedType.class, type -> {
-            assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.INT);
+            assertThat(type.backingType()).isEqualTo(CompiledIrModule.INT);
             assertThat(type.comments()).containsExactly("User identifier");
         });
         assertThat(module.types().get("order_id")).isInstanceOfSatisfying(CompiledPrimitiveBackedType.class, type ->
-                assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.INT));
+                assertThat(type.backingType()).isEqualTo(CompiledIrModule.INT));
 
         assertThat(function(compiled, "Ids", "make").returnType()).isInstanceOfSatisfying(
                 CompiledPrimitiveBackedType.class,
@@ -51,7 +51,7 @@ class PrimitiveBackedTypeCompilerTest {
         );
         assertThat(function(compiled, "Ids", "unwrap").expression()).isInstanceOfSatisfying(
                 CompiledUnwrapExpression.class,
-                unwrap -> assertThat(unwrap.type()).isEqualTo(PrimitiveLinkedType.INT)
+                unwrap -> assertThat(unwrap.type()).isEqualTo(CompiledIrModule.INT)
         );
         assertThat(function(compiled, "Ids", "call_plus").expression()).isInstanceOfSatisfying(
                 CompiledFunctionCall.class,
@@ -163,15 +163,15 @@ class PrimitiveBackedTypeCompilerTest {
                 fun pass_to_string(value: token): String = append_suffix(value)
                 """, SourceKind.FUNCTIONAL));
 
-        assertThat(compiled.modules().first().types().get("token")).isInstanceOfSatisfying(
+        assertThat(compiled.modules().getFirst().types().get("token")).isInstanceOfSatisfying(
                 CompiledPrimitiveBackedType.class,
-                type -> assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.STRING)
+                type -> assertThat(type.backingType()).isEqualTo(CompiledIrModule.STRING)
         );
         assertThat(function(compiled, "Tokens", "make").returnType()).isInstanceOfSatisfying(
                 CompiledPrimitiveBackedType.class,
                 type -> assertThat(type.name()).isEqualTo("token")
         );
-        assertThat(function(compiled, "Tokens", "unwrap").returnType()).isEqualTo(PrimitiveLinkedType.STRING);
+        assertThat(function(compiled, "Tokens", "unwrap").returnType()).isEqualTo(CompiledIrModule.STRING);
     }
 
     @Test
@@ -190,7 +190,7 @@ class PrimitiveBackedTypeCompilerTest {
 
         assertThat(function(compiled, "String", "stringify").expression()).isInstanceOfSatisfying(
                 CompiledUnwrapExpression.class,
-                unwrap -> assertThat(unwrap.type()).isEqualTo(PrimitiveLinkedType.STRING)
+                unwrap -> assertThat(unwrap.type()).isEqualTo(CompiledIrModule.STRING)
         );
         assertThat(function(compiled, "String", "char_size").expression()).isInstanceOfSatisfying(
                 CompiledFunctionCall.class,

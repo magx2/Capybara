@@ -25,6 +25,7 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Comparator
 import java.util.TreeSet
 
 plugins {
@@ -101,6 +102,14 @@ tasks.named('saveSdkImportConfig') {
 }
 
 abstract class InProcessCapybaraCompileTask extends DefaultTask {
+    private static TreeSet compiledModuleTreeSet() {
+        new TreeSet({ left, right -> compiledModuleCompareKey(left) <=> compiledModuleCompareKey(right) } as Comparator)
+    }
+
+    private static String compiledModuleCompareKey(def module) {
+        module.path() + "\n" + module.name()
+    }
+
     @Classpath
     abstract ConfigurableFileCollection getRuntimeClasspath()
 
@@ -179,7 +188,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                     PrintStream
             )
 
-            def libraries = new TreeSet()
+            def libraries = compiledModuleTreeSet()
             additionalInputDirs.files.each { libraryDir ->
                 Path libraryPath = libraryDir.toPath()
                 if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {

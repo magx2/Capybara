@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.*;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
@@ -2122,11 +2123,11 @@ public final class ObjectOrientedJavaGenerator {
             return renderPrimitiveBackedType(primitiveBackedType.orElseThrow(), boxed);
         }
         return switch (trimmed) {
-            case "byte" -> renderPrimitiveType(PrimitiveLinkedType.BYTE, boxed);
-            case "int" -> renderPrimitiveType(PrimitiveLinkedType.INT, boxed);
-            case "long" -> renderPrimitiveType(PrimitiveLinkedType.LONG, boxed);
-            case "double" -> renderPrimitiveType(PrimitiveLinkedType.DOUBLE, boxed);
-            case "float" -> renderPrimitiveType(PrimitiveLinkedType.FLOAT, boxed);
+            case "byte" -> renderPrimitiveType(CompiledIrModule.BYTE, boxed);
+            case "int" -> renderPrimitiveType(CompiledIrModule.INT, boxed);
+            case "long" -> renderPrimitiveType(CompiledIrModule.LONG, boxed);
+            case "double" -> renderPrimitiveType(CompiledIrModule.DOUBLE, boxed);
+            case "float" -> renderPrimitiveType(CompiledIrModule.FLOAT, boxed);
             case "bool" -> boxed ? "Boolean" : "boolean";
             case "String" -> "String";
             case "any" -> "Object";
@@ -2136,13 +2137,13 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private String renderPrimitiveType(PrimitiveLinkedType type, boolean boxed) {
-        return switch (type) {
-            case BYTE -> boxed ? "Byte" : "byte";
-            case INT -> boxed ? "Integer" : "int";
-            case LONG -> boxed ? "Long" : "long";
-            case DOUBLE -> boxed ? "Double" : "double";
-            case FLOAT -> boxed ? "Float" : "float";
-            case STRING -> "String";
+        return switch (type.name()) {
+            case "BYTE" -> boxed ? "Byte" : "byte";
+            case "INT" -> boxed ? "Integer" : "int";
+            case "LONG" -> boxed ? "Long" : "long";
+            case "DOUBLE" -> boxed ? "Double" : "double";
+            case "FLOAT" -> boxed ? "Float" : "float";
+            case "STRING" -> "String";
             default -> throw new IllegalArgumentException("Unsupported primitive-backed OO type `" + type + "`");
         };
     }

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static dev.capylang.compiler.CollectionLinkedType.CompiledList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
@@ -40,7 +39,7 @@ class InfixOperatorCompilerTest {
                     values + value
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("append"))
                 .findFirst()
                 .orElseThrow();
@@ -64,7 +63,7 @@ class InfixOperatorCompilerTest {
                     [ResultAssert { value: true }]
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("collect"))
                 .findFirst()
                 .orElseThrow();
@@ -93,7 +92,7 @@ class InfixOperatorCompilerTest {
                     [ResultAssert { value: Success { value: true } }]
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("collect"))
                 .findFirst()
                 .orElseThrow();
@@ -120,7 +119,7 @@ class InfixOperatorCompilerTest {
                     values | value => ResultAssert { value: value }
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("collect"))
                 .findFirst()
                 .orElseThrow();
@@ -150,7 +149,7 @@ class InfixOperatorCompilerTest {
                     values | value => ResultAssert { value: Success { value: value } }
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("collect"))
                 .findFirst()
                 .orElseThrow();
@@ -233,7 +232,7 @@ class InfixOperatorCompilerTest {
                     value.filter(ch => ch != "b")
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("keep_non_b"))
                 .findFirst()
                 .orElseThrow();
@@ -253,7 +252,7 @@ class InfixOperatorCompilerTest {
                     value.`|-`(ch => ch != "b")
                 """);
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("keep_non_b"))
                 .findFirst()
                 .orElseThrow();
@@ -276,7 +275,7 @@ class InfixOperatorCompilerTest {
                 fun subset_method(sum: Sum): bool = sum.⊆(10)
                 """);
 
-        assertThat(compiled.modules().first().functions())
+        assertThat(compiled.modules().getFirst().functions())
                 .extracting(CompiledFunction::name)
                 .contains("dollar_minus", "subset_infix", "subset_method");
     }
@@ -289,10 +288,13 @@ class InfixOperatorCompilerTest {
         return compileProgram(modules, new java.util.TreeSet<>());
     }
 
-    private static CompiledProgram compileProgram(List<RawModule> modules, java.util.SortedSet<CompiledModule> libraries) {
+    private static CompiledProgram compileProgram(List<RawModule> modules, java.util.Collection<CompiledModule> libraries) {
+        var sortedLibraries = new java.util.TreeSet<CompiledModule>(
+                java.util.Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+        sortedLibraries.addAll(libraries);
         var result = CapybaraCompiler.INSTANCE.compile(
                 modules,
-                libraries
+                sortedLibraries
         );
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(CompilerErrors.from(error).toString());

@@ -1,0 +1,296 @@
+from /capy/collection/List import { * }
+from /capy/lang/Option import { * }
+from /dev/capylang/compiler/CompiledAnnotation import { CompiledAnnotation }
+from /dev/capylang/compiler/CompiledObjectKind import { CompiledObjectKind }
+from /dev/capylang/compiler/CompiledObjectMethod import { CompiledObjectMethod }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/Visibility import { Visibility }
+from /dev/capylang/compiler/parser/ObjectOrientedModule import { ObjectOrientedModule }
+
+data CompiledIr { marker: String }
+data CompiledExpression { <native> }
+
+union CompiledType =
+    PrimitiveLinkedType
+    | CompiledList
+    | CompiledSet
+    | CompiledDict
+    | CompiledDataParentType
+    | CompiledDataType
+    | CompiledObjectType
+    | CompiledPrimitiveBackedType
+    | CompiledGenericTypeParameter
+    | CompiledFunctionType
+    | CompiledTupleType
+
+union CollectionLinkedType =
+    CompiledList
+    | CompiledSet
+    | CompiledDict
+
+union GenericDataType =
+    CompiledDataParentType
+    | CompiledDataType
+    | CompiledObjectType
+    | CompiledPrimitiveBackedType
+
+const EXTENSION: String = ".json"
+
+const BYTE: PrimitiveLinkedType = PrimitiveLinkedType { name: "BYTE" }
+const INT: PrimitiveLinkedType = PrimitiveLinkedType { name: "INT" }
+const LONG: PrimitiveLinkedType = PrimitiveLinkedType { name: "LONG" }
+const FLOAT: PrimitiveLinkedType = PrimitiveLinkedType { name: "FLOAT" }
+const DOUBLE: PrimitiveLinkedType = PrimitiveLinkedType { name: "DOUBLE" }
+const STRING: PrimitiveLinkedType = PrimitiveLinkedType { name: "STRING" }
+const BOOL: PrimitiveLinkedType = PrimitiveLinkedType { name: "BOOL" }
+const NOTHING: PrimitiveLinkedType = PrimitiveLinkedType { name: "NOTHING" }
+const ANY: PrimitiveLinkedType = PrimitiveLinkedType { name: "ANY" }
+const DATA: PrimitiveLinkedType = PrimitiveLinkedType { name: "DATA" }
+const ENUM: PrimitiveLinkedType = PrimitiveLinkedType { name: "ENUM" }
+
+data PrimitiveLinkedType { name: String }
+data CompiledList { elementType: CompiledType }
+data CompiledSet { elementType: CompiledType }
+data CompiledDict { valueType: CompiledType }
+data CompiledGenericTypeParameter { name: String }
+data CompiledFunctionType { argumentType: CompiledType, returnType: CompiledType }
+data CompiledTupleType { elementTypes: List[CompiledType] }
+
+data CompiledField {
+    name: String,
+    type: CompiledType,
+    annotations: List[CompiledAnnotation]
+}
+
+data CompiledDataType {
+    name: String,
+    fields: List[CompiledField],
+    typeParameters: List[String],
+    extendedTypes: List[String],
+    comments: List[String],
+    visibility: Visibility,
+    singleton: bool,
+    nativeType: bool,
+    enumValue: bool,
+    annotations: List[CompiledAnnotation]
+}
+
+data CompiledDataParentType {
+    name: String,
+    fields: List[CompiledField],
+    subTypes: List[CompiledDataType],
+    typeParameters: List[String],
+    comments: List[String],
+    visibility: Visibility,
+    enumType: bool,
+    annotations: List[CompiledAnnotation]
+}
+
+data CompiledObjectType {
+    name: String,
+    backendClassName: String,
+    parents: List[String],
+    visibility: Visibility,
+    annotations: List[CompiledAnnotation],
+    kind: CompiledObjectKind,
+    methods: List[CompiledObjectMethod]
+}
+
+data CompiledPrimitiveBackedType {
+    name: String,
+    backingType: PrimitiveLinkedType,
+    cfunType: String,
+    comments: List[String],
+    visibility: Visibility,
+    annotations: List[CompiledAnnotation]
+}
+
+data CompiledFunction {
+    name: String,
+    returnType: CompiledType,
+    parameters: List[CompiledFunctionParameter],
+    expression: CompiledExpression,
+    comments: List[String],
+    visibility: Visibility,
+    programMain: bool,
+    recursive: bool,
+    tailRecursive: bool,
+    annotations: List[CompiledAnnotation]
+}
+
+data CompiledFunctionParameter {
+    name: String,
+    type: CompiledType
+}
+
+data StaticImport {
+    className: String,
+    memberName: String,
+    enumValue: bool
+}
+
+data CompiledModule {
+    name: String,
+    path: String,
+    types: Dict[GenericDataType],
+    visiblePrimitiveBackedTypes: Dict[CompiledPrimitiveBackedType],
+    functions: List[CompiledFunction],
+    derivers: Dict[any],
+    annotations: Dict[any],
+    staticImports: List[StaticImport]
+}
+
+data CompiledProgram {
+    modules: List[CompiledModule],
+    objectOrientedModules: List[ObjectOrientedModule],
+    nativeProviders: NativeProviderManifest,
+    nativeProviderCatalog: NativeProviderCatalog
+}
+
+fun findPrimitiveLinkedType(name: String): Option[PrimitiveLinkedType] =
+    if name == "BYTE"
+    then Some { BYTE }
+    else if name == "INT"
+        then Some { INT }
+        else if name == "LONG"
+            then Some { LONG }
+            else if name == "FLOAT"
+                then Some { FLOAT }
+                else if name == "DOUBLE"
+                    then Some { DOUBLE }
+                    else if name == "STRING"
+                        then Some { STRING }
+                        else if name == "BOOL"
+                            then Some { BOOL }
+                            else if name == "NOTHING"
+                                then Some { NOTHING }
+                                else if name == "ANY"
+                                    then Some { ANY }
+                                    else if name == "DATA"
+                                        then Some { DATA }
+                                        else if name == "ENUM"
+                                            then Some { ENUM }
+                                            else None {}
+
+fun CompiledType.name(): String =
+    compiledTypeName(this)
+
+fun GenericDataType.name(): String =
+    match this with
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } -> name
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } -> name
+    case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } -> name
+    case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } -> name
+
+fun GenericDataType.fields(): List[CompiledField] =
+    genericDataTypeFields(this)
+
+fun GenericDataType.visibility(): Visibility =
+    genericDataTypeVisibility(this)
+
+fun PrimitiveLinkedType.ordinal(): int =
+    if this.name == "BYTE"
+    then 0
+    else if this.name == "INT"
+        then 1
+        else if this.name == "LONG"
+            then 2
+            else if this.name == "FLOAT"
+                then 3
+                else if this.name == "DOUBLE"
+                    then 4
+                    else if this.name == "STRING"
+                        then 5
+                        else if this.name == "BOOL"
+                            then 6
+                            else if this.name == "NOTHING"
+                                then 7
+                                else if this.name == "ANY"
+                                    then 8
+                                    else if this.name == "DATA"
+                                        then 9
+                                        else 10
+
+fun compiledTypeName(type: CompiledType): String =
+    match type with
+    case PrimitiveLinkedType { name } -> name
+    case CompiledList { elementType } -> "List"
+    case CompiledSet { elementType } -> "Set"
+    case CompiledDict { valueType } -> "Dict"
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } -> name
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } -> name
+    case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } -> name
+    case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } -> name
+    case CompiledGenericTypeParameter { name } -> name
+    case CompiledFunctionType { argumentType, returnType } -> compiledTypeName(argumentType) + "=>" + compiledTypeName(returnType)
+    case CompiledTupleType { elementTypes } -> "Tuple"
+
+fun genericDataTypeFields(type: GenericDataType): List[CompiledField] =
+    match type with
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } -> fields
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } -> fields
+    case _ -> []
+
+fun genericDataTypeVisibility(type: GenericDataType): Visibility =
+    match type with
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } -> visibility
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } -> visibility
+    case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } -> visibility
+    case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } -> visibility
+
+fun compiledModuleCompareKey(module: CompiledModule): String =
+    module.path + "\n" + module.name
+
+fun compiledFunctionCompareKey(function: CompiledFunction): String =
+    function.name + compiledFunctionParametersCompareKey(function.parameters)
+
+private fun compiledFunctionParametersCompareKey(parameters: List[CompiledFunctionParameter]): String =
+    parameters.reduce("", (acc, parameter) => acc + "\n" + compiledTypeCompareKey(parameter.type) + "\n" + parameter.name)
+
+fun compiledTypeCompareKey(type: CompiledType): String =
+    match type with
+    case PrimitiveLinkedType { name } -> name
+    case CompiledList { elementType } -> "CompiledList[elementType=" + compiledTypeCompareKey(elementType) + "]"
+    case CompiledSet { elementType } -> "CompiledSet[elementType=" + compiledTypeCompareKey(elementType) + "]"
+    case CompiledDict { valueType } -> "CompiledDict[valueType=" + compiledTypeCompareKey(valueType) + "]"
+    case CompiledFunctionType { argumentType, returnType } ->
+        "CompiledFunctionType[argumentType=" + compiledTypeCompareKey(argumentType) + ", returnType=" + compiledTypeCompareKey(returnType) + "]"
+    case CompiledTupleType { elementTypes } -> "CompiledTupleType[elementTypes=" + elementTypes + "]"
+    case _ -> "" + type
+
+fun PrimitiveLinkedType.to_string(): String = this.name
+fun CompiledList.to_string(): String = "CompiledList[elementType=" + compiledTypeCompareKey(this.elementType) + "]"
+fun CompiledSet.to_string(): String = "CompiledSet[elementType=" + compiledTypeCompareKey(this.elementType) + "]"
+fun CompiledDict.to_string(): String = "CompiledDict[valueType=" + compiledTypeCompareKey(this.valueType) + "]"
+fun CompiledFunctionType.to_string(): String =
+    "CompiledFunctionType[argumentType=" + compiledTypeCompareKey(this.argumentType)
+        + ", returnType=" + compiledTypeCompareKey(this.returnType)
+        + "]"
+fun CompiledTupleType.to_string(): String = "CompiledTupleType[elementTypes=" + this.elementTypes + "]"
+fun CompiledField.to_string(): String =
+    "CompiledField[name=" + this.name + ", type=" + compiledTypeCompareKey(this.type) + ", annotations=" + this.annotations + "]"
+fun CompiledFunctionParameter.to_string(): String =
+    "CompiledFunctionParameter[name=" + this.name + ", type=" + compiledTypeCompareKey(this.type) + "]"
+fun CompiledDataType.to_string(): String =
+    "CompiledDataType[name=" + this.name
+        + ", fields=" + this.fields
+        + ", typeParameters=" + this.typeParameters
+        + ", extendedTypes=" + this.extendedTypes
+        + ", comments=" + this.comments
+        + ", visibility=" + this.visibility
+        + ", singleton=" + this.singleton
+        + ", nativeType=" + this.nativeType
+        + ", enumValue=" + this.enumValue
+        + ", annotations=" + this.annotations
+        + "]"
+fun CompiledDataParentType.to_string(): String =
+    "CompiledDataParentType[name=" + this.name
+        + ", fields=" + this.fields
+        + ", subTypes=" + this.subTypes
+        + ", typeParameters=" + this.typeParameters
+        + ", comments=" + this.comments
+        + ", visibility=" + this.visibility
+        + ", enumType=" + this.enumType
+        + ", annotations=" + this.annotations
+        + "]"

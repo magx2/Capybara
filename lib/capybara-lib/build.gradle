@@ -30,6 +30,7 @@ import java.net.URLClassLoader
 import java.nio.file.Path
 import java.nio.file.Files
 import java.nio.file.DirectoryStream
+import java.util.Comparator
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
@@ -126,6 +127,14 @@ class CapyRuntimeBridge implements Closeable {
     private def parseArgumentsMethod
     private def runTestsMethod
 
+    private static TreeSet compiledModuleTreeSet() {
+        new TreeSet({ left, right -> compiledModuleCompareKey(left) <=> compiledModuleCompareKey(right) } as Comparator)
+    }
+
+    private static String compiledModuleCompareKey(def module) {
+        module.path() + "\n" + module.name()
+    }
+
     CapyRuntimeBridge(Set<File> runtimeClasspathFiles) {
         def runtimeUrls = runtimeClasspathFiles.collect { it.toURI().toURL() } as URL[]
         classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
@@ -161,7 +170,7 @@ class CapyRuntimeBridge implements Closeable {
     }
 
     TreeSet readLibraryModules(Set<File> libraryDirs) {
-        def modules = new TreeSet()
+        def modules = compiledModuleTreeSet()
         libraryDirs.each { libraryDir ->
             Path libraryPath = libraryDir.toPath()
             if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {

@@ -27,7 +27,7 @@ class TupleDestructuringCompilerTest {
                         """
         , SourceKind.FUNCTIONAL)));
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("map_pairs"))
                 .findFirst()
                 .orElseThrow();
@@ -54,7 +54,7 @@ class TupleDestructuringCompilerTest {
                         """
         , SourceKind.FUNCTIONAL)));
 
-        var function = compiled.modules().first().functions().stream()
+        var function = compiled.modules().getFirst().functions().stream()
                 .filter(it -> it.name().equals("filter_pairs"))
                 .findFirst()
                 .orElseThrow();

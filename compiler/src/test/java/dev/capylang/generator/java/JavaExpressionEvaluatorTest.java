@@ -42,7 +42,7 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 import static dev.capylang.compiler.CompiledExpressionPrinter.printExpression;
-import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
+import static dev.capylang.compiler.CompiledIrModule.ANY;
 
 class JavaExpressionEvaluatorTest {
     private static final Object STANDARD_LIBRARY_LOCK = new Object();
@@ -73,15 +73,15 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "list_of_obj",
                         "fun list_of_obj() = []",
-                        new CollectionLinkedType.CompiledList(ANY)),
+                        new CompiledList(ANY)),
                 Arguments.of(
                         "set_of_obj",
                         "fun set_of_obj() = {}",
-                        new CollectionLinkedType.CompiledSet(ANY)),
+                        new CompiledSet(ANY)),
                 Arguments.of(
                         "dict_of_obj",
                         "fun dict_of_obj() = { \"one\": 1, }",
-                        new CollectionLinkedType.CompiledDict(PrimitiveLinkedType.INT))
+                        new CompiledDict(CompiledIrModule.INT))
         );
     }
 
@@ -123,6 +123,13 @@ class JavaExpressionEvaluatorTest {
                     .collect(joining(", ")));
         }
         return ((Result.Success<CompiledProgram>) programResult).value();
+    }
+
+    private static java.util.SortedSet<CompiledModule> sortedModules(Collection<CompiledModule> modules) {
+        var sorted = new java.util.TreeSet<CompiledModule>(
+                java.util.Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+        sorted.addAll(modules);
+        return sorted;
     }
 
     private static Optional<CompiledFunction> findFunction(String name, CompiledProgram program) {
@@ -170,9 +177,9 @@ class JavaExpressionEvaluatorTest {
                 "capy.test.CapyTest.test_file__string__compiledlist_elementtype_int",
                 List.of(
                         new CompiledStringValue("\"suite\""),
-                        new CompiledNewList(List.of(), new CollectionLinkedType.CompiledList(PrimitiveLinkedType.INT))
+                        new CompiledNewList(List.of(), new CompiledList(CompiledIrModule.INT))
                 ),
-                PrimitiveLinkedType.STRING
+                CompiledIrModule.STRING
         );
 
         var evaluated = JavaExpressionEvaluator.evaluateExpression(expression);
@@ -209,7 +216,7 @@ class JavaExpressionEvaluatorTest {
         assertThat(expression).isInstanceOf(CompiledLambdaExpression.class);
         var lambda = (CompiledLambdaExpression) expression;
         assertThat(lambda.argumentName()).isEqualTo("$capybaraPartial1");
-        assertThat(lambda.functionType()).isEqualTo(new CompiledFunctionType(PrimitiveLinkedType.INT, PrimitiveLinkedType.INT));
+        assertThat(lambda.functionType()).isEqualTo(new CompiledFunctionType(CompiledIrModule.INT, CompiledIrModule.INT));
     }
 
     @Test
@@ -226,15 +233,15 @@ class JavaExpressionEvaluatorTest {
         assertThat(expression).isInstanceOf(CompiledLambdaExpression.class);
         var first = (CompiledLambdaExpression) expression;
         assertThat(first.argumentName()).isEqualTo("$capybaraPartial1");
-        assertThat(first.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.INT);
+        assertThat(first.functionType().argumentType()).isEqualTo(CompiledIrModule.INT);
         assertThat(first.expression()).isInstanceOf(CompiledLambdaExpression.class);
         var second = (CompiledLambdaExpression) first.expression();
         assertThat(second.argumentName()).isEqualTo("$capybaraPartial2");
-        assertThat(second.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.DOUBLE);
+        assertThat(second.functionType().argumentType()).isEqualTo(CompiledIrModule.DOUBLE);
         assertThat(second.expression()).isInstanceOf(CompiledLambdaExpression.class);
         var third = (CompiledLambdaExpression) second.expression();
         assertThat(third.argumentName()).isEqualTo("$capybaraPartial3");
-        assertThat(third.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.INT);
+        assertThat(third.functionType().argumentType()).isEqualTo(CompiledIrModule.INT);
     }
 
     @Test
@@ -591,7 +598,7 @@ class JavaExpressionEvaluatorTest {
 
                 data DONE {}
                 fun done(): DONE = DONE
-                """, SourceKind.FUNCTIONAL)), libraries);
+                """, SourceKind.FUNCTIONAL)), sortedModules(libraries));
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(CompilerErrors.from(error).stream().map(CompilerError::message).collect(joining(",")))
@@ -971,8 +978,8 @@ class JavaExpressionEvaluatorTest {
 
         var returnType = findFunction("merged_outcomes", program).orElseThrow().returnType();
 
-        assertThat(returnType).isInstanceOf(CollectionLinkedType.CompiledList.class);
-        var elementType = ((CollectionLinkedType.CompiledList) returnType).elementType();
+        assertThat(returnType).isInstanceOf(CompiledList.class);
+        var elementType = ((CompiledList) returnType).elementType();
         assertThat(elementType).isInstanceOf(CompiledDataParentType.class);
         assertThat(((CompiledDataParentType) elementType).name()).isEqualTo("Outcome");
     }

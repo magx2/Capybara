@@ -1,9 +1,12 @@
 package dev.capylang.generator.java;
 
 import java.util.List;
+import java.util.Set;
 
 public sealed interface JavaInterface extends Comparable<JavaInterface> permits JavaNormalInterface, JavaSealedInterface {
     JavaType name();
+
+    Set<JavaType> extendInterfaces();
 
     List<JavaInterfaceMethod> methods();
 

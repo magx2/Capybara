@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter;
+import dev.capylang.compiler.CompiledFunctionParameter;
 import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.*;
@@ -60,6 +60,32 @@ public class CapybaraCompiler {
     @SuppressWarnings("unchecked")
     private static <T> Optional<T> typedOptional(Optional value) {
         return (Optional<T>) value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Map<String, T> typedModuleMap(Map<String, Object> values) {
+        return values.entrySet().stream()
+                .collect(toMap(Map.Entry::getKey, entry -> (T) entry.getValue(), (left, right) -> right, TreeMap::new));
+    }
+
+    private static SortedSet<StaticImport> sortedStaticImports(Collection<StaticImport> staticImports) {
+        var sorted = new TreeSet<>(
+                Comparator.comparing(StaticImport::className)
+                        .thenComparing(StaticImport::memberName)
+                        .thenComparing(StaticImport::enumValue)
+        );
+        sorted.addAll(staticImports);
+        return sorted;
+    }
+
+    private static TreeSet<CompiledModule> compiledModuleTreeSet() {
+        return new TreeSet<>(Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+    }
+
+    private static TreeSet<CompiledModule> compiledModuleTreeSet(Collection<CompiledModule> modules) {
+        var sorted = compiledModuleTreeSet();
+        sorted.addAll(modules);
+        return sorted;
     }
 
     @SuppressWarnings("unchecked")
@@ -159,7 +185,7 @@ public class CapybaraCompiler {
                 return error;
             }
             var functionalProgram = ((Result.Success<CompiledProgram>) compiledProgram).value();
-            var modulesForNativeProviders = new TreeSet<>(mergedLibraries);
+            var modulesForNativeProviders = compiledModuleTreeSet(mergedLibraries);
             modulesForNativeProviders.addAll(functionalProgram.modules());
             var nativeProviderCatalog = nativeProviderCatalog(
                     functionalProgram.objectOrientedModules(),
@@ -240,7 +266,7 @@ public class CapybaraCompiler {
     }
 
     private SortedSet<CompiledModule> mergeLibraries(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
-        var merged = new TreeSet<>(loadBundledLibraries(rawModules));
+        var merged = compiledModuleTreeSet(loadBundledLibraries(rawModules));
         libraries.forEach(library -> {
             // Replace bundled stdlib modules using canonical module identity so
             // `/capy/foo/Bar` and `capy/foo/Bar` are treated as the same module.
@@ -270,16 +296,16 @@ public class CapybaraCompiler {
     private static SortedSet<CompiledModule> loadBundledLibraries(Collection<RawModule> rawModules) {
         var cached = bundledLibrariesCache;
         if (cached != null) {
-            return new TreeSet<>(cached);
+            return compiledModuleTreeSet(cached);
         }
         synchronized (BUNDLED_LIBRARIES_LOCK) {
             cached = bundledLibrariesCache;
             if (cached != null) {
-                return new TreeSet<>(cached);
+                return compiledModuleTreeSet(cached);
             }
             var loaded = loadBundledLibrariesUncached(rawModules);
             if (!loaded.isEmpty()) {
-                bundledLibrariesCache = new TreeSet<>(loaded);
+                bundledLibrariesCache = compiledModuleTreeSet(loaded);
             }
             return loaded;
         }
@@ -288,7 +314,7 @@ public class CapybaraCompiler {
     private static SortedSet<CompiledModule> loadBundledLibrariesUncached(Collection<RawModule> rawModules) {
         try {
             if (isStdlibBootstrap(rawModules)) {
-                return new TreeSet<>();
+                return compiledModuleTreeSet();
             }
             var resources = CapybaraCompiler.class.getClassLoader().getResources("capy");
             while (resources.hasMoreElements()) {
@@ -316,9 +342,9 @@ public class CapybaraCompiler {
 
     private static SortedSet<CompiledModule> readBundledLibraries(Stream<Path> paths) {
         return paths
-                .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
+                .filter(path -> path.getFileName().toString().endsWith(CompiledIrModule.EXTENSION))
                 .map(CapybaraCompiler::readBundledLibrary)
-                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+                .collect(java.util.stream.Collectors.toCollection(CapybaraCompiler::compiledModuleTreeSet));
     }
 
     private static Path bundledLibrariesFallbackPath() {
@@ -413,7 +439,7 @@ public class CapybaraCompiler {
         objectTypeCatalog.linkedTypesByModule().forEach((moduleName, objectTypes) ->
                 mergeModuleTypes(linkedTypesByModule, moduleName, objectTypes));
         for (var library : libraries) {
-            mergeModuleTypes(linkedTypesByModule, new ModuleRef(library.name(), library.path()), library.types(), false);
+            mergeModuleTypes(linkedTypesByModule, new ModuleRef(library.name(), library.path()), new TreeMap<>(library.types()), false);
         }
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
@@ -430,12 +456,12 @@ public class CapybaraCompiler {
         }
 
         var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule, moduleHelperClassRequiredByModule);
-        var staticImportsByModule = new HashMap<String, SortedSet<CompiledModule.StaticImport>>();
+        var staticImportsByModule = new HashMap<String, SortedSet<StaticImport>>();
         for (var library : libraries) {
             putImportedModuleEntry(
                     staticImportsByModule,
                     new ModuleRef(library.name(), library.path()),
-                    library.staticImports()
+                    sortedStaticImports(library.staticImports())
             );
         }
         var deriversByModule = new HashMap<String, Map<String, DeriverDeclaration>>();
@@ -443,7 +469,7 @@ public class CapybaraCompiler {
             putImportedModuleEntry(
                     deriversByModule,
                     new ModuleRef(library.name(), library.path()),
-                    library.derivers()
+                    typedModuleMap(library.derivers())
             );
         }
         for (var module : program.modules()) {
@@ -463,7 +489,7 @@ public class CapybaraCompiler {
             putImportedModuleEntry(
                     annotationsByModule,
                     new ModuleRef(library.name(), library.path()),
-                    library.annotations()
+                    typedModuleMap(library.annotations())
             );
         }
         for (var module : program.modules()) {
@@ -683,8 +709,8 @@ public class CapybaraCompiler {
     }
 
     private record LinkedDataFields(
-            List<List<CompiledDataType.CompiledField>> inherited,
-            List<CompiledDataType.CompiledField> own
+            List<List<CompiledField>> inherited,
+            List<CompiledField> own
     ) {
     }
 
@@ -1133,7 +1159,7 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
             Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
-            Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
+            Map<String, SortedSet<StaticImport>> staticImportsByModule,
             Map<String, String> moduleClassNameByModuleName,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CompileCache compileCache
@@ -1164,7 +1190,7 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
             Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
-            Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
+            Map<String, SortedSet<StaticImport>> staticImportsByModule,
             Map<String, String> moduleClassNameByModuleName,
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CompileCache compileCache
@@ -1235,7 +1261,7 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
             Map<String, Map<String, AnnotationDeclaration>> annotationsByModule,
-            Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
+            Map<String, SortedSet<StaticImport>> staticImportsByModule,
             CompileCache compileCache
     ) {
         var cacheKey = moduleCacheKey(module);
@@ -1320,7 +1346,7 @@ public class CapybaraCompiler {
             ModuleLinkIndex moduleLinkIndex,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
-            Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
+            Map<String, SortedSet<StaticImport>> staticImportsByModule,
             CompileCache compileCache
     ) {
         var signatures = new LinkedHashSet<CapybaraExpressionCompiler.FunctionSignature>();
@@ -1456,7 +1482,7 @@ public class CapybaraCompiler {
             case CompiledDataType linkedDataType -> new CompiledDataType(
                     linkedDataType.name(),
                     linkedDataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     resolveLinkedType(field.type(), all, nextResolvingTypeNames),
                                     field.annotations()
@@ -1474,7 +1500,7 @@ public class CapybaraCompiler {
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(
+                            .map(field -> new CompiledField(
                                     field.name(),
                                     resolveLinkedType(field.type(), all, nextResolvingTypeNames),
                                     field.annotations()
@@ -1535,12 +1561,12 @@ public class CapybaraCompiler {
                 yield resolveGenericDataType(linkedDataParentType, all, appendResolvingTypeName(resolvingTypeNames, linkedDataParentType.name()));
             }
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType;
-            case CollectionLinkedType.CompiledList linkedList ->
-                    new CollectionLinkedType.CompiledList(resolveLinkedType(linkedList.elementType(), all, resolvingTypeNames));
-            case CollectionLinkedType.CompiledSet linkedSet ->
-                    new CollectionLinkedType.CompiledSet(resolveLinkedType(linkedSet.elementType(), all, resolvingTypeNames));
-            case CollectionLinkedType.CompiledDict linkedDict ->
-                    new CollectionLinkedType.CompiledDict(resolveLinkedType(linkedDict.valueType(), all, resolvingTypeNames));
+            case CompiledList linkedList ->
+                    new CompiledList(resolveLinkedType(linkedList.elementType(), all, resolvingTypeNames));
+            case CompiledSet linkedSet ->
+                    new CompiledSet(resolveLinkedType(linkedSet.elementType(), all, resolvingTypeNames));
+            case CompiledDict linkedDict ->
+                    new CompiledDict(resolveLinkedType(linkedDict.valueType(), all, resolvingTypeNames));
             case CompiledTupleType linkedTupleType -> new CompiledTupleType(
                     linkedTupleType.elementTypes().stream().map(element -> resolveLinkedType(element, all, resolvingTypeNames)).toList()
             );
@@ -1685,7 +1711,7 @@ public class CapybaraCompiler {
             String methodName,
             CompiledType methodReturnType,
             String conflictingSubtypeName,
-            CompiledDataType.CompiledField field,
+            CompiledField field,
             Definition conflictingDeclaration,
             String moduleSourceFile
     ) {
@@ -1727,8 +1753,8 @@ public class CapybaraCompiler {
         return name + "#" + parameterCount;
     }
 
-    private Optional<CompiledDataType.CompiledField> conflictingField(
-            List<CompiledDataType.CompiledField> fields,
+    private Optional<CompiledField> conflictingField(
+            List<CompiledField> fields,
             String fieldName
     ) {
         return fields.stream()
@@ -1796,17 +1822,17 @@ public class CapybaraCompiler {
         };
     }
 
-    private SortedSet<CompiledModule.StaticImport> deriverLexicalStaticImports(
+    private SortedSet<StaticImport> deriverLexicalStaticImports(
             Module module,
             ModuleLinkIndex moduleLinkIndex,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
-            Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule
+            Map<String, SortedSet<StaticImport>> staticImportsByModule
     ) {
-        var imports = new TreeSet<CompiledModule.StaticImport>();
+        var imports = sortedStaticImports(List.of());
         for (var ownerModule : usedImportedDeriverOwnerModules(module, moduleLinkIndex, deriversByModule)) {
             var ownerClassName = getModuleEntry(moduleLinkIndex.moduleJavaClassNameByModuleName(), ownerModule);
             if (ownerClassName != null) {
-                imports.add(new CompiledModule.StaticImport(ownerClassName, "*"));
+                imports.add(new StaticImport(ownerClassName, "*"));
             }
             var ownerStaticImports = getModuleEntry(staticImportsByModule, ownerModule);
             if (ownerStaticImports != null) {
@@ -1816,13 +1842,13 @@ public class CapybaraCompiler {
         return unmodifiableSortedSet(imports);
     }
 
-    private SortedSet<CompiledModule.StaticImport> staticImports(
+    private SortedSet<StaticImport> staticImports(
             Module module,
             ModuleLinkIndex moduleLinkIndex,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, Map<String, DeriverDeclaration>> deriversByModule,
-            Map<String, SortedSet<CompiledModule.StaticImport>> staticImportsByModule,
+            Map<String, SortedSet<StaticImport>> staticImportsByModule,
             CompileCache compileCache
     ) {
         var cacheKey = moduleCacheKey(module);
@@ -1833,7 +1859,7 @@ public class CapybaraCompiler {
             return cached;
         }
         var startedAt = System.nanoTime();
-        var imports = new HashSet<CompiledModule.StaticImport>();
+        var imports = new HashSet<StaticImport>();
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
@@ -1863,11 +1889,11 @@ public class CapybaraCompiler {
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 if (!importedSignaturesByName.isEmpty()
                     || importedTypes.values().stream().anyMatch(type -> !(type instanceof CompiledObjectType))) {
-                    imports.add(new CompiledModule.StaticImport(className, "*"));
+                    imports.add(new StaticImport(className, "*"));
                 }
                 imports.addAll(enumValueStaticImports(importedModule, importedTypes));
                 importedObjectTypes.forEach((symbol, objectType) ->
-                        imports.add(new CompiledModule.StaticImport(objectType.backendClassName(), symbol)));
+                        imports.add(new StaticImport(objectType.backendClassName(), symbol)));
                 continue;
             }
             var availableFunctionMembers = importedSignaturesByName.keySet();
@@ -1878,22 +1904,22 @@ public class CapybaraCompiler {
                 if (availableMembers.contains(symbol)) {
                     var objectType = importedObjectTypes.get(symbol);
                     if (objectType != null) {
-                        imports.add(new CompiledModule.StaticImport(objectType.backendClassName(), symbol));
+                        imports.add(new StaticImport(objectType.backendClassName(), symbol));
                     } else {
                         imports.add(enumValueStaticImport(importedModule, importedTypes, symbol)
-                                .orElseGet(() -> new CompiledModule.StaticImport(className, symbol)));
+                                .orElseGet(() -> new StaticImport(className, symbol)));
                     }
                 }
             }
         }
         imports.addAll(deriverLexicalStaticImports(module, moduleLinkIndex, deriversByModule, staticImportsByModule));
         compileCache.staticImportGenerationNanos += System.nanoTime() - startedAt;
-        var result = unmodifiableSortedSet(new TreeSet<>(imports));
+        var result = unmodifiableSortedSet(sortedStaticImports(imports));
         cachedByModule.put(cacheKey, result);
         return result;
     }
 
-    private List<CompiledModule.StaticImport> enumValueStaticImports(
+    private List<StaticImport> enumValueStaticImports(
             ModuleRef importedModule,
             SortedMap<String, GenericDataType> importedTypes
     ) {
@@ -1902,14 +1928,14 @@ public class CapybaraCompiler {
                 .map(CompiledDataParentType.class::cast)
                 .filter(CompiledDataParentType::enumType)
                 .flatMap(enumType -> enumType.subTypes().stream()
-                        .map(enumValue -> new CompiledModule.StaticImport(
+                        .map(enumValue -> new StaticImport(
                                 rawEnumOwnerTypeName(importedModule, enumType.name(), importedTypes),
                                 enumValue.name(),
                                 true)))
                 .toList();
     }
 
-    private Optional<CompiledModule.StaticImport> enumValueStaticImport(
+    private Optional<StaticImport> enumValueStaticImport(
             ModuleRef importedModule,
             SortedMap<String, GenericDataType> importedTypes,
             String symbol
@@ -1923,7 +1949,7 @@ public class CapybaraCompiler {
                 .filter(CompiledDataParentType::enumType)
                 .filter(enumType -> enumType.subTypes().stream().anyMatch(subType -> subType.name().equals(dataType.name())))
                 .findFirst()
-                .map(enumType -> new CompiledModule.StaticImport(
+                .map(enumType -> new StaticImport(
                         rawEnumOwnerTypeName(importedModule, enumType.name(), importedTypes),
                         dataType.name(),
                         true));
@@ -1966,7 +1992,9 @@ public class CapybaraCompiler {
             var parameters = function.parameters().stream().map(parameter -> String.valueOf(parameter.type())).toList();
             byKey.put(function.name() + "#" + parameters, function);
         }
-        return unmodifiableSortedSet(new TreeSet<>(byKey.values()));
+        var sorted = new TreeSet<>(Comparator.comparing(CompiledIrModule::compiledFunctionCompareKey));
+        sorted.addAll(byKey.values());
+        return unmodifiableSortedSet(sorted);
     }
 
     private ModuleRef resolveImportedModule(String rawImportedModuleName, ModuleLinkIndex moduleLinkIndex) {
@@ -3037,14 +3065,14 @@ public class CapybaraCompiler {
         );
     }
 
-    private List<CompiledDataType.CompiledField> withCompiledFieldAnnotations(
+    private List<CompiledField> withCompiledFieldAnnotations(
             String typeName,
-            List<CompiledDataType.CompiledField> fields,
+            List<CompiledField> fields,
             Map<String, Definition> definitionsByTypeName,
             Map<String, AvailableAnnotation> availableAnnotations
     ) {
         return fields.stream()
-                .map(field -> new CompiledDataType.CompiledField(
+                .map(field -> new CompiledField(
                         field.name(),
                         field.type(),
                         findFunctionalFieldAnnotationUsages(typeName, field.name(), definitionsByTypeName, new HashSet<>())
@@ -3950,7 +3978,7 @@ public class CapybaraCompiler {
             mergeModuleTypes(
                     linkedTypesByModule,
                     new ModuleRef(module.name(), module.path()),
-                    module.types(),
+                    new TreeMap<>(module.types()),
                     false
             );
         }
@@ -4293,7 +4321,7 @@ public class CapybaraCompiler {
             String targetType,
             String qualifier,
             List<String> comments,
-            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            List<CompiledFunctionParameter> parameters,
             String sourceFile,
             boolean effectReturnType,
             boolean nativeBody
@@ -5680,7 +5708,7 @@ public class CapybaraCompiler {
     }
 
     private String primitiveDescriptorForMessage(PrimitiveLinkedType primitive) {
-        return primitive == PrimitiveLinkedType.STRING ? "String" : primitive.name().toLowerCase(Locale.ROOT);
+        return sameType(primitive, CompiledIrModule.STRING) ? "String" : primitive.name().toLowerCase(Locale.ROOT);
     }
 
     private boolean expressionMayProduceResult(Expression expression) {
@@ -6065,7 +6093,7 @@ public class CapybaraCompiler {
                         "NEW_DATA",
                         "",
                         List.of(),
-                        addAll(newData.assignments().stream().map(CompiledNewData.FieldAssignment::value).toList())
+                        addAll(newData.assignments().stream().map(CompiledNewDataFieldAssignment::value).toList())
                 );
                 case CompiledNewList newList -> setNode(id, "NEW_LIST", "", List.of(), addAll(newList.values()));
                 case CompiledNewSet newSet -> setNode(id, "NEW_SET", "", List.of(), addAll(newSet.values()));
@@ -6105,7 +6133,7 @@ public class CapybaraCompiler {
             );
         }
 
-        private int addMatchCase(CompiledMatchExpression.MatchCase matchCase) {
+        private int addMatchCase(CompiledMatchCase matchCase) {
             var id = reserveNode();
             var childIds = new ArrayList<Integer>();
             matchCase.guard().map(this::add).ifPresent(childIds::add);
@@ -6233,7 +6261,7 @@ public class CapybaraCompiler {
             case CompiledNewData newData -> analyzeAllTailRecursionLegacy(
                     selfCallNames,
                     parameters,
-                    newData.assignments().stream().map(CompiledNewData.FieldAssignment::value).toList(),
+                    newData.assignments().stream().map(CompiledNewDataFieldAssignment::value).toList(),
                     false
             );
             case CompiledNewList newList -> analyzeAllTailRecursionLegacy(selfCallNames, parameters, newList.values(), false);
@@ -6446,7 +6474,7 @@ public class CapybaraCompiler {
                 : linker.linkExpression(function.expression());
         return ResultOps.flatMap(linkedExpression, expression -> {
             if (function.returnType().isPresent()
-                || expression.type() != PrimitiveLinkedType.ANY
+                || differentType(expression.type(), CompiledIrModule.ANY)
                 || !function.name().contains("__local_fun_")) {
                 return Results.success(expression);
             }
@@ -6456,7 +6484,7 @@ public class CapybaraCompiler {
                             signature.name(),
                             signature.parameterTypes(),
                             signature.parameterNames(),
-                            PrimitiveLinkedType.NOTHING,
+                            CompiledIrModule.NOTHING,
                             signature.visibility()
                     )
                             : signature)
@@ -6478,7 +6506,7 @@ public class CapybaraCompiler {
             );
             return ResultOps.map(
                     retryLinker.linkExpression(function.expression()),
-                    retry -> retry.type() != PrimitiveLinkedType.ANY ? retry : expression);
+                    retry -> differentType(retry.type(), CompiledIrModule.ANY) ? retry : expression);
         });
     }
     private Optional<Result<CompiledFunction>> validateTypeMethodDeclaredInLocalType(
@@ -7364,10 +7392,10 @@ public class CapybaraCompiler {
     private String formatLinkedType(CompiledType type) {
         return switch (type) {
             case PrimitiveLinkedType primitiveType -> formatPrimitiveLinkedType(primitiveType);
-            case CollectionLinkedType.CompiledList linkedList ->
+            case CompiledList linkedList ->
                     "List[" + formatLinkedType(linkedList.elementType()) + "]";
-            case CollectionLinkedType.CompiledSet linkedSet -> "Set[" + formatLinkedType(linkedSet.elementType()) + "]";
-            case CollectionLinkedType.CompiledDict linkedDict ->
+            case CompiledSet linkedSet -> "Set[" + formatLinkedType(linkedSet.elementType()) + "]";
+            case CompiledDict linkedDict ->
                     "Dict[" + formatLinkedType(linkedDict.valueType()) + "]";
             case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::formatLinkedType)
@@ -7391,9 +7419,17 @@ public class CapybaraCompiler {
     }
 
     private String formatPrimitiveLinkedType(PrimitiveLinkedType primitiveType) {
-        return primitiveType == PrimitiveLinkedType.STRING
+        return sameType(primitiveType, CompiledIrModule.STRING)
                 ? "String"
                 : primitiveType.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private boolean sameType(CompiledType actual, CompiledType expected) {
+        return expected.equals(actual);
+    }
+
+    private boolean differentType(CompiledType actual, CompiledType expected) {
+        return !sameType(actual, expected);
     }
 
     private boolean isAssignableReturnType(CompiledType expected, CompiledType actual, Map<String, GenericDataType> dataTypes) {
@@ -7401,15 +7437,17 @@ public class CapybaraCompiler {
             || (!(expected instanceof GenericDataType) && !(actual instanceof GenericDataType) && expected.equals(actual))) {
             return true;
         }
-        if (actual == PrimitiveLinkedType.NOTHING
-            || actual == PrimitiveLinkedType.ANY
-            || expected == PrimitiveLinkedType.ANY) {
+        if (sameType(actual, CompiledIrModule.NOTHING)
+            || sameType(actual, CompiledIrModule.ANY)
+            || sameType(expected, CompiledIrModule.ANY)) {
             return true;
         }
-        if (expected == PrimitiveLinkedType.DATA) {
-            return actual instanceof GenericDataType || actual == PrimitiveLinkedType.DATA || actual == PrimitiveLinkedType.ENUM;
+        if (sameType(expected, CompiledIrModule.DATA)) {
+            return actual instanceof GenericDataType
+                   || sameType(actual, CompiledIrModule.DATA)
+                   || sameType(actual, CompiledIrModule.ENUM);
         }
-        if (expected == PrimitiveLinkedType.ENUM) {
+        if (sameType(expected, CompiledIrModule.ENUM)) {
             return isEnumLikeType(actual, dataTypes);
         }
         if (expected instanceof PrimitiveLinkedType expectedPrimitive
@@ -7420,16 +7458,16 @@ public class CapybaraCompiler {
             && actual instanceof CompiledPrimitiveBackedType actualPrimitiveBacked) {
             return isAssignablePrimitiveBackedReturnType(expectedPrimitive, actualPrimitiveBacked);
         }
-        if (expected instanceof CollectionLinkedType.CompiledList expectedList
-            && actual instanceof CollectionLinkedType.CompiledList actualList) {
+        if (expected instanceof CompiledList expectedList
+            && actual instanceof CompiledList actualList) {
             return isAssignableReturnType(expectedList.elementType(), actualList.elementType(), dataTypes);
         }
-        if (expected instanceof CollectionLinkedType.CompiledSet expectedSet
-            && actual instanceof CollectionLinkedType.CompiledSet actualSet) {
+        if (expected instanceof CompiledSet expectedSet
+            && actual instanceof CompiledSet actualSet) {
             return isAssignableReturnType(expectedSet.elementType(), actualSet.elementType(), dataTypes);
         }
-        if (expected instanceof CollectionLinkedType.CompiledDict expectedDict
-            && actual instanceof CollectionLinkedType.CompiledDict actualDict) {
+        if (expected instanceof CompiledDict expectedDict
+            && actual instanceof CompiledDict actualDict) {
             return isAssignableReturnType(expectedDict.valueType(), actualDict.valueType(), dataTypes);
         }
         if (expected instanceof CompiledTupleType expectedTuple
@@ -7557,7 +7595,7 @@ public class CapybaraCompiler {
     }
 
     private boolean isEnumLikeType(CompiledType type, Map<String, GenericDataType> dataTypes) {
-        if (type == PrimitiveLinkedType.ENUM) {
+        if (sameType(type, CompiledIrModule.ENUM)) {
             return true;
         }
         if (type instanceof CompiledDataParentType parentType) {
@@ -7575,33 +7613,33 @@ public class CapybaraCompiler {
     }
 
     private boolean isAssignablePrimitiveReturnType(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
-        if (expected == actual) {
+        if (sameType(actual, expected)) {
             return true;
         }
-        if (actual == PrimitiveLinkedType.NOTHING) {
+        if (sameType(actual, CompiledIrModule.NOTHING)) {
             return true;
         }
-        if (expected == PrimitiveLinkedType.ANY) {
+        if (sameType(expected, CompiledIrModule.ANY)) {
             return true;
         }
-        if (expected == PrimitiveLinkedType.DATA || actual == PrimitiveLinkedType.DATA
-            || expected == PrimitiveLinkedType.ENUM || actual == PrimitiveLinkedType.ENUM) {
+        if (sameType(expected, CompiledIrModule.DATA) || sameType(actual, CompiledIrModule.DATA)
+            || sameType(expected, CompiledIrModule.ENUM) || sameType(actual, CompiledIrModule.ENUM)) {
             return false;
         }
-        if (expected == PrimitiveLinkedType.BOOL || actual == PrimitiveLinkedType.BOOL) {
+        if (sameType(expected, CompiledIrModule.BOOL) || sameType(actual, CompiledIrModule.BOOL)) {
             return false;
         }
-        if (expected == PrimitiveLinkedType.STRING || actual == PrimitiveLinkedType.STRING) {
+        if (sameType(expected, CompiledIrModule.STRING) || sameType(actual, CompiledIrModule.STRING)) {
             return false;
         }
-        return (actual == PrimitiveLinkedType.INT
-                && (expected == PrimitiveLinkedType.LONG
-                    || expected == PrimitiveLinkedType.FLOAT
-                    || expected == PrimitiveLinkedType.DOUBLE))
-               || (actual == PrimitiveLinkedType.LONG
-                   && (expected == PrimitiveLinkedType.FLOAT
-                       || expected == PrimitiveLinkedType.DOUBLE))
-               || (actual == PrimitiveLinkedType.FLOAT && expected == PrimitiveLinkedType.DOUBLE);
+        return (sameType(actual, CompiledIrModule.INT)
+                && (sameType(expected, CompiledIrModule.LONG)
+                    || sameType(expected, CompiledIrModule.FLOAT)
+                    || sameType(expected, CompiledIrModule.DOUBLE)))
+               || (sameType(actual, CompiledIrModule.LONG)
+                   && (sameType(expected, CompiledIrModule.FLOAT)
+                       || sameType(expected, CompiledIrModule.DOUBLE)))
+               || (sameType(actual, CompiledIrModule.FLOAT) && sameType(expected, CompiledIrModule.DOUBLE));
     }
 
     private boolean isAssignablePrimitiveBackedReturnType(
@@ -7642,12 +7680,12 @@ public class CapybaraCompiler {
             CompiledType returnType,
             Map<String, GenericDataType> dataTypes
     ) {
-        if (returnType instanceof CollectionLinkedType.CompiledDict dictType
+        if (returnType instanceof CompiledDict dictType
             && expression instanceof dev.capylang.compiler.expression.CompiledNewSet linkedNewSet
             && linkedNewSet.values().isEmpty()) {
             return new dev.capylang.compiler.expression.CompiledNewDict(
                     List.of(),
-                    new CollectionLinkedType.CompiledDict(dictType.valueType())
+                    new CompiledDict(dictType.valueType())
             );
         }
         if (returnType instanceof CompiledDataParentType parentType
@@ -7669,7 +7707,7 @@ public class CapybaraCompiler {
                 if (expectedSubtype.fields().size() != newData.assignments().size()) {
                     return expression;
                 }
-                var coercedAssignments = new ArrayList<dev.capylang.compiler.expression.CompiledNewData.FieldAssignment>();
+                var coercedAssignments = new ArrayList<dev.capylang.compiler.expression.CompiledNewDataFieldAssignment>();
                 for (int i = 0; i < newData.assignments().size(); i++) {
                     var expectedField = expectedSubtype.fields().get(i);
                     var assignment = newData.assignments().get(i);
@@ -7677,7 +7715,7 @@ public class CapybaraCompiler {
                     if (!isAssignableReturnType(expectedField.type(), coercedValue.type(), dataTypes)) {
                         return expression;
                     }
-                    coercedAssignments.add(new dev.capylang.compiler.expression.CompiledNewData.FieldAssignment(
+                    coercedAssignments.add(new dev.capylang.compiler.expression.CompiledNewDataFieldAssignment(
                             assignment.name(),
                             coercedValue
                     ));
@@ -7710,8 +7748,8 @@ public class CapybaraCompiler {
                             .findFirst();
             default -> {
                 var coercedExpression = coerceReturnExpression(expression, expectedReturnType, dataTypes);
-                if (coercedExpression.type() != PrimitiveLinkedType.ANY
-                    && coercedExpression.type() != PrimitiveLinkedType.NOTHING
+                if (differentType(coercedExpression.type(), CompiledIrModule.ANY)
+                    && differentType(coercedExpression.type(), CompiledIrModule.NOTHING)
                     && shouldReportConcreteBranchMismatch(expectedReturnType, coercedExpression.type(), dataTypes)) {
                     yield Optional.of(coercedExpression.type());
                 }
@@ -7758,8 +7796,8 @@ public class CapybaraCompiler {
 
     private boolean hasProgramMainArguments(List<CompiledType> parameterTypes) {
         return parameterTypes.size() == 1
-               && parameterTypes.getFirst() instanceof CollectionLinkedType.CompiledList listType
-               && listType.elementType() == PrimitiveLinkedType.STRING;
+               && parameterTypes.getFirst() instanceof CompiledList listType
+               && sameType(listType.elementType(), CompiledIrModule.STRING);
     }
 
     private boolean returnsEffectProgram(CompiledType returnType) {
@@ -7971,7 +8009,7 @@ public class CapybaraCompiler {
             case dev.capylang.compiler.expression.CompiledMatchExpression value ->
                     new dev.capylang.compiler.expression.CompiledMatchExpression(
                             enrichNothing(value.matchWith(), functionName, moduleSourceFile),
-                            value.cases().stream().map(matchCase -> new dev.capylang.compiler.expression.CompiledMatchExpression.MatchCase(
+                            value.cases().stream().map(matchCase -> new dev.capylang.compiler.expression.CompiledMatchCase(
                                     matchCase.pattern(),
                                     matchCase.guard().map(guard -> enrichNothing(guard, functionName, moduleSourceFile)),
                                     enrichNothing(matchCase.expression(), functionName, moduleSourceFile)
@@ -8027,7 +8065,7 @@ public class CapybaraCompiler {
                     );
             case dev.capylang.compiler.expression.CompiledNewDict value ->
                     new dev.capylang.compiler.expression.CompiledNewDict(
-                            value.entries().stream().map(entry -> new dev.capylang.compiler.expression.CompiledNewDict.Entry(
+                            value.entries().stream().map(entry -> new dev.capylang.compiler.expression.CompiledNewDictEntry(
                                     enrichNothing(entry.key(), functionName, moduleSourceFile),
                                     enrichNothing(entry.value(), functionName, moduleSourceFile)
                             )).toList(),
@@ -8046,7 +8084,7 @@ public class CapybaraCompiler {
             case dev.capylang.compiler.expression.CompiledNewData value ->
                     new dev.capylang.compiler.expression.CompiledNewData(
                             value.type(),
-                            value.assignments().stream().map(assignment -> new dev.capylang.compiler.expression.CompiledNewData.FieldAssignment(
+                            value.assignments().stream().map(assignment -> new dev.capylang.compiler.expression.CompiledNewDataFieldAssignment(
                                     assignment.name(),
                                     enrichNothing(assignment.value(), functionName, moduleSourceFile)
                             )).toList()
@@ -8359,17 +8397,17 @@ public class CapybaraCompiler {
 
     private PrimitiveLinkedType toPrimitiveLinkedType(PrimitiveType primitiveType) {
         return switch (primitiveType.name()) {
-            case "BYTE" -> PrimitiveLinkedType.BYTE;
-            case "INT" -> PrimitiveLinkedType.INT;
-            case "LONG" -> PrimitiveLinkedType.LONG;
-            case "DOUBLE" -> PrimitiveLinkedType.DOUBLE;
-            case "BOOL" -> PrimitiveLinkedType.BOOL;
-            case "STRING" -> PrimitiveLinkedType.STRING;
-            case "FLOAT" -> PrimitiveLinkedType.FLOAT;
-            case "NOTHING" -> PrimitiveLinkedType.NOTHING;
-            case "ANY" -> PrimitiveLinkedType.ANY;
-            case "DATA" -> PrimitiveLinkedType.DATA;
-            case "ENUM" -> PrimitiveLinkedType.ENUM;
+            case "BYTE" -> CompiledIrModule.BYTE;
+            case "INT" -> CompiledIrModule.INT;
+            case "LONG" -> CompiledIrModule.LONG;
+            case "DOUBLE" -> CompiledIrModule.DOUBLE;
+            case "BOOL" -> CompiledIrModule.BOOL;
+            case "STRING" -> CompiledIrModule.STRING;
+            case "FLOAT" -> CompiledIrModule.FLOAT;
+            case "NOTHING" -> CompiledIrModule.NOTHING;
+            case "ANY" -> CompiledIrModule.ANY;
+            case "DATA" -> CompiledIrModule.DATA;
+            case "ENUM" -> CompiledIrModule.ENUM;
             default -> throw new IllegalStateException("Unknown primitive type: " + primitiveType.name());
         };
     }
@@ -8383,7 +8421,7 @@ public class CapybaraCompiler {
     ) {
         var linked = parserType(function.returnType())
                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
-                .orElseGet(() -> Results.success(PrimitiveLinkedType.ANY));
+                .orElseGet(() -> Results.success(CompiledIrModule.ANY));
         if (!(linked instanceof Result.Error<CompiledType> error)) {
             return linked;
         }
@@ -8744,24 +8782,25 @@ public class CapybaraCompiler {
 
     private Type compiledTypeToParserType(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> switch (primitive) {
-                case BYTE -> ParserAst.BYTE;
-                case INT -> ParserAst.INT;
-                case LONG -> ParserAst.LONG;
-                case DOUBLE -> ParserAst.DOUBLE;
-                case BOOL -> ParserAst.BOOL;
-                case STRING -> ParserAst.STRING;
-                case FLOAT -> ParserAst.FLOAT;
-                case ANY -> ParserAst.ANY;
-                case NOTHING -> ParserAst.NOTHING;
-                case DATA -> ParserAst.DATA;
-                case ENUM -> ParserAst.ENUM;
+            case PrimitiveLinkedType primitive -> switch (primitive.name()) {
+                case "BYTE" -> ParserAst.BYTE;
+                case "INT" -> ParserAst.INT;
+                case "LONG" -> ParserAst.LONG;
+                case "DOUBLE" -> ParserAst.DOUBLE;
+                case "BOOL" -> ParserAst.BOOL;
+                case "STRING" -> ParserAst.STRING;
+                case "FLOAT" -> ParserAst.FLOAT;
+                case "ANY" -> ParserAst.ANY;
+                case "NOTHING" -> ParserAst.NOTHING;
+                case "DATA" -> ParserAst.DATA;
+                case "ENUM" -> ParserAst.ENUM;
+                default -> ParserAst.ANY;
             };
-            case CollectionLinkedType.CompiledList compiledList ->
+            case CompiledList compiledList ->
                     new ListType(compiledTypeToParserType(compiledList.elementType()));
-            case CollectionLinkedType.CompiledSet compiledSet ->
+            case CompiledSet compiledSet ->
                     new SetType(compiledTypeToParserType(compiledSet.elementType()));
-            case CollectionLinkedType.CompiledDict compiledDict ->
+            case CompiledDict compiledDict ->
                     new DictType(compiledTypeToParserType(compiledDict.valueType()));
             case CompiledTupleType tupleType -> new TupleType(
                     tupleType.elementTypes().stream().map(this::compiledTypeToParserType).toList()
@@ -8808,13 +8847,13 @@ public class CapybaraCompiler {
             case ListType listType ->
                     ResultOps.map(
                             linkType(listType.elementType(), dataTypes, functionGenericTypeNames, compileCache),
-                            elementType -> (CompiledType) new CollectionLinkedType.CompiledList(elementType));
+                            elementType -> (CompiledType) new CompiledList(elementType));
             case SetType setType -> ResultOps.map(
                     linkType(setType.elementType(), dataTypes, functionGenericTypeNames, compileCache),
-                    elementType -> (CompiledType) new CollectionLinkedType.CompiledSet(elementType));
+                    elementType -> (CompiledType) new CompiledSet(elementType));
             case DictType dictType -> ResultOps.map(
                     linkType(dictType.valueType(), dataTypes, functionGenericTypeNames, compileCache),
-                    valueType -> (CompiledType) new CollectionLinkedType.CompiledDict(valueType));
+                    valueType -> (CompiledType) new CompiledDict(valueType));
             case FunctionType functionType -> ResultOps.flatMap(
                     linkType(functionType.argumentType(), dataTypes, functionGenericTypeNames, compileCache),
                     argumentType -> ResultOps.map(
@@ -8889,7 +8928,7 @@ public class CapybaraCompiler {
                 yield new CompiledDataParentType(
                         parentType.name(),
                         parentType.fields().stream()
-                                .map(field -> new CompiledDataType.CompiledField(
+                                .map(field -> new CompiledField(
                                         field.name(),
                                         substituteTypeParameters(field.type(), substitutions),
                                         field.annotations()
@@ -8926,7 +8965,7 @@ public class CapybaraCompiler {
                     substitutions.put(dataType.typeParameters().get(i), typeArguments.get(i));
                 }
                 var substitutedFields = dataType.fields().stream()
-                        .map(field -> new CompiledDataType.CompiledField(
+                        .map(field -> new CompiledField(
                                 field.name(),
                                 substituteTypeParameters(field.type(), substitutions),
                                 field.annotations()
@@ -8954,11 +8993,11 @@ public class CapybaraCompiler {
             return substitutions.getOrDefault(genericTypeParameter.name(), type);
         }
         return switch (type) {
-            case CollectionLinkedType.CompiledList linkedList -> new CollectionLinkedType.CompiledList(
+            case CompiledList linkedList -> new CompiledList(
                     substituteTypeParameters(linkedList.elementType(), substitutions));
-            case CollectionLinkedType.CompiledSet linkedSet -> new CollectionLinkedType.CompiledSet(
+            case CompiledSet linkedSet -> new CompiledSet(
                     substituteTypeParameters(linkedSet.elementType(), substitutions));
-            case CollectionLinkedType.CompiledDict linkedDict -> new CollectionLinkedType.CompiledDict(
+            case CompiledDict linkedDict -> new CompiledDict(
                     substituteTypeParameters(linkedDict.valueType(), substitutions));
             case CompiledFunctionType functionType -> new CompiledFunctionType(
                     substituteTypeParameters(functionType.argumentType(), substitutions),
@@ -8976,10 +9015,10 @@ public class CapybaraCompiler {
     private String typeDescriptor(CompiledType type) {
         return switch (type) {
             case PrimitiveLinkedType primitive -> formatPrimitiveLinkedType(primitive);
-            case CollectionLinkedType.CompiledList linkedList ->
+            case CompiledList linkedList ->
                     "List[" + typeDescriptor(linkedList.elementType()) + "]";
-            case CollectionLinkedType.CompiledSet linkedSet -> "Set[" + typeDescriptor(linkedSet.elementType()) + "]";
-            case CollectionLinkedType.CompiledDict linkedDict -> "Dict[" + typeDescriptor(linkedDict.valueType()) + "]";
+            case CompiledSet linkedSet -> "Set[" + typeDescriptor(linkedSet.elementType()) + "]";
+            case CompiledDict linkedDict -> "Dict[" + typeDescriptor(linkedDict.valueType()) + "]";
             case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::typeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
@@ -9238,7 +9277,7 @@ public class CapybaraCompiler {
                 resultParent.name(),
                 resultParent.fields(),
                 resultParent.subTypes(),
-                List.of(dataType.name(), PrimitiveLinkedType.STRING.name()),
+                List.of(dataType.name(), CompiledIrModule.STRING.name()),
                 resultParent.comments(),
                 resultParent.visibility(),
                 resultParent.enumType(),
@@ -9255,7 +9294,7 @@ public class CapybaraCompiler {
         private final Map<SignatureVisibilityCacheKey, Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>> visibleSignaturesByNameByScope = new HashMap<>();
         // CompileCache is compile-local; modulesByName and linkedTypesByModule are invariant for its lifetime.
         private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, Result<List<CapybaraExpressionCompiler.FunctionSignature>>>> availableSignaturesByModulePhase = new IdentityHashMap<>();
-        private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, SortedSet<CompiledModule.StaticImport>>> staticImportsByModulePhase = new IdentityHashMap<>();
+        private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, SortedSet<StaticImport>>> staticImportsByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraExpressionCompiler.LinkCache> expressionLinkCaches = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraTypeCompiler.LinkCache> typeLinkCaches = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, Map<Set<String>, Map<String, Result<CompiledType>>>> genericTypeLinkCaches = new IdentityHashMap<>();
@@ -9390,12 +9429,12 @@ public class CapybaraCompiler {
             );
         }
         var backingType = switch (declaration.backingType().name()) {
-            case "BYTE" -> PrimitiveLinkedType.BYTE;
-            case "INT" -> PrimitiveLinkedType.INT;
-            case "LONG" -> PrimitiveLinkedType.LONG;
-            case "FLOAT" -> PrimitiveLinkedType.FLOAT;
-            case "DOUBLE" -> PrimitiveLinkedType.DOUBLE;
-            case "STRING" -> PrimitiveLinkedType.STRING;
+            case "BYTE" -> CompiledIrModule.BYTE;
+            case "INT" -> CompiledIrModule.INT;
+            case "LONG" -> CompiledIrModule.LONG;
+            case "FLOAT" -> CompiledIrModule.FLOAT;
+            case "DOUBLE" -> CompiledIrModule.DOUBLE;
+            case "STRING" -> CompiledIrModule.STRING;
             default -> null;
         };
         if (backingType == null) {
@@ -9479,7 +9518,7 @@ public class CapybaraCompiler {
                 .map(parentName -> {
                     var parent = declarationsByName.get(parentName);
                     if (parent == null) {
-                        return Results.<List<CompiledDataType.CompiledField>>error(
+                        return Results.<List<CompiledField>>error(
                                 "Extended data type `" + parentName + "` not found"
                         );
                     }
@@ -9508,12 +9547,12 @@ public class CapybaraCompiler {
                         normalizedFile))
                 .collect(new ResultCollectionCollector<>());
         var linked = ResultOps.flatMap(ResultOps.join(
-                (List<List<CompiledDataType.CompiledField>> inherited) ->
-                        (List<CompiledDataType.CompiledField> own) -> new LinkedDataFields(inherited, own),
+                (List<List<CompiledField>> inherited) ->
+                        (List<CompiledField> own) -> new LinkedDataFields(inherited, own),
                 inheritedFields,
                 ownFields
         ), linkedFields -> {
-            var fields = new ArrayList<CompiledDataType.CompiledField>();
+            var fields = new ArrayList<CompiledField>();
             var fieldOrigins = new LinkedHashMap<String, FieldOrigin>();
             for (var i = 0; i < dataDeclaration.extendsTypes().size(); i++) {
                 var parentName = dataDeclaration.extendsTypes().get(i);
@@ -9554,9 +9593,9 @@ public class CapybaraCompiler {
     }
 
     private String mergeDataFields(
-            List<CompiledDataType.CompiledField> mergedFields,
+            List<CompiledField> mergedFields,
             Map<String, FieldOrigin> fieldOrigins,
-            List<CompiledDataType.CompiledField> candidateFields,
+            List<CompiledField> candidateFields,
             String ownerName,
             String dataName
     ) {
@@ -9598,7 +9637,7 @@ public class CapybaraCompiler {
         );
     }
 
-    private Result<CompiledDataType.CompiledField> linkField(
+    private Result<CompiledField> linkField(
             DataField type,
             Set<String> genericTypes,
             Map<String, DataDeclaration> declarationsByName,
@@ -9610,7 +9649,7 @@ public class CapybaraCompiler {
             String normalizedFile
     ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
-            return Results.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
+            return Results.success(new CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
         }
         if (type.type() instanceof DataType dataType && declarationsByName.containsKey(dataType.name())) {
             return ResultOps.map(linkDataDeclaration(
@@ -9622,7 +9661,7 @@ public class CapybaraCompiler {
                     cache,
                     visiting,
                     normalizedFile),
-                    linkedDataType -> new CompiledDataType.CompiledField(type.name(), linkedDataType));
+                    linkedDataType -> new CompiledField(type.name(), linkedDataType));
         }
         var knownDataTypes = new HashMap<String, GenericDataType>();
         declarationsByName.forEach((name, declaration) -> {
@@ -9656,7 +9695,7 @@ public class CapybaraCompiler {
             && type.type() instanceof DataType dataType) {
             var importedQualifiedName = resolveImportedQualifiedTypeName(dataType.name(), importDeclarations);
             if (importedQualifiedName.isPresent() && isQualifiedExternalTypeName(importedQualifiedName.get())) {
-                return Results.success(new CompiledDataType.CompiledField(
+                return Results.success(new CompiledField(
                         type.name(),
                         externalTypePlaceholder(importedQualifiedName.get())
                 ));
@@ -9665,12 +9704,12 @@ public class CapybaraCompiler {
         if (linkedType instanceof Result.Error<CompiledType>
             && type.type() instanceof DataType dataType
             && isQualifiedExternalTypeName(dataType.name())) {
-            return Results.success(new CompiledDataType.CompiledField(
+            return Results.success(new CompiledField(
                     type.name(),
                     externalTypePlaceholder(dataType.name())
             ));
         }
-        return ResultOps.map(linkedType, t -> new CompiledDataType.CompiledField(type.name(), t));
+        return ResultOps.map(linkedType, t -> new CompiledField(type.name(), t));
     }
 
     private Map<String, GenericDataType> importedExternalTypePlaceholders(List<ImportDeclaration> importDeclarations) {
@@ -9786,7 +9825,7 @@ public class CapybaraCompiler {
         var optionParentDescriptor = baseTypeName(typeName) + "[T]";
         var some = new CompiledDataType(
                 "Some",
-                List.of(new CompiledDataType.CompiledField("value", new CompiledGenericTypeParameter("T"))),
+                List.of(new CompiledField("value", new CompiledGenericTypeParameter("T"))),
                 List.of("T"),
                 List.of(optionParentDescriptor),
                 false
@@ -9811,14 +9850,14 @@ public class CapybaraCompiler {
         var resultParentDescriptor = baseTypeName(typeName) + "[T]";
         var success = new CompiledDataType(
                 "Success",
-                List.of(new CompiledDataType.CompiledField("value", new CompiledGenericTypeParameter("T"))),
+                List.of(new CompiledField("value", new CompiledGenericTypeParameter("T"))),
                 List.of("T"),
                 List.of(resultParentDescriptor),
                 false
         );
         var error = new CompiledDataType(
                 "Error",
-                List.of(new CompiledDataType.CompiledField("message", PrimitiveLinkedType.STRING)),
+                List.of(new CompiledField("message", CompiledIrModule.STRING)),
                 List.of(),
                 List.of(resultParentDescriptor),
                 false
@@ -9892,13 +9931,13 @@ public class CapybaraCompiler {
 
     private Result<CompiledDataType> mergeParentFields(
             String parentTypeName,
-            List<CompiledDataType.CompiledField> parentFields,
+            List<CompiledField> parentFields,
             CompiledDataType childType
     ) {
-        var merged = new ArrayList<CompiledDataType.CompiledField>(parentFields);
+        var merged = new ArrayList<CompiledField>(parentFields);
         var childFieldsByName = childType.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        CompiledDataType.CompiledField::name,
+                        CompiledField::name,
                         java.util.function.Function.identity(),
                         (first, second) -> second,
                         java.util.LinkedHashMap::new
@@ -9935,17 +9974,17 @@ public class CapybaraCompiler {
         ));
     }
 
-    private Result<CompiledDataType.CompiledField> linkField(
+    private Result<CompiledField> linkField(
             DataField type,
             Set<String> genericTypes,
             Map<String, GenericDataType> knownDataTypes
     ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
-            return Results.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
+            return Results.success(new CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
         }
         return ResultOps.map(
                 linkType(type.type(), knownDataTypes),
-                t -> new CompiledDataType.CompiledField(type.name(), t));
+                t -> new CompiledField(type.name(), t));
     }
 
     private Result<List<CompiledDataType>> findSubtypes(

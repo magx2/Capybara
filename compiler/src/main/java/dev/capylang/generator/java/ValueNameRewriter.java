@@ -307,7 +307,7 @@ public class ValueNameRewriter {
     private static CompiledExpression rewriteValueInLinkedNewDict(String name, String uniqueName, CompiledNewDict linkedNewDict) {
         return new CompiledNewDict(
                 linkedNewDict.entries().stream()
-                        .map(entry -> new CompiledNewDict.Entry(
+                        .map(entry -> new CompiledNewDictEntry(
                                 rewriteValueInExpression(name, uniqueName, entry.key()),
                                 rewriteValueInExpression(name, uniqueName, entry.value())
                         ))

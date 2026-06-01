@@ -13,6 +13,7 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
+import dev.capylang.compiler.CompiledIrModule;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.CompiledModule;
 
@@ -21,11 +22,22 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
+    private static TreeSet<CompiledModule> compiledModuleTreeSet() {
+        return new TreeSet<>(Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+    }
+
+    private static TreeSet<CompiledModule> compiledModuleTreeSet(Collection<CompiledModule> modules) {
+        var sorted = compiledModuleTreeSet();
+        sorted.addAll(modules);
+        return sorted;
+    }
+
     @InputDirectory
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getInputDir();
@@ -181,13 +193,13 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     }
 
     private TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, Capy.CompilationArtifacts compilation) {
-        var mergedLibraries = new TreeSet<>(libraries);
+        var mergedLibraries = compiledModuleTreeSet(libraries);
         mergedLibraries.addAll(compilation.program().modules());
         return mergedLibraries;
     }
 
     private TreeSet<CompiledModule> readLibraryModules(Collection<java.nio.file.Path> directories) throws IOException {
-        var modules = new TreeSet<CompiledModule>();
+        var modules = compiledModuleTreeSet();
         for (var directory : directories) {
             if (Files.notExists(directory) || !Files.isDirectory(directory)) {
                 continue;

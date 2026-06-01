@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.*;
 import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledAnnotation;
 import dev.capylang.compiler.CompiledAnnotationValue;
@@ -91,6 +92,14 @@ public final class PythonGenerator implements Generator {
             "global", "if", "import", "in", "is", "lambda", "match", "nonlocal", "not",
             "or", "pass", "raise", "return", "try", "while", "with", "yield"
     );
+
+    private static boolean sameType(CompiledType actual, CompiledType expected) {
+        return expected.equals(actual);
+    }
+
+    private static boolean differentType(CompiledType actual, CompiledType expected) {
+        return !sameType(actual, expected);
+    }
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -583,13 +592,13 @@ public final class PythonGenerator implements Generator {
         }
 
         private String primitiveTypeName(PrimitiveLinkedType type) {
-            return switch (type) {
-                case BYTE -> "byte";
-                case INT -> "int";
-                case LONG -> "long";
-                case FLOAT -> "float";
-                case DOUBLE -> "double";
-                case STRING -> "String";
+            return switch (type.name()) {
+                case "BYTE" -> "byte";
+                case "INT" -> "int";
+                case "LONG" -> "long";
+                case "FLOAT" -> "float";
+                case "DOUBLE" -> "double";
+                case "STRING" -> "String";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
         }
@@ -664,13 +673,13 @@ public final class PythonGenerator implements Generator {
 
         private String render(CompiledExpression expression, Scope scope) {
             return switch (expression) {
-                case CompiledBooleanValue booleanValue -> pyBool(booleanValue == CompiledBooleanValue.TRUE);
+                case CompiledBooleanValue booleanValue -> pyBool(booleanValue.value());
                 case CompiledByteValue byteValue -> JavaScriptGenerator.stripNumericSuffix(byteValue.byteValue());
                 case CompiledDoubleValue doubleValue -> JavaScriptGenerator.stripNumericSuffix(doubleValue.doubleValue());
                 case CompiledFloatValue floatValue -> JavaScriptGenerator.stripNumericSuffix(floatValue.floatValue());
                 case CompiledIntValue intValue -> JavaScriptGenerator.stripNumericSuffix(intValue.intValue());
                 case CompiledLongValue longValue -> renderLongLiteral(longValue.longValue());
-                case CompiledStringValue stringValue -> stringValue.toString();
+                case CompiledStringValue stringValue -> CompiledExpressionIrModule.compiledExpressionLiteralString(stringValue);
                 case CompiledVariable variable -> scope.resolve(variable.name());
                 case CompiledNumericWidening numericWidening -> renderNumericWidening(numericWidening, scope);
                 case CompiledNewList newList -> renderNewList(newList, scope);
@@ -731,7 +740,8 @@ public final class PythonGenerator implements Generator {
 
         private String renderNumericWidening(CompiledNumericWidening numericWidening, Scope scope) {
             var expression = render(numericWidening.expression(), scope);
-            if (numericWidening.type() == PrimitiveLinkedType.LONG && numericWidening.expression().type() != PrimitiveLinkedType.LONG) {
+            if (sameType(numericWidening.type(), CompiledIrModule.LONG)
+                && differentType(numericWidening.expression().type(), CompiledIrModule.LONG)) {
                 return "capy.to_long(" + expression + ")";
             }
             return expression;
@@ -845,7 +855,7 @@ public final class PythonGenerator implements Generator {
             if ("unsafe_run".equals(methodName) || "unsafeRun".equals(methodName)) {
                 return "(" + receiver + ").unsafe_run()";
             }
-            if (receiverType == PrimitiveLinkedType.ENUM && tailArgs.isEmpty()) {
+            if (sameType(receiverType, CompiledIrModule.ENUM) && tailArgs.isEmpty()) {
                 if ("name".equals(methodName)) {
                     return "(" + receiver + ").name";
                 }
@@ -867,16 +877,16 @@ public final class PythonGenerator implements Generator {
                 return moduleVar("capy.lang.String") + ".getChar(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
-                && receiverType == PrimitiveLinkedType.STRING
+                && sameType(receiverType, CompiledIrModule.STRING)
                 && tailArgs.size() == 1) {
                 return "str(" + receiver + ").startswith(" + tailArgs.getFirst() + ")";
             }
             if (("end_with".equals(methodName) || "endWith".equals(methodName))
-                && receiverType == PrimitiveLinkedType.STRING
+                && sameType(receiverType, CompiledIrModule.STRING)
                 && tailArgs.size() == 1) {
                 return "str(" + receiver + ").endswith(" + tailArgs.getFirst() + ")";
             }
-            if ("trim".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.isEmpty()) {
+            if ("trim".equals(methodName) && sameType(receiverType, CompiledIrModule.STRING) && tailArgs.isEmpty()) {
                 return "str(" + receiver + ").strip()";
             }
             if ("size".equals(methodName) && isCollectionType(receiverType)) {
@@ -886,7 +896,7 @@ public final class PythonGenerator implements Generator {
                 && isCollectionType(receiverType)) {
                 return "capy.list_(" + receiver + ")";
             }
-            if ("entries".equals(methodName) && receiverType instanceof CollectionLinkedType.CompiledDict) {
+            if ("entries".equals(methodName) && receiverType instanceof CompiledDict) {
                 return "capy.entries(" + receiver + ")";
             }
             if ("replace".equals(methodName) && tailArgs.size() == 2) {
@@ -896,7 +906,7 @@ public final class PythonGenerator implements Generator {
                 && renderNativeCollectionMethod(functionCall, args, methodName).isPresent()) {
                 return renderNativeCollectionMethod(functionCall, args, methodName).orElseThrow();
             }
-            if (receiverType instanceof CollectionLinkedType.CompiledSet) {
+            if (receiverType instanceof CompiledSet) {
                 var nativeSetMethod = renderNativeSetMethod(methodName, receiver, tailArgs);
                 if (nativeSetMethod.isPresent()) {
                     return nativeSetMethod.orElseThrow();
@@ -1002,23 +1012,23 @@ public final class PythonGenerator implements Generator {
                     if (receiverType instanceof CompiledTupleType) {
                         return Optional.of("capy.raw_index(" + receiver + ", " + args.get(1) + ")");
                     }
-                    if (receiverType instanceof CollectionLinkedType.CompiledList
-                        || receiverType instanceof CollectionLinkedType.CompiledDict
-                        || receiverType == PrimitiveLinkedType.STRING) {
+                    if (receiverType instanceof CompiledList
+                        || receiverType instanceof CompiledDict
+                        || sameType(receiverType, CompiledIrModule.STRING)) {
                         return Optional.of("capy.get_index(" + receiver + ", " + args.get(1) + ")");
                     }
                     return Optional.empty();
                 }
                 if (args.size() == 3) {
-                    if (receiverType instanceof CollectionLinkedType.CompiledList
-                        || receiverType == PrimitiveLinkedType.STRING) {
+                    if (receiverType instanceof CompiledList
+                        || sameType(receiverType, CompiledIrModule.STRING)) {
                         return Optional.of("capy.slice_(" + receiver + ", " + args.get(1) + ", " + args.get(2) + ")");
                     }
                     return Optional.empty();
                 }
             }
             if (("_contains_native".equals(methodName) || "contains_native".equals(methodName))
-                && receiverType instanceof CollectionLinkedType.CompiledSet
+                && receiverType instanceof CompiledSet
                 && args.size() == 2) {
                 return Optional.of("capy.contains(" + receiver + ", " + args.get(1) + ")");
             }
@@ -1041,53 +1051,53 @@ public final class PythonGenerator implements Generator {
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
                 case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
-                case MINUS -> expression.type() == PrimitiveLinkedType.STRING
+                case MINUS -> sameType(expression.type(), CompiledIrModule.STRING)
                         ? "(" + renderStringConcat(left, right) + ")"
                         : "(" + renderCollectionMinus(expression, left, right) + ")";
                 case MUL -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.long_mul(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.int_mul(" + left + ", " + right + ")";
                     }
                     yield "((" + left + ") * (" + right + "))";
                 }
                 case DIV -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.int_div(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.long_div(" + left + ", " + right + ")";
                     }
                     yield "((" + left + ") / (" + right + "))";
                 }
                 case MOD -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.long_mod(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.int_mod(" + left + ", " + right + ")";
                     }
                     yield "((" + left + ") % (" + right + "))";
                 }
                 case POWER -> {
-                    if (expression.type() == PrimitiveLinkedType.STRING) {
+                    if (sameType(expression.type(), CompiledIrModule.STRING)) {
                         yield "(" + renderStringConcat(left, right) + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.LONG) {
+                    if (sameType(expression.type(), CompiledIrModule.LONG)) {
                         yield "capy.long_pow(" + left + ", " + right + ")";
                     }
-                    if (expression.type() == PrimitiveLinkedType.INT) {
+                    if (sameType(expression.type(), CompiledIrModule.INT)) {
                         yield "capy.int_pow(" + left + ", " + right + ")";
                     }
                     yield "capy.math.pow(" + left + ", " + right + ")";
@@ -1112,9 +1122,9 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {
-            var equality = (leftType == PrimitiveLinkedType.BOOL && rightType != PrimitiveLinkedType.BOOL)
+            var equality = (sameType(leftType, CompiledIrModule.BOOL) && differentType(rightType, CompiledIrModule.BOOL))
                     ? "(" + left + " == capy.truthy(" + right + "))"
-                    : (rightType == PrimitiveLinkedType.BOOL && leftType != PrimitiveLinkedType.BOOL)
+                    : (sameType(rightType, CompiledIrModule.BOOL) && differentType(leftType, CompiledIrModule.BOOL))
                             ? "(capy.truthy(" + left + ") == " + right + ")"
                             : "capy.equals(" + left + ", " + right + ")";
             return negated ? "(not " + equality + ")" : equality;
@@ -1127,7 +1137,7 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderLambda(CompiledLambdaExpression lambdaExpression, Scope scope) {
-            if (lambdaExpression.functionType().argumentType() == PrimitiveLinkedType.NOTHING) {
+            if (sameType(lambdaExpression.functionType().argumentType(), CompiledIrModule.NOTHING)) {
                 return "(lambda: (" + render(lambdaExpression.expression(), scope) + "))";
             }
             var tupleArgs = parseTuplePipeArguments(lambdaExpression.argumentName());
@@ -1204,28 +1214,28 @@ public final class PythonGenerator implements Generator {
             return "capy.match_value(" + value + ", [" + String.join(", ", cases) + "])";
         }
 
-        private RenderedPattern renderPattern(CompiledMatchExpression.Pattern pattern, Scope scope) {
+        private RenderedPattern renderPattern(CompiledPattern pattern, Scope scope) {
             return switch (pattern) {
-                case CompiledMatchExpression.IntPattern intPattern ->
+                case CompiledIntPattern intPattern ->
                         new RenderedPattern("capy.pattern_value(" + JavaScriptGenerator.stripNumericSuffix(intPattern.value()) + ")", List.of(), scope);
-                case CompiledMatchExpression.LongPattern longPattern ->
+                case CompiledLongPattern longPattern ->
                         new RenderedPattern("capy.pattern_value(" + renderLongLiteral(longPattern.value()) + ")", List.of(), scope);
-                case CompiledMatchExpression.FloatPattern floatPattern ->
+                case CompiledFloatPattern floatPattern ->
                         new RenderedPattern("capy.pattern_value(" + JavaScriptGenerator.stripNumericSuffix(floatPattern.value()) + ")", List.of(), scope);
-                case CompiledMatchExpression.StringPattern stringPattern ->
+                case CompiledStringPattern stringPattern ->
                         new RenderedPattern("capy.pattern_value(" + stringPattern.value() + ")", List.of(), scope);
-                case CompiledMatchExpression.BoolPattern boolPattern ->
+                case CompiledBoolPattern boolPattern ->
                         new RenderedPattern("capy.pattern_value(" + pyBool(Boolean.parseBoolean(boolPattern.value())) + ")", List.of(), scope);
-                case CompiledMatchExpression.WildcardPattern ignored ->
+                case CompiledWildcardPattern ignored ->
                         new RenderedPattern("capy.pattern_wildcard()", List.of(), scope);
-                case CompiledMatchExpression.VariablePattern variablePattern -> {
+                case CompiledVariablePattern variablePattern -> {
                     if (JavaScriptGenerator.isTypeLikeIdentifier(variablePattern.name())) {
                         yield new RenderedPattern("capy.pattern_type(" + pyString(typeNameReference(variablePattern.name())) + ")", List.of(), scope);
                     }
                     yield bindPatternValue(variablePattern.name(), scope);
                 }
-                case CompiledMatchExpression.WildcardBindingPattern wildcardBindingPattern -> bindPatternValue(wildcardBindingPattern.name(), scope);
-                case CompiledMatchExpression.TypedPattern typedPattern -> {
+                case CompiledWildcardBindingPattern wildcardBindingPattern -> bindPatternValue(wildcardBindingPattern.name(), scope);
+                case CompiledTypedPattern typedPattern -> {
                     var bound = bindPatternValue(typedPattern.name(), scope);
                     yield new RenderedPattern(
                             "capy.pattern_typed(" + pyString(typeNameReference(typedPattern.type().name())) + ", " + pyString(pyIdentifier(typedPattern.name())) + ")",
@@ -1233,12 +1243,12 @@ public final class PythonGenerator implements Generator {
                             bound.scope()
                     );
                 }
-                case CompiledMatchExpression.ConstructorPattern constructorPattern ->
+                case CompiledConstructorPattern constructorPattern ->
                         renderConstructorPattern(constructorPattern, scope);
             };
         }
 
-        private RenderedPattern renderConstructorPattern(CompiledMatchExpression.ConstructorPattern pattern, Scope scope) {
+        private RenderedPattern renderConstructorPattern(CompiledConstructorPattern pattern, Scope scope) {
             var constructorName = typeNameReference(pattern.constructorName());
             var fields = programContext.fieldsForType(constructorName);
             var descriptors = new ArrayList<String>();
@@ -1354,40 +1364,40 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderBoolean(CompiledExpression expression, Scope scope) {
-            if (expression.type() == PrimitiveLinkedType.BOOL) {
+            if (sameType(expression.type(), CompiledIrModule.BOOL)) {
                 return render(expression, scope);
             }
             return "capy.truthy(" + render(expression, scope) + ")";
         }
 
         private boolean isCollectionType(CompiledType type) {
-            return type instanceof CollectionLinkedType.CompiledList
-                   || type instanceof CollectionLinkedType.CompiledSet
-                   || type instanceof CollectionLinkedType.CompiledDict
-                   || type == PrimitiveLinkedType.STRING;
+            return type instanceof CompiledList
+                   || type instanceof CompiledSet
+                   || type instanceof CompiledDict
+                   || sameType(type, CompiledIrModule.STRING);
         }
 
         private boolean isStringLike(CompiledType type) {
-            return type == PrimitiveLinkedType.STRING
+            return sameType(type, CompiledIrModule.STRING)
                    || (type instanceof CompiledPrimitiveBackedType primitiveBackedType
-                       && primitiveBackedType.backingType() == PrimitiveLinkedType.STRING);
+                       && sameType(primitiveBackedType.backingType(), CompiledIrModule.STRING));
         }
 
         private boolean isNativePlusType(CompiledType type) {
             return isCollectionType(type)
-                   || type == PrimitiveLinkedType.STRING
-                   || type == PrimitiveLinkedType.INT
-                   || type == PrimitiveLinkedType.LONG
-                   || type == PrimitiveLinkedType.FLOAT
-                   || type == PrimitiveLinkedType.DOUBLE;
+                   || sameType(type, CompiledIrModule.STRING)
+                   || sameType(type, CompiledIrModule.INT)
+                   || sameType(type, CompiledIrModule.LONG)
+                   || sameType(type, CompiledIrModule.FLOAT)
+                   || sameType(type, CompiledIrModule.DOUBLE);
         }
 
         private boolean isNativeMinusType(CompiledType type) {
             return isCollectionType(type)
-                   || type == PrimitiveLinkedType.INT
-                   || type == PrimitiveLinkedType.LONG
-                   || type == PrimitiveLinkedType.FLOAT
-                   || type == PrimitiveLinkedType.DOUBLE;
+                   || sameType(type, CompiledIrModule.INT)
+                   || sameType(type, CompiledIrModule.LONG)
+                   || sameType(type, CompiledIrModule.FLOAT)
+                   || sameType(type, CompiledIrModule.DOUBLE);
         }
 
         private boolean isPrimitiveConversion(String methodName) {
@@ -1395,10 +1405,10 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderContains(CompiledType leftType, String left, String right) {
-            if (leftType instanceof CollectionLinkedType.CompiledDict) {
+            if (leftType instanceof CompiledDict) {
                 return "(" + left + ").has(" + right + ")";
             }
-            if (leftType == PrimitiveLinkedType.STRING) {
+            if (sameType(leftType, CompiledIrModule.STRING)) {
                 return "(" + right + " in str(" + left + "))";
             }
             return "capy.contains(" + left + ", " + right + ")";
@@ -1413,28 +1423,28 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderCollectionPlus(CompiledType leftType, String left, CompiledType rightType, String right, CompiledType resultType) {
-            if (leftType instanceof CollectionLinkedType.CompiledList) {
-                return rightType instanceof CollectionLinkedType.CompiledList
+            if (leftType instanceof CompiledList) {
+                return rightType instanceof CompiledList
                         ? "capy.list_plus(" + left + ", " + right + ")"
                         : "capy.list_append(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledSet) {
-                return rightType instanceof CollectionLinkedType.CompiledSet
+            if (leftType instanceof CompiledSet) {
+                return rightType instanceof CompiledSet
                         ? "capy.set_plus(" + left + ", " + right + ")"
                         : "capy.set_append(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledDict) {
+            if (leftType instanceof CompiledDict) {
                 return rightType instanceof CompiledTupleType
                         ? "capy.dict_put(" + left + ", " + right + ")"
                         : "capy.dict_plus(" + left + ", " + right + ")";
             }
-            if (leftType == PrimitiveLinkedType.STRING || rightType == PrimitiveLinkedType.STRING) {
+            if (sameType(leftType, CompiledIrModule.STRING) || sameType(rightType, CompiledIrModule.STRING)) {
                 return "capy.to_string_value(" + left + ") + capy.to_string_value(" + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.LONG) {
+            if (sameType(resultType, CompiledIrModule.LONG)) {
                 return "capy.long_add(" + left + ", " + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.INT) {
+            if (sameType(resultType, CompiledIrModule.INT)) {
                 return "capy.int_add(" + left + ", " + right + ")";
             }
             return "((" + left + ") + (" + right + "))";
@@ -1449,25 +1459,25 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderCollectionMinus(CompiledType leftType, String left, CompiledType rightType, String right, CompiledType resultType) {
-            if (leftType instanceof CollectionLinkedType.CompiledList) {
-                return rightType instanceof CollectionLinkedType.CompiledList
+            if (leftType instanceof CompiledList) {
+                return rightType instanceof CompiledList
                         ? "capy.list_minus(" + left + ", " + right + ")"
                         : "capy.list_remove(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledSet) {
-                return rightType instanceof CollectionLinkedType.CompiledSet
+            if (leftType instanceof CompiledSet) {
+                return rightType instanceof CompiledSet
                         ? "capy.set_minus(" + left + ", " + right + ")"
                         : "capy.set_remove(" + left + ", " + right + ")";
             }
-            if (leftType instanceof CollectionLinkedType.CompiledDict) {
-                return rightType instanceof CollectionLinkedType.CompiledDict
+            if (leftType instanceof CompiledDict) {
+                return rightType instanceof CompiledDict
                         ? "capy.dict_minus(" + left + ", " + right + ")"
                         : "capy.dict_remove(" + left + ", " + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.LONG) {
+            if (sameType(resultType, CompiledIrModule.LONG)) {
                 return "capy.long_sub(" + left + ", " + right + ")";
             }
-            if (resultType == PrimitiveLinkedType.INT) {
+            if (sameType(resultType, CompiledIrModule.INT)) {
                 return "capy.int_sub(" + left + ", " + right + ")";
             }
             return "((" + left + ") - (" + right + "))";
@@ -1477,7 +1487,7 @@ public final class PythonGenerator implements Generator {
             return switch (methodName) {
                 case "to_int" -> returnType instanceof GenericDataType
                         ? "capy.parse_int_result(" + receiver + ")"
-                        : receiverType == PrimitiveLinkedType.LONG
+                        : sameType(receiverType, CompiledIrModule.LONG)
                                 ? "capy.long_to_int(" + receiver + ")"
                                 : "capy.float_to_int(" + receiver + ")";
                 case "to_long" -> returnType instanceof GenericDataType
@@ -1686,7 +1696,7 @@ public final class PythonGenerator implements Generator {
                 .collect(joining(", ", "[", "]"));
     }
 
-    private static String renderReflectionFieldDescriptors(List<CompiledReflectionValue.Field> fields, String fallbackPackagePath) {
+    private static String renderReflectionFieldDescriptors(List<CompiledReflectionField> fields, String fallbackPackagePath) {
         if (fields.isEmpty()) {
             return "[]";
         }
@@ -1705,13 +1715,13 @@ public final class PythonGenerator implements Generator {
         return switch (type) {
             case PrimitiveLinkedType primitive ->
                     renderDataInfo(primitiveReflectionTypeName(primitive), renderEmptyReflectionPackage(), List.of());
-            case CollectionLinkedType.CompiledList listType ->
+            case CompiledList listType ->
                     "capy.type_info('list', 'List', pkg=" + renderEmptyReflectionPackage()
                     + ", element_type=" + renderReflectionTypeInfo(listType.elementType(), fallbackPackagePath) + ")";
-            case CollectionLinkedType.CompiledSet setType ->
+            case CompiledSet setType ->
                     "capy.type_info('set', 'Set', pkg=" + renderEmptyReflectionPackage()
                     + ", element_type=" + renderReflectionTypeInfo(setType.elementType(), fallbackPackagePath) + ")";
-            case CollectionLinkedType.CompiledDict dictType ->
+            case CompiledDict dictType ->
                     "capy.type_info('dict', 'Dict', pkg=" + renderEmptyReflectionPackage()
                     + ", value_type=" + renderReflectionTypeInfo(dictType.valueType(), fallbackPackagePath) + ")";
             case CompiledTupleType tupleType -> {
@@ -1777,7 +1787,7 @@ public final class PythonGenerator implements Generator {
     }
 
     private static String primitiveReflectionTypeName(PrimitiveLinkedType type) {
-        return type == PrimitiveLinkedType.STRING
+        return sameType(type, CompiledIrModule.STRING)
                 ? "String"
                 : type.name().toLowerCase(java.util.Locale.ROOT);
     }
@@ -2417,13 +2427,13 @@ public final class PythonGenerator implements Generator {
         }
 
         private static String primitiveTypeName(PrimitiveLinkedType type) {
-            return switch (type) {
-                case BYTE -> "byte";
-                case INT -> "int";
-                case LONG -> "long";
-                case FLOAT -> "float";
-                case DOUBLE -> "double";
-                case STRING -> "String";
+            return switch (type.name()) {
+                case "BYTE" -> "byte";
+                case "INT" -> "int";
+                case "LONG" -> "long";
+                case "FLOAT" -> "float";
+                case "DOUBLE" -> "double";
+                case "STRING" -> "String";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
         }
@@ -5344,7 +5354,7 @@ public final class PythonGenerator implements Generator {
                                 ? normalizedBaseName
                                 : normalizedBaseName + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix)
                         : normalizedBaseName + overloadSuffix;
-                var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
+                var parameterTypes = function.parameters().stream().map(CompiledFunctionParameter::type).toList();
                 overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
                 if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
                     overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
@@ -5357,7 +5367,7 @@ public final class PythonGenerator implements Generator {
         }
         for (var function : primitiveBackedMethods) {
             var emittedName = primitiveBackedMethodName(function);
-            var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
+            var parameterTypes = function.parameters().stream().map(CompiledFunctionParameter::type).toList();
             overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
             overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
         }

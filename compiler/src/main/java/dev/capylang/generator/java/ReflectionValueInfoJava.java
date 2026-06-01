@@ -1,5 +1,6 @@
 package dev.capylang.generator.java;
 
+import dev.capylang.compiler.*;
 import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledAnnotation;
 import dev.capylang.compiler.CompiledAnnotationArgument;
@@ -18,6 +19,10 @@ import java.util.List;
 
 public final class ReflectionValueInfoJava {
     private ReflectionValueInfoJava() {
+    }
+
+    private static boolean sameType(CompiledType actual, CompiledType expected) {
+        return expected.equals(actual);
     }
 
     public static JavaDataValueInfo dataValueInfo(
@@ -71,22 +76,22 @@ public final class ReflectionValueInfoJava {
         return switch (type) {
             case PrimitiveLinkedType primitive ->
                     "new capy.metaProg.Reflection.DataInfo("
-                    + javaString(primitive == PrimitiveLinkedType.STRING
+                    + javaString(sameType(primitive, CompiledIrModule.STRING)
                             ? "String"
                             : primitive.name().toLowerCase(java.util.Locale.ROOT)) + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionAnnotations(List.of()) + ")";
-            case CollectionLinkedType.CompiledList listType ->
+            case CompiledList listType ->
                     "new capy.metaProg.Reflection.ListInfo("
                     + javaString("List") + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionTypeInfo(listType.elementType(), fallbackPackagePath) + ")";
-            case CollectionLinkedType.CompiledSet setType ->
+            case CompiledSet setType ->
                     "new capy.metaProg.Reflection.SetInfo("
                     + javaString("Set") + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionTypeInfo(setType.elementType(), fallbackPackagePath) + ")";
-            case CollectionLinkedType.CompiledDict dictType ->
+            case CompiledDict dictType ->
                     "new capy.metaProg.Reflection.DictInfo("
                     + javaString("Dict") + ", "
                     + reflectionEmptyPackageInfo() + ", "

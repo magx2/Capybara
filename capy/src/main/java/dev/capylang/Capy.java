@@ -11,6 +11,7 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import dev.capylang.compiler.*;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledFunction;
@@ -65,6 +66,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -102,6 +104,16 @@ public class Capy {
     private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
     private static final ObjectMapper NATIVE_MANIFEST_OBJECT_MAPPER = createNativeManifestObjectMapper();
     private static final ObjectWriter PRETTY_JSON_WRITER = OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
+
+    private static TreeSet<CompiledModule> compiledModuleTreeSet() {
+        return new TreeSet<>(Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+    }
+
+    private static TreeSet<CompiledModule> compiledModuleTreeSet(Collection<CompiledModule> modules) {
+        var sorted = compiledModuleTreeSet();
+        sorted.addAll(modules);
+        return sorted;
+    }
 
     public static void main(String[] args) {
         System.exit(execute(args, System.out, System.err));
@@ -875,13 +887,13 @@ public class Capy {
     }
 
     private static TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, CompilationArtifacts compilation) {
-        var mergedLibraries = new TreeSet<>(libraries);
+        var mergedLibraries = compiledModuleTreeSet(libraries);
         mergedLibraries.addAll(compilation.program().modules());
         return mergedLibraries;
     }
 
     private static CompiledProgram mergePrograms(CompiledProgram first, CompiledProgram second) {
-        var modules = new TreeSet<CompiledModule>();
+        var modules = compiledModuleTreeSet();
         modules.addAll(first.modules());
         modules.addAll(second.modules());
         var objectOrientedModules = new ArrayList<>(first.objectOrientedModules());
@@ -998,7 +1010,7 @@ public class Capy {
         }
 
         var tempDir = Files.createTempDirectory("capy-package-");
-        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), false, new NativeProviderManifest(List.of(), null), err, readCompilerVersion());
+        var exitCode = compileOrThrow(options.input(), tempDir, compiledModuleTreeSet(), false, new NativeProviderManifest(List.of(), null), err, readCompilerVersion());
         if (exitCode != EXIT_SUCCESS) {
             throw new CliException("Unable to compile package input from: " + options.input());
         }
@@ -1478,11 +1490,11 @@ public class Capy {
 
     private static TreeSet<CompiledModule> readLibraryModules(String libsOption) {
         if (libsOption == null || libsOption.isBlank()) {
-            return new TreeSet<>();
+            return compiledModuleTreeSet();
         }
 
         var libraries = libsOption.split(",");
-        var modules = new TreeSet<CompiledModule>();
+        var modules = compiledModuleTreeSet();
         for (var library : libraries) {
             var trimmed = library.trim();
             if (trimmed.isEmpty()) {
@@ -1555,8 +1567,8 @@ public class Capy {
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = modulePath.isBlank()
-                        ? outputDir.resolve(module.name() + CompiledModule.EXTENSION)
-                        : outputDir.resolve(modulePath).resolve(module.name() + CompiledModule.EXTENSION);
+                        ? outputDir.resolve(module.name() + CompiledIrModule.EXTENSION)
+                        : outputDir.resolve(modulePath).resolve(module.name() + CompiledIrModule.EXTENSION);
                 Files.createDirectories(moduleJson.getParent());
                 log.info("Writing linked module to file: " + moduleJson);
                 var startedAt = System.nanoTime();
@@ -1705,12 +1717,12 @@ public class Capy {
     }
 
     private static boolean isTestFileListType(dev.capylang.compiler.CompiledType returnType) {
-        return returnType instanceof CollectionLinkedType.CompiledList listType
+        return returnType instanceof CompiledList listType
                && isTestFileType(listType.elementType().name());
     }
 
     private static boolean isEffectTestFileListType(dev.capylang.compiler.CompiledType returnType) {
-        return returnType instanceof CollectionLinkedType.CompiledList listType
+        return returnType instanceof CompiledList listType
                && isEffectTestProducerType(listType.elementType());
     }
 
@@ -1774,7 +1786,7 @@ public class Capy {
                 List.of(),
                 false
         )),
-                List.of(new CompiledModule.StaticImport("capy.test_.CapyTest", "TestFile"))
+                List.of(new StaticImport("capy.test_.CapyTest", "TestFile"))
         );
     }
 
@@ -1806,8 +1818,8 @@ public class Capy {
         return isTestFileListType(returnType) || isEffectTestFileListType(returnType);
     }
 
-    private static CollectionLinkedType.CompiledList gatheredTestValuesType() {
-        return new CollectionLinkedType.CompiledList(dev.capylang.compiler.PrimitiveLinkedType.ANY);
+    private static CompiledList gatheredTestValuesType() {
+        return new CompiledList(dev.capylang.compiler.CompiledIrModule.ANY);
     }
 
     private static dev.capylang.compiler.CompiledDataType testFileType() {
@@ -2054,7 +2066,7 @@ public class Capy {
         try (var files = Files.walk(linkedInputDir)) {
             var modules = files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
+                    .filter(path -> path.getFileName().toString().endsWith(CompiledIrModule.EXTENSION))
                     .filter(path -> !path.getFileName().toString().equals(BUILD_INFO_FILE))
                     .map(Capy::readLinkedModule)
                     .toList();
@@ -2105,7 +2117,7 @@ public class Capy {
         try (var files = Files.walk(root)) {
             return files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
+                    .filter(path -> path.getFileName().toString().endsWith(CompiledIrModule.EXTENSION))
                     .map(Capy::readLinkedModule)
                     .toList();
         }

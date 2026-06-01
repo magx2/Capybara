@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
-import static dev.capylang.compiler.PrimitiveLinkedType.ENUM;
+import static dev.capylang.compiler.CompiledIrModule.ANY;
+import static dev.capylang.compiler.CompiledIrModule.ENUM;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CapybaraTypeFinderTest {

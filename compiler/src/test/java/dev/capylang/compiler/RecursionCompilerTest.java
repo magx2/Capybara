@@ -51,7 +51,7 @@ class RecursionCompilerTest {
                     __sum(n, 0)
                 """);
 
-        assertThat(program.modules().first().functions())
+        assertThat(program.modules().getFirst().functions())
                 .filteredOn(function -> function.name().contains("__local_fun_"))
                 .singleElement()
                 .satisfies(function -> {

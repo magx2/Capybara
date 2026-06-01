@@ -1,8 +1,15 @@
 package dev.capylang.generator.java;
 
 import java.util.List;
+import java.util.Set;
 
-public record JavaNormalInterface(JavaType name, List<String> comments, List<JavaInterfaceMethod> methods, List<JavaMethod> defaultMethods) implements JavaInterface {
+public record JavaNormalInterface(
+        JavaType name,
+        Set<JavaType> extendInterfaces,
+        List<String> comments,
+        List<JavaInterfaceMethod> methods,
+        List<JavaMethod> defaultMethods
+) implements JavaInterface {
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof JavaNormalInterface that)) return false;
