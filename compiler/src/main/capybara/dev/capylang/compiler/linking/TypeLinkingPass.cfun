@@ -1,12 +1,18 @@
-/// Pure helpers for parser type names and compiled type descriptors.
-data String { <native> }
-data List[T] { <native> }
+from /capy/collection/Dict import { * }
+from /capy/collection/List import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /dev/capylang/compiler/CompiledIr import { * }
+from /dev/capylang/compiler/Results import { * }
+from /dev/capylang/compiler/parser/ParserAst import { CollectionType, DataType, DictType, FunctionType, ListType, PrimitiveType, SetType, TupleType, Type, findPrimitiveType }
 
-fun String.`+`(value: any): String = <native>
-fun List[T].`+`(value: T): List[T] = <native>
+/// Type linking and pure helpers for parser type names and compiled type descriptors.
 
 fun parse_type_argument(raw: String): String =
     tl_parse_type_argument_descriptor(tl_string_trim(raw))
+
+fun parse_type_argument_ast(raw: String): Type =
+    tl_parse_type_argument_ast(tl_string_trim(raw))
 
 fun parse_data_type_name(raw_name: String): Tuple[String, List[String]] =
     let idx = tl_index_of(raw_name, "[")
@@ -14,20 +20,60 @@ fun parse_data_type_name(raw_name: String): Tuple[String, List[String]] =
     then (raw_name, [])
     else (raw_name[0, idx], split_top_level_type_arguments(raw_name[idx + 1, tl_string_size(raw_name) - 1]))
 
+fun link_type(type: Type, data_types: Dict[GenericDataType]): Result[CompiledType] =
+    let keys = tl_data_type_keys(data_types)
+    link_type(type, data_types, keys)
+
+fun link_type(
+    type: Type,
+    data_types: Dict[GenericDataType],
+    sorted_data_type_keys: List[String]
+): Result[CompiledType] =
+    match type with
+    case PrimitiveType { name, descriptor } -> success(link_primitive_type_name(name))
+    case ListType { elementType } ->
+        link_type(elementType, data_types, sorted_data_type_keys).reduce(
+            linked => success(CompiledList { elementType: linked }),
+            message => error(message)
+        )
+    case SetType { elementType } ->
+        link_type(elementType, data_types, sorted_data_type_keys).reduce(
+            linked => success(CompiledSet { elementType: linked }),
+            message => error(message)
+        )
+    case DictType { valueType } ->
+        link_type(valueType, data_types, sorted_data_type_keys).reduce(
+            linked => success(CompiledDict { valueType: linked }),
+            message => error(message)
+        )
+    case FunctionType { argumentType, returnType } ->
+        tl_link_function_type(argumentType, returnType, data_types, sorted_data_type_keys)
+    case TupleType { elementTypes } ->
+        tl_link_type_list(elementTypes, data_types, sorted_data_type_keys, 0, [], []).reduce(
+            linked_types => success(CompiledTupleType { elementTypes: linked_types }),
+            message => error(message)
+        )
+    case DataType { name } ->
+        link_data_type(name, data_types, sorted_data_type_keys, sorted_data_type_keys)
+
 fun split_top_level_type_arguments(content: String): List[String] =
-    fun scan(content: String, idx: int, depth: int, current: String, result: List[String]): List[String] =
+    fun scan(content: String, idx: int, square: int, paren: int, current: String, result: List[String]): List[String] =
         match content[idx] with
         case Some { char } ->
             if char == "["
-            then scan(content, idx + 1, depth + 1, current + char, result)
+            then scan(content, idx + 1, square + 1, paren, current + char, result)
             else if char == "]"
-                then scan(content, idx + 1, tl_max_int(0, depth - 1), current + char, result)
-                else if char == "," & depth == 0
-                    then scan(content, idx + 1, depth, "", tl_append_non_empty_trimmed(result, current))
-                    else scan(content, idx + 1, depth, current + char, result)
+                then scan(content, idx + 1, tl_max_int(0, square - 1), paren, current + char, result)
+                else if char == "("
+                    then scan(content, idx + 1, square, paren + 1, current + char, result)
+                    else if char == ")"
+                        then scan(content, idx + 1, square, tl_max_int(0, paren - 1), current + char, result)
+                        else if char == "," & square == 0 & paren == 0
+                            then scan(content, idx + 1, square, paren, "", tl_append_non_empty_trimmed(result, current))
+                            else scan(content, idx + 1, square, paren, current + char, result)
         case _ -> tl_append_non_empty_trimmed(result, current)
     ---
-    scan(content, 0, 0, "", [])
+    scan(content, 0, 0, 0, "", [])
 
 fun resolve_data_type(
     raw_name: String,
@@ -61,8 +107,563 @@ fun substitute_type_descriptor(descriptor: String, substitutions: List[Tuple[Str
 fun type_cache_key(type: String): String =
     type
 
+fun type_cache_key(type: Type): String =
+    match type with
+    case PrimitiveType { name, descriptor } -> name
+    case ListType { elementType } -> "List[" + type_cache_key(elementType) + "]"
+    case SetType { elementType } -> "Set[" + type_cache_key(elementType) + "]"
+    case DictType { valueType } -> "Dict[" + type_cache_key(valueType) + "]"
+    case DataType { name } -> name
+    case FunctionType { argumentType, returnType } ->
+        "(" + type_cache_key(argumentType) + " => " + type_cache_key(returnType) + ")"
+    case TupleType { elementTypes } -> "Tuple[" + tl_type_cache_key_arguments(elementTypes, 0, "") + "]"
+
 fun type_descriptor(type: String): String =
     type
+
+fun type_descriptor(type: CompiledType): String =
+    match type with
+    case PrimitiveLinkedType { name } -> primitive_descriptor(name)
+    case CompiledList { elementType } -> "List[" + type_descriptor(elementType) + "]"
+    case CompiledSet { elementType } -> "Set[" + type_descriptor(elementType) + "]"
+    case CompiledDict { valueType } -> "Dict[" + type_descriptor(valueType) + "]"
+    case CompiledTupleType { elementTypes } -> "Tuple[" + tl_type_descriptor_arguments(elementTypes, 0, "") + "]"
+    case CompiledFunctionType { argumentType, returnType } ->
+        "(" + type_descriptor(argumentType) + " => " + type_descriptor(returnType) + ")"
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+        if tl_list_size(typeParameters) == 0
+        then name
+        else name + "[" + tl_string_arguments(typeParameters, 0, "") + "]"
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } ->
+        if tl_list_size(typeParameters) == 0
+        then name
+        else name + "[" + tl_string_arguments(typeParameters, 0, "") + "]"
+    case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } -> name
+    case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } -> name
+    case CompiledGenericTypeParameter { name } -> name
+
+private fun link_data_type(
+    raw_name: String,
+    data_types: Dict[GenericDataType],
+    data_type_keys: List[String],
+    sorted_data_type_keys: List[String]
+): Result[CompiledType] =
+    let resolved = resolve_data_type(raw_name, data_type_keys, sorted_data_type_keys)
+    if tl_resolved_data_type_found(resolved)
+    then
+        match data_types.get(tl_resolved_data_type_key(resolved)) with
+        case Some { data_type } ->
+            instantiate_type_arguments_if_needed(
+                with_qualified_name_if_needed(data_type, tl_resolved_data_type_requested_name(resolved)),
+                tl_resolved_data_type_arguments(resolved),
+                data_types,
+                sorted_data_type_keys
+            )
+        case _ -> error(tl_resolved_data_type_error(resolved))
+    else error(tl_resolved_data_type_error(resolved))
+
+private fun instantiate_type_arguments_if_needed(
+    linked_type: CompiledType,
+    type_arguments: List[String],
+    data_types: Dict[GenericDataType],
+    sorted_data_type_keys: List[String]
+): Result[CompiledType] =
+    if tl_list_size(type_arguments) == 0
+    then success(linked_type)
+    else
+        match linked_type with
+        case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } ->
+            error("Type `" + name + "` does not accept type arguments")
+        case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } ->
+            error("Type `" + name + "` does not accept type arguments")
+        case _ ->
+            tl_link_type_arguments(type_arguments, data_types, sorted_data_type_keys, 0, [], []).reduce(
+                arguments => success(instantiate_type_arguments(linked_type, arguments)),
+                message => error(message)
+            )
+
+private fun tl_link_type_arguments(
+    type_arguments: List[String],
+    data_types: Dict[GenericDataType],
+    sorted_data_type_keys: List[String],
+    idx: int,
+    linked: List[CompiledType],
+    errors: List[String]
+): Result[List[CompiledType]] =
+    match type_arguments[idx] with
+    case Some { argument } ->
+        link_type(parse_type_argument_ast(argument), data_types, sorted_data_type_keys).reduce(
+            value => tl_link_type_arguments(type_arguments, data_types, sorted_data_type_keys, idx + 1, linked + value, errors),
+            message => tl_link_type_arguments(type_arguments, data_types, sorted_data_type_keys, idx + 1, linked, errors + message)
+        )
+    case _ ->
+        if tl_list_size(errors) == 0
+        then success(linked)
+        else error(errors)
+
+private fun tl_link_type_list(
+    types: List[Type],
+    data_types: Dict[GenericDataType],
+    sorted_data_type_keys: List[String],
+    idx: int,
+    linked: List[CompiledType],
+    errors: List[String]
+): Result[List[CompiledType]] =
+    match types[idx] with
+    case Some { type } ->
+        link_type(type, data_types, sorted_data_type_keys).reduce(
+            value => tl_link_type_list(types, data_types, sorted_data_type_keys, idx + 1, linked + value, errors),
+            message => tl_link_type_list(types, data_types, sorted_data_type_keys, idx + 1, linked, errors + message)
+        )
+    case _ ->
+        if tl_list_size(errors) == 0
+        then success(linked)
+        else error(errors)
+
+private fun tl_link_function_type(
+    argument_type: Type,
+    return_type: Type,
+    data_types: Dict[GenericDataType],
+    sorted_data_type_keys: List[String]
+): Result[CompiledType] =
+    let linked_argument = link_type(argument_type, data_types, sorted_data_type_keys)
+    let linked_return = link_type(return_type, data_types, sorted_data_type_keys)
+    linked_argument.reduce(
+        argument => linked_return.reduce(
+            return_value => success(CompiledFunctionType { argumentType: argument, returnType: return_value }),
+            return_error => error(return_error)
+        ),
+        argument_error => linked_return.reduce(
+            _ => error(argument_error),
+            return_error => error([argument_error, return_error])
+        )
+    )
+
+private fun instantiate_type_arguments(linked_type: CompiledType, type_arguments: List[CompiledType]): CompiledType =
+    let mapped_type_arguments = tl_type_descriptors(type_arguments, 0, [])
+    match linked_type with
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } ->
+        let substitutions = substitutions_for(typeParameters, type_arguments, 0, [])
+        CompiledDataParentType {
+            name: name,
+            fields: substitute_fields(fields, substitutions, 0, []),
+            subTypes: substitute_sub_types(subTypes, substitutions, 0, []),
+            typeParameters: mapped_type_arguments,
+            comments: comments,
+            visibility: visibility,
+            enumType: enumType,
+            annotations: annotations
+        }
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+        if tl_list_size(typeParameters) == 0
+        then CompiledDataType {
+            name: name,
+            fields: fields,
+            typeParameters: mapped_type_arguments,
+            extendedTypes: extendedTypes,
+            comments: comments,
+            visibility: visibility,
+            singleton: singleton,
+            nativeType: nativeType,
+            enumValue: enumValue,
+            annotations: annotations
+        }
+        else
+            let substitutions = substitutions_for(typeParameters, type_arguments, 0, [])
+            CompiledDataType {
+                name: name,
+                fields: substitute_fields(fields, substitutions, 0, []),
+                typeParameters: substitute_descriptors(typeParameters, substitutions, 0, []),
+                extendedTypes: substitute_descriptors(extendedTypes, substitutions, 0, []),
+                comments: comments,
+                visibility: visibility,
+                singleton: singleton,
+                nativeType: nativeType,
+                enumValue: enumValue,
+                annotations: annotations
+            }
+    case _ -> linked_type
+
+private fun substitutions_for(
+    type_parameters: List[String],
+    type_arguments: List[CompiledType],
+    idx: int,
+    substitutions: List[Tuple[String, CompiledType]]
+): List[Tuple[String, CompiledType]] =
+    match type_parameters[idx] with
+    case Some { parameter } ->
+        substitutions_for_parameter(type_parameters, type_arguments, idx, substitutions, parameter)
+    case _ -> substitutions
+
+private fun substitutions_for_parameter(
+    type_parameters: List[String],
+    type_arguments: List[CompiledType],
+    idx: int,
+    substitutions: List[Tuple[String, CompiledType]],
+    parameter: String
+): List[Tuple[String, CompiledType]] =
+    match type_arguments[idx] with
+    case Some { argument } -> substitutions_for(type_parameters, type_arguments, idx + 1, substitutions + (parameter, argument))
+    case _ -> substitutions
+
+private fun substitute_type_parameters(linked_type: CompiledType, substitutions: List[Tuple[String, CompiledType]]): CompiledType =
+    match linked_type with
+    case CompiledGenericTypeParameter { name } -> compiled_substitution_or_original(linked_type, substitutions, name)
+    case CompiledList { elementType } -> CompiledList { elementType: substitute_type_parameters(elementType, substitutions) }
+    case CompiledSet { elementType } -> CompiledSet { elementType: substitute_type_parameters(elementType, substitutions) }
+    case CompiledDict { valueType } -> CompiledDict { valueType: substitute_type_parameters(valueType, substitutions) }
+    case CompiledFunctionType { argumentType, returnType } ->
+        CompiledFunctionType {
+            argumentType: substitute_type_parameters(argumentType, substitutions),
+            returnType: substitute_type_parameters(returnType, substitutions)
+        }
+    case CompiledTupleType { elementTypes } ->
+        CompiledTupleType { elementTypes: substitute_type_list(elementTypes, substitutions, 0, []) }
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+        CompiledDataType {
+            name: name,
+            fields: substitute_fields(fields, substitutions, 0, []),
+            typeParameters: substitute_descriptors(typeParameters, substitutions, 0, []),
+            extendedTypes: substitute_descriptors(extendedTypes, substitutions, 0, []),
+            comments: comments,
+            visibility: visibility,
+            singleton: singleton,
+            nativeType: nativeType,
+            enumValue: enumValue,
+            annotations: annotations
+        }
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } ->
+        CompiledDataParentType {
+            name: name,
+            fields: substitute_fields(fields, substitutions, 0, []),
+            subTypes: substitute_sub_types(subTypes, substitutions, 0, []),
+            typeParameters: substitute_descriptors(typeParameters, substitutions, 0, []),
+            comments: comments,
+            visibility: visibility,
+            enumType: enumType,
+            annotations: annotations
+        }
+    case _ -> linked_type
+
+private fun compiled_substitution_or_original(
+    linked_type: CompiledType,
+    substitutions: List[Tuple[String, CompiledType]],
+    name: String
+): CompiledType =
+    match tl_get_compiled_substitution(substitutions, name, 0) with
+    case Some { replacement } -> replacement
+    case _ -> linked_type
+
+private fun substitute_fields(
+    fields: List[CompiledField],
+    substitutions: List[Tuple[String, CompiledType]],
+    idx: int,
+    updated: List[CompiledField]
+): List[CompiledField] =
+    match fields[idx] with
+    case Some { field } ->
+        substitute_fields(fields, substitutions, idx + 1, updated + CompiledField {
+            name: field.name,
+            type: substitute_type_parameters(field.type, substitutions),
+            annotations: field.annotations
+        })
+    case None {} -> updated
+
+private fun substitute_sub_types(
+    sub_types: List[CompiledDataType],
+    substitutions: List[Tuple[String, CompiledType]],
+    idx: int,
+    updated: List[CompiledDataType]
+): List[CompiledDataType] =
+    match sub_types[idx] with
+    case Some { sub_type } ->
+        substitute_sub_types(sub_types, substitutions, idx + 1, updated + substitute_data_sub_type(sub_type, substitutions))
+    case _ -> updated
+
+private fun substitute_data_sub_type(
+    sub_type: CompiledDataType,
+    substitutions: List[Tuple[String, CompiledType]]
+): CompiledDataType =
+    let substituted = substitute_type_parameters(tl_compiled_data_type_as_compiled_type(sub_type), substitutions)
+    match substituted with
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+        CompiledDataType {
+            name: name,
+            fields: fields,
+            typeParameters: typeParameters,
+            extendedTypes: extendedTypes,
+            comments: comments,
+            visibility: visibility,
+            singleton: singleton,
+            nativeType: nativeType,
+            enumValue: enumValue,
+            annotations: annotations
+        }
+    case _ -> sub_type
+
+private fun substitute_type_list(
+    types: List[CompiledType],
+    substitutions: List[Tuple[String, CompiledType]],
+    idx: int,
+    updated: List[CompiledType]
+): List[CompiledType] =
+    match types[idx] with
+    case Some { type } -> substitute_type_list(types, substitutions, idx + 1, updated + substitute_type_parameters(type, substitutions))
+    case _ -> updated
+
+private fun substitute_descriptors(
+    descriptors: List[String],
+    substitutions: List[Tuple[String, CompiledType]],
+    idx: int,
+    updated: List[String]
+): List[String] =
+    match descriptors[idx] with
+    case Some { descriptor } ->
+        substitute_descriptors(descriptors, substitutions, idx + 1, updated + substitute_type_descriptor(descriptor, tl_descriptor_substitutions(substitutions, 0, [])))
+    case _ -> updated
+
+private fun tl_descriptor_substitutions(
+    substitutions: List[Tuple[String, CompiledType]],
+    idx: int,
+    descriptors: List[Tuple[String, String]]
+): List[Tuple[String, String]] =
+    match substitutions[idx] with
+    case Some { substitution } ->
+        tl_descriptor_substitutions(substitutions, idx + 1, descriptors + (substitution[0], type_descriptor(substitution[1])))
+    case _ -> descriptors
+
+private fun with_qualified_name_if_needed(type: GenericDataType, requested_name: String): CompiledType =
+    if !tl_string_contains(requested_name, ".") & !tl_string_starts_with(requested_name, "/")
+    then type
+    else
+        match type with
+        case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+            CompiledDataType {
+                name: requested_name,
+                fields: fields,
+                typeParameters: typeParameters,
+                extendedTypes: extendedTypes,
+                comments: comments,
+                visibility: visibility,
+                singleton: singleton,
+                nativeType: nativeType,
+                enumValue: enumValue,
+                annotations: annotations
+            }
+        case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } ->
+            CompiledDataParentType {
+                name: requested_name,
+                fields: fields,
+                subTypes: subTypes,
+                typeParameters: typeParameters,
+                comments: comments,
+                visibility: visibility,
+                enumType: enumType,
+                annotations: annotations
+            }
+        case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } ->
+            CompiledPrimitiveBackedType {
+                name: requested_name,
+                backingType: backingType,
+                cfunType: cfunType,
+                comments: comments,
+                visibility: visibility,
+                annotations: annotations
+            }
+        case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } -> type
+
+private fun tl_generic_data_type_as_compiled_type(type: GenericDataType): CompiledType =
+    match type with
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+        CompiledDataType {
+            name: name,
+            fields: fields,
+            typeParameters: typeParameters,
+            extendedTypes: extendedTypes,
+            comments: comments,
+            visibility: visibility,
+            singleton: singleton,
+            nativeType: nativeType,
+            enumValue: enumValue,
+            annotations: annotations
+        }
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } ->
+        CompiledDataParentType {
+            name: name,
+            fields: fields,
+            subTypes: subTypes,
+            typeParameters: typeParameters,
+            comments: comments,
+            visibility: visibility,
+            enumType: enumType,
+            annotations: annotations
+        }
+    case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } ->
+        CompiledObjectType {
+            name: name,
+            backendClassName: backendClassName,
+            parents: parents,
+            visibility: visibility,
+            annotations: annotations,
+            kind: kind,
+            methods: methods
+        }
+    case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } ->
+        CompiledPrimitiveBackedType {
+            name: name,
+            backingType: backingType,
+            cfunType: cfunType,
+            comments: comments,
+            visibility: visibility,
+            annotations: annotations
+        }
+
+private fun tl_compiled_data_type_as_compiled_type(type: CompiledDataType): CompiledType =
+    CompiledDataType {
+        name: type.name,
+        fields: type.fields,
+        typeParameters: type.typeParameters,
+        extendedTypes: type.extendedTypes,
+        comments: type.comments,
+        visibility: type.visibility,
+        singleton: type.singleton,
+        nativeType: type.nativeType,
+        enumValue: type.enumValue,
+        annotations: type.annotations
+    }
+
+private fun primitive_descriptor(name: String): String =
+    if name == "BYTE"
+    then "byte"
+    else if name == "INT"
+        then "int"
+        else if name == "LONG"
+            then "long"
+            else if name == "DOUBLE"
+                then "double"
+                else if name == "STRING"
+                    then "String"
+                    else if name == "BOOL"
+                        then "bool"
+                        else if name == "FLOAT"
+                            then "float"
+                            else if name == "ANY"
+                                then "any"
+                                else if name == "DATA"
+                                    then "data"
+                                    else if name == "ENUM"
+                                        then "enum"
+                                        else if name == "NOTHING"
+                                            then "nothing"
+                                            else name
+
+private fun link_primitive_type_name(name: String): CompiledType =
+    if name == "BYTE"
+    then BYTE
+    else if name == "INT"
+        then INT
+        else if name == "LONG"
+            then LONG
+            else if name == "DOUBLE"
+                then DOUBLE
+                else if name == "STRING"
+                    then STRING
+                    else if name == "BOOL"
+                        then BOOL
+                        else if name == "FLOAT"
+                            then FLOAT
+                            else if name == "DATA"
+                                then DATA
+                                else if name == "ENUM"
+                                    then ENUM
+                                    else if name == "NOTHING"
+                                        then NOTHING
+                                        else ANY
+
+private fun tl_parse_type_argument_ast(trimmed: String): Type =
+    match findPrimitiveType(trimmed) with
+    case Some { primitive } -> primitive
+    case _ ->
+        if tl_string_starts_with(trimmed, "List[") & tl_string_ends_with(trimmed, "]")
+        then ListType { elementType: parse_type_argument_ast(trimmed[5, tl_string_size(trimmed) - 1]) }
+        else if tl_string_starts_with(trimmed, "Set[") & tl_string_ends_with(trimmed, "]")
+            then SetType { elementType: parse_type_argument_ast(trimmed[4, tl_string_size(trimmed) - 1]) }
+            else if tl_string_starts_with(trimmed, "Dict[") & tl_string_ends_with(trimmed, "]")
+                then DictType { valueType: parse_type_argument_ast(trimmed[5, tl_string_size(trimmed) - 1]) }
+                else if tl_string_starts_with(trimmed, "Tuple[") & tl_string_ends_with(trimmed, "]")
+                    then TupleType { elementTypes: tl_parse_type_argument_ast_arguments(split_top_level_type_arguments(trimmed[6, tl_string_size(trimmed) - 1]), 0, []) }
+                    else
+                        let fat_arrow_index = tl_index_of_top_level_arrow(trimmed, "=>")
+                        if fat_arrow_index > 0
+                        then
+                            let left = tl_string_trim(trimmed[0, fat_arrow_index])
+                            let right = tl_string_trim(trimmed[fat_arrow_index + 2, tl_string_size(trimmed)])
+                            FunctionType {
+                                argumentType: parse_type_argument_ast(tl_strip_optional_parentheses(left)),
+                                returnType: parse_type_argument_ast(right)
+                            }
+                        else
+                            let slim_arrow_index = tl_index_of_top_level_arrow(trimmed, "->")
+                            if slim_arrow_index > 0
+                            then
+                                let left = tl_string_trim(trimmed[0, slim_arrow_index])
+                                let right = tl_string_trim(trimmed[slim_arrow_index + 2, tl_string_size(trimmed)])
+                                FunctionType {
+                                    argumentType: parse_type_argument_ast(tl_strip_optional_parentheses(left)),
+                                    returnType: parse_type_argument_ast(right)
+                                }
+                            else DataType { name: trimmed }
+
+private fun tl_parse_type_argument_ast_arguments(args: List[String], idx: int, parsed: List[Type]): List[Type] =
+    match args[idx] with
+    case Some { arg } -> tl_parse_type_argument_ast_arguments(args, idx + 1, parsed + parse_type_argument_ast(arg))
+    case _ -> parsed
+
+private fun tl_type_cache_key_arguments(args: List[Type], idx: int, output: String): String =
+    match args[idx] with
+    case Some { arg } -> tl_type_cache_key_arguments(args, idx + 1, tl_append_joined(output, type_cache_key(arg)))
+    case _ -> output
+
+private fun tl_type_descriptor_arguments(args: List[CompiledType], idx: int, output: String): String =
+    match args[idx] with
+    case Some { arg } -> tl_type_descriptor_arguments(args, idx + 1, tl_append_joined(output, type_descriptor(arg)))
+    case _ -> output
+
+private fun tl_type_descriptors(args: List[CompiledType], idx: int, descriptors: List[String]): List[String] =
+    match args[idx] with
+    case Some { arg } -> tl_type_descriptors(args, idx + 1, descriptors + type_descriptor(arg))
+    case _ -> descriptors
+
+private fun tl_string_arguments(args: List[String], idx: int, output: String): String =
+    match args[idx] with
+    case Some { arg } -> tl_string_arguments(args, idx + 1, tl_append_joined(output, arg))
+    case _ -> output
+
+private fun tl_data_type_keys(data_types: Dict[GenericDataType]): List[String] =
+    data_types.entries().reduce([], (keys, entry) => keys + entry[0])
+
+private fun tl_resolved_data_type_found(resolved: Tuple[bool, String, String, List[String], String]): bool =
+    resolved[0]
+
+private fun tl_resolved_data_type_key(resolved: Tuple[bool, String, String, List[String], String]): String =
+    resolved[1]
+
+private fun tl_resolved_data_type_requested_name(resolved: Tuple[bool, String, String, List[String], String]): String =
+    resolved[2]
+
+private fun tl_resolved_data_type_arguments(resolved: Tuple[bool, String, String, List[String], String]): List[String] =
+    resolved[3]
+
+private fun tl_resolved_data_type_error(resolved: Tuple[bool, String, String, List[String], String]): String =
+    resolved[4]
+
+private fun tl_get_compiled_substitution(entries: List[Tuple[String, CompiledType]], key: String, idx: int): Option[CompiledType] =
+    match entries[idx] with
+    case Some { entry } ->
+        if entry[0] == key
+        then Some { entry[1] }
+        else tl_get_compiled_substitution(entries, key, idx + 1)
+    case _ -> None {}
 
 private fun tl_parse_type_argument_descriptor(trimmed: String): String =
     if tl_is_primitive_type_name(trimmed)
@@ -344,6 +945,9 @@ private fun tl_string_is_blank(value: String): bool =
         case _ -> true
     ---
     scan(value, 0)
+
+private fun tl_string_contains(value: String, target: String): bool =
+    tl_index_of(value, target) >= 0
 
 private fun tl_string_trim(value: String): String =
     tl_trim_right(tl_trim_left(value))

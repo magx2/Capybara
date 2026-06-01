@@ -1,0 +1,74 @@
+from /dev/capylang/compiler/CompiledIr import { * }
+
+fun find_higher_type(left: CompiledType, right: CompiledType): CompiledType =
+    if left == right
+    then left
+    else if left == NOTHING
+        then right
+        else if right == NOTHING
+            then left
+            else if left == ANY | right == ANY
+                then ANY
+                else if left == ENUM & is_enum_like_type(right)
+                    then ENUM
+                    else if right == ENUM & is_enum_like_type(left)
+                        then ENUM
+                        else if left == DATA & !is_primitive_linked_type(right)
+                            then DATA
+                            else if right == DATA & !is_primitive_linked_type(left)
+                                then DATA
+                                else if is_primitive_linked_type(left) & is_primitive_linked_type(right)
+                                    then find_higher_primitive_type(left, right)
+                                    else ANY
+
+private fun find_higher_primitive_type(left: CompiledType, right: CompiledType): CompiledType =
+    match left with
+    case PrimitiveLinkedType { name } ->
+        if primitive_rank(name) < primitive_rank(primitive_type_name(right))
+        then right
+        else left
+    case _ -> ANY
+
+private fun primitive_type_name(type: CompiledType): String =
+    match type with
+    case PrimitiveLinkedType { name } -> name
+    case _ -> "ANY"
+
+private fun is_enum_like_type(type: CompiledType): bool =
+    if type == ENUM
+    then true
+    else
+        match type with
+        case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } -> enumType
+        case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } -> enumValue
+        case _ -> false
+
+private fun is_primitive_linked_type(type: CompiledType): bool =
+    match type with
+    case PrimitiveLinkedType { name } -> true
+    case _ -> false
+
+private fun primitive_rank(name: String): int =
+    if name == "BYTE"
+    then 0
+    else if name == "INT"
+        then 1
+        else if name == "LONG"
+            then 2
+            else if name == "FLOAT"
+                then 3
+                else if name == "DOUBLE"
+                    then 4
+                    else if name == "STRING"
+                        then 5
+                        else if name == "BOOL"
+                            then 6
+                            else if name == "NOTHING"
+                                then 7
+                                else if name == "ANY"
+                                    then 8
+                                    else if name == "DATA"
+                                        then 9
+                                        else if name == "ENUM"
+                                            then 10
+                                            else 8

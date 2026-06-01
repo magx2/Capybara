@@ -124,6 +124,14 @@ tasks.named('compileJava') {
             )
         }
 
+        def typeLinkingPass = new File(generatedJavaDir, 'dev/capylang/compiler/linking/TypeLinkingPass.java')
+        if (typeLinkingPass.exists() && !typeLinkingPass.text.contains('import dev.capylang.compiler.*;')) {
+            typeLinkingPass.text = typeLinkingPass.text.replace(
+                    'package dev.capylang.compiler.linking;\n',
+                    'package dev.capylang.compiler.linking;\n\nimport dev.capylang.compiler.*;\n'
+            )
+        }
+
         def compiledType = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledType.java')
         if (compiledType.exists()) {
             compiledType.text = compiledType.text.replace(
@@ -179,6 +187,7 @@ tasks.named('compileJava') {
 
 import dev.capylang.compiler.CompiledAnnotation;
 import dev.capylang.compiler.CompiledDataParentType;
+import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunctionType;
 import dev.capylang.compiler.CompiledObjectType;
                         import dev.capylang.compiler.CompiledTupleType;

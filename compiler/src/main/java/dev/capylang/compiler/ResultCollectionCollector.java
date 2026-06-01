@@ -67,4 +67,3 @@ public class ResultCollectionCollector<T>
         return Set.of();
     }
 }
-

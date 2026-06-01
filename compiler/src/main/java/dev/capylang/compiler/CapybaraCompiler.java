@@ -9,6 +9,7 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import dev.capylang.compiler.CompiledFunctionParameter;
 import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
 import dev.capylang.compiler.expression.*;
+import dev.capylang.compiler.linking.TypeLinkingPass;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.ParserAst;
 import dev.capylang.compiler.parser.ParserAst.Module;
@@ -66,6 +67,10 @@ public class CapybaraCompiler {
     private static <T> Map<String, T> typedModuleMap(Map<String, Object> values) {
         return values.entrySet().stream()
                 .collect(toMap(Map.Entry::getKey, entry -> (T) entry.getValue(), (left, right) -> right, TreeMap::new));
+    }
+
+    private static List<String> sortedTypeKeys(Map<String, GenericDataType> dataTypes) {
+        return dataTypes.keySet().stream().sorted().toList();
     }
 
     private static SortedSet<StaticImport> sortedStaticImports(Collection<StaticImport> staticImports) {
@@ -8773,11 +8778,11 @@ public class CapybaraCompiler {
             Map<String, GenericDataType> dataTypes,
             CompileCache compileCache
     ) {
-        var linkCache = compileCache.typeLinkCaches.computeIfAbsent(
-                dataTypes,
-                ignored -> new CapybaraTypeCompiler.LinkCache()
+        var linkedTypesByKey = compileCache.typeLinkResults.computeIfAbsent(dataTypes, ignored -> new HashMap<>());
+        return linkedTypesByKey.computeIfAbsent(
+                typeCacheKey(type),
+                ignored -> TypeLinkingPass.linkType(type, dataTypes, sortedTypeKeys(dataTypes))
         );
-        return CapybaraTypeCompiler.linkType(type, dataTypes, linkCache);
     }
 
     private Type compiledTypeToParserType(CompiledType type) {
@@ -8902,18 +8907,7 @@ public class CapybaraCompiler {
     }
 
     private String typeCacheKey(Type type) {
-        return switch (type) {
-            case PrimitiveType primitiveType -> primitiveType.name();
-            case ListType listType -> "List[" + typeCacheKey(listType.elementType()) + "]";
-            case SetType setType -> "Set[" + typeCacheKey(setType.elementType()) + "]";
-            case DictType dictType -> "Dict[" + typeCacheKey(dictType.valueType()) + "]";
-            case DataType dataType -> dataType.name();
-            case FunctionType functionType ->
-                    "(" + typeCacheKey(functionType.argumentType()) + " => " + typeCacheKey(functionType.returnType()) + ")";
-            case TupleType tupleType -> "Tuple[" + tupleType.elementTypes().stream()
-                    .map(this::typeCacheKey)
-                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
-        };
+        return TypeLinkingPass.typeCacheKey(type);
     }
 
     private CompiledType instantiateTypeArguments(CompiledType linkedType, List<CompiledType> typeArguments) {
@@ -9013,43 +9007,20 @@ public class CapybaraCompiler {
     }
 
     private String typeDescriptor(CompiledType type) {
-        return switch (type) {
-            case PrimitiveLinkedType primitive -> formatPrimitiveLinkedType(primitive);
-            case CompiledList linkedList ->
-                    "List[" + typeDescriptor(linkedList.elementType()) + "]";
-            case CompiledSet linkedSet -> "Set[" + typeDescriptor(linkedSet.elementType()) + "]";
-            case CompiledDict linkedDict -> "Dict[" + typeDescriptor(linkedDict.valueType()) + "]";
-            case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
-                    .map(this::typeDescriptor)
-                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
-            case CompiledFunctionType linkedFunctionType ->
-                    "(" + typeDescriptor(linkedFunctionType.argumentType()) + " => " + typeDescriptor(linkedFunctionType.returnType()) + ")";
-            case CompiledDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
-                    ? linkedDataType.name()
-                    : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";
-            case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
-                    ? linkedDataParentType.name()
-                    : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
-            case CompiledObjectType objectType -> objectType.name();
-            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
-            case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
-        };
+        return TypeLinkingPass.typeDescriptor(type);
     }
 
+    @SuppressWarnings("unchecked")
     private ParsedGenericTypeName parseGenericTypeName(String rawName, CompileCache compileCache) {
         var cached = compileCache.parsedGenericTypeNames.get(rawName);
         if (cached != null) {
             return cached;
         }
-        var idx = rawName.indexOf('[');
-        if (idx <= 0 || !rawName.endsWith("]")) {
-            var parsed = new ParsedGenericTypeName(rawName, List.of());
-            compileCache.parsedGenericTypeNames.put(rawName, parsed);
-            return parsed;
-        }
-        var baseName = rawName.substring(0, idx);
-        var argsContent = rawName.substring(idx + 1, rawName.length() - 1);
-        var parsed = new ParsedGenericTypeName(baseName, splitTopLevelTypeArguments(argsContent, compileCache));
+        var parsedName = TypeLinkingPass.parseDataTypeName(rawName);
+        var parsed = new ParsedGenericTypeName(
+                (String) parsedName.get(0),
+                List.copyOf((List<String>) parsedName.get(1))
+        );
         compileCache.parsedGenericTypeNames.put(rawName, parsed);
         return parsed;
     }
@@ -9063,47 +9034,7 @@ public class CapybaraCompiler {
         if (cached != null) {
             return cached;
         }
-        var result = new ArrayList<String>();
-        var depthSquare = 0;
-        var depthParen = 0;
-        var current = new StringBuilder();
-        for (var i = 0; i < content.length(); i++) {
-            var ch = content.charAt(i);
-            if (ch == '[') {
-                depthSquare++;
-                current.append(ch);
-                continue;
-            }
-            if (ch == ']') {
-                depthSquare = Math.max(0, depthSquare - 1);
-                current.append(ch);
-                continue;
-            }
-            if (ch == '(') {
-                depthParen++;
-                current.append(ch);
-                continue;
-            }
-            if (ch == ')') {
-                depthParen = Math.max(0, depthParen - 1);
-                current.append(ch);
-                continue;
-            }
-            if (ch == ',' && depthSquare == 0 && depthParen == 0) {
-                var token = current.toString().trim();
-                if (!token.isEmpty()) {
-                    result.add(token);
-                }
-                current.setLength(0);
-                continue;
-            }
-            current.append(ch);
-        }
-        var token = current.toString().trim();
-        if (!token.isEmpty()) {
-            result.add(token);
-        }
-        var parsed = List.copyOf(result);
+        var parsed = List.copyOf(TypeLinkingPass.splitTopLevelTypeArguments(content));
         compileCache.splitTopLevelGenericTypeArguments.put(content, parsed);
         return parsed;
     }
@@ -9117,40 +9048,7 @@ public class CapybaraCompiler {
         if (cached != null) {
             return cached;
         }
-        var trimmed = raw.trim();
-        var parsed = ParserAst.findPrimitiveType(trimmed)
-                .map(Type.class::cast)
-                .orElseGet(() -> {
-                    if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
-                        return new ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), compileCache));
-                    }
-                    if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
-                        return new SetType(parseTypeArgument(trimmed.substring(4, trimmed.length() - 1), compileCache));
-                    }
-                    if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
-                        return new DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), compileCache));
-                    }
-                    if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
-                        var inner = trimmed.substring(6, trimmed.length() - 1);
-                        var elements = splitTopLevelTypeArguments(inner, compileCache).stream()
-                                .map(argument -> parseTypeArgument(argument, compileCache))
-                                .toList();
-                        return new TupleType(elements);
-                    }
-                    var arrowIndex = indexOfTopLevelArrow(trimmed, "=>");
-                    if (arrowIndex > 0) {
-                        var left = trimmed.substring(0, arrowIndex).trim();
-                        var right = trimmed.substring(arrowIndex + 2).trim();
-                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left), compileCache), parseTypeArgument(right, compileCache));
-                    }
-                    arrowIndex = indexOfTopLevelArrow(trimmed, "->");
-                    if (arrowIndex > 0) {
-                        var left = trimmed.substring(0, arrowIndex).trim();
-                        var right = trimmed.substring(arrowIndex + 2).trim();
-                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left), compileCache), parseTypeArgument(right, compileCache));
-                    }
-                    return new DataType(trimmed);
-                });
+        var parsed = TypeLinkingPass.parseTypeArgumentAst(raw);
         compileCache.parsedGenericTypeArguments.put(raw, parsed);
         return parsed;
     }
@@ -9260,7 +9158,7 @@ public class CapybaraCompiler {
     }
 
     private boolean isKnownTypeName(String typeName, Map<String, GenericDataType> dataTypes) {
-        return CapybaraTypeCompiler.linkType(new DataType(typeName), dataTypes) instanceof Result.Success<CompiledType>;
+        return TypeLinkingPass.linkType(new DataType(typeName), dataTypes, sortedTypeKeys(dataTypes)) instanceof Result.Success<CompiledType>;
     }
 
     private CompiledDataParentType resultTypeForData(CompiledDataType dataType, Map<String, GenericDataType> dataTypes) {
@@ -9296,7 +9194,7 @@ public class CapybaraCompiler {
         private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, Result<List<CapybaraExpressionCompiler.FunctionSignature>>>> availableSignaturesByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, SortedSet<StaticImport>>> staticImportsByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraExpressionCompiler.LinkCache> expressionLinkCaches = new IdentityHashMap<>();
-        private final IdentityHashMap<Map<String, GenericDataType>, CapybaraTypeCompiler.LinkCache> typeLinkCaches = new IdentityHashMap<>();
+        private final IdentityHashMap<Map<String, GenericDataType>, Map<String, Result<CompiledType>>> typeLinkResults = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, Map<Set<String>, Map<String, Result<CompiledType>>>> genericTypeLinkCaches = new IdentityHashMap<>();
         private final IdentityHashMap<Function, Set<String>> functionGenericTypeNamesByFunction = new IdentityHashMap<>();
         private final Map<String, ParsedGenericTypeName> parsedGenericTypeNames = new HashMap<>();

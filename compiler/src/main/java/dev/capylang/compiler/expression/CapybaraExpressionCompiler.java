@@ -12,6 +12,7 @@ import dev.capylang.compiler.*;
 import dev.capylang.compiler.CompiledDict;
 import dev.capylang.compiler.CompiledList;
 import dev.capylang.compiler.CompiledSet;
+import dev.capylang.compiler.linking.TypeLinkingPass;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.ParserAst;
 import dev.capylang.compiler.parser.ParserAst.*;
@@ -21,7 +22,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-import static dev.capylang.compiler.CapybaraTypeCompiler.linkType;
 import static dev.capylang.compiler.CompiledIrModule.*;
 import static dev.capylang.compiler.expression.CapybaraTypeFinder.findHigherType;
 
@@ -11054,8 +11054,12 @@ public class CapybaraExpressionCompiler {
                 new CompiledDataParentType(typeName, List.of(), List.of(), List.of())
         ));
         return ResultOps.map(
-                linkType(type, knownTypes),
+                TypeLinkingPass.linkType(type, knownTypes, sortedTypeKeys(knownTypes)),
                 linkedType -> replaceScopeGenericPlaceholders(linkedType, genericTypeNames));
+    }
+
+    private static List<String> sortedTypeKeys(Map<String, GenericDataType> dataTypes) {
+        return dataTypes.keySet().stream().sorted().toList();
     }
 
     private CompiledType replaceScopeGenericPlaceholders(CompiledType type, java.util.Set<String> genericTypeNames) {
