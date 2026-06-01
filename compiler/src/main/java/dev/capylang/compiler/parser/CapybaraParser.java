@@ -3,9 +3,7 @@ package dev.capylang.compiler.parser;
 
 import dev.capylang.compiler.ImportDeclaration;
 import capy.lang.Result;
-import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.Results;
-import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.parser.ParserAst.Module;
 import dev.capylang.compiler.parser.ParserAst.*;
 import dev.capylang.compiler.parser.ParserAst.AnnotationValue;
@@ -38,7 +36,7 @@ public class CapybaraParser {
     private static final java.util.regex.Pattern QUALIFIED_IMPORT_PATTERN = java.util.regex.Pattern.compile(
             "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
     );
-    private final List<CompilerError> parserErrors = new ArrayList<>();
+    private final List<ParserError> parserErrors = new ArrayList<>();
     private RawModule currentModule;
     private String currentSource;
 
@@ -66,21 +64,21 @@ public class CapybaraParser {
     public synchronized Result<Program> parseModule(Collection<RawModule> rawModules) {
         try {
             var modules = new ArrayList<Module>();
-            var errors = new TreeSet<CompilerError>();
+            var errors = new TreeSet<ParserError>();
             for (var rawModule : rawModules) {
                 var parsedModule = parseModule(rawModule);
                 if (parsedModule instanceof Result.Success<Module> success) {
                     modules.add(success.value());
                 } else if (parsedModule instanceof Result.Error<Module> error) {
-                    errors.addAll(CompilerErrors.from(error));
+                    errors.addAll(parserErrorsFrom(error));
                 }
             }
             if (!errors.isEmpty()) {
-                return CompilerErrors.result(errors);
+                return parserErrorResult(errors);
             }
             return Results.success(new Program(List.copyOf(modules)));
         } catch (RuntimeException e) {
-            return CompilerErrors.result(new CompilerError(boundaryErrorMessage(e)));
+            return parserErrorResult(new ParserError(boundaryErrorMessage(e)));
         }
     }
 
@@ -115,7 +113,7 @@ public class CapybaraParser {
 
             var program = parser.program();
             if (!syntaxErrors.isEmpty()) {
-                return CompilerErrors.result(formatSyntaxError(module, parsedSource.source(), syntaxErrors.get(0)));
+                return parserErrorResult(formatSyntaxError(module, parsedSource.source(), syntaxErrors.get(0)));
             }
 
             var parsedDefinitions = program.definition().stream()
@@ -124,19 +122,19 @@ public class CapybaraParser {
                     .toList();
             var duplicateLocalFunctions = findDuplicateLocalFunctions(parsedDefinitions);
             if (!duplicateLocalFunctions.isEmpty()) {
-                return CompilerErrors.result(duplicateLocalFunctions);
+                return parserErrorResult(duplicateLocalFunctions);
             }
             var duplicateLocalConsts = findDuplicateLocalConsts(parsedDefinitions);
             if (!duplicateLocalConsts.isEmpty()) {
-                return CompilerErrors.result(duplicateLocalConsts);
+                return parserErrorResult(duplicateLocalConsts);
             }
             if (!parserErrors.isEmpty()) {
-                return CompilerErrors.result(parserErrors);
+                return parserErrorResult(parserErrors);
             }
             var definitions = new java.util.LinkedHashSet<>(parsedDefinitions);
             return Results.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports(), module.sourceKind()));
         } catch (RuntimeException e) {
-            return CompilerErrors.result(formatParserException(module, e));
+            return parserErrorResult(formatParserException(module, e));
         } finally {
             parserErrors.clear();
             currentModule = null;
@@ -171,7 +169,7 @@ public class CapybaraParser {
 
             var program = parser.program();
             if (!syntaxErrors.isEmpty()) {
-                return CompilerErrors.result(formatObjectOrientedSyntaxError(module, syntaxErrors.getFirst()));
+                return parserErrorResult(formatObjectOrientedSyntaxError(module, syntaxErrors.getFirst()));
             }
 
             var definitions = program.definition().stream()
@@ -185,26 +183,105 @@ public class CapybaraParser {
                     module.sourceKind()
             ));
         } catch (RuntimeException exception) {
-            return CompilerErrors.result(new CompilerError(0, 0, module.file(), String.valueOf(exception.getMessage())));
+            return parserErrorResult(new ParserError(0, 0, module.file(), String.valueOf(exception.getMessage())));
         }
     }
 
     public Result<List<ObjectOrientedModule>> parseObjectOrientedModules(Collection<RawModule> modules) {
         var parsedModules = new ArrayList<ObjectOrientedModule>();
-        var errors = new java.util.TreeSet<CompilerError>();
+        var errors = new java.util.TreeSet<ParserError>();
         for (var module : modules) {
             var parsed = parseObjectOrientedModule(module);
             if (parsed instanceof Result.Success<ObjectOrientedModule> success) {
                 parsedModules.add(success.value());
             } else if (parsed instanceof Result.Error<ObjectOrientedModule> error) {
-                errors.addAll(CompilerErrors.from(error));
+                errors.addAll(parserErrorsFrom(error));
             }
         }
-        return errors.isEmpty() ? Results.success(List.copyOf(parsedModules)) : CompilerErrors.result(errors);
+        return errors.isEmpty() ? Results.success(List.copyOf(parsedModules)) : parserErrorResult(errors);
     }
 
     private static String boundaryErrorMessage(RuntimeException exception) {
         return Objects.toString(exception.getMessage(), exception.getClass().getSimpleName());
+    }
+
+    private static <T> Result<T> parserErrorResult(ParserError error) {
+        return Results.error(error.toString());
+    }
+
+    private static <T> Result<T> parserErrorResult(Collection<ParserError> errors) {
+        return Results.error(errors.stream()
+                .sorted()
+                .map(ParserError::toString)
+                .toList());
+    }
+
+    private static SortedSet<ParserError> parserErrorsFrom(Result.Error<?> error) {
+        return parserErrorsFrom(Results.errorMessage((Result<?>) error));
+    }
+
+    private static SortedSet<ParserError> parserErrorsFrom(String messages) {
+        var errors = new TreeSet<ParserError>();
+        var lines = messages.split("\\R", -1);
+        var hasFormattedError = false;
+        for (var line : lines) {
+            if (!line.isBlank() && parseFormattedErrorLine(line) != null) {
+                hasFormattedError = true;
+                break;
+            }
+        }
+        if (!hasFormattedError) {
+            if (!messages.isBlank()) {
+                errors.add(new ParserError(messages));
+            }
+            return errors;
+        }
+
+        ParserError current = null;
+        for (var line : lines) {
+            if (line.isBlank()) {
+                if (current != null) {
+                    current = new ParserError(
+                            current.line(),
+                            current.column(),
+                            current.file(),
+                            current.message() + "\n");
+                }
+                continue;
+            }
+
+            var parsed = parseFormattedErrorLine(line);
+            if (parsed != null) {
+                if (current != null) {
+                    errors.add(current);
+                }
+                current = parsed;
+            } else if (current != null) {
+                current = new ParserError(
+                        current.line(),
+                        current.column(),
+                        current.file(),
+                        current.message() + "\n" + line);
+            } else {
+                errors.add(new ParserError(line));
+            }
+        }
+        if (current != null) {
+            errors.add(current);
+        }
+        return errors;
+    }
+
+    private static ParserError parseFormattedErrorLine(String message) {
+        var matcher = java.util.regex.Pattern.compile("^(.*?) (\\d+):(\\d+): (.*)$").matcher(message);
+        if (!matcher.matches()) {
+            return null;
+        }
+        return new ParserError(
+                Integer.parseInt(matcher.group(2)),
+                Integer.parseInt(matcher.group(3)),
+                matcher.group(1),
+                matcher.group(4));
     }
 
     private ParsedSource parseSource(String source) {
@@ -281,7 +358,7 @@ public class CapybaraParser {
         return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
     }
 
-    private CompilerError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
+    private ParserError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
         var lines = source.split("\\R", -1);
         var lineText = lines[Math.max(0, Math.min(syntaxError.line() - 1, lines.length - 1))].stripLeading();
         var removedSingle = java.util.regex.Pattern.compile("^single\\s+((?:_*)[A-Z][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s*(?://.*)?$").matcher(lineText);
@@ -300,12 +377,12 @@ public class CapybaraParser {
         return formatParserError(module, source, formatSyntaxError(syntaxError));
     }
 
-    private CompilerError formatObjectOrientedSyntaxError(RawModule module, SyntaxError syntaxError) {
+    private ParserError formatObjectOrientedSyntaxError(RawModule module, SyntaxError syntaxError) {
         var details = "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
-        return new CompilerError(syntaxError.line(), syntaxError.column(), module.file(), details);
+        return new ParserError(syntaxError.line(), syntaxError.column(), module.file(), details);
     }
 
-    private CompilerError formatParserException(RawModule module, RuntimeException exception) {
+    private ParserError formatParserException(RawModule module, RuntimeException exception) {
         return formatParserError(module, module.input(), exception.getMessage());
     }
 
@@ -345,7 +422,7 @@ public class CapybaraParser {
         );
     }
 
-    private List<CompilerError> findDuplicateLocalFunctions(List<Definition> definitions) {
+    private List<ParserError> findDuplicateLocalFunctions(List<Definition> definitions) {
         if (currentModule == null || currentSource == null) {
             return List.of();
         }
@@ -360,7 +437,7 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private CompilerError duplicateLocalFunctionError(List<Function> functions) {
+    private ParserError duplicateLocalFunctionError(List<Function> functions) {
         var firstFunction = functions.getFirst();
         var firstPosition = sourcePosition(firstFunction.position()).orElseThrow();
         var originalName = firstFunction.name().replaceFirst("^.*__local_fun_\\d+_", "");
@@ -377,7 +454,7 @@ public class CapybaraParser {
         );
     }
 
-    private List<CompilerError> findDuplicateLocalConsts(List<Definition> definitions) {
+    private List<ParserError> findDuplicateLocalConsts(List<Definition> definitions) {
         if (currentModule == null || currentSource == null) {
             return List.of();
         }
@@ -392,7 +469,7 @@ public class CapybaraParser {
                 .toList();
     }
 
-    private CompilerError duplicateLocalConstError(List<Function> functions) {
+    private ParserError duplicateLocalConstError(List<Function> functions) {
         var firstFunction = functions.getFirst();
         var firstPosition = sourcePosition(firstFunction.position()).orElseThrow();
         var originalName = firstFunction.name().replaceFirst("^.*__local_const_\\d+_", "");
@@ -409,7 +486,7 @@ public class CapybaraParser {
         );
     }
 
-    private CompilerError formatParserError(RawModule module, String source, String rawMessage) {
+    private ParserError formatParserError(RawModule module, String source, String rawMessage) {
         var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(String.valueOf(rawMessage));
         if (!parserError.matches()) {
             var duplicateLocalFunctionMatcher = java.util.regex.Pattern.compile("Duplicate local function name: ([A-Za-z_][A-Za-z0-9_]*)").matcher(String.valueOf(rawMessage));
@@ -429,7 +506,7 @@ public class CapybaraParser {
                     );
                 }
             }
-            return new CompilerError(0, 0, moduleFile(module), String.valueOf(rawMessage));
+            return new ParserError(0, 0, moduleFile(module), String.valueOf(rawMessage));
         }
 
         var line = Integer.parseInt(parserError.group(1));
@@ -476,7 +553,7 @@ public class CapybaraParser {
                       + " --> %s:%d:%d\n".formatted(moduleFile(module), line, column)
                       + String.join("\n", renderedLines) + "\n"
                       + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-        return new CompilerError(line, column, moduleFile(module), message);
+        return new ParserError(line, column, moduleFile(module), message);
     }
 
     private List<SourcePosition> findLocalFunctionLocations(String source, String localName) {
@@ -500,6 +577,27 @@ public class CapybaraParser {
     }
 
     private record SyntaxError(int line, int column, String message) {
+    }
+
+    private record ParserError(int line, int column, String file, String message) implements Comparable<ParserError> {
+        private ParserError(String message) {
+            this(0, 0, "", message);
+        }
+
+        @Override
+        public int compareTo(ParserError other) {
+            return Comparator
+                    .comparing(ParserError::file)
+                    .thenComparing(ParserError::line)
+                    .thenComparing(ParserError::column)
+                    .thenComparing(ParserError::message)
+                    .compare(this, other);
+        }
+
+        @Override
+        public String toString() {
+            return "%s %d:%s: %s".formatted(file, line, column, message);
+        }
     }
 
     private List<Definition> definition(dev.capylang.parser.antlr.FunctionalParser.DefinitionContext context) {
