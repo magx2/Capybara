@@ -32,9 +32,12 @@ import dev.capylang.generator.java.JavaAstBuilder;
 import dev.capylang.generator.java.JavaClass;
 import dev.capylang.generator.java.JavaConst;
 import dev.capylang.generator.java.JavaDataValueInfo;
+import dev.capylang.generator.java.JavaDataValueInfoField;
 import dev.capylang.generator.java.JavaEnum;
+import dev.capylang.generator.java.JavaFunctionParameter;
 import dev.capylang.generator.java.JavaMethod;
 import dev.capylang.generator.java.JavaRecord;
+import dev.capylang.generator.java.JavaRecordField;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -101,6 +104,37 @@ public final class JavaScriptGenerator implements Generator {
 
     private static boolean differentType(CompiledType actual, CompiledType expected) {
         return !sameType(actual, expected);
+    }
+
+    private static CompiledExpression expression(JavaMethod method) {
+        return (CompiledExpression) method.expression();
+    }
+
+    private static CompiledExpression expression(JavaConst javaConst) {
+        return (CompiledExpression) javaConst.expression();
+    }
+
+    private static CompiledType sourceReturnType(JavaMethod method) {
+        return (CompiledType) method.sourceReturnType();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<CompiledType> sourceParameterTypes(JavaMethod method) {
+        return (List<CompiledType>) (List<?>) method.sourceParameterTypes();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<CompiledAnnotation> annotations(JavaDataValueInfo dataValueInfo) {
+        return (List<CompiledAnnotation>) dataValueInfo.annotations();
+    }
+
+    private static CompiledType fieldType(JavaDataValueInfoField field) {
+        return (CompiledType) field.type();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<CompiledAnnotation> annotations(JavaDataValueInfoField field) {
+        return (List<CompiledAnnotation>) field.annotations();
     }
 
     @Override
@@ -372,7 +406,7 @@ public final class JavaScriptGenerator implements Generator {
                     .append(", ")
                     .append(renderDataValueFieldDescriptors(dataValueInfo.fields(), dataValueInfo.packagePath()))
                     .append(", ")
-                    .append(renderAnnotations(dataValueInfo.annotations()))
+                    .append(renderAnnotations(annotations(dataValueInfo)))
                     .append(");\n");
             code.append("    }\n");
             for (var method : record.methods()) {
@@ -482,7 +516,7 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderConst(JavaConst javaConst) {
-            var expression = expressions.render(javaConst.expression(), Scope.root());
+            var expression = expressions.render(expression(javaConst), Scope.root());
             var name = jsConstIdentifier(javaConst.name());
             if (!javaConst.isPrivate()) {
                 exportNames.add(name);
@@ -492,10 +526,10 @@ public final class JavaScriptGenerator implements Generator {
 
         private String renderFunction(JavaMethod method, boolean topLevel) {
             var name = topLevel
-                    ? programContext.emittedFunctionName(method.sourceName(), method.sourceParameterTypes())
+                    ? programContext.emittedFunctionName(method.sourceName(), sourceParameterTypes(method))
                     : method.name();
             var params = method.parameters().stream()
-                    .map(JavaMethod.JavaFunctionParameter::generatedName)
+                    .map(JavaFunctionParameter::generatedName)
                     .map(JavaScriptGenerator::normalizeJsIdentifier)
                     .toList();
             var scope = Scope.root();
@@ -508,7 +542,7 @@ public final class JavaScriptGenerator implements Generator {
             var nativeProviderBody = renderNativeProviderFunction(method, name);
             var body = nativeProviderBody.orElse(isCapyLangRandomSeedMethod(method)
                     ? "capy.toLong(Date.now())"
-                    : expressions.render(method.expression(), scope));
+                    : expressions.render(expression(method), scope));
             var code = new StringBuilder();
             if (topLevel) {
                 code.append("function ").append(name).append("(").append(String.join(", ", params)).append(") {\n");
@@ -543,15 +577,15 @@ public final class JavaScriptGenerator implements Generator {
             return "capy.lang.Random".equals(moduleInfo.className())
                    && "seed".equals(method.sourceName())
                    && method.parameters().isEmpty()
-                   && method.sourceReturnType() instanceof CompiledPrimitiveBackedType primitiveBackedType
+                   && sourceReturnType(method) instanceof CompiledPrimitiveBackedType primitiveBackedType
                    && "seed".equals(primitiveBackedType.name())
-                   && method.expression() instanceof CompiledNothingValue nothingValue
+                   && expression(method) instanceof CompiledNothingValue nothingValue
                    && (nothingValue.message().contains("`<native>`")
                        || nothingValue.message().contains("native expression in function"));
         }
 
         private boolean isNativeExpression(JavaMethod method) {
-            return method.expression() instanceof CompiledNothingValue nothingValue
+            return expression(method) instanceof CompiledNothingValue nothingValue
                    && (nothingValue.message().contains("`<native>`")
                        || nothingValue.message().contains("native expression in function"));
         }
@@ -815,7 +849,7 @@ public final class JavaScriptGenerator implements Generator {
         private boolean hasLocalFunction(CompiledFunctionCall functionCall, String emittedName) {
             var parameterTypes = functionCall.arguments().stream().map(CompiledExpression::type).toList();
             return moduleInfo.javaClass().staticMethods().stream()
-                    .anyMatch(method -> method.sourceParameterTypes().equals(parameterTypes)
+                    .anyMatch(method -> sourceParameterTypes(method).equals(parameterTypes)
                                         && (method.sourceName().equals(functionCall.name())
                                             || method.name().equals(emittedName)
                                             || programContext.emittedFunctionName(method.sourceName(), parameterTypes).equals(emittedName)));
@@ -1763,11 +1797,11 @@ public final class JavaScriptGenerator implements Generator {
         return "{ fields: "
                + renderDataValueFieldDescriptors(dataValueInfo.fields(), dataValueInfo.packagePath())
                + ", annotations: "
-               + renderAnnotations(dataValueInfo.annotations())
+               + renderAnnotations(annotations(dataValueInfo))
                + " }";
     }
 
-    private static String renderDataValueFieldDescriptors(List<JavaDataValueInfo.Field> fields, String fallbackPackagePath) {
+    private static String renderDataValueFieldDescriptors(List<JavaDataValueInfoField> fields, String fallbackPackagePath) {
         if (fields.isEmpty()) {
             return "[]";
         }
@@ -1775,9 +1809,9 @@ public final class JavaScriptGenerator implements Generator {
                 .map(field -> "{ name: "
                               + jsString(field.name())
                               + ", type: "
-                              + renderReflectionTypeInfo(field.type(), fallbackPackagePath)
+                              + renderReflectionTypeInfo(fieldType(field), fallbackPackagePath)
                               + ", annotations: "
-                              + renderAnnotations(field.annotations())
+                              + renderAnnotations(annotations(field))
                               + " }")
                 .collect(joining(", ", "[", "]"));
     }
@@ -2091,7 +2125,7 @@ public final class JavaScriptGenerator implements Generator {
                 for (var record : module.javaClass().records()) {
                     var name = simpleTypeName(record.name().toString());
                     moduleTypes.add(name);
-                    fields.put(name, record.fields().stream().map(JavaRecord.JavaRecordField::name).toList());
+                    fields.put(name, record.fields().stream().map(JavaRecordField::name).toList());
                     if (!record.isPrivate()) {
                         moduleExports.add(name);
                     }

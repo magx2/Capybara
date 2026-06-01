@@ -1,0 +1,7 @@
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+data JavaFunctionParameter {
+    type: JavaType,
+    sourceName: String,
+    generatedName: String
+}

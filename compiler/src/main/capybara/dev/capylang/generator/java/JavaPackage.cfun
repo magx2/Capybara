@@ -1,0 +1,3 @@
+data JavaPackage { packageName: String }
+
+fun JavaPackage.to_string(): String = this.packageName

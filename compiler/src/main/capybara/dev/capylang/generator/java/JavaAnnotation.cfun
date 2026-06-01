@@ -1,0 +1,3 @@
+data JavaAnnotation { value: String }
+
+fun JavaAnnotation.to_string(): String = this.value

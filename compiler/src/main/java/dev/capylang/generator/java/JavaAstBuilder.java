@@ -1,6 +1,5 @@
 package dev.capylang.generator.java;
 
-import dev.capylang.generator.java.JavaInterface.JavaInterfaceMethod;
 import dev.capylang.compiler.*;
 import dev.capylang.compiler.CompiledDict;
 import dev.capylang.compiler.CompiledList;
@@ -11,7 +10,7 @@ import java.util.stream.Stream;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.*;
-import static dev.capylang.generator.java.JavaAnnotation.generatedAnnotation;
+import static dev.capylang.generator.java.JavaHelperAst.generatedAnnotation;
 
 public class JavaAstBuilder {
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
@@ -21,6 +20,18 @@ public class JavaAstBuilder {
             Comparator.comparing(CompiledDataType::name);
     private static final Comparator<CompiledPrimitiveBackedType> COMPILED_PRIMITIVE_BACKED_TYPE_COMPARATOR =
             Comparator.comparing(CompiledPrimitiveBackedType::name);
+    private static final Comparator<JavaType> JAVA_TYPE_COMPARATOR =
+            Comparator.comparing(JavaHelperAst::javaTypeSortKey);
+    private static final Comparator<JavaConst> JAVA_CONST_COMPARATOR =
+            Comparator.comparing(JavaHelperAst::javaConstSortKey);
+    private static final Comparator<JavaMethod> JAVA_METHOD_COMPARATOR =
+            Comparator.comparing(JavaHelperAst::javaMethodSortKey);
+    private static final Comparator<JavaInterface> JAVA_INTERFACE_COMPARATOR =
+            Comparator.comparing(JavaHelperAst::javaInterfaceSortKey);
+    private static final Comparator<JavaRecord> JAVA_RECORD_COMPARATOR =
+            Comparator.comparing(JavaHelperAst::javaRecordSortKey);
+    private static final Comparator<JavaEnum> JAVA_ENUM_COMPARATOR =
+            Comparator.comparing(JavaHelperAst::javaEnumSortKey);
     private final Map<String, String> functionNameOverrides;
     private final Map<String, String> enumValueOwnerOverrides;
     private final Map<String, PrimitiveBackedTypeInfo> globalPrimitiveBackedTypes;
@@ -86,12 +97,26 @@ public class JavaAstBuilder {
     private Set<String> localTypeNames = Set.of();
     private Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes = Map.of();
 
-    @SafeVarargs
-    private static <T extends Comparable<? super T>> SortedSet<T> sortedSetOf(T... values) {
-        var sorted = new TreeSet<T>();
-        Collections.addAll(sorted, values);
-        return sorted;
+    private static SortedSet<JavaType> javaTypeSet() {
+        return new TreeSet<>(JAVA_TYPE_COMPARATOR);
     }
+
+    private static SortedSet<JavaType> javaTypeSet(Collection<JavaType> values) {
+        var result = javaTypeSet();
+        result.addAll(values);
+        return result;
+    }
+
+    private static SortedSet<JavaInterface> javaInterfaceSet() {
+        return new TreeSet<>(JAVA_INTERFACE_COMPARATOR);
+    }
+
+    private static <T> List<T> sortedUniqueList(Stream<T> values, Comparator<? super T> comparator) {
+        var sorted = new TreeSet<T>(comparator);
+        values.forEach(sorted::add);
+        return List.copyOf(sorted);
+    }
+
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final JavaType CAPYBARA_DATA_VALUE = new JavaType("dev.capylang.CapybaraDataValue");
     private static final Set<String> JAVA_KEYWORDS = Set.of(
@@ -145,12 +170,12 @@ public class JavaAstBuilder {
         var subClassToInterface = findSubClassToInterface(typeIndex.dataParentTypes(), interfaces);
         var enumValueOwnerOverrides = enumValueOwnerOverrides(typeIndex);
         return new JavaClass(
-                sortedSetOf(generatedAnnotation()),
+                List.of(generatedAnnotation()),
                 javaClassName,
                 new JavaPackage(javaPackageName),
                 module.staticImports().stream()
                         .map(this::buildJavaStaticImport)
-                        .collect(toCollection(TreeSet::new)),
+                        .collect(collectingAndThen(toCollection(TreeSet::new), List::copyOf)),
                 buildStaticConsts(functions),
                 buildStaticMethods(functions, staticMethodsSelfCallClassNames, nativeTypeNames),
                 interfaces,
@@ -264,7 +289,7 @@ public class JavaAstBuilder {
 
     private static Map<String, SortedSet<JavaType>> copyInterfaceMap(Map<String, SortedSet<JavaType>> source) {
         var copy = new LinkedHashMap<String, SortedSet<JavaType>>();
-        source.forEach((key, value) -> copy.put(key, Collections.unmodifiableSortedSet(new TreeSet<>(value))));
+        source.forEach((key, value) -> copy.put(key, Collections.unmodifiableSortedSet(javaTypeSet(value))));
         return Map.copyOf(copy);
     }
 
@@ -280,7 +305,7 @@ public class JavaAstBuilder {
                 .collect(toSet());
         interfaces.forEach((subtypeName, parents) -> {
             if (interfaceNames.contains(subtypeName)) {
-                result.computeIfAbsent(subtypeName, ignored -> new TreeSet<>()).addAll(parents);
+                result.computeIfAbsent(subtypeName, ignored -> javaTypeSet()).addAll(parents);
             }
         });
         return result;
@@ -295,7 +320,7 @@ public class JavaAstBuilder {
                 }
                 var interfaceName = buildClassName(parentType.name());
                 for (var subtype : parentType.subTypes()) {
-                    result.computeIfAbsent(moduleTypeKey(module, subtype.name()), ignored -> new TreeSet<>())
+                    result.computeIfAbsent(moduleTypeKey(module, subtype.name()), ignored -> javaTypeSet())
                             .add(interfaceName);
                 }
             }
@@ -325,9 +350,9 @@ public class JavaAstBuilder {
         var representedRawNames = currentInterfaces.stream()
                 .map(JavaAstBuilder::rawJavaTypeName)
                 .collect(toSet());
-        return globalInterfacesBySubtypeName.getOrDefault(moduleTypeKey(module, typeName), new TreeSet<>()).stream()
+        return globalInterfacesBySubtypeName.getOrDefault(moduleTypeKey(module, typeName), javaTypeSet()).stream()
                 .filter(javaType -> !representedRawNames.contains(rawJavaTypeName(javaType)))
-                .collect(toCollection(TreeSet::new));
+                .collect(toCollection(JavaAstBuilder::javaTypeSet));
     }
 
     private static void putPrimitiveBackedTypeAlias(
@@ -452,7 +477,7 @@ public class JavaAstBuilder {
         return Collections.unmodifiableSortedMap(indexed);
     }
 
-    private SortedMap<CompiledDataType, SortedSet<JavaInterface>> findSubClassToInterface(SortedSet<CompiledDataParentType> dataParentTypes, SortedSet<JavaInterface> interfaces) {
+    private SortedMap<CompiledDataType, SortedSet<JavaInterface>> findSubClassToInterface(SortedSet<CompiledDataParentType> dataParentTypes, List<JavaInterface> interfaces) {
         var javaInterfaceByJavaName = interfaces.stream()
                 .collect(toMap(
                         jInterface -> jInterface.name().name(),
@@ -472,7 +497,7 @@ public class JavaAstBuilder {
                 .collect(groupingBy(
                         ClassToJavaInterface::data,
                         () -> new TreeMap<>(COMPILED_DATA_TYPE_COMPARATOR),
-                        mapping(ClassToJavaInterface::parent, toCollection(TreeSet::new))
+                        mapping(ClassToJavaInterface::parent, toCollection(JavaAstBuilder::javaInterfaceSet))
                 ));
     }
 
@@ -480,17 +505,16 @@ public class JavaAstBuilder {
         return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
-    private SortedSet<JavaMethod> buildStaticMethods(
+    private List<JavaMethod> buildStaticMethods(
             Set<CompiledFunction> functions,
             List<String> qualifiedJavaClassNames,
             Set<String> nativeTypeNames
     ) {
-        return functions.stream()
+        return sortedUniqueList(functions.stream()
                 .filter(function -> !isConstFunction(function))
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX)
                                     || isStaticNativeTypeMethod(function, nativeTypeNames))
-                .map(function -> buildStaticMethod(function, qualifiedJavaClassNames))
-                .collect(toCollection(TreeSet::new));
+                .map(function -> buildStaticMethod(function, qualifiedJavaClassNames)), JAVA_METHOD_COMPARATOR);
     }
 
     private boolean isStaticNativeTypeMethod(CompiledFunction function, Set<String> nativeTypeNames) {
@@ -517,12 +541,11 @@ public class JavaAstBuilder {
                    || nothingValue.message().contains("native expression in function"));
     }
 
-    private SortedSet<JavaConst> buildStaticConsts(Set<CompiledFunction> functions) {
-        return functions.stream()
+    private List<JavaConst> buildStaticConsts(Set<CompiledFunction> functions) {
+        return sortedUniqueList(functions.stream()
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
                 .filter(this::isConstFunction)
-                .map(this::buildStaticConst)
-                .collect(toCollection(TreeSet::new));
+                .map(this::buildStaticConst), JAVA_CONST_COMPARATOR);
     }
 
     private boolean isConstFunction(CompiledFunction function) {
@@ -569,6 +592,7 @@ public class JavaAstBuilder {
                 function.returnType(),
                 function.parameters().stream()
                         .map(CompiledFunctionParameter::type)
+                        .map(type -> (Object) type)
                         .toList(),
                 expression,
                 function.comments()
@@ -1331,12 +1355,12 @@ public class JavaAstBuilder {
         return genericStart > 0 ? typeName.substring(0, genericStart) : typeName;
     }
 
-    private List<JavaMethod.JavaFunctionParameter> buildJavaFunctionParameters(List<CompiledFunctionParameter> parameters) {
+    private List<JavaFunctionParameter> buildJavaFunctionParameters(List<CompiledFunctionParameter> parameters) {
         return parameters.stream().map(this::buildJavaFunctionParameter).toList();
     }
 
-    private JavaMethod.JavaFunctionParameter buildJavaFunctionParameter(CompiledFunctionParameter parameter) {
-        return new JavaMethod.JavaFunctionParameter(
+    private JavaFunctionParameter buildJavaFunctionParameter(CompiledFunctionParameter parameter) {
+        return new JavaFunctionParameter(
                 buildJavaType(parameter.type()),
                 parameter.name(),
                 buildJavaFunctionParameterName(parameter.name())
@@ -1474,15 +1498,14 @@ public class JavaAstBuilder {
         };
     }
 
-    private SortedSet<JavaInterface> buildInterfaces(
+    private List<JavaInterface> buildInterfaces(
             CompiledModule module,
             SortedSet<CompiledDataParentType> dataParentTypes,
             SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix
     ) {
-        return dataParentTypes.stream()
+        return sortedUniqueList(dataParentTypes.stream()
                 .filter(parentType -> !parentType.enumType())
-                .map(parentType -> buildInterface(module, parentType, functionsByOwnerPrefix))
-                .collect(toCollection(TreeSet::new));
+                .map(parentType -> buildInterface(module, parentType, functionsByOwnerPrefix)), JAVA_INTERFACE_COMPARATOR);
     }
 
     private JavaInterface buildInterface(
@@ -1490,9 +1513,9 @@ public class JavaAstBuilder {
             CompiledDataParentType type,
             SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix
     ) {
-        return new JavaSealedInterface(
+        return new JavaInterface.JavaSealedInterface(
                 buildClassName(type.name()),
-                globalInterfaceExtendsByName.getOrDefault(moduleTypeKey(module, type.name()), new TreeSet<>()),
+                List.copyOf(globalInterfaceExtendsByName.getOrDefault(moduleTypeKey(module, type.name()), javaTypeSet())),
                 type.comments(),
                 buildJavaMethods(type.fields()),
                 type.subTypes().stream().map(CompiledDataType::name).map(name -> buildClassName(name).toString()).toList(),
@@ -1525,6 +1548,7 @@ public class JavaAstBuilder {
                 function.returnType(),
                 parameters.stream()
                         .map(CompiledFunctionParameter::type)
+                        .map(type -> (Object) type)
                         .toList(),
                 function.expression(),
                 function.comments()
@@ -1541,18 +1565,17 @@ public class JavaAstBuilder {
                 buildJavaType(field.type()));
     }
 
-    private SortedSet<JavaRecord> buildRecords(
+    private List<JavaRecord> buildRecords(
             CompiledModule module,
             SortedSet<CompiledDataType> dataTypes,
             SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
             SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix,
             String reflectionFallbackPackagePath
     ) {
-        return dataTypes.stream()
+        return sortedUniqueList(dataTypes.stream()
                 .filter(dt -> !dt.singleton())
                 .filter(dt -> !dt.nativeType())
-                .map(dt -> buildRecord(module, dt, subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath))
-                .collect(toCollection(TreeSet::new));
+                .map(dt -> buildRecord(module, dt, subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath)), JAVA_RECORD_COMPARATOR);
     }
 
     private JavaRecord buildRecord(
@@ -1564,28 +1587,28 @@ public class JavaAstBuilder {
     ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
-                ? new TreeSet<JavaType>()
-                : javaInterface.stream().map(javaType -> implementedInterfaceType(type, javaType)).collect(toCollection(TreeSet::new));
+                ? javaTypeSet()
+                : javaInterface.stream().map(javaType -> implementedInterfaceType(type, javaType)).collect(toCollection(JavaAstBuilder::javaTypeSet));
         implementInterfaces.addAll(globalImplementedInterfaces(module, type.name(), implementInterfaces));
         implementInterfaces.add(CAPYBARA_DATA_VALUE);
 
         var interfaceFields = javaInterface == null
-                ? Stream.<JavaRecord.JavaRecordField>empty()
+                ? Stream.<JavaRecordField>empty()
                 : javaInterface.stream()
                         .map(JavaInterface::methods)
                         .flatMap(List::stream)
-                        .map(method -> new JavaRecord.JavaRecordField(
+                        .map(method -> new JavaRecordField(
                                 method.name(),
                                 method.returnType()));
         var recordFields = isResultErrorDataType(type)
-                ? Stream.of(new JavaRecord.JavaRecordField(
+                ? Stream.of(new JavaRecordField(
                         "ex",
                         new JavaType("dev.capylang.CapybaraException")))
                 : type.fields().stream()
-                        .map(field -> new JavaRecord.JavaRecordField(
+                        .map(field -> new JavaRecordField(
                                 field.name(),
                                 buildJavaType(field.type())));
-        var fieldsByName = new java.util.LinkedHashMap<String, JavaRecord.JavaRecordField>();
+        var fieldsByName = new java.util.LinkedHashMap<String, JavaRecordField>();
         Stream.concat(interfaceFields, recordFields).forEach(field -> fieldsByName.put(field.name(), field));
         var fields = List.copyOf(fieldsByName.values());
         var recordTypeParameters = type.typeParameters().isEmpty() && javaInterface != null
@@ -1594,30 +1617,33 @@ public class JavaAstBuilder {
                         .distinct()
                         .toList()
                 : type.typeParameters();
+        var dataValueInfoPackagePath = ReflectionValueInfoJava.reflectionPackagePath(type.name(), reflectionFallbackPackagePath);
         return new JavaRecord(
                 buildClassName(type.name()),
                 type.name().startsWith("_") || type.visibility() == Visibility.PRIVATE,
                 type.comments(),
-                implementInterfaces,
+                List.copyOf(implementInterfaces),
                 fields,
                 recordTypeParameters,
                 ReflectionValueInfoJava.dataValueInfo(
                         type.name(),
                         reflectionFallbackPackagePath,
-                        buildDataValueFields(type),
+                        buildDataValueFields(type, dataValueInfoPackagePath),
                         type.annotations()
                 ),
-                new TreeSet<JavaMethod>(),
+                List.of(),
                 buildRecordMethods(type, functionsByOwnerPrefix));
     }
 
-    private List<JavaDataValueInfo.Field> buildDataValueFields(CompiledDataType type) {
+    private List<JavaDataValueInfoField> buildDataValueFields(CompiledDataType type, String dataValueInfoPackagePath) {
         return type.fields().stream()
-                .map(field -> new JavaDataValueInfo.Field(
+                .map(field -> new JavaDataValueInfoField(
                         field.name(),
                         field.type(),
+                        ReflectionValueInfoJava.reflectionTypeInfo(field.type(), dataValueInfoPackagePath),
                         dataValueFieldExpression(type, field),
-                        field.annotations()))
+                        field.annotations(),
+                        ReflectionValueInfoJava.reflectionAnnotations(field.annotations())))
                 .toList();
     }
 
@@ -1628,11 +1654,12 @@ public class JavaAstBuilder {
         return "this." + field.name() + "()";
     }
 
-    private SortedSet<JavaMethod> buildRecordMethods(CompiledDataType type, SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix) {
+    private List<JavaMethod> buildRecordMethods(CompiledDataType type, SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix) {
         var ownerPrefix = METHOD_DECL_PREFIX + type.name() + "__";
-        return functionsByOwnerPrefix.getOrDefault(ownerPrefix, List.of()).stream()
-                .map(function -> buildRecordMethod(function, ownerPrefix))
-                .collect(toCollection(TreeSet::new));
+        return sortedUniqueList(
+                functionsByOwnerPrefix.getOrDefault(ownerPrefix, List.of()).stream()
+                        .map(function -> buildRecordMethod(function, ownerPrefix)),
+                JAVA_METHOD_COMPARATOR);
     }
 
     private JavaMethod buildRecordMethod(CompiledFunction function, String ownerPrefix) {
@@ -1652,6 +1679,7 @@ public class JavaAstBuilder {
                 function.returnType(),
                 parameters.stream()
                         .map(CompiledFunctionParameter::type)
+                        .map(type -> (Object) type)
                         .toList(),
                 function.expression(),
                 function.comments()
@@ -1710,8 +1738,8 @@ public class JavaAstBuilder {
 
     private List<String> interfaceTypeParameters(JavaInterface javaInterface) {
         return switch (javaInterface) {
-            case JavaSealedInterface javaSealedInterface -> javaSealedInterface.typeParameters();
-            case JavaNormalInterface javaNormalInterface -> List.<String>of();
+            case JavaInterface.JavaSealedInterface javaSealedInterface -> javaSealedInterface.typeParameters();
+            case JavaInterface.JavaNormalInterface javaNormalInterface -> List.<String>of();
         };
     }
 
@@ -1729,7 +1757,7 @@ public class JavaAstBuilder {
         return new JavaType(javaInterface.name() + "<" + String.join(", ", implementedTypeParameters) + ">");
     }
 
-    private SortedSet<JavaEnum> buildEnums(
+    private List<JavaEnum> buildEnums(
             CompiledModule module,
             ModuleTypeIndex typeIndex,
             SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
@@ -1742,7 +1770,7 @@ public class JavaAstBuilder {
         var declaredEnums = typeIndex.dataParentTypes().stream()
                 .filter(CompiledDataParentType::enumType)
                 .map(enumType -> buildDeclaredEnum(module, enumType, reflectionFallbackPackagePath));
-        return Stream.concat(singletonEnums, declaredEnums).collect(toCollection(TreeSet::new));
+        return sortedUniqueList(Stream.concat(singletonEnums, declaredEnums), JAVA_ENUM_COMPARATOR);
     }
 
     private JavaEnum buildSingletonEnum(
@@ -1753,14 +1781,14 @@ public class JavaAstBuilder {
     ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
-                ? new TreeSet<JavaType>()
-                : javaInterface.stream().map(JavaInterface::name).collect(toCollection(TreeSet::new));
+                ? javaTypeSet()
+                : javaInterface.stream().map(JavaInterface::name).collect(toCollection(JavaAstBuilder::javaTypeSet));
         implementInterfaces.addAll(globalImplementedInterfaces(module, type.name(), implementInterfaces));
         implementInterfaces.add(CAPYBARA_DATA_VALUE);
         return new JavaEnum(
                 buildClassName(type.name()),
                 type.comments(),
-                implementInterfaces,
+                List.copyOf(implementInterfaces),
                 List.of("INSTANCE"),
                 List.of(ReflectionValueInfoJava.dataValueInfo(
                         type.name(),
@@ -1772,13 +1800,13 @@ public class JavaAstBuilder {
     }
 
     private JavaEnum buildDeclaredEnum(CompiledModule module, CompiledDataParentType enumType, String reflectionFallbackPackagePath) {
-        var implementInterfaces = new TreeSet<JavaType>();
+        var implementInterfaces = javaTypeSet();
         implementInterfaces.addAll(globalImplementedInterfaces(module, enumType.name(), implementInterfaces));
         implementInterfaces.add(CAPYBARA_DATA_VALUE);
         return new JavaEnum(
                 buildClassName(enumType.name()),
                 enumType.comments(),
-                implementInterfaces,
+                List.copyOf(implementInterfaces),
                 enumType.subTypes().stream().map(CompiledDataType::name).toList(),
                 enumType.subTypes().stream()
                         .map(subType -> ReflectionValueInfoJava.dataValueInfo(

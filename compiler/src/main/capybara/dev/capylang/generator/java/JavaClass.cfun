@@ -1,0 +1,21 @@
+from /dev/capylang/generator/java/JavaAnnotation import { JavaAnnotation }
+from /dev/capylang/generator/java/JavaConst import { JavaConst }
+from /dev/capylang/generator/java/JavaEnum import { JavaEnum }
+from /dev/capylang/generator/java/JavaInterface import { JavaInterface }
+from /dev/capylang/generator/java/JavaMethod import { JavaMethod }
+from /dev/capylang/generator/java/JavaPackage import { JavaPackage }
+from /dev/capylang/generator/java/JavaRecord import { JavaRecord }
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+data JavaClass {
+    annotations: List[JavaAnnotation],
+    name: JavaType,
+    javaPackage: JavaPackage,
+    staticImports: List[String],
+    staticConsts: List[JavaConst],
+    staticMethods: List[JavaMethod],
+    interfaces: List[JavaInterface],
+    records: List[JavaRecord],
+    enums: List[JavaEnum],
+    enumValueOwnerOverrides: Dict[String]
+}

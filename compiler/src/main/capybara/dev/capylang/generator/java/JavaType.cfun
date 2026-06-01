@@ -1,0 +1,3 @@
+data JavaType { name: String }
+
+fun JavaType.to_string(): String = this.name

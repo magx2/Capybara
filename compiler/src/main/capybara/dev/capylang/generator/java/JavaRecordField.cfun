@@ -1,0 +1,6 @@
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+data JavaRecordField {
+    name: String,
+    type: JavaType
+}

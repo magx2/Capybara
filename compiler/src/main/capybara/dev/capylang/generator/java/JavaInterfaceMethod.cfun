@@ -1,0 +1,6 @@
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+data JavaInterfaceMethod {
+    name: String,
+    returnType: JavaType
+}

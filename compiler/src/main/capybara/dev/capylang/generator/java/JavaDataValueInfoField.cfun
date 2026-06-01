@@ -1,0 +1,8 @@
+data JavaDataValueInfoField {
+    name: String,
+    type: any,
+    javaTypeInfoExpression: String,
+    valueExpression: String,
+    annotations: any,
+    javaAnnotationsExpression: String
+}

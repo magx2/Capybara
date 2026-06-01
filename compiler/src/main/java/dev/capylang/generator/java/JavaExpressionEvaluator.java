@@ -3,6 +3,7 @@ package dev.capylang.generator.java;
 import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledType;
+import dev.capylang.compiler.ReflectionValueInfoJava;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
 import dev.capylang.compiler.parser.InfixOperatorModule;
@@ -148,13 +149,13 @@ public class JavaExpressionEvaluator {
         return expressionToJava(scope);
     }
 
-    public static String evaluateExpression(CompiledExpression expression, List<JavaMethod.JavaFunctionParameter> parameters) {
+    public static String evaluateExpression(CompiledExpression expression, List<JavaFunctionParameter> parameters) {
         return evaluateExpression(expression, parameters, null);
     }
 
     public static String evaluateExpression(
             CompiledExpression expression,
-            List<JavaMethod.JavaFunctionParameter> parameters,
+            List<JavaFunctionParameter> parameters,
             String moduleHelperClass
     ) {
         log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
@@ -165,7 +166,7 @@ public class JavaExpressionEvaluator {
 
     public static String evaluateTailRecursiveExpression(
             CompiledExpression expression,
-            List<JavaMethod.JavaFunctionParameter> parameters,
+            List<JavaFunctionParameter> parameters,
             List<String> selfCallNames,
             CompiledType sourceReturnType,
             List<CompiledType> sourceParameterTypes,
@@ -179,7 +180,7 @@ public class JavaExpressionEvaluator {
         return code.toString();
     }
 
-    private static Scope initialScope(List<JavaMethod.JavaFunctionParameter> parameters, String moduleHelperClass) {
+    private static Scope initialScope(List<JavaFunctionParameter> parameters, String moduleHelperClass) {
         var scope = moduleHelperClass == null ? Scope.EMPTY : Scope.EMPTY.withModuleHelperClass(moduleHelperClass);
         for (var parameter : parameters) {
             scope = scope.addLocalValue(parameter.sourceName())
@@ -375,7 +376,7 @@ public class JavaExpressionEvaluator {
 
     private record TailRecursiveContext(
             List<String> selfCallNames,
-            List<JavaMethod.JavaFunctionParameter> parameters,
+            List<JavaFunctionParameter> parameters,
             CompiledType returnType,
             List<CompiledType> parameterTypes
     ) {
@@ -3368,18 +3369,20 @@ public class JavaExpressionEvaluator {
                                          + "))");
         }
 
-        var fields = new ArrayList<JavaDataValueInfo.Field>(reflectionValue.fields().size());
+        var fields = new ArrayList<JavaDataValueInfoField>(reflectionValue.fields().size());
         for (var field : reflectionValue.fields()) {
             var fieldValue = evaluateExpression(
                     new CompiledFieldAccess(targetReference, field.name(), field.type()),
                     current
             ).popExpression();
             current = fieldValue.scope();
-            fields.add(new JavaDataValueInfo.Field(
+            fields.add(new JavaDataValueInfoField(
                     field.name(),
                     field.type(),
+                    ReflectionValueInfoJava.reflectionTypeInfo(field.type(), reflectionValue.packagePath()),
                     fieldValue.expression(),
-                    field.annotations()
+                    field.annotations(),
+                    ReflectionValueInfoJava.reflectionAnnotations(field.annotations())
             ));
         }
 
@@ -3388,7 +3391,8 @@ public class JavaExpressionEvaluator {
                 reflectionValue.packageName(),
                 reflectionValue.packagePath(),
                 fields,
-                reflectionValue.annotations()
+                reflectionValue.annotations(),
+                ReflectionValueInfoJava.reflectionAnnotations(reflectionValue.annotations())
         ));
         return current.addExpression(expression);
     }

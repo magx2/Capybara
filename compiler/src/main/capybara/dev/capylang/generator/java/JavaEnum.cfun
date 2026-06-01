@@ -1,0 +1,10 @@
+from /dev/capylang/generator/java/JavaDataValueInfo import { JavaDataValueInfo }
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+data JavaEnum {
+    name: JavaType,
+    comments: List[String],
+    implementInterfaces: List[JavaType],
+    values: List[String],
+    dataValueInfos: List[JavaDataValueInfo]
+}

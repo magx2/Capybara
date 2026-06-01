@@ -49,6 +49,23 @@ public final class JavaGenerator implements Generator {
         return expected.equals(actual);
     }
 
+    private static dev.capylang.compiler.expression.CompiledExpression expression(JavaMethod method) {
+        return (dev.capylang.compiler.expression.CompiledExpression) method.expression();
+    }
+
+    private static dev.capylang.compiler.expression.CompiledExpression expression(JavaConst javaConst) {
+        return (dev.capylang.compiler.expression.CompiledExpression) javaConst.expression();
+    }
+
+    private static CompiledType sourceReturnType(JavaMethod method) {
+        return (CompiledType) method.sourceReturnType();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<CompiledType> sourceParameterTypes(JavaMethod method) {
+        return (List<CompiledType>) (List<?>) method.sourceParameterTypes();
+    }
+
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
         var timings = new GenerationTimings();
@@ -368,12 +385,12 @@ public final class JavaGenerator implements Generator {
                         javaClass.annotations(),
                         new JavaType(javaClass.name() + "Module"),
                         javaClass.javaPackage(),
-                        utilityStaticImports,
+                        List.copyOf(utilityStaticImports),
                         javaClass.staticConsts(),
                         javaClass.staticMethods(),
-                        new TreeSet<>(),
-                        new TreeSet<>(),
-                        new TreeSet<>(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
                         javaClass.enumValueOwnerOverrides()
                 );
                 compiled.add(new GeneratedModule(
@@ -1200,7 +1217,7 @@ public final class JavaGenerator implements Generator {
         javaClass.annotations().forEach(annotation -> code.append(annotation).append("\n"));
 
         code.append(mapJavaOwnerInterfaceHeader(ownerInterface)).append("{\n");
-        if (ownerInterface instanceof JavaNormalInterface normalInterface) {
+        if (ownerInterface instanceof JavaInterface.JavaNormalInterface normalInterface) {
             normalInterface.methods().stream()
                     .map(this::mapJavaInterfaceMethod)
                     .forEach(method -> code.append(method).append('\n'));
@@ -1208,7 +1225,7 @@ public final class JavaGenerator implements Generator {
                     .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                     .forEach(code::append);
         }
-        if (ownerInterface instanceof JavaSealedInterface sealedInterface) {
+        if (ownerInterface instanceof JavaInterface.JavaSealedInterface sealedInterface) {
             sealedInterface.methods().stream()
                     .map(this::mapJavaInterfaceMethod)
                     .forEach(method -> code.append(method).append('\n'));
@@ -1262,9 +1279,9 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaInterfaceHeader(JavaInterface javaInterface) {
         return switch (javaInterface) {
-            case JavaNormalInterface javaNormalInterface ->
+            case JavaInterface.JavaNormalInterface javaNormalInterface ->
                     "public interface " + javaNormalInterface.name() + mapJavaInterfaceExtends(javaNormalInterface) + " ";
-            case JavaSealedInterface javaSealedInterface -> {
+            case JavaInterface.JavaSealedInterface javaSealedInterface -> {
                 var permits = join(", ", javaSealedInterface.permits());
                 var typeParameters = javaSealedInterface.typeParameters().isEmpty()
                         ? ""
@@ -1276,9 +1293,9 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaOwnerInterfaceHeader(JavaInterface javaInterface) {
         return switch (javaInterface) {
-            case JavaNormalInterface javaNormalInterface ->
+            case JavaInterface.JavaNormalInterface javaNormalInterface ->
                     "public interface " + javaNormalInterface.name() + mapJavaInterfaceExtends(javaNormalInterface) + " ";
-            case JavaSealedInterface javaSealedInterface -> {
+            case JavaInterface.JavaSealedInterface javaSealedInterface -> {
                 var ownerName = javaSealedInterface.name().toString();
                 var permits = javaSealedInterface.permits().stream()
                         .map(permit -> ownerName + "." + permit)
@@ -1303,7 +1320,7 @@ public final class JavaGenerator implements Generator {
         return code.toString();
     }
 
-    private void appendImports(StringBuilder code, Set<String> staticImports) {
+    private void appendImports(StringBuilder code, java.util.Collection<String> staticImports) {
         var classImports = new TreeSet<String>();
         staticImports.stream()
                 .map(this::classImportForStaticImport)
@@ -1435,7 +1452,7 @@ public final class JavaGenerator implements Generator {
                + staticMethods + methods + dataValueInfoMethod + withMethods + toStringMethod + "}\n";
     }
 
-    private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
+    private String mapJavaRecordField(JavaRecordField field) {
         return field.type() + " " + field.name();
     }
 
@@ -1445,7 +1462,7 @@ public final class JavaGenerator implements Generator {
             return "";
         }
         var parameters = record.fields().stream().map(this::mapJavaRecordField).collect(joining(", "));
-        var arguments = record.fields().stream().map(JavaRecord.JavaRecordField::name).collect(joining(", "));
+        var arguments = record.fields().stream().map(JavaRecordField::name).collect(joining(", "));
         if (record.fields().isEmpty()) {
             return "public " + record.name() + " with() { return this; }\n";
         }
@@ -1480,7 +1497,7 @@ public final class JavaGenerator implements Generator {
         return body.toString();
     }
 
-    private String mapRecordFieldDisplayName(JavaRecord record, JavaRecord.JavaRecordField field) {
+    private String mapRecordFieldDisplayName(JavaRecord record, JavaRecordField field) {
         if ("Error".equals(record.name().toString())
             && "ex".equals(field.name())
             && "dev.capylang.CapybaraException".equals(field.type().toString())) {
@@ -1489,7 +1506,7 @@ public final class JavaGenerator implements Generator {
         return field.name();
     }
 
-    private String mapRecordFieldToStringValue(JavaRecord.JavaRecordField field) {
+    private String mapRecordFieldToStringValue(JavaRecordField field) {
         return "dev.capylang.CapybaraToStringUtil.toStringValue(" + field.name() + ")";
     }
 
@@ -1565,12 +1582,12 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaInterface(JavaInterface javaInterface, String helperCallOwnerName) {
         return switch (javaInterface) {
-            case JavaNormalInterface javaNormalInterface -> mapJavaNormalInterface(javaNormalInterface, helperCallOwnerName);
-            case JavaSealedInterface javaSealedInterface -> mapJavaSealedInterface(javaSealedInterface, helperCallOwnerName);
+            case JavaInterface.JavaNormalInterface javaNormalInterface -> mapJavaNormalInterface(javaNormalInterface, helperCallOwnerName);
+            case JavaInterface.JavaSealedInterface javaSealedInterface -> mapJavaSealedInterface(javaSealedInterface, helperCallOwnerName);
         };
     }
 
-    private String mapJavaNormalInterface(JavaNormalInterface javaInterface, String helperCallOwnerName) {
+    private String mapJavaNormalInterface(JavaInterface.JavaNormalInterface javaInterface, String helperCallOwnerName) {
         var methods = javaInterface.methods().size() > 0
                 ? javaInterface.methods().stream()
                 .map(this::mapJavaInterfaceMethod)
@@ -1583,7 +1600,7 @@ public final class JavaGenerator implements Generator {
                + "public interface " + javaInterface.name() + mapJavaInterfaceExtends(javaInterface) + " {" + methods + defaultMethods + "}\n";
     }
 
-    private String mapJavaSealedInterface(JavaSealedInterface javaInterface, String helperCallOwnerName) {
+    private String mapJavaSealedInterface(JavaInterface.JavaSealedInterface javaInterface, String helperCallOwnerName) {
         var permits = join(", ", javaInterface.permits());
         var typeParameters = javaInterface.typeParameters().isEmpty()
                 ? ""
@@ -1609,7 +1626,7 @@ public final class JavaGenerator implements Generator {
                 .collect(joining(", ", " extends ", ""));
     }
 
-    private String mapJavaInterfaceMethod(JavaInterface.JavaInterfaceMethod method) {
+    private String mapJavaInterfaceMethod(JavaInterfaceMethod method) {
         return method.returnType() + " " + method.name() + "();";
     }
 
@@ -1737,7 +1754,7 @@ public final class JavaGenerator implements Generator {
                && "Random".equals(ownerName)
                && "seed".equals(mapMethodName(method.name()))
                && method.parameters().isEmpty()
-               && method.sourceReturnType() instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType
+               && sourceReturnType(method) instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType
                && "seed".equals(primitiveBackedType.name())
                && isNativeExpression(method);
     }
@@ -1753,8 +1770,8 @@ public final class JavaGenerator implements Generator {
         return "capy.lang".equals(ownerPackage)
                && "Primitives".equals(ownerName)
                && method.parameters().size() == 1
-               && method.sourceParameterTypes().size() == 1
-               && sameType(method.sourceParameterTypes().getFirst(), CompiledIrModule.STRING)
+               && sourceParameterTypes(method).size() == 1
+               && sameType(sourceParameterTypes(method).getFirst(), CompiledIrModule.STRING)
                && isNativeExpression(method)
                && switch (method.sourceName()) {
                    case "to_int", "to_long", "to_double", "to_float", "to_bool" -> true;
@@ -1767,7 +1784,7 @@ public final class JavaGenerator implements Generator {
         var syntheticMethodCall = new CompiledFunctionCall(
                 METHOD_DECL_PREFIX + "String__" + method.sourceName(),
                 List.of(new CompiledVariable(parameter.sourceName(), CompiledIrModule.STRING)),
-                method.sourceReturnType()
+                sourceReturnType(method)
         );
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
@@ -1776,7 +1793,7 @@ public final class JavaGenerator implements Generator {
     }
 
     private boolean isNativeExpression(JavaMethod method) {
-        return method.expression() instanceof dev.capylang.compiler.expression.CompiledNothingValue nothingValue
+        return expression(method) instanceof dev.capylang.compiler.expression.CompiledNothingValue nothingValue
                && (nothingValue.message().contains("`<native>`")
                    || nothingValue.message().contains("native expression in function"));
     }
@@ -1827,7 +1844,7 @@ public final class JavaGenerator implements Generator {
     private String mapCapyIoIOMethod(JavaMethod method, String visibility, String methodTypeParameters) {
         var methodName = mapMethodName(method.name());
         var arguments = method.parameters().stream()
-                .map(JavaMethod.JavaFunctionParameter::generatedName)
+                .map(JavaFunctionParameter::generatedName)
                 .collect(joining(", "));
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
@@ -1868,14 +1885,14 @@ public final class JavaGenerator implements Generator {
 
     private String evaluateMethodBody(JavaMethod method, String moduleHelperClass) {
         if (!method.tailRecursive()) {
-            return evaluateExpression(method.expression(), method.parameters(), moduleHelperClass);
+            return evaluateExpression(expression(method), method.parameters(), moduleHelperClass);
         }
         return evaluateTailRecursiveExpression(
-                method.expression(),
+                expression(method),
                 method.parameters(),
                 method.selfCallNames(),
-                method.sourceReturnType(),
-                method.sourceParameterTypes(),
+                sourceReturnType(method),
+                sourceParameterTypes(method),
                 moduleHelperClass
         );
     }
@@ -1922,7 +1939,7 @@ public final class JavaGenerator implements Generator {
         var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
         return mapJavaDoc(javaConst.comments())
                + visibility + "static final " + javaConst.type() + " " + javaConst.name() + " = "
-               + extractInitializerExpression(evaluateExpression(javaConst.expression(), List.of(), ownerTypeName))
+               + extractInitializerExpression(evaluateExpression(expression(javaConst), List.of(), ownerTypeName))
                + ";\n";
     }
 
@@ -1954,13 +1971,13 @@ public final class JavaGenerator implements Generator {
         return name;
     }
 
-    private String mapFunctionParameters(List<JavaMethod.JavaFunctionParameter> parameters) {
+    private String mapFunctionParameters(List<JavaFunctionParameter> parameters) {
         return parameters.stream()
                 .map(this::mapFunctionParameter)
                 .collect(joining(", "));
     }
 
-    private String mapFunctionParameter(JavaMethod.JavaFunctionParameter parameter) {
+    private String mapFunctionParameter(JavaFunctionParameter parameter) {
         return parameter.type() + " " + parameter.generatedName();
     }
 

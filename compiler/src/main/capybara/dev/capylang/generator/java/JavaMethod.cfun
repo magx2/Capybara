@@ -1,0 +1,18 @@
+from /dev/capylang/generator/java/JavaFunctionParameter import { JavaFunctionParameter }
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+data JavaMethod {
+    name: String,
+    sourceName: String,
+    isPrivate: bool,
+    programMain: bool,
+    tailRecursive: bool,
+    selfCallNames: List[String],
+    typeParameters: List[String],
+    returnType: JavaType,
+    parameters: List[JavaFunctionParameter],
+    sourceReturnType: any,
+    sourceParameterTypes: List[any],
+    expression: any,
+    comments: List[String]
+}

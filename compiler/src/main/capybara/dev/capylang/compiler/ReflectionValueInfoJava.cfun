@@ -1,0 +1,375 @@
+from /dev/capylang/compiler/CompiledAnnotation import { CompiledAnnotation }
+from /dev/capylang/compiler/CompiledAnnotationArgument import { CompiledAnnotationArgument }
+from /dev/capylang/compiler/CompiledAnnotationValue import { * }
+from /dev/capylang/compiler/CompiledIr import { * }
+from /dev/capylang/generator/java/JavaDataValueInfo import { JavaDataValueInfo }
+from /dev/capylang/generator/java/JavaDataValueInfoField import { JavaDataValueInfoField }
+
+data List[T] { <native> }
+data String { <native> }
+
+fun List[T].`+`(value: T): List[T] = <native>
+fun String.replace(old: String, new: String): String = <native>
+
+fun data_value_info(
+    type_name: String,
+    fallback_package_path: String,
+    fields: List[JavaDataValueInfoField],
+    annotations: List[CompiledAnnotation]
+): JavaDataValueInfo =
+    let path = reflection_package_path(type_name, fallback_package_path)
+    let package_name = if rvi_string_is_blank(path) then "" else simple_reflection_type_name(path)
+    JavaDataValueInfo {
+        name: simple_reflection_type_name(type_name),
+        packageName: package_name,
+        packagePath: path,
+        fields: fields,
+        annotations: annotations,
+        javaAnnotationsExpression: reflection_annotations(annotations)
+    }
+
+fun data_value_info_expression(data_value_info: JavaDataValueInfo): String =
+    let field_value_infos = field_value_info_expressions(data_value_info.fields, data_value_info.packagePath, 0, [])
+    "new capy.metaProg.Reflection.DataValueInfo("
+        + rvi_java_string(data_value_info.name) + ", "
+        + "new capy.metaProg.Reflection.PackageInfo("
+        + rvi_java_string(data_value_info.packageName) + ", "
+        + rvi_java_string(data_value_info.packagePath) + "), "
+        + reflection_list("capy.metaProg.Reflection.FieldValueInfo", field_value_infos)
+        + ", "
+        + data_value_info.javaAnnotationsExpression
+        + ")"
+
+fun reflection_type_info(type: CompiledType, fallback_package_path: String): String =
+    match type with
+    case PrimitiveLinkedType { name } ->
+        "new capy.metaProg.Reflection.DataInfo("
+            + rvi_java_string(if name == "STRING" then "String" else lower_primitive_name(name)) + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_annotations([]) + ")"
+    case CompiledList { elementType } ->
+        "new capy.metaProg.Reflection.ListInfo("
+            + rvi_java_string("List") + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_type_info(elementType, fallback_package_path) + ")"
+    case CompiledSet { elementType } ->
+        "new capy.metaProg.Reflection.SetInfo("
+            + rvi_java_string("Set") + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_type_info(elementType, fallback_package_path) + ")"
+    case CompiledDict { valueType } ->
+        "new capy.metaProg.Reflection.DictInfo("
+            + rvi_java_string("Dict") + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_type_info(valueType, fallback_package_path) + ")"
+    case CompiledTupleType { elementTypes } ->
+        "new capy.metaProg.Reflection.TupleInfo("
+            + rvi_java_string("Tuple") + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_list("capy.metaProg.Reflection.AnyInfo", reflection_type_info_values(elementTypes, fallback_package_path, 0, [])) + ")"
+    case CompiledFunctionType { argumentType, returnType } ->
+        "new capy.metaProg.Reflection.FunctionTypeInfo("
+            + rvi_java_string("function") + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_list("capy.metaProg.Reflection.AnyInfo", reflection_function_parameter_type_infos(type, fallback_package_path, [])) + ", "
+            + reflection_type_info(reflection_function_return_type(type), fallback_package_path) + ")"
+    case CompiledGenericTypeParameter { name } ->
+        "new capy.metaProg.Reflection.DataInfo("
+            + rvi_java_string(name) + ", "
+            + reflection_empty_package_info() + ", "
+            + reflection_annotations([]) + ")"
+    case CompiledPrimitiveBackedType { name, backingType, cfunType, comments, visibility, annotations } ->
+        reflection_type_info(backingType, fallback_package_path)
+    case CompiledDataParentType { name, fields, subTypes, typeParameters, comments, visibility, enumType, annotations } ->
+        "new capy.metaProg.Reflection.DataInfo("
+            + rvi_java_string(simple_reflection_type_name(name)) + ", "
+            + reflection_package_info(name, fallback_package_path) + ", "
+            + reflection_annotations(annotations) + ")"
+    case CompiledDataType { name, fields, typeParameters, extendedTypes, comments, visibility, singleton, nativeType, enumValue, annotations } ->
+        "new capy.metaProg.Reflection.DataInfo("
+            + rvi_java_string(simple_reflection_type_name(name)) + ", "
+            + reflection_package_info(name, fallback_package_path) + ", "
+            + reflection_annotations(annotations) + ")"
+    case CompiledObjectType { name, backendClassName, parents, visibility, annotations, kind, methods } ->
+        "new capy.metaProg.Reflection.DataInfo("
+            + rvi_java_string(simple_reflection_type_name(name)) + ", "
+            + reflection_package_info(name, fallback_package_path) + ", "
+            + reflection_annotations(annotations) + ")"
+
+fun reflection_annotations(annotations: List[CompiledAnnotation]): String =
+    reflection_list(
+        "capy.metaProg.Reflection.AnnotationInfo",
+        reflection_annotation_values(annotations, 0, [])
+    )
+
+fun reflection_package_path(symbol_name: String, fallback_package_path: String): String =
+    let normalized = symbol_name.replace("\\", "/")
+    let dot = last_index_of(normalized, ".")
+    let slash = last_index_of(normalized, "/")
+    if slash >= 0
+    then
+        if dot > slash
+        then strip_leading_slash(normalized[0, dot])
+        else strip_leading_slash(normalized[0, slash])
+    else if dot > 0
+        then normalized[0, dot]
+        else fallback_package_path
+
+private fun field_value_info_expressions(
+    fields: List[JavaDataValueInfoField],
+    fallback_package_path: String,
+    idx: int,
+    output: List[String]
+): List[String] =
+    match fields[idx] with
+    case Some { field } ->
+        field_value_info_expressions(
+            fields,
+            fallback_package_path,
+            idx + 1,
+            output + ("new capy.metaProg.Reflection.FieldValueInfo("
+                + rvi_java_string(field.name) + ", "
+                + field.javaTypeInfoExpression + ", "
+                + field.valueExpression + ", "
+                + field.javaAnnotationsExpression + ")")
+        )
+    case _ -> output
+
+private fun reflection_type_info_values(
+    types: List[CompiledType],
+    fallback_package_path: String,
+    idx: int,
+    output: List[String]
+): List[String] =
+    match types[idx] with
+    case Some { type } ->
+        reflection_type_info_values(types, fallback_package_path, idx + 1, output + reflection_type_info(type, fallback_package_path))
+    case _ -> output
+
+private fun reflection_annotation_values(
+    annotations: List[CompiledAnnotation],
+    idx: int,
+    output: List[String]
+): List[String] =
+    match annotations[idx] with
+    case Some { annotation } ->
+        reflection_annotation_values(annotations, idx + 1, output + reflection_annotation(annotation))
+    case _ -> output
+
+private fun reflection_annotation(annotation: CompiledAnnotation): String =
+    "new capy.metaProg.Reflection.AnnotationInfo("
+        + rvi_java_string(annotation.name) + ", "
+        + reflection_package_info_values(annotation.packageName, annotation.packagePath) + ", "
+        + reflection_list(
+            "capy.metaProg.Reflection.AnnotationArgumentInfo",
+            reflection_annotation_argument_values(annotation.arguments, 0, [])
+        )
+        + ")"
+
+private fun reflection_annotation_argument_values(
+    arguments: List[CompiledAnnotationArgument],
+    idx: int,
+    output: List[String]
+): List[String] =
+    match arguments[idx] with
+    case Some { argument } ->
+        reflection_annotation_argument_values(arguments, idx + 1, output + reflection_annotation_argument(argument))
+    case _ -> output
+
+private fun reflection_annotation_argument(argument: CompiledAnnotationArgument): String =
+    "new capy.metaProg.Reflection.AnnotationArgumentInfo("
+        + rvi_java_string(argument.name) + ", "
+        + reflection_annotation_value(argument.value)
+        + ")"
+
+private fun reflection_annotation_value(value: CompiledAnnotationValue): String =
+    match value with
+    case StringValue { value } ->
+        "new capy.metaProg.Reflection.AnnotationString(" + normalize_string_literal(value) + ")"
+    case IntValue { value } ->
+        "new capy.metaProg.Reflection.AnnotationInt(" + value + ")"
+    case LongValue { value } ->
+        "new capy.metaProg.Reflection.AnnotationLong(" + value + ")"
+    case DoubleValue { value } ->
+        "new capy.metaProg.Reflection.AnnotationDouble(" + value + ")"
+    case FloatValue { value } ->
+        "new capy.metaProg.Reflection.AnnotationFloat(" + value + ")"
+    case BoolValue { value } ->
+        "new capy.metaProg.Reflection.AnnotationBool(" + value + ")"
+    case TypeNameValue { name } ->
+        "new capy.metaProg.Reflection.AnnotationTypeName(" + rvi_java_string(name) + ")"
+    case NothingValue {} ->
+        "new capy.metaProg.Reflection.AnnotationNothing()"
+
+private fun reflection_list(java_element_type: String, values: List[String]): String =
+    match values[0] with
+    case Some _ -> "java.util.List.of(" + join_strings(values, ", ", 0, "") + ")"
+    case _ -> "java.util.List.<" + java_element_type + ">of()"
+
+private fun reflection_function_parameter_type_infos(
+    current: CompiledType,
+    fallback_package_path: String,
+    output: List[String]
+): List[String] =
+    match current with
+    case CompiledFunctionType { argumentType, returnType } ->
+        reflection_function_parameter_type_infos(
+            returnType,
+            fallback_package_path,
+            output + reflection_type_info(argumentType, fallback_package_path)
+        )
+    case _ -> output
+
+private fun reflection_function_return_type(current: CompiledType): CompiledType =
+    match current with
+    case CompiledFunctionType { argumentType, returnType } -> reflection_function_return_type(returnType)
+    case _ -> current
+
+private fun reflection_package_info(symbol_name: String, fallback_package_path: String): String =
+    let path = reflection_package_path(symbol_name, fallback_package_path)
+    let name = if rvi_string_is_blank(path) then "" else simple_reflection_type_name(path)
+    "new capy.metaProg.Reflection.PackageInfo(" + rvi_java_string(name) + ", " + rvi_java_string(path) + ")"
+
+private fun reflection_package_info_values(package_name: String, package_path: String): String =
+    "new capy.metaProg.Reflection.PackageInfo("
+        + rvi_java_string(package_name)
+        + ", "
+        + rvi_java_string(strip_leading_slash(package_path))
+        + ")"
+
+private fun reflection_empty_package_info(): String =
+    "new capy.metaProg.Reflection.PackageInfo(\"\", \"\")"
+
+private fun simple_reflection_type_name(type_name: String): String =
+    let normalized = strip_generic_suffix(type_name)
+    let slash = last_index_of(normalized, "/")
+    let dot = last_index_of(normalized, ".")
+    let idx = max_int(slash, dot)
+    if idx >= 0 then normalized[idx + 1, rvi_string_size(normalized)] else normalized
+
+private fun strip_generic_suffix(type_name: String): String =
+    let idx = index_of(type_name, "[")
+    if idx >= 0 then type_name[0, idx] else type_name
+
+private fun rvi_java_string(value: String): String =
+    "\"" + escape_java_string(value, 0, "") + "\""
+
+private fun escape_java_string(value: String, idx: int, output: String): String =
+    match value[idx] with
+    case Some { char } -> escape_java_string(value, idx + 1, output + escaped_java_char(char))
+    case _ -> output
+
+private fun escaped_java_char(char: String): String =
+    if char == "\\"
+    then "\\\\"
+    else if char == "\""
+        then "\\\""
+        else if char == '\n'
+            then "\\n"
+            else if char == '\r'
+                then "\\r"
+                else if char == '\t'
+                    then "\\t"
+                    else char
+
+private fun normalize_string_literal(raw: String): String =
+    let size = rvi_string_size(raw)
+    if size < 2
+    then rvi_java_string(raw)
+    else if raw[0, 1] == "\"" & raw[size - 1, size] == "\""
+        then rvi_java_string(normalize_double_quoted_content(raw[1, size - 1], 0, ""))
+        else if raw[0, 1] == "'" & raw[size - 1, size] == "'"
+            then rvi_java_string(raw[1, size - 1])
+            else rvi_java_string(raw)
+
+private fun normalize_double_quoted_content(content: String, idx: int, output: String): String =
+    if idx >= rvi_string_size(content)
+    then output
+    else
+        match content[idx] with
+        case Some { char } ->
+            if char == "\\" & idx + 1 < rvi_string_size(content)
+            then
+                match content[idx + 1] with
+                case Some { next } ->
+                    if next == "\"" | next == "\\"
+                    then normalize_double_quoted_content(content, idx + 2, output + next)
+                    else normalize_double_quoted_content(content, idx + 1, output + char)
+                case _ -> output
+            else normalize_double_quoted_content(content, idx + 1, output + char)
+        case _ -> output
+
+private fun join_strings(values: List[String], separator: String, idx: int, output: String): String =
+    match values[idx] with
+    case Some { value } ->
+        if idx == 0
+        then join_strings(values, separator, idx + 1, value)
+        else join_strings(values, separator, idx + 1, output + separator + value)
+    case _ -> output
+
+private fun lower_primitive_name(name: String): String =
+    if name == "BYTE"
+    then "byte"
+    else if name == "INT"
+        then "int"
+        else if name == "LONG"
+            then "long"
+            else if name == "FLOAT"
+                then "float"
+                else if name == "DOUBLE"
+                    then "double"
+                    else if name == "BOOL"
+                        then "bool"
+                        else if name == "NOTHING"
+                            then "nothing"
+                            else if name == "ANY"
+                                then "any"
+                                else if name == "DATA"
+                                    then "data"
+                                    else if name == "ENUM"
+                                        then "enum"
+                                        else name
+
+private fun strip_leading_slash(value: String): String =
+    if rvi_string_size(value) > 0 & value[0, 1] == "/"
+    then value[1, rvi_string_size(value)]
+    else value
+
+private fun last_index_of(value: String, needle: String): int =
+    last_index_of_scan(value, needle, 0, -1)
+
+private fun last_index_of_scan(value: String, needle: String, idx: int, last: int): int =
+    match value[idx] with
+    case Some { char } ->
+        last_index_of_scan(value, needle, idx + 1, if char == needle then idx else last)
+    case _ -> last
+
+private fun index_of(value: String, needle: String): int =
+    index_of_scan(value, needle, 0)
+
+private fun index_of_scan(value: String, needle: String, idx: int): int =
+    match value[idx] with
+    case Some { char } -> if char == needle then idx else index_of_scan(value, needle, idx + 1)
+    case _ -> -1
+
+private fun rvi_string_is_blank(value: String): bool =
+    rvi_string_is_blank_scan(value, 0)
+
+private fun rvi_string_is_blank_scan(value: String, idx: int): bool =
+    match value[idx] with
+    case Some { char } ->
+        if char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
+        then rvi_string_is_blank_scan(value, idx + 1)
+        else false
+    case _ -> true
+
+private fun rvi_string_size(value: String): int =
+    rvi_string_size_scan(value, 0)
+
+private fun rvi_string_size_scan(value: String, idx: int): int =
+    match value[idx] with
+    case Some _ -> rvi_string_size_scan(value, idx + 1)
+    case _ -> idx
+
+private fun max_int(left: int, right: int): int =
+    if left > right then left else right

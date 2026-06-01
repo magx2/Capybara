@@ -65,13 +65,17 @@ final class ConstDependencyOrder {
         }
         states.put(name, VisitState.VISITING);
         var javaConst = byName.get(name);
-        for (var dependency : dependencies(javaConst.expression(), byName.keySet(), emittedFunctionName)) {
+        for (var dependency : dependencies(expression(javaConst), byName.keySet(), emittedFunctionName)) {
             if (!dependency.equals(name)) {
                 visit(dependency, byName, emittedFunctionName, states, ordered);
             }
         }
         states.put(name, VisitState.VISITED);
         ordered.add(javaConst);
+    }
+
+    private static CompiledExpression expression(JavaConst javaConst) {
+        return (CompiledExpression) javaConst.expression();
     }
 
     private static Set<String> dependencies(

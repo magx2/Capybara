@@ -1,0 +1,77 @@
+from /dev/capylang/generator/java/JavaAnnotation import { JavaAnnotation }
+from /dev/capylang/generator/java/JavaConst import { JavaConst }
+from /dev/capylang/generator/java/JavaEnum import { JavaEnum }
+from /dev/capylang/generator/java/JavaFunctionParameter import { JavaFunctionParameter }
+from /dev/capylang/generator/java/JavaInterface import { * }
+from /dev/capylang/generator/java/JavaMethod import { JavaMethod }
+from /dev/capylang/generator/java/JavaPackage import { JavaPackage }
+from /dev/capylang/generator/java/JavaRecord import { JavaRecord }
+from /dev/capylang/generator/java/JavaType import { JavaType }
+
+fun generated_annotation(): JavaAnnotation =
+    JavaAnnotation { value: "@javax.annotation.processing.Generated(\"Capybara Compiler\")" }
+
+fun java_annotation_sort_key(annotation: JavaAnnotation): String =
+    annotation.value
+
+fun java_type_sort_key(type: JavaType): String =
+    type.name
+
+fun java_package_sort_key(java_package: JavaPackage): String =
+    java_package.packageName
+
+fun java_const_sort_key(constant: JavaConst): String =
+    constant.name + "\n" + java_type_sort_key(constant.type)
+
+fun java_method_sort_key(method: JavaMethod): String =
+    method.name
+        + "\n" + jah_padded_int(jah_list_size(method.parameters))
+        + java_function_parameter_sort_keys(method.parameters, 0)
+        + "\n" + java_type_sort_key(method.returnType)
+
+fun java_interface_sort_key(java_interface: JavaInterface): String =
+    java_interface.name().name + "\n" + java_interface_rank(java_interface)
+
+fun java_record_sort_key(record: JavaRecord): String =
+    java_type_sort_key(record.name)
+
+fun java_enum_sort_key(java_enum: JavaEnum): String =
+    java_type_sort_key(java_enum.name)
+
+private fun java_function_parameter_sort_keys(parameters: List[JavaFunctionParameter], idx: int): String =
+    match parameters[idx] with
+    case Some { parameter } ->
+        "\n" + java_type_sort_key(parameter.type)
+            + "\n" + parameter.generatedName
+            + "\n" + parameter.sourceName
+            + java_function_parameter_sort_keys(parameters, idx + 1)
+    case _ -> ""
+
+private fun java_interface_rank(java_interface: JavaInterface): int =
+    match java_interface with
+    case JavaNormalInterface { name, extendInterfaces, comments, methods, defaultMethods } -> 0
+    case JavaSealedInterface { name, extendInterfaces, comments, methods, permits, typeParameters, defaultMethods } -> 1
+
+private fun jah_padded_int(value: int): String =
+    jah_left_pad_int("" + value, 10)
+
+private fun jah_left_pad_int(value: String, width: int): String =
+    if jah_string_size(value) >= width
+    then value
+    else jah_left_pad_int("0" + value, width)
+
+private fun jah_string_size(value: String): int =
+    jah_string_size_scan(value, 0)
+
+private fun jah_string_size_scan(value: String, idx: int): int =
+    match value[idx] with
+    case Some _ -> jah_string_size_scan(value, idx + 1)
+    case _ -> idx
+
+private fun jah_list_size(values: List[T]): int =
+    jah_list_size_scan(values, 0)
+
+private fun jah_list_size_scan(values: List[T], idx: int): int =
+    match values[idx] with
+    case Some _ -> jah_list_size_scan(values, idx + 1)
+    case _ -> idx

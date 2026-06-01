@@ -5,7 +5,7 @@ import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.compiler.parser.SourceKindModule;
-import dev.capylang.generator.java.ReflectionValueInfoJava;
+import dev.capylang.compiler.ReflectionValueInfoJava;
 
 import java.nio.file.Path;
 import java.util.*;
