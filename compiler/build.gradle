@@ -232,6 +232,76 @@ public CompiledMatchExpression(CompiledExpression matchWith, java.util.List<Comp
             }
         }
 
+        def valueNameRewriter = new File(generatedJavaDir, 'dev/capylang/generator/java/ValueNameRewriter.java')
+        if (valueNameRewriter.exists()) {
+            def text = valueNameRewriter.text
+                    .replace('import dev.capylang.compiler.expression.CompiledExpressionIrModule.CompiledEffectBindExpression;\n', '')
+                    .replace('import dev.capylang.compiler.expression.CompiledExpressionIrModule.CompiledExpression;\n', '')
+                    .replace('import dev.capylang.compiler.expression.CompiledExpressionIrModule.CompiledLetExpression;\n', '')
+                    .replace('import dev.capylang.compiler.expression.CompiledExpressionIrModule.CompiledVariable;\n', '')
+            if (!text.contains('import dev.capylang.compiler.expression.CompiledExpression;')) {
+                text = text.replace(
+                    'package dev.capylang.generator.java;\n',
+                    '''package dev.capylang.generator.java;
+
+import dev.capylang.compiler.CompiledDataParentType;
+import dev.capylang.compiler.CompiledType;
+import dev.capylang.compiler.expression.CompiledEffectBindExpression;
+import dev.capylang.compiler.expression.CompiledExpression;
+import dev.capylang.compiler.expression.CompiledLetExpression;
+import dev.capylang.compiler.expression.CompiledVariable;
+'''
+                )
+            }
+            valueNameRewriter.text = text
+        }
+
+        def generatorJavaScope = new File(generatedJavaDir, 'dev/capylang/generator/java/Scope.java')
+        if (generatorJavaScope.exists()) {
+            def text = generatorJavaScope.text
+                    .replace('import dev.capylang.compiler.expression.CompiledExpressionIrModule.CompiledExpression;\n', '')
+                    .replace('dev.capylang.compiler.ScopeModule.', 'dev.capylang.generator.java.ScopeModule.')
+            if (!text.contains('import dev.capylang.compiler.expression.CompiledExpression;')) {
+                text = text.replace(
+                    'package dev.capylang.generator.java;\n',
+                    '''package dev.capylang.generator.java;
+
+import dev.capylang.compiler.expression.CompiledExpression;
+'''
+                )
+            }
+            if (!text.contains('public static final Scope EMPTY = ScopeModule.EMPTY;')) {
+                text = text.replace(
+                        'implements dev.capylang.CapybaraDataValue {@Override',
+                        'implements dev.capylang.CapybaraDataValue {public static final Scope EMPTY = ScopeModule.EMPTY;\n@Override'
+                )
+                text = text.replace(
+                        'implements dev.capylang.CapybaraDataValue {public Scope ',
+                        'implements dev.capylang.CapybaraDataValue {public static final Scope EMPTY = ScopeModule.EMPTY;\npublic Scope '
+                )
+            }
+            generatorJavaScope.text = text
+        }
+
+        def generatorJavaScopeModule = new File(generatedJavaDir, 'dev/capylang/generator/java/ScopeModule.java')
+        if (generatorJavaScopeModule.exists()) {
+            generatorJavaScopeModule.text = generatorJavaScopeModule.text
+                    .replace('dev.capylang.compiler.ScopeModule.', 'dev.capylang.generator.java.ScopeModule.')
+        }
+
+        ['UniqueNameScopeExpression.java', 'ScopeExpression.java'].each { name ->
+            def scopeHelperData = new File(generatedJavaDir, "dev/capylang/generator/java/${name}")
+            if (scopeHelperData.exists() && !scopeHelperData.text.contains('import dev.capylang.compiler.expression.CompiledExpression;')) {
+                scopeHelperData.text = scopeHelperData.text.replace(
+                        'package dev.capylang.generator.java;\n',
+                        '''package dev.capylang.generator.java;
+
+import dev.capylang.compiler.expression.CompiledExpression;
+'''
+                )
+            }
+        }
+
         def compiledField = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledField.java')
         if (compiledField.exists() && !compiledField.text.contains('public CompiledField(java.lang.String name, CompiledType type)')) {
             compiledField.text = compiledField.text.replace(

@@ -1,0 +1,431 @@
+from /capy/collection/Dict import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/String import { * }
+
+data CompiledExpression { <native> }
+
+private fun js_scope_dict_contains_value(values: Dict[T], value: T): bool =
+    values.entries().any(entry => entry[1] == value)
+
+data Scope {
+    valueIdx: int,
+    localValues: Set[String],
+    javaLocalValues: Set[String],
+    valueNameToUniqueName: Dict[String],
+    statements: List[String],
+    expression: Option[String],
+    moduleHelperClass: Option[String]
+}
+
+data UniqueNameScopeExpression {
+    uniqueName: String,
+    scope: Scope,
+    expression: CompiledExpression
+}
+
+data ReservedJavaLocalName {
+    logicalName: String,
+    javaName: String,
+    nextValueIdx: int
+}
+
+data ScopeExpression {
+    scope: Scope,
+    expression: CompiledExpression
+}
+
+data ExpressionScope {
+    expression: String,
+    scope: Scope
+}
+
+const EMPTY: Scope = Scope {
+    valueIdx: 0,
+    localValues: {},
+    javaLocalValues: {},
+    valueNameToUniqueName: {:},
+    statements: [],
+    expression: None {},
+    moduleHelperClass: None {}
+}
+
+fun Scope.add_value(name: String, expression: CompiledExpression): UniqueNameScopeExpression =
+    let java_name = js_scope_normalize_java_local_identifier(name)
+    if !this.localValues.contains(name) & !this.javaLocalValues.contains(java_name)
+    then
+        let updated_values = this.localValues + name
+        let updated_java_values = this.javaLocalValues + java_name
+        let updated_mappings = if name == java_name
+            then this.valueNameToUniqueName
+            else this.valueNameToUniqueName + (name, java_name)
+        UniqueNameScopeExpression {
+            uniqueName: java_name,
+            scope: Scope {
+                valueIdx: this.valueIdx,
+                localValues: updated_values,
+                javaLocalValues: updated_java_values,
+                valueNameToUniqueName: updated_mappings,
+                statements: this.statements,
+                expression: this.expression,
+                moduleHelperClass: this.moduleHelperClass
+            },
+            expression
+        }
+    else if this.localValues.contains(name)
+        then this.generate_unique_name(name, expression)
+        else this.reserve_unique_java_local_name(name, expression)
+
+fun Scope.add_statement(statement: String): Scope =
+    this.add_statement_unchecked(statement)
+
+fun Scope.add_local_value(name: String): Scope =
+    let java_name = js_scope_normalize_java_local_identifier(name)
+    if !this.localValues.contains(name) & !this.javaLocalValues.contains(java_name)
+    then
+        let updated_mappings = if name == java_name
+            then this.valueNameToUniqueName
+            else this.valueNameToUniqueName + (name, java_name)
+        Scope {
+            valueIdx: this.valueIdx,
+            localValues: this.localValues + name,
+            javaLocalValues: this.javaLocalValues + java_name,
+            valueNameToUniqueName: updated_mappings,
+            statements: this.statements,
+            expression: this.expression,
+            moduleHelperClass: this.moduleHelperClass
+        }
+    else if this.localValues.contains(name) & js_scope_option_string_equals(this.valueNameToUniqueName[name], java_name)
+        then this
+        else
+            let reserved = this.reserve_unique_java_local_name(name)
+            Scope {
+                valueIdx: reserved.nextValueIdx,
+                localValues: this.localValues + name,
+                javaLocalValues: this.javaLocalValues + reserved.javaName,
+                valueNameToUniqueName: this.valueNameToUniqueName + (name, reserved.javaName),
+                statements: this.statements,
+                expression: this.expression,
+                moduleHelperClass: this.moduleHelperClass
+            }
+
+fun Scope.with_reserved_java_local_name(name: String): Scope =
+    let java_name = js_scope_normalize_java_local_identifier(name)
+    if this.javaLocalValues.contains(java_name)
+    then this
+    else Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues + java_name,
+        valueNameToUniqueName: this.valueNameToUniqueName,
+        statements: this.statements,
+        expression: this.expression,
+        moduleHelperClass: this.moduleHelperClass
+    }
+
+fun Scope.without_reserved_java_local_name(name: String): Scope =
+    let java_name = js_scope_normalize_java_local_identifier(name)
+    if this.localValues.contains(name) | js_scope_option_string_equals(this.valueNameToUniqueName[name], java_name)
+    then this
+    else if js_scope_dict_contains_value(this.valueNameToUniqueName, java_name) | !this.javaLocalValues.contains(java_name)
+        then this
+        else Scope {
+            valueIdx: this.valueIdx,
+            localValues: this.localValues,
+            javaLocalValues: this.javaLocalValues - java_name,
+            valueNameToUniqueName: this.valueNameToUniqueName,
+            statements: this.statements,
+            expression: this.expression,
+            moduleHelperClass: this.moduleHelperClass
+        }
+
+private fun Scope.add_statement_unchecked(statement: String): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues,
+        valueNameToUniqueName: this.valueNameToUniqueName,
+        statements: this.statements + statement,
+        expression: this.expression,
+        moduleHelperClass: this.moduleHelperClass
+    }
+
+fun Scope.add_expression(expression: String): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues,
+        valueNameToUniqueName: this.valueNameToUniqueName,
+        statements: this.statements,
+        expression: Some { expression },
+        moduleHelperClass: this.moduleHelperClass
+    }
+
+private fun Scope.reserve_unique_java_local_name(baseName: String): ReservedJavaLocalName =
+    let normalized = js_scope_normalized_reserved_base_name(baseName, this.valueIdx)
+    js_scope_reserve_unique_java_local_name_scan(this.javaLocalValues, js_scope_normalized_base_name(normalized), js_scope_normalized_base_idx(normalized))
+
+private fun Scope.generate_unique_name(name: String, expression: CompiledExpression): UniqueNameScopeExpression =
+    let reserved = this.reserve_unique_java_local_name(name)
+    UniqueNameScopeExpression {
+        uniqueName: reserved.javaName,
+        scope: Scope {
+            valueIdx: reserved.nextValueIdx,
+            localValues: this.localValues + reserved.logicalName,
+            javaLocalValues: this.javaLocalValues + reserved.javaName,
+            valueNameToUniqueName: this.valueNameToUniqueName + (name, reserved.javaName) + (reserved.logicalName, reserved.javaName),
+            statements: this.statements,
+            expression: this.expression,
+            moduleHelperClass: this.moduleHelperClass
+        },
+        expression
+    }
+
+private fun Scope.reserve_unique_java_local_name(name: String, expression: CompiledExpression): UniqueNameScopeExpression =
+    let reserved = this.reserve_unique_java_local_name(name)
+    UniqueNameScopeExpression {
+        uniqueName: reserved.javaName,
+        scope: Scope {
+            valueIdx: reserved.nextValueIdx,
+            localValues: this.localValues + name,
+            javaLocalValues: this.javaLocalValues + reserved.javaName,
+            valueNameToUniqueName: this.valueNameToUniqueName + (name, reserved.javaName),
+            statements: this.statements,
+            expression: this.expression,
+            moduleHelperClass: this.moduleHelperClass
+        },
+        expression
+    }
+
+fun Scope.add_value_override(sourceName: String, targetName: String): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues,
+        valueNameToUniqueName: this.valueNameToUniqueName + (sourceName, targetName),
+        statements: this.statements,
+        expression: this.expression,
+        moduleHelperClass: this.moduleHelperClass
+    }
+
+fun Scope.get_statements(): List[String] =
+    this.statements
+
+fun Scope.get_expression(): String =
+    match this.expression with
+    case Some { value } -> value
+    case _ -> ""
+
+fun Scope.add(other: Scope): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues + other.localValues,
+        javaLocalValues: this.javaLocalValues + other.javaLocalValues,
+        valueNameToUniqueName: this.valueNameToUniqueName + other.valueNameToUniqueName,
+        statements: this.statements + other.statements,
+        expression: js_scope_union_string_option(this.expression, other.expression),
+        moduleHelperClass: js_scope_union_string_option(this.moduleHelperClass, other.moduleHelperClass)
+    }
+
+fun Scope.find_value_override(name: String): Option[String] =
+    this.valueNameToUniqueName[name]
+
+fun Scope.without_value_overrides(): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues,
+        valueNameToUniqueName: {:},
+        statements: this.statements,
+        expression: this.expression,
+        moduleHelperClass: this.moduleHelperClass
+    }
+
+fun Scope.with_statements(statements: List[String]): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues,
+        valueNameToUniqueName: this.valueNameToUniqueName,
+        statements,
+        expression: this.expression,
+        moduleHelperClass: this.moduleHelperClass
+    }
+
+fun Scope.declare_value(name: String, lastExpression: String, expression: CompiledExpression): ScopeExpression =
+    let unique = this.add_value(name, expression)
+    ScopeExpression {
+        scope: unique.scope.add_statement_unchecked("var " + unique.uniqueName + " = " + lastExpression),
+        expression: unique.expression
+    }
+
+fun Scope.declare_typed_value(name: String, javaType: String, lastExpression: String, expression: CompiledExpression): ScopeExpression =
+    let unique = this.add_value(name, expression)
+    ScopeExpression {
+        scope: unique.scope.add_statement_unchecked(javaType + " " + unique.uniqueName + " = " + lastExpression),
+        expression: unique.expression
+    }
+
+fun Scope.pop_expression(): ExpressionScope =
+    ExpressionScope {
+        expression: this.get_expression(),
+        scope: Scope {
+            valueIdx: this.valueIdx,
+            localValues: this.localValues,
+            javaLocalValues: this.javaLocalValues,
+            valueNameToUniqueName: this.valueNameToUniqueName,
+            statements: this.statements,
+            expression: None {},
+            moduleHelperClass: this.moduleHelperClass
+        }
+    }
+
+fun Scope.with_module_helper_class(moduleHelperClass: String): Scope =
+    Scope {
+        valueIdx: this.valueIdx,
+        localValues: this.localValues,
+        javaLocalValues: this.javaLocalValues,
+        valueNameToUniqueName: this.valueNameToUniqueName,
+        statements: this.statements,
+        expression: this.expression,
+        moduleHelperClass: Some { moduleHelperClass }
+    }
+
+private fun js_scope_option_string_equals(value: Option[String], expected: String): bool =
+    match value with
+    case Some { actual } -> actual == expected
+    case _ -> false
+
+private fun js_scope_union_string_option(left: Option[String], right: Option[String]): Option[String] =
+    if js_scope_option_string_present(left)
+    then left
+    else right
+
+private fun js_scope_option_string_present(value: Option[String]): bool =
+    match value with
+    case Some _ -> true
+    case _ -> false
+
+private fun js_scope_reserve_unique_java_local_name_scan(javaLocalValues: Set[String], baseName: String, idx: int): ReservedJavaLocalName =
+    let next_idx = idx + 1
+    let logical_name = baseName + "_j" + next_idx
+    let java_name = js_scope_normalize_java_local_identifier(logical_name)
+    if javaLocalValues.contains(java_name)
+    then js_scope_reserve_unique_java_local_name_scan(javaLocalValues, baseName, next_idx)
+    else ReservedJavaLocalName {
+        logicalName: logical_name,
+        javaName: java_name,
+        nextValueIdx: next_idx
+    }
+
+private fun js_scope_normalized_reserved_base_name(baseName: String, defaultIdx: int): Tuple[String, int] =
+    let idx = js_scope_last_generated_separator_index(baseName)
+    if idx >= 0 & js_scope_is_all_digits(baseName[idx + 2, js_scope_string_size(baseName)])
+    then (baseName[0, idx], js_scope_parse_positive_int(baseName[idx + 2, js_scope_string_size(baseName)], 0, 0))
+    else (baseName, defaultIdx)
+
+private fun js_scope_normalized_base_name(value: Tuple[String, int]): String =
+    value[0]
+
+private fun js_scope_normalized_base_idx(value: Tuple[String, int]): int =
+    value[1]
+
+private fun js_scope_last_generated_separator_index(value: String): int =
+    js_scope_last_generated_separator_index_scan(value, js_scope_string_size(value) - 2)
+
+private fun js_scope_last_generated_separator_index_scan(value: String, idx: int): int =
+    if idx < 0
+    then -1
+    else if value[idx, idx + 2] == "_j"
+        then idx
+        else js_scope_last_generated_separator_index_scan(value, idx - 1)
+
+private fun js_scope_is_all_digits(value: String): bool =
+    js_scope_string_size(value) > 0 & js_scope_is_all_digits_scan(value, 0)
+
+private fun js_scope_is_all_digits_scan(value: String, idx: int): bool =
+    match value[idx] with
+    case Some { char } ->
+        if js_scope_is_ascii_digit(char)
+        then js_scope_is_all_digits_scan(value, idx + 1)
+        else false
+    case _ -> true
+
+private fun js_scope_parse_positive_int(value: String, idx: int, acc: int): int =
+    match value[idx] with
+    case Some { char } -> js_scope_parse_positive_int(value, idx + 1, acc * 10 + js_scope_digit_value(char))
+    case _ -> acc
+
+private fun js_scope_digit_value(char: String): int =
+    match char with
+    case "0" -> 0
+    case "1" -> 1
+    case "2" -> 2
+    case "3" -> 3
+    case "4" -> 4
+    case "5" -> 5
+    case "6" -> 6
+    case "7" -> 7
+    case "8" -> 8
+    case "9" -> 9
+    case _ -> 0
+
+private fun js_scope_normalize_java_local_identifier(identifier: String): String =
+    if identifier == "_"
+    then "__unused"
+    else if js_scope_string_size(identifier) == 0
+        then "__value"
+        else
+            let normalized = js_scope_normalize_java_identifier_body(identifier, 0, "")
+            let candidate = if js_scope_is_java_identifier_start(normalized[0, 1])
+                then normalized
+                else "_" + normalized
+            if js_scope_is_java_keyword(candidate)
+            then candidate + "_"
+            else candidate
+
+private fun js_scope_normalize_java_identifier_body(identifier: String, idx: int, output: String): String =
+    match identifier[idx] with
+    case Some { char } ->
+        if js_scope_is_java_identifier_part(char)
+        then js_scope_normalize_java_identifier_body(identifier, idx + 1, output + char)
+        else js_scope_normalize_java_identifier_body(identifier, idx + 1, output + "_")
+    case _ -> output
+
+private fun js_scope_is_java_identifier_start(char: String): bool =
+    js_scope_is_ascii_letter(char) | char == "_" | char == "$"
+
+private fun js_scope_is_java_identifier_part(char: String): bool =
+    js_scope_is_java_identifier_start(char) | js_scope_is_ascii_digit(char)
+
+private fun js_scope_is_ascii_letter(char: String): bool =
+    match char with
+    case "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M" -> true
+    case "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z" -> true
+    case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m" -> true
+    case "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" -> true
+    case _ -> false
+
+private fun js_scope_is_ascii_digit(char: String): bool =
+    match char with
+    case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" -> true
+    case _ -> false
+
+private fun js_scope_is_java_keyword(value: String): bool =
+    match value with
+    case "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class" -> true
+    case "const", "continue", "default", "do", "double", "else", "enum", "extends", "false" -> true
+    case "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof" -> true
+    case "int", "interface", "long", "native", "new", "null", "package", "private", "protected" -> true
+    case "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized" -> true
+    case "this", "throw", "throws", "transient", "true", "try", "void", "volatile", "while" -> true
+    case _ -> false
+
+private fun js_scope_string_size(value: String): int =
+    js_scope_string_size_scan(value, 0)
+
+private fun js_scope_string_size_scan(value: String, idx: int): int =
+    match value[idx] with
+    case Some _ -> js_scope_string_size_scan(value, idx + 1)
+    case _ -> idx

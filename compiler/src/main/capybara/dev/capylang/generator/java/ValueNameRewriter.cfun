@@ -1,0 +1,29 @@
+from /dev/capylang/compiler/expression/CompiledExpressionIr import { CompiledEffectBindExpression, CompiledExpression, CompiledLetExpression, CompiledVariable }
+
+/// Rewrites a value occurrence when Java local-name collision handling has
+/// introduced a generated name. This mirrors the historical Java helper's
+/// public API; the remaining Java expression renderer still owns the wider
+/// scoping decisions during the renderer migration.
+fun rewrite_value_in_expression(target_name: String, unique_name: String, expression: CompiledExpression): CompiledExpression =
+    match expression with
+    case CompiledVariable { name, type, emptyShapeCompatible } ->
+        if name == target_name
+        then CompiledVariable { name: unique_name, type, emptyShapeCompatible: false }
+        else expression
+    case CompiledLetExpression { name, value, declaredType, rest } ->
+        if name == target_name
+        then CompiledLetExpression { name: unique_name, value, declaredType, rest }
+        else expression
+    case CompiledEffectBindExpression { name, source, payloadType, letType, declaredType, rest, effectType } ->
+        if name == target_name
+        then CompiledEffectBindExpression {
+            name: unique_name,
+            source,
+            payloadType,
+            letType,
+            declaredType,
+            rest,
+            effectType
+        }
+        else expression
+    case _ -> expression
