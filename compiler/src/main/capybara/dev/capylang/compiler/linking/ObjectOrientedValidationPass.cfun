@@ -1,10 +1,309 @@
+from /capy/lang/Option import { * }
+from /dev/capylang/compiler/parser/ObjectOriented import { * }
+from /dev/capylang/compiler/parser/ObjectOrientedModule import { * }
+
 /// Pure validation for object-oriented source.
-/// Tuple DTOs keep this generated compiler-main pass independent of the Capybara stdlib runtime.
+/// Parser-model inputs are normalized to compact tuple DTOs for the rule checks below.
 data String { <native> }
 data List[T] { <native> }
 
 fun String.`+`(value: any): String = <native>
 fun List[T].`+`(value: T): List[T] = <native>
+
+data OoValidationBuildState {
+    nextBlockId: int,
+    nextStatementId: int,
+    blocks: List[Tuple[int, List[int]]],
+    statements: List[Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]]
+}
+
+fun validate_object_oriented_modules(modules: List[ObjectOrientedModule]): List[Tuple[int, int, String, String]] =
+    validate_modules(oo_model_modules(modules, 0, []))
+
+private fun oo_model_modules(
+    modules: List[ObjectOrientedModule],
+    idx: int,
+    output: List[
+        Tuple[
+            String,
+            List[Tuple[String, String, List[Tuple[String, String]], List[String], List[String]]],
+            List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]],
+            List[Tuple[int, List[int]]],
+            List[Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]]
+        ]
+    ]
+): List[
+    Tuple[
+        String,
+        List[Tuple[String, String, List[Tuple[String, String]], List[String], List[String]]],
+        List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]],
+        List[Tuple[int, List[int]]],
+        List[Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]]
+    ]
+] =
+    match modules[idx] with
+    case Some { module } -> oo_model_modules(modules, idx + 1, output + oo_model_module(module))
+    case _ -> output
+
+private fun oo_model_module(
+    module: ObjectOrientedModule
+): Tuple[
+    String,
+    List[Tuple[String, String, List[Tuple[String, String]], List[String], List[String]]],
+    List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]],
+    List[Tuple[int, List[int]]],
+    List[Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]]
+] =
+    let definitions = oo_model_definitions(module.objectOriented().definitions(), 0, [])
+    let members = oo_model_definition_members(module.objectOriented().definitions(), oo_model_empty_state(), 0, [])
+    let state = members[0]
+    (module.moduleFile(), definitions, members[1], state.blocks, state.statements)
+
+private fun oo_model_empty_state(): OoValidationBuildState =
+    OoValidationBuildState { nextBlockId: 0, nextStatementId: 0, blocks: [], statements: [] }
+
+private fun oo_model_definitions(
+    definitions: List[TypeDeclaration],
+    idx: int,
+    output: List[Tuple[String, String, List[Tuple[String, String]], List[String], List[String]]]
+): List[Tuple[String, String, List[Tuple[String, String]], List[String], List[String]]] =
+    match definitions[idx] with
+    case Some { definition } ->
+        oo_model_definitions(definitions, idx + 1, output + oo_model_definition(definition))
+    case _ -> output
+
+private fun oo_model_definition(
+    definition: TypeDeclaration
+): Tuple[String, String, List[Tuple[String, String]], List[String], List[String]] =
+    match definition with
+    case ClassDeclaration { name, constructorParameters, parents, members, modifiers, comments, annotations, linkedAnnotations } ->
+        ("class", name, oo_model_parameters(constructorParameters), oo_model_parents(parents), modifiers)
+    case TraitDeclaration { name, parents, members, comments, annotations, linkedAnnotations } ->
+        ("trait", name, [], oo_model_parents(parents), [])
+    case InterfaceDeclaration { name, parents, members, comments, annotations, linkedAnnotations } ->
+        ("interface", name, [], oo_model_parents(parents), [])
+
+private fun oo_model_definition_name(definition: TypeDeclaration): String =
+    match definition with
+    case ClassDeclaration { name, constructorParameters, parents, members, modifiers, comments, annotations, linkedAnnotations } -> name
+    case TraitDeclaration { name, parents, members, comments, annotations, linkedAnnotations } -> name
+    case InterfaceDeclaration { name, parents, members, comments, annotations, linkedAnnotations } -> name
+
+private fun oo_model_definition_members(
+    definitions: List[TypeDeclaration],
+    state: OoValidationBuildState,
+    idx: int,
+    output: List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]]
+): Tuple[
+    OoValidationBuildState,
+    List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]]
+] =
+    match definitions[idx] with
+    case Some { definition } ->
+        let members = oo_model_members(oo_model_definition_name(definition), definition.members(), state, 0, output)
+        oo_model_definition_members(definitions, members[0], idx + 1, members[1])
+    case _ -> (state, output)
+
+private fun oo_model_members(
+    owner: String,
+    members: List[MemberDeclaration],
+    state: OoValidationBuildState,
+    idx: int,
+    output: List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]]
+): Tuple[
+    OoValidationBuildState,
+    List[Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]]
+] =
+    match members[idx] with
+    case Some { member } ->
+        let built = oo_model_member(owner, member, state)
+        oo_model_members(owner, members, built[0], idx + 1, output + built[1])
+    case _ -> (state, output)
+
+private fun oo_model_member(
+    owner: String,
+    member: MemberDeclaration,
+    state: OoValidationBuildState
+): Tuple[
+    OoValidationBuildState,
+    Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]
+] =
+    match member with
+    case FieldDeclaration { name, type, visibility, initializer, comments, annotations, linkedAnnotations } ->
+        let init = oo_model_optional_string(initializer)
+        (state, (owner, "field", name, type, visibility, [], false, oo_model_empty_body(), init[0], init[1], []))
+    case MethodDeclaration { name, parameters, returnType, visibility, modifiers, body, comments, annotations, linkedAnnotations } ->
+        let built_body = oo_model_optional_body(body, state)
+        let body_info = built_body[1]
+        (built_body[0], (owner, "method", name, returnType, visibility, modifiers, body_info[0], body_info[1], false, "", oo_model_parameters(parameters)))
+    case InitBlock { body, comments, annotations, linkedAnnotations } ->
+        let built_body = oo_model_block_body(body, state)
+        (built_body[0], (owner, "init", "init", "void", "public", [], true, built_body[1], false, "", []))
+
+private fun oo_model_optional_body(
+    body: Option[MethodBody],
+    state: OoValidationBuildState
+): Tuple[OoValidationBuildState, Tuple[bool, Tuple[String, String, int]]] =
+    match body with
+    case Some { value } ->
+        let built = oo_model_body(value, state)
+        (built[0], (true, built[1]))
+    case _ -> (state, (false, oo_model_empty_body()))
+
+private fun oo_model_body(body: MethodBody, state: OoValidationBuildState): Tuple[OoValidationBuildState, Tuple[String, String, int]] =
+    match body with
+    case ExpressionBody { expression } -> (state, ("expression", expression, -1))
+    case StatementBlock { statements } -> oo_model_block_body(StatementBlock { statements: statements }, state)
+
+private fun oo_model_block_body(block: StatementBlock, state: OoValidationBuildState): Tuple[OoValidationBuildState, Tuple[String, String, int]] =
+    let built = oo_model_block(block, state)
+    (built[0], ("block", "", built[1]))
+
+private fun oo_model_empty_body(): Tuple[String, String, int] =
+    ("none", "", -1)
+
+private fun oo_model_block(block: StatementBlock, state: OoValidationBuildState): Tuple[OoValidationBuildState, int] =
+    let id = state.nextBlockId
+    let start_state = OoValidationBuildState { nextBlockId: id + 1, nextStatementId: state.nextStatementId, blocks: state.blocks, statements: state.statements }
+    let built = oo_model_statements(block.statements, start_state, 0, [])
+    let built_state = built[0]
+    (OoValidationBuildState {
+        nextBlockId: built_state.nextBlockId,
+        nextStatementId: built_state.nextStatementId,
+        blocks: built_state.blocks + (id, built[1]),
+        statements: built_state.statements
+    }, id)
+
+private fun oo_model_statements(
+    statements: List[Statement],
+    state: OoValidationBuildState,
+    idx: int,
+    output: List[int]
+): Tuple[OoValidationBuildState, List[int]] =
+    match statements[idx] with
+    case Some { statement } ->
+        let built = oo_model_statement(statement, state)
+        oo_model_statements(statements, built[0], idx + 1, output + built[1])
+    case _ -> (state, output)
+
+private fun oo_model_statement(statement: Statement, state: OoValidationBuildState): Tuple[OoValidationBuildState, int] =
+    let id = state.nextStatementId
+    let start_state = OoValidationBuildState { nextBlockId: state.nextBlockId, nextStatementId: id + 1, blocks: state.blocks, statements: state.statements }
+    let built = oo_model_statement_row(id, statement, start_state)
+    let built_state = built[0]
+    (OoValidationBuildState {
+        nextBlockId: built_state.nextBlockId,
+        nextStatementId: built_state.nextStatementId,
+        blocks: built_state.blocks,
+        statements: built_state.statements + built[1]
+    }, id)
+
+private fun oo_model_statement_row(
+    id: int,
+    statement: Statement,
+    state: OoValidationBuildState
+): Tuple[
+    OoValidationBuildState,
+    Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]
+] =
+    match statement with
+    case LetStatement { name, type, expression } ->
+        let declared_type = oo_model_optional_string(type)
+        (state, oo_model_statement_dto(id, "let", name, declared_type[1], expression, [], oo_model_empty_body(), -1, -1, [], ""))
+    case LocalMethodStatement { name, parameters, returnType, body, comments } ->
+        let built_body = oo_model_body(body, state)
+        (built_body[0], oo_model_statement_dto(id, "local_method", name, "", "", oo_model_parameters(parameters), built_body[1], -1, -1, [], returnType))
+    case MutableVariableStatement { name, type, expression } ->
+        let declared_type = oo_model_optional_string(type)
+        (state, oo_model_statement_dto(id, "mutable", name, declared_type[1], expression, [], oo_model_empty_body(), -1, -1, [], ""))
+    case AssignmentStatement { name, expression } ->
+        (state, oo_model_statement_dto(id, "assignment", name, "", expression, [], oo_model_empty_body(), -1, -1, [], ""))
+    case ExpressionStatement { expression } ->
+        (state, oo_model_statement_dto(id, "expression", "", "", expression, [], oo_model_empty_body(), -1, -1, [], ""))
+    case ThrowStatement { expression } ->
+        (state, oo_model_statement_dto(id, "throw", "", "", expression, [], oo_model_empty_body(), -1, -1, [], ""))
+    case ReturnStatement { expression } ->
+        (state, oo_model_statement_dto(id, "return", "", "", expression, [], oo_model_empty_body(), -1, -1, [], ""))
+    case IfStatement { condition, thenBranch, elseBranch } ->
+        let then_block = oo_model_block(thenBranch, state)
+        let else_statement = oo_model_optional_statement(elseBranch, then_block[0])
+        (else_statement[0], oo_model_statement_dto(id, "if", "", "", condition, [], oo_model_empty_body(), then_block[1], else_statement[1], [], ""))
+    case TryCatchStatement { tryBlock, catches } ->
+        let try_block = oo_model_block(tryBlock, state)
+        let built_catches = oo_model_catches(catches, try_block[0], 0, [])
+        (built_catches[0], oo_model_statement_dto(id, "try", "", "", "", [], oo_model_empty_body(), try_block[1], -1, built_catches[1], ""))
+    case WhileStatement { condition, body } ->
+        let built_body = oo_model_block(body, state)
+        (built_body[0], oo_model_statement_dto(id, "while", "", "", condition, [], oo_model_empty_body(), built_body[1], -1, [], ""))
+    case DoWhileStatement { body, condition } ->
+        let built_body = oo_model_block(body, state)
+        (built_body[0], oo_model_statement_dto(id, "do_while", "", "", condition, [], oo_model_empty_body(), built_body[1], -1, [], ""))
+    case ForEachStatement { name, type, iterable, body } ->
+        let declared_type = oo_model_optional_string(type)
+        let built_body = oo_model_block(body, state)
+        (built_body[0], oo_model_statement_dto(id, "foreach", name, declared_type[1], iterable, [], oo_model_empty_body(), built_body[1], -1, [], ""))
+    case StatementBlock { statements } ->
+        let built_body = oo_model_block(StatementBlock { statements: statements }, state)
+        (built_body[0], oo_model_statement_dto(id, "block", "", "", "", [], oo_model_empty_body(), built_body[1], -1, [], ""))
+
+private fun oo_model_optional_statement(body: Option[Statement], state: OoValidationBuildState): Tuple[OoValidationBuildState, int] =
+    match body with
+    case Some { value } -> oo_model_statement(value, state)
+    case _ -> (state, -1)
+
+private fun oo_model_catches(
+    catches: List[CatchClause],
+    state: OoValidationBuildState,
+    idx: int,
+    output: List[Tuple[String, int]]
+): Tuple[OoValidationBuildState, List[Tuple[String, int]]] =
+    match catches[idx] with
+    case Some { catch_clause } ->
+        let built = oo_model_catch(catch_clause, state)
+        oo_model_catches(catches, built[0], idx + 1, output + built[1])
+    case _ -> (state, output)
+
+private fun oo_model_catch(catch_clause: CatchClause, state: OoValidationBuildState): Tuple[OoValidationBuildState, Tuple[String, int]] =
+    match catch_clause with
+    case CatchClause { name, body } ->
+        let built = oo_model_block(body, state)
+        (built[0], (name, built[1]))
+
+private fun oo_model_statement_dto(
+    id: int,
+    kind: String,
+    name: String,
+    declared_type: String,
+    raw_expression: String,
+    parameters: List[Tuple[String, String]],
+    body: Tuple[String, String, int],
+    body_id: int,
+    else_statement_id: int,
+    catches: List[Tuple[String, int]],
+    return_type: String
+): Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String] =
+    (id, kind, name, declared_type, raw_expression, parameters, body, body_id, else_statement_id, catches, return_type)
+
+private fun oo_model_parameters(parameters: List[Parameter]): List[Tuple[String, String]] =
+    oo_model_parameters_scan(parameters, 0, [])
+
+private fun oo_model_parameters_scan(parameters: List[Parameter], idx: int, output: List[Tuple[String, String]]): List[Tuple[String, String]] =
+    match parameters[idx] with
+    case Some { parameter } -> oo_model_parameters_scan(parameters, idx + 1, output + (parameter.name, parameter.type))
+    case _ -> output
+
+private fun oo_model_parents(parents: List[TypeReference]): List[String] =
+    oo_model_parents_scan(parents, 0, [])
+
+private fun oo_model_parents_scan(parents: List[TypeReference], idx: int, output: List[String]): List[String] =
+    match parents[idx] with
+    case Some { parent } -> oo_model_parents_scan(parents, idx + 1, output + parent.name)
+    case _ -> output
+
+private fun oo_model_optional_string(value: Option[String]): Tuple[bool, String] =
+    match value with
+    case Some { text } -> (true, text)
+    case _ -> (false, "")
 
 fun validate_modules(
     modules: List[

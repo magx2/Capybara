@@ -9,6 +9,7 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import dev.capylang.compiler.CompiledFunctionParameter;
 import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
 import dev.capylang.compiler.expression.*;
+import dev.capylang.compiler.linking.ObjectOrientedValidationPass;
 import dev.capylang.compiler.linking.TypeLinkingPass;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.ParserAst;
@@ -118,6 +119,23 @@ public class CapybaraCompiler {
         return typedOptional(value);
     }
 
+    private static CompilerError objectOrientedValidationError(List<?> tuple) {
+        return new CompilerError(
+                tupleIntAt(tuple, 0),
+                tupleIntAt(tuple, 1),
+                tupleStringAt(tuple, 2),
+                tupleStringAt(tuple, 3)
+        );
+    }
+
+    private static int tupleIntAt(List<?> tuple, int index) {
+        return ((Number) tuple.get(index)).intValue();
+    }
+
+    private static String tupleStringAt(List<?> tuple, int index) {
+        return (String) tuple.get(index);
+    }
+
     private static Optional<ObjectOriented.MethodBody> objectMethodBody(Optional value) {
         return typedOptional(value);
     }
@@ -165,11 +183,12 @@ public class CapybaraCompiler {
                     return ResultOps.error(error);
                 }
                 parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooParseResult).value();
-                var ooValidationResult = ObjectOrientedValidator.INSTANCE.validate(parsedObjectOrientedModules);
-                if (ooValidationResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
-                    return ResultOps.error(error);
+                var validationErrors = ObjectOrientedValidationPass.validateObjectOrientedModules(parsedObjectOrientedModules);
+                if (!validationErrors.isEmpty()) {
+                    var errors = new TreeSet<CompilerError>();
+                    validationErrors.forEach(error -> errors.add(objectOrientedValidationError(error)));
+                    return CompilerErrors.result(errors);
                 }
-                parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooValidationResult).value();
             }
 
             var functionalModules = rawModules.stream()
