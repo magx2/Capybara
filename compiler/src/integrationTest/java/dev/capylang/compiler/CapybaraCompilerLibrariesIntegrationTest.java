@@ -6,8 +6,10 @@ import org.junit.jupiter.api.Test;
 import dev.capylang.generator.GeneratedModule;
 import dev.capylang.generator.JavaGenerator;
 import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.compiler.parser.SourceKind;
 
-import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -22,22 +24,22 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 data Message { value: String }
                 fun make_message(value: String): Message = Message { value: value }
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new TreeSet<>()).modules();
+        var libraries = compiledModuleTreeSet(compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource, SourceKind.FUNCTIONAL)), new TreeSet<>()).modules());
 
         var consumerSource = """
                 from Library import { * }
                 fun consume(value: String): String = make_message(value).value
                 """;
-        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries));
+        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries));
 
         assertThat(generated.modules()).hasSize(1);
         var module = generated.modules().getFirst();
-        assertThat(module.relativePath()).isEqualTo(Path.of("foo", "app", "Consumer.java"));
+        assertThat(module.relativePath()).isEqualTo("foo/app/Consumer.java");
         assertThat(module.code()).contains("import static foo.lib.Library.*;");
         assertThat(module.code()).contains("makeMessage(value)");
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
-                .doesNotContain(Path.of("foo", "lib", "Library.java"));
+                .doesNotContain("foo/lib/Library.java");
     }
 
     @Test
@@ -69,12 +71,12 @@ class CapybaraCompilerLibrariesIntegrationTest {
                     if index == 0 then /capy/lang/Option.Some { value: this.group_value } else /capy/lang/Option.None {}
                 fun Match.groups(): List[/capy/lang/Option[String]] = [/capy/lang/Option.Some { value: this.group_value }]
                 """;
-        var libraries = compileProgram(List.of(
+        var libraries = compiledModuleTreeSet(compileProgram(List.of(
                 optionModule(),
                 stringModule(),
                 collectionsModule(),
-                new RawModule("Regex", "/capy/lang", regexLibrarySource)
-        ), new TreeSet<>()).modules();
+                new RawModule("Regex", "/capy/lang", regexLibrarySource, SourceKind.FUNCTIONAL)
+        ), new TreeSet<>()).modules());
 
         var consumerSource = """
                 from /capy/lang/Regex import { * }
@@ -98,11 +100,11 @@ class CapybaraCompilerLibrariesIntegrationTest {
                     case None -> ""
                 fun groups_count(input: String): int = regex/\\\\d+/.find(input).groups().size()
                 """;
-        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
+        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource, SourceKind.FUNCTIONAL)), libraries));
 
         assertThat(generated.modules()).hasSize(1);
         var module = generated.modules().getFirst();
-        assertThat(module.relativePath()).isEqualTo(Path.of("foo", "app", "RegexConsumer.java"));
+        assertThat(module.relativePath()).isEqualTo("foo/app/RegexConsumer.java");
         assertThat(module.code()).contains("fromLiteral(\"\\\\d+\", \"\")");
         assertThat(module.code()).contains("fromLiteral(\",\", \"\")");
     }
@@ -115,12 +117,18 @@ class CapybaraCompilerLibrariesIntegrationTest {
         return ((Result.Success<CompiledProgram>) result).value();
     }
 
+    private static TreeSet<CompiledModule> compiledModuleTreeSet(Collection<CompiledModule> modules) {
+        var sorted = new TreeSet<>(Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
+        sorted.addAll(modules);
+        return sorted;
+    }
+
     private static RawModule optionModule() {
         return new RawModule("Option", "/capy/lang", """
                 union Option[T] = Some[T] | None
                 data Some[T] { value: T }
                 data None {}
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static RawModule stringModule() {
@@ -128,7 +136,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 data String { <native> }
                 fun String.`?`(part: String): bool = <native>
                 fun String.replace(old: String, new: String): String = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 
     private static RawModule collectionsModule() {
@@ -136,6 +144,6 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 data List[T] { <native> }
                 fun List[T].`|`(map: T => Y): List[Y] = <native>
                 fun List[T].size(): int = <native>
-                """);
+                """, SourceKind.FUNCTIONAL);
     }
 }

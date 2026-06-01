@@ -10,6 +10,7 @@ import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.CompiledProgram;
 import capy.lang.Result;
 import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.compiler.parser.SourceKind;
 
 import java.util.Arrays;
 import java.util.List;
@@ -19,7 +20,7 @@ class CompilationTest {
     @ParameterizedTest(name = "{index}: should {0}")
     @MethodSource
     void test(String code) {
-        var rawModules = List.of(new RawModule("Main", "/capybara", code));
+        var rawModules = List.of(new RawModule("Main", "/capybara", code, SourceKind.FUNCTIONAL));
         System.out.println(" === PARSING === ");
         System.out.println(rawModules);
 

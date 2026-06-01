@@ -71,6 +71,10 @@ test {
 }
 
 sourceSets {
+    main {
+        java.srcDir file('src/main/compat-java')
+    }
+
     integrationTest {
         java.srcDir file('src/integrationTest/java')
         resources.srcDir file('src/integrationTest/resources')

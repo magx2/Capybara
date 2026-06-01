@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import capy.lang.Result;
-import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.CompilerErrors;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.ParserAst;
@@ -867,12 +866,12 @@ class CapybaraParserTest {
                     0
                 """, SourceKind.FUNCTIONAL);
 
-        var error = (CompilerError) method.invoke(
+        var error = CompilerErrors.from(method.invoke(
                 parser,
                 module,
                 module.input(),
                 "Duplicate local function name: parse_positive_digit"
-        );
+        ).toString()).first();
 
         assertThat(error.line()).isEqualTo(2);
         assertThat(error.column()).isEqualTo(4);
