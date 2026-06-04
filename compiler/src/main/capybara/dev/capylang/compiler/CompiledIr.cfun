@@ -1,4 +1,6 @@
+from /capy/collection/Dict import { * }
 from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
 from /capy/lang/Option import { * }
 from /dev/capylang/compiler/CompiledAnnotation import { CompiledAnnotation }
 from /dev/capylang/compiler/CompiledObjectKind import { CompiledObjectKind }
@@ -56,6 +58,12 @@ data CompiledDict { valueType: CompiledType }
 data CompiledGenericTypeParameter { name: String }
 data CompiledFunctionType { argumentType: CompiledType, returnType: CompiledType }
 data CompiledTupleType { elementTypes: List[CompiledType] }
+
+data Scope {
+    localValues: Dict[CompiledType],
+    variableNameToUniqueName: Dict[String],
+    emptyShapeCompatibleValues: Set[String]
+}
 
 data CompiledField {
     name: String,
@@ -268,6 +276,21 @@ fun CompiledFunctionType.to_string(): String =
         + ", returnType=" + compiledTypeCompareKey(this.returnType)
         + "]"
 fun CompiledTupleType.to_string(): String = "CompiledTupleType[elementTypes=" + this.elementTypes + "]"
+fun Scope.is_empty_shape_compatible_value(name: String): bool =
+    this.emptyShapeCompatibleValues.contains(name)
+
+fun Scope.add(name: String, value: CompiledType): Scope =
+    this.add(name, value, false)
+
+fun Scope.add(name: String, value: CompiledType, emptyShapeCompatible: bool): Scope =
+    Scope {
+        localValues: this.localValues + (name, value),
+        variableNameToUniqueName: this.variableNameToUniqueName,
+        emptyShapeCompatibleValues: if emptyShapeCompatible
+            then this.emptyShapeCompatibleValues + name
+            else this.emptyShapeCompatibleValues - name
+    }
+
 fun CompiledField.to_string(): String =
     "CompiledField[name=" + this.name + ", type=" + compiledTypeCompareKey(this.type) + ", annotations=" + this.annotations + "]"
 fun CompiledFunctionParameter.to_string(): String =

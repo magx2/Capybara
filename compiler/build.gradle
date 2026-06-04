@@ -280,6 +280,7 @@ import dev.capylang.compiler.expression.CompiledVariable;
         if (generatorJavaScope.exists()) {
             def text = generatorJavaScope.text
                     .replace('import dev.capylang.compiler.expression.CompiledExpressionIrModule.CompiledExpression;\n', '')
+                    .replace('dev.capylang.compiler.Scope.', 'dev.capylang.generator.java.ScopeModule.')
                     .replace('dev.capylang.compiler.ScopeModule.', 'dev.capylang.generator.java.ScopeModule.')
             if (!text.contains('import dev.capylang.compiler.expression.CompiledExpression;')) {
                 text = text.replace(
@@ -306,6 +307,7 @@ import dev.capylang.compiler.expression.CompiledExpression;
         def generatorJavaScopeModule = new File(generatedJavaDir, 'dev/capylang/generator/java/ScopeModule.java')
         if (generatorJavaScopeModule.exists()) {
             generatorJavaScopeModule.text = generatorJavaScopeModule.text
+                    .replace('dev.capylang.compiler.Scope.', 'dev.capylang.generator.java.ScopeModule.')
                     .replace('dev.capylang.compiler.ScopeModule.', 'dev.capylang.generator.java.ScopeModule.')
         }
 

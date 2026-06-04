@@ -36,6 +36,7 @@ public class CapybaraExpressionCompiler {
     private static final String REFLECTION_INTRINSIC_MODULE = "capy/meta_prog/Reflection";
     private static final String REFLECTION_INTRINSIC_FUNCTION = "reflection";
     private static final String REFLECTION_DATA_VALUE_INFO = "DataValueInfo";
+    private static final Scope EMPTY_SCOPE = new Scope(Map.of(), Map.of(), Set.of());
     private static final Map<String, String> NORMALIZED_TYPE_ALIAS_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> SIMPLE_RAW_TYPE_NAME_CACHE = new ConcurrentHashMap<>();
 
@@ -260,12 +261,12 @@ public class CapybaraExpressionCompiler {
     }
 
     public Result<CompiledExpression> linkExpression(Expression expression) {
-        return linkExpression(expression, ScopeModule.EMPTY);
+        return linkExpression(expression, EMPTY_SCOPE);
     }
 
     public Result<CompiledExpression> linkExpressionForExpectedType(Expression expression, CompiledType expectedType) {
         return ResultOps.map(
-                linkArgumentForExpectedType(expression, ScopeModule.EMPTY, expectedType),
+                linkArgumentForExpectedType(expression, EMPTY_SCOPE, expectedType),
                 CoercedArgument::expression);
     }
 
@@ -2404,7 +2405,7 @@ public class CapybaraExpressionCompiler {
         if ("void".equals(trimmed) || trimmed.endsWith("[]")) {
             return Optional.empty();
         }
-        var linkedType = linkTypeInScope(CapybaraParser.parseTypeDescriptor(trimmed), ScopeModule.EMPTY);
+        var linkedType = linkTypeInScope(CapybaraParser.parseTypeDescriptor(trimmed), EMPTY_SCOPE);
         if (linkedType instanceof Result.Error<CompiledType>) {
             return Optional.empty();
         }
