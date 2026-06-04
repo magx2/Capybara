@@ -102,6 +102,22 @@ def generatedCapybaraJavaDir = layout.buildDirectory.dir('generated/sources/capy
 tasks.named('compileJava') {
     doFirst {
         def generatedJavaDir = generatedCapybaraJavaDir
+        def nativeProviderBootstrap = new File(generatedJavaDir, 'dev/capylang/NativeProviderBootstrap.java')
+        def antlrParserProvider = new File(generatedJavaDir, 'dev/capylang/compiler/parser/AntlrParserProvider.java')
+        if (nativeProviderBootstrap.exists() && antlrParserProvider.exists()) {
+            def relocatedBootstrap = new File(generatedJavaDir, 'dev/capylang/compiler/parser/AntlrParserNativeProviderBootstrap.java')
+            relocatedBootstrap.parentFile.mkdirs()
+            relocatedBootstrap.text = nativeProviderBootstrap.text
+                    .replace('package dev.capylang;', 'package dev.capylang.compiler.parser;\n\nimport dev.capylang.NativeProviders;')
+                    .replace('public final class NativeProviderBootstrap', 'public final class AntlrParserNativeProviderBootstrap')
+                    .replace('private NativeProviderBootstrap()', 'private AntlrParserNativeProviderBootstrap()')
+            nativeProviderBootstrap.delete()
+            antlrParserProvider.text = antlrParserProvider.text.replace(
+                    'dev.capylang.NativeProviderBootstrap.antlr_parser()',
+                    'dev.capylang.compiler.parser.AntlrParserNativeProviderBootstrap.antlr_parser()'
+            )
+        }
+
         new File(generatedJavaDir, 'dev/capylang/compiler/CompiledExpression.java').delete()
 
         def compiledIrModule = new File(generatedJavaDir, 'dev/capylang/compiler/CompiledIrModule.java')

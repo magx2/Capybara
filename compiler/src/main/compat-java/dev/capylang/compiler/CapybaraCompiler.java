@@ -60,6 +60,15 @@ public class CapybaraCompiler {
     private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
     private static final SourcePosition EMPTY_SOURCE_POSITION = new SourcePosition(0, 0, Optional.empty());
     private static volatile SortedSet<CompiledModule> bundledLibrariesCache;
+    private final AntlrParser parser;
+
+    public CapybaraCompiler() {
+        this(CapybaraParser.INSTANCE);
+    }
+
+    CapybaraCompiler(AntlrParser parser) {
+        this.parser = Objects.requireNonNull(parser);
+    }
 
     @SuppressWarnings("unchecked")
     private static <T> Optional<T> typedOptional(Optional value) {
@@ -184,11 +193,11 @@ public class CapybaraCompiler {
                     .toList();
             var parsedObjectOrientedModules = List.<ObjectOrientedModule>of();
             if (!objectOrientedModules.isEmpty()) {
-                var ooParseResult = CapybaraParser.INSTANCE.parseObjectOrientedModules(objectOrientedModules);
-                if (ooParseResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
-                    return ResultOps.error(error);
+                var ooParseResult = parser.parse_object_oriented_modules(objectOrientedModules);
+                if (ooParseResult instanceof AntlrParseResults.ObjectOrientedModulesParseError error) {
+                    return Results.error(error.message());
                 }
-                parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooParseResult).value();
+                parsedObjectOrientedModules = (List<ObjectOrientedModule>) ((AntlrParseResults.ParsedObjectOrientedModules) ooParseResult).value();
                 var validationErrors = ObjectOrientedValidationPass.validateObjectOrientedModules(parsedObjectOrientedModules);
                 if (!validationErrors.isEmpty()) {
                     var errors = new TreeSet<CompilerError>();
@@ -202,11 +211,11 @@ public class CapybaraCompiler {
                     .toList();
             var parsedProgram = new Program(List.of());
             if (!functionalModules.isEmpty()) {
-                var program = CapybaraParser.INSTANCE.parseModule(functionalModules);
-                if (program instanceof Result.Error<Program> error) {
-                    return ResultOps.error(error);
+                var program = parser.parse_modules(functionalModules);
+                if (program instanceof AntlrParseResults.ProgramParseError error) {
+                    return Results.error(error.message());
                 }
-                parsedProgram = ((Result.Success<Program>) program).value();
+                parsedProgram = (Program) ((AntlrParseResults.ParsedProgram) program).value();
             }
             var modulesForBundledLibraryCheck = functionalModules.isEmpty() ? rawModules : functionalModules;
             var mergedLibraries = mergeLibraries(modulesForBundledLibraryCheck, libraries);

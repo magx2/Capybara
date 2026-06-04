@@ -2,6 +2,7 @@ package dev.capylang.compiler.parser;
 
 
 import dev.capylang.compiler.ImportDeclaration;
+import dev.capylang.NativeImplementation;
 import capy.lang.Result;
 import dev.capylang.compiler.Results;
 import dev.capylang.compiler.parser.ParserAst.Module;
@@ -15,7 +16,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
 
-public class CapybaraParser {
+@NativeImplementation(qualifier = "antlr")
+public class CapybaraParser implements AntlrParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
@@ -82,6 +84,15 @@ public class CapybaraParser {
         }
     }
 
+    @Override
+    public AntlrParseResults.ProgramParseResult parse_modules(Object rawModules) {
+        var result = parseModule(rawModules(rawModules));
+        if (result instanceof Result.Success<Program> success) {
+            return new AntlrParseResults.ParsedProgram(success.value());
+        }
+        return new AntlrParseResults.ProgramParseError(Results.errorMessage(result));
+    }
+
     public synchronized Result<Module> parseModule(RawModule module) {
         try {
             var parsedSource = parseSource(module.input());
@@ -142,6 +153,15 @@ public class CapybaraParser {
         }
     }
 
+    @Override
+    public AntlrParseResults.ModuleParseResult parse_module(Object module) {
+        var result = parseModule(rawModule(module));
+        if (result instanceof Result.Success<Module> success) {
+            return new AntlrParseResults.ParsedModule(success.value());
+        }
+        return new AntlrParseResults.ModuleParseError(Results.errorMessage(result));
+    }
+
     public Result<ObjectOrientedModule> parseObjectOrientedModule(RawModule module) {
         try {
             var parsedSource = parseSource(module.input());
@@ -187,6 +207,15 @@ public class CapybaraParser {
         }
     }
 
+    @Override
+    public AntlrParseResults.ObjectOrientedModuleParseResult parse_object_oriented_module(Object module) {
+        var result = parseObjectOrientedModule(rawModule(module));
+        if (result instanceof Result.Success<ObjectOrientedModule> success) {
+            return new AntlrParseResults.ParsedObjectOrientedModule(success.value());
+        }
+        return new AntlrParseResults.ObjectOrientedModuleParseError(Results.errorMessage(result));
+    }
+
     public Result<List<ObjectOrientedModule>> parseObjectOrientedModules(Collection<RawModule> modules) {
         var parsedModules = new ArrayList<ObjectOrientedModule>();
         var errors = new java.util.TreeSet<ParserError>();
@@ -199,6 +228,24 @@ public class CapybaraParser {
             }
         }
         return errors.isEmpty() ? Results.success(List.copyOf(parsedModules)) : parserErrorResult(errors);
+    }
+
+    @Override
+    public AntlrParseResults.ObjectOrientedModulesParseResult parse_object_oriented_modules(Object modules) {
+        var result = parseObjectOrientedModules(rawModules(modules));
+        if (result instanceof Result.Success<List<ObjectOrientedModule>> success) {
+            return new AntlrParseResults.ParsedObjectOrientedModules(success.value());
+        }
+        return new AntlrParseResults.ObjectOrientedModulesParseError(Results.errorMessage(result));
+    }
+
+    private static RawModule rawModule(Object value) {
+        return (RawModule) value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<RawModule> rawModules(Object value) {
+        return (List<RawModule>) value;
     }
 
     private static String boundaryErrorMessage(RuntimeException exception) {

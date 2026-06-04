@@ -1,0 +1,16 @@
+union ProgramParseResult = ParsedProgram | ProgramParseError
+union ModuleParseResult = ParsedModule | ModuleParseError
+union ObjectOrientedModuleParseResult = ParsedObjectOrientedModule | ObjectOrientedModuleParseError
+union ObjectOrientedModulesParseResult = ParsedObjectOrientedModules | ObjectOrientedModulesParseError
+
+data ParsedProgram { value: any }
+data ProgramParseError { message: String }
+
+data ParsedModule { value: any }
+data ModuleParseError { message: String }
+
+data ParsedObjectOrientedModule { value: any }
+data ObjectOrientedModuleParseError { message: String }
+
+data ParsedObjectOrientedModules { value: any }
+data ObjectOrientedModulesParseError { message: String }
