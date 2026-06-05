@@ -1,0 +1,9 @@
+data CompiledProgram(
+    modules: List[CompiledModule],
+    objectOrientedModules: List[ObjectOrientedModule],
+    nativeProviders: NativeProviderManifest,
+    nativeProviderCatalog: NativeProviderCatalog)
+
+// TODO(codex): define all types for CompiledProgram from `master` branch, path `compiler/src/main/java/dev/capylang/compiler/CompiledProgram.java`
+
+data CompilerError(message: String, moduleName: String, line: int, column: int)

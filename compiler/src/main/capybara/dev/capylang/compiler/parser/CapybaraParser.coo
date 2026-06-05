@@ -1,0 +1,15 @@
+from Program import { Program }
+
+interface CapybaraParser {
+    fun parse(modules: List[RawModule]): Program
+}
+
+data RawModule(name: String, path: String, input: String, sourceKind: SourceKind)
+enum SourceKind {
+    FUNCTIONAL, OBJECT_ORIENTED
+}
+
+fun SourceKind.extension(): String =
+    match this with
+    case FUNCTIONAL -> "cfun"
+    case OBJECT_ORIENTED -> "coo"

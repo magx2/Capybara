@@ -1,0 +1,4 @@
+from /capy/io/Path import { Path }
+
+data GeneratedProgram(modules: List[GeneratedModule])
+data GeneratedModule(relativePath: Path, code: String)
