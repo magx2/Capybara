@@ -20,7 +20,6 @@ repositories {
 
 dependencies {
     implementation(project(":capy"))
-    implementation(project(":compiler"))
     testImplementation(gradleTestKit())
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
