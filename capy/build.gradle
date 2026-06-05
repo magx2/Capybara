@@ -29,6 +29,7 @@ import java.util.TreeSet
 
 plugins {
     id 'buildlogic.java-application-conventions'
+    id 'antlr'
     id "com.github.node-gradle.node" version "7.1.0"
     id "com.pswidersk.python-plugin" version "3.2.9"
 }
@@ -330,9 +331,10 @@ abstract class CapybaraPythonTestTask extends Exec {
 }
 
 dependencies {
-    implementation project(':compiler')
+    antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
+    implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
     implementation 'org.yaml:snakeyaml:2.4'
 
     testImplementation 'org.assertj:assertj-core:3.27.6'
@@ -340,10 +342,9 @@ dependencies {
 
 def capybaraVersion = project.version.toString()
 def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
+def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
 def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
 def capyResourcesDir = layout.buildDirectory.dir('resources/main')
-def compilerClassesDir = project(':compiler').layout.buildDirectory.dir('classes/java/main')
-def compilerResourcesDir = project(':compiler').layout.buildDirectory.dir('resources/main')
 def capybaraLibClassesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('classes/java/main')
 def capybaraLibResourcesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('resources/main')
 def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
@@ -401,12 +402,16 @@ def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactV
 def capyRuntimeClasspath = files(
         capyClassesDir,
         capyResourcesDir,
-        compilerClassesDir,
-        compilerResourcesDir,
         capyRuntimeDependencies
 )
 
 sourceSets {
+    integrationTest {
+        java.srcDir file('src/integrationTest/java')
+        resources.srcDir file('src/integrationTest/resources')
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
     e2eCfun {
         java.srcDir e2eCfunGeneratedJavaDir
         resources.srcDir file('src/e2e-cfun/resources')
@@ -429,6 +434,8 @@ sourceSets {
 }
 
 configurations {
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
     e2eCfunImplementation.extendsFrom testImplementation
     e2eCfunRuntimeOnly.extendsFrom testRuntimeOnly
     e2eCooImplementation.extendsFrom testImplementation
@@ -454,11 +461,16 @@ def e2eCooJavaNativeRuntimeDependencies = configurations.e2eCooJavaNativeRuntime
 }.files
 
 processResources {
+    dependsOn tasks.named('compileJava')
+    dependsOn ':lib:capybara-lib:linkCapybaraLinked'
     filesMatching('capybara-version.txt') {
         expand(version: capybaraVersion)
     }
     from(javaLibSourceDir) {
         into 'java-lib-src'
+    }
+    from(capybaraStdlibLinkedDir) {
+        into 'capy'
     }
 }
 
@@ -467,29 +479,33 @@ application {
 }
 
 test {
-    dependsOn ':compiler:classes'
+    dependsOn ':lib:capybara-lib:classes'
     classpath = files(
             sourceSets.test.output,
             capyClassesDir,
             capyResourcesDir,
-            compilerClassesDir,
-            compilerResourcesDir,
             testRuntimeDependencies
     )
+}
+
+def integrationTests = tasks.register('integrationTest', Test) {
+    description = 'Runs compiler integration tests.'
+    group = 'verification'
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    shouldRunAfter test
+    useJUnitPlatform()
 }
 
 def registerE2eTestTask = { String taskName, String taskDescription, sourceSet, runtimeDependencies, String compileJavaTaskName, testResultsDir ->
     tasks.register(taskName, InProcessCapybaraTestTask) {
         description = taskDescription
         group = 'verification'
-        dependsOn ':compiler:classes'
         dependsOn ':lib:capybara-lib:classes'
         dependsOn tasks.named(compileJavaTaskName)
         runtimeClasspath.from(files(
                 sourceSet.output,
                 sourceSets.main.output,
-                compilerClassesDir,
-                compilerResourcesDir,
                 capybaraLibClassesDir,
                 capybaraLibResourcesDir,
                 runtimeDependencies
@@ -531,7 +547,6 @@ def jsTests = tasks.register('jsTests', NodeTask) {
     description = 'Runs JavaScript tests.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     script.set(jsTestRunner)
     workingDir.set(layout.projectDirectory)
     args.set([jsTestSourcePath])
@@ -551,7 +566,6 @@ def pythonTests = tasks.register('pythonTests', Exec) {
     description = 'Runs Python CLI tests.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     configurePythonTask(delegate)
     workingDir layout.projectDirectory.asFile
     args pyTestRunner.asFile.absolutePath, pyTestSourcePath
@@ -594,7 +608,6 @@ def e2eCfunJsTests = tasks.register('e2e-cfun-js', CapybaraNodeTestTask) {
     description = 'Runs functional Capybara e2e tests on JavaScript.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     script.set(capybaraJsTestRunner)
     workingDir.set(layout.projectDirectory)
     getTests().convention([])
@@ -616,7 +629,6 @@ def e2eCooJsTests = tasks.register('e2e-coo-js', CapybaraNodeTestTask) {
     description = 'Runs object-oriented Capybara e2e tests on JavaScript.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     script.set(capybaraJsTestRunner)
     workingDir.set(layout.projectDirectory)
     getTests().convention([])
@@ -639,7 +651,6 @@ def e2eCooJsNativeTests = tasks.register('e2e-coo-js-native', CapybaraNodeTestTa
     description = 'Runs object-oriented JavaScript native provider Capybara e2e tests.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     dependsOn 'copyE2eCooJsNativeFixtures'
     script.set(capybaraJsTestRunner)
     workingDir.set(layout.projectDirectory)
@@ -666,7 +677,6 @@ def e2eCfunPythonTests = tasks.register('e2e-cfun-python', CapybaraPythonTestTas
     description = 'Runs functional Capybara e2e tests on Python.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     configurePythonTask(delegate)
     workingDir layout.projectDirectory.asFile
     getTests().convention([])
@@ -689,7 +699,6 @@ def e2eCooPythonTests = tasks.register('e2e-coo-python', CapybaraPythonTestTask)
     description = 'Runs object-oriented Capybara e2e tests on Python.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     configurePythonTask(delegate)
     workingDir layout.projectDirectory.asFile
     getTests().convention([])
@@ -712,7 +721,6 @@ def e2eCooPythonNativeTests = tasks.register('e2e-coo-python-native', CapybaraPy
     description = 'Runs object-oriented Python native provider Capybara e2e tests.'
     group = 'verification'
     dependsOn ':capy:classes'
-    dependsOn ':compiler:classes'
     dependsOn 'copyE2eCooPyNativeFixtures'
     configurePythonTask(delegate)
     workingDir layout.projectDirectory.asFile
@@ -750,6 +758,7 @@ tasks.register('e2eTests') {
 }
 
 check {
+    dependsOn integrationTests
     dependsOn e2eCfunTests
     dependsOn e2eCfunJsTests
     dependsOn e2eCfunPythonTests
@@ -769,7 +778,6 @@ def registerCapybaraE2eLinkTask = { String taskName, String taskDescription, Str
         description = taskDescription
         dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
         dependsOn ':capy:classes'
-        dependsOn ':compiler:classes'
 
         runtimeClasspath.from(capyRuntimeClasspath)
         inputDir.set(capybaraInputDir)
@@ -912,9 +920,6 @@ jar {
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     dependsOn configurations.runtimeClasspath
-    dependsOn ':compiler:classes'
-    from compilerClassesDir
-    from compilerResourcesDir
     from {
         configurations.runtimeClasspath
                 .findAll { it.exists() }
