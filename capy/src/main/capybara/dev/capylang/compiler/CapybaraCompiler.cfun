@@ -20,21 +20,21 @@ fun compile(
         column: 0
     }] })
     else pure(Left { CompiledProgram {
-        modules: compileModules(rawModules),
+        modules: compile_modules(rawModules),
         objectOrientedModules: [],
         nativeProviders: nativeProviders,
         nativeProviderCatalog: empty_native_provider_catalog()
     }})
 
-private fun compileModules(raw_modules: List[RawModule]): List[CompiledModule] =
+private fun compile_modules(raw_modules: List[RawModule]): List[CompiledModule] =
     match raw_modules[0] with
     case None -> []
-    case Some { raw_module } -> [compileModule(raw_module)] + compileModules(raw_modules[1:])
+    case Some { raw_module } -> [compile_module(raw_module)] + compile_modules(raw_modules[1:])
 
-private fun compileModule(raw_module: RawModule): CompiledModule =
+private fun compile_module(raw_module: RawModule): CompiledModule =
     CompiledModule {
         name: raw_module.name,
-        path: normalizeModulePath(raw_module.path),
+        path: normalize_module_path(raw_module.path),
         types: {:},
         visiblePrimitiveBackedTypes: {:},
         functions: [],
@@ -43,7 +43,7 @@ private fun compileModule(raw_module: RawModule): CompiledModule =
         staticImports: []
     }
 
-private fun normalizeModulePath(path: String): String =
+private fun normalize_module_path(path: String): String =
     if path.starts_with("/")
-    then normalizeModulePath(path[1, path.size()])
+    then normalize_module_path(path[1, path.size()])
     else path
