@@ -275,15 +275,12 @@ private fun js_string_body(value: String, idx: int, output: String): String =
     case _ -> output
 
 private fun js_string_char(char: String): String =
-    if char == "\\"
-    then "\\\\"
-    else if char == "'"
-        then "\\'"
-        else if char == '\r'
-            then "\\r"
-            else if char == '\n'
-                then "\\n"
-                else char
+    match char with
+    case "\\" -> "\\\\"
+    case "'" -> "\\'"
+    case '\r' -> "\\r"
+    case '\n' -> "\\n"
+    case _ -> char
 
 private fun is_valid_js_identifier(value: String): bool =
     match value[0] with

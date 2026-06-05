@@ -23,23 +23,16 @@ fun expression_forms(): List[Tuple[String, String]] = [
 ]
 
 fun literal_type(kind: String): String =
-    if kind == "BOOL"
-    then "BOOL"
-    else if kind == "BYTE"
-        then "BYTE"
-        else if kind == "INT"
-            then "INT"
-            else if kind == "LONG"
-                then "LONG"
-                else if kind == "FLOAT"
-                    then "FLOAT"
-                    else if kind == "DOUBLE"
-                        then "DOUBLE"
-                        else if kind == "STRING"
-                            then "STRING"
-                            else if kind == "NOTHING"
-                                then "NOTHING"
-                                else "ANY"
+    match kind with
+    case "BOOL" -> "BOOL"
+    case "BYTE" -> "BYTE"
+    case "INT" -> "INT"
+    case "LONG" -> "LONG"
+    case "FLOAT" -> "FLOAT"
+    case "DOUBLE" -> "DOUBLE"
+    case "STRING" -> "STRING"
+    case "NOTHING" -> "NOTHING"
+    case _ -> "ANY"
 
 fun higher_type_decision(
     left: String,
@@ -128,35 +121,37 @@ private fun analyze_tail_recursion_node(
     tail_position: bool
 ): Tuple[bool, int] =
     match find_expression_node(nodes, node_id, 0) with
-    case Some { node } ->
-        let kind = expression_node_kind(node)
-        if kind == "CALL"
-        then analyze_tail_recursion_call(nodes, node, self_call_names, parameter_type_descriptors, tail_position)
-        else if kind == "IF"
-            then merge_analysis_list([
-                analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
-                analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position),
-                analyze_child_at(nodes, expression_node_child_ids(node), 2, self_call_names, parameter_type_descriptors, tail_position)
-            ], 0, empty_analysis())
-            else if kind == "LET"
-                then merge_analysis_list([
-                    analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
-                    analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
-                ], 0, empty_analysis())
-                else if kind == "MATCH"
-                    then merge_analysis(
-                        analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
-                        analyze_children_from(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
-                    )
-                    else if kind == "MATCH_CASE"
-                        then analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, tail_position)
-                        else if kind == "MATCH_CASE_GUARD"
-                            then merge_analysis_list([
-                                analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
-                                analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
-                            ], 0, empty_analysis())
-                            else analyze_all_children(nodes, expression_node_child_ids(node), self_call_names, parameter_type_descriptors, false)
+    case Some { node } -> analyze_tail_recursion_existing_node(nodes, node, self_call_names, parameter_type_descriptors, tail_position)
     case _ -> empty_analysis()
+
+private fun analyze_tail_recursion_existing_node(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    node: Tuple[int, String, String, List[String], List[int]],
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String],
+    tail_position: bool
+): Tuple[bool, int] =
+    match expression_node_kind(node) with
+    case "CALL" -> analyze_tail_recursion_call(nodes, node, self_call_names, parameter_type_descriptors, tail_position)
+    case "IF" -> merge_analysis_list([
+            analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+            analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position),
+            analyze_child_at(nodes, expression_node_child_ids(node), 2, self_call_names, parameter_type_descriptors, tail_position)
+        ], 0, empty_analysis())
+    case "LET" -> merge_analysis_list([
+            analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+            analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
+        ], 0, empty_analysis())
+    case "MATCH" -> merge_analysis(
+            analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+            analyze_children_from(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
+        )
+    case "MATCH_CASE" -> analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, tail_position)
+    case "MATCH_CASE_GUARD" -> merge_analysis_list([
+            analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+            analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
+        ], 0, empty_analysis())
+    case _ -> analyze_all_children(nodes, expression_node_child_ids(node), self_call_names, parameter_type_descriptors, false)
 
 private fun analyze_tail_recursion_call(
     nodes: List[Tuple[int, String, String, List[String], List[int]]],
@@ -294,29 +289,19 @@ private fun ep_higher_ordered_primitive_type(left: String, right: String): Strin
     else left
 
 private fun ep_primitive_rank(name: String): int =
-    if name == "BYTE"
-    then 0
-    else if name == "INT"
-        then 1
-        else if name == "LONG"
-            then 2
-            else if name == "FLOAT"
-                then 3
-                else if name == "DOUBLE"
-                    then 4
-                    else if name == "STRING"
-                        then 5
-                        else if name == "BOOL"
-                            then 6
-                            else if name == "NOTHING"
-                                then 7
-                                else if name == "ANY"
-                                    then 8
-                                    else if name == "DATA"
-                                        then 9
-                                        else if name == "ENUM"
-                                            then 10
-                                            else 8
+    match name with
+    case "BYTE" -> 0
+    case "INT" -> 1
+    case "LONG" -> 2
+    case "FLOAT" -> 3
+    case "DOUBLE" -> 4
+    case "STRING" -> 5
+    case "BOOL" -> 6
+    case "NOTHING" -> 7
+    case "ANY" -> 8
+    case "DATA" -> 9
+    case "ENUM" -> 10
+    case _ -> 8
 
 private fun ep_is_effect_type(type_name: String): bool =
     type_name == "Effect" | ep_normalize_qualified_type_name(type_name) == "/capy/lang/Effect"

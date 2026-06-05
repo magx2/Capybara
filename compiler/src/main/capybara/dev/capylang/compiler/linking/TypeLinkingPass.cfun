@@ -533,52 +533,33 @@ private fun tl_compiled_data_type_as_compiled_type(type: CompiledDataType): Comp
     }
 
 private fun primitive_descriptor(name: String): String =
-    if name == "BYTE"
-    then "byte"
-    else if name == "INT"
-        then "int"
-        else if name == "LONG"
-            then "long"
-            else if name == "DOUBLE"
-                then "double"
-                else if name == "STRING"
-                    then "String"
-                    else if name == "BOOL"
-                        then "bool"
-                        else if name == "FLOAT"
-                            then "float"
-                            else if name == "ANY"
-                                then "any"
-                                else if name == "DATA"
-                                    then "data"
-                                    else if name == "ENUM"
-                                        then "enum"
-                                        else if name == "NOTHING"
-                                            then "nothing"
-                                            else name
+    match name with
+    case "BYTE" -> "byte"
+    case "INT" -> "int"
+    case "LONG" -> "long"
+    case "DOUBLE" -> "double"
+    case "STRING" -> "String"
+    case "BOOL" -> "bool"
+    case "FLOAT" -> "float"
+    case "ANY" -> "any"
+    case "DATA" -> "data"
+    case "ENUM" -> "enum"
+    case "NOTHING" -> "nothing"
+    case _ -> name
 
 private fun link_primitive_type_name(name: String): CompiledType =
-    if name == "BYTE"
-    then BYTE
-    else if name == "INT"
-        then INT
-        else if name == "LONG"
-            then LONG
-            else if name == "DOUBLE"
-                then DOUBLE
-                else if name == "STRING"
-                    then STRING
-                    else if name == "BOOL"
-                        then BOOL
-                        else if name == "FLOAT"
-                            then FLOAT
-                            else if name == "DATA"
-                                then DATA
-                                else if name == "ENUM"
-                                    then ENUM
-                                    else if name == "NOTHING"
-                                        then NOTHING
-                                        else ANY
+    match name with
+    case "BYTE" -> BYTE
+    case "INT" -> INT
+    case "LONG" -> LONG
+    case "DOUBLE" -> DOUBLE
+    case "STRING" -> STRING
+    case "BOOL" -> BOOL
+    case "FLOAT" -> FLOAT
+    case "DATA" -> DATA
+    case "ENUM" -> ENUM
+    case "NOTHING" -> NOTHING
+    case _ -> ANY
 
 private fun tl_parse_type_argument_ast(trimmed: String): Type =
     match findPrimitiveType(trimmed) with

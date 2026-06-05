@@ -59,24 +59,27 @@ fun validate_provider_declaration(
         else if !provider_native_body(provider)
             then np_failure("TypeMismatch: Native provider `" + provider_name(provider)
                 + "` must use `<native>` as its function body")
-            else if provider_target_kind(provider) == "BUILTIN_OR_COMPOSITE"
-                then np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` target type `" + provider_target_type(provider)
-                    + "` with qualifier `" + provider_qualifier(provider) + "` is not an interface")
-                else if provider_target_kind(provider) == "UNKNOWN"
-                    then np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` targets unknown type `" + provider_target_type(provider)
+            else
+                match provider_target_kind(provider) with
+                case "BUILTIN_OR_COMPOSITE" ->
+                    np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` target type `" + provider_target_type(provider)
+                        + "` with qualifier `" + provider_qualifier(provider) + "` is not an interface")
+                case "UNKNOWN" ->
+                    np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` targets unknown type `" + provider_target_type(provider)
                         + "` with qualifier `" + provider_qualifier(provider) + "`")
-                    else if provider_target_kind(provider) != "INTERFACE"
-                        then np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` target type `" + provider_target_type(provider)
-                            + "` resolves to " + provider_target_kind(provider)
-                            + " and is not an interface; qualifier `" + provider_qualifier(provider) + "`")
-                        else if np_list_contains_key(declared_provider_keys, provider_key(provider_interface_id(provider), provider_qualifier(provider)))
-                            then np_failure("DuplicateProvider: Duplicate native provider declaration for native provider `" + provider_name(provider)
-                                + "` and interface `" + provider_interface_id(provider)
-                                + "` with qualifier `" + provider_qualifier(provider) + "`")
-                            else if np_list_contains_string(declared_provider_symbols, provider_name(provider))
-                                then np_failure("DuplicateProvider: Native provider `" + provider_name(provider) + "` duplicates another provider symbol in module `" + provider_module_name(provider)
-                                    + "` for target `" + provider_target_type(provider) + "` with qualifier `" + provider_qualifier(provider) + "`")
-                                else np_success()
+                case "INTERFACE" ->
+                    if np_list_contains_key(declared_provider_keys, provider_key(provider_interface_id(provider), provider_qualifier(provider)))
+                    then np_failure("DuplicateProvider: Duplicate native provider declaration for native provider `" + provider_name(provider)
+                        + "` and interface `" + provider_interface_id(provider)
+                        + "` with qualifier `" + provider_qualifier(provider) + "`")
+                    else if np_list_contains_string(declared_provider_symbols, provider_name(provider))
+                        then np_failure("DuplicateProvider: Native provider `" + provider_name(provider) + "` duplicates another provider symbol in module `" + provider_module_name(provider)
+                            + "` for target `" + provider_target_type(provider) + "` with qualifier `" + provider_qualifier(provider) + "`")
+                        else np_success()
+                case _ ->
+                    np_failure("TypeMismatch: Native provider `" + provider_name(provider) + "` target type `" + provider_target_type(provider)
+                        + "` resolves to " + provider_target_kind(provider)
+                        + " and is not an interface; qualifier `" + provider_qualifier(provider) + "`")
 
 fun not_wired_error(provider: Tuple[String, String, String, String, int, bool, bool, String, String, String]): String =
     "NotWired: Native provider `" + provider_name(provider) + "` for interface `" + provider_interface_id(provider)
@@ -162,19 +165,18 @@ private fun validate_backend_required_fields(
     backend: String,
     binding: Tuple[String, String, String, String]
 ): Tuple[bool, String] =
-    if backend == "java"
-    then require_backend_text(provider, backend, "java.className", backend_binding_class_name(binding))
-    else if backend == "javascript"
-        then
-            let module_result = require_backend_text(provider, backend, "javascript.module", backend_binding_module_name(binding))
-            if module_result[0] == false
-            then module_result
-            else require_backend_text(provider, backend, "javascript.export", backend_binding_export_name(binding))
-        else
-            let module_result = require_backend_text(provider, backend, "python.module", backend_binding_module_name(binding))
-            if module_result[0] == false
-            then module_result
-            else require_backend_text(provider, backend, "python.className", backend_binding_class_name(binding))
+    match backend with
+    case "java" -> require_backend_text(provider, backend, "java.className", backend_binding_class_name(binding))
+    case "javascript" ->
+        let module_result = require_backend_text(provider, backend, "javascript.module", backend_binding_module_name(binding))
+        if module_result[0] == false
+        then module_result
+        else require_backend_text(provider, backend, "javascript.export", backend_binding_export_name(binding))
+    case _ ->
+        let module_result = require_backend_text(provider, backend, "python.module", backend_binding_module_name(binding))
+        if module_result[0] == false
+        then module_result
+        else require_backend_text(provider, backend, "python.className", backend_binding_class_name(binding))
 
 private fun require_backend_text(
     provider: Tuple[String, String, String, String, int, bool, bool, String, String, String],
@@ -189,11 +191,10 @@ private fun require_backend_text(
         + "` requires field `" + field_name + "`")
 
 private fun np_supported_backend_factories(backend: String): List[String] =
-    if backend == "java"
-    then ["constructor"]
-    else if backend == "javascript"
-        then ["new", "call"]
-        else ["call"]
+    match backend with
+    case "java" -> ["constructor"]
+    case "javascript" -> ["new", "call"]
+    case _ -> ["call"]
 
 private fun calls_provider_with_arguments_scan(expression: String, provider_name: String, index: int): bool =
     if index >= np_string_size(expression)

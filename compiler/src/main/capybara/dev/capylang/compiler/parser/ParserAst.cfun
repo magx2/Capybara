@@ -48,29 +48,19 @@ data FunctionType { argumentType: Type, returnType: Type }
 data TupleType { elementTypes: List[Type] }
 
 fun findPrimitiveType(name: String): Option[PrimitiveType] =
-    if name == BYTE.descriptor
-    then Some { BYTE }
-    else if name == INT.descriptor
-        then Some { INT }
-        else if name == LONG.descriptor
-            then Some { LONG }
-            else if name == DOUBLE.descriptor
-                then Some { DOUBLE }
-                else if name == STRING.descriptor
-                    then Some { STRING }
-                    else if name == BOOL.descriptor
-                        then Some { BOOL }
-                        else if name == FLOAT.descriptor
-                            then Some { FLOAT }
-                            else if name == ANY.descriptor
-                                then Some { ANY }
-                                else if name == DATA.descriptor
-                                    then Some { DATA }
-                                    else if name == ENUM.descriptor
-                                        then Some { ENUM }
-                                        else if name == NOTHING.descriptor
-                                            then Some { NOTHING }
-                                            else None {}
+    match name with
+    case "byte" -> Some { BYTE }
+    case "int" -> Some { INT }
+    case "long" -> Some { LONG }
+    case "double" -> Some { DOUBLE }
+    case "String" -> Some { STRING }
+    case "bool" -> Some { BOOL }
+    case "float" -> Some { FLOAT }
+    case "any" -> Some { ANY }
+    case "data" -> Some { DATA }
+    case "enum" -> Some { ENUM }
+    case "nothing" -> Some { NOTHING }
+    case _ -> None {}
 
 fun Type.name(): String =
     match this with

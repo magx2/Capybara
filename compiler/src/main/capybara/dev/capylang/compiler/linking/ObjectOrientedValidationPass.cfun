@@ -423,21 +423,20 @@ private fun validate_definition(
     let members = module_members(module)
     let blocks = module_blocks(module)
     let statements = module_statements(module)
-    if definition_kind(definition) == "class"
-    then
+    match definition_kind(definition) with
+    case "class" ->
         let modifier_errors = validate_duplicate_modifiers(file, "Class `" + name + "`", definition_modifiers(definition), errors)
         let class_errors = validate_class_modifiers(file, name, definition_modifiers(definition), modifier_errors)
         let parameter_errors = validate_duplicate_parameters(file, "Constructor `" + name + "`", definition_constructor_parameters(definition), class_errors)
         let parent_errors = validate_class_parents(file, name, definition_parents(definition), all_modules, parameter_errors)
         let member_errors = validate_class_members(file, name, definition_constructor_parameters(definition), members, blocks, statements, all_modules, definition, 0, [], parent_errors)
         validate_concrete_class_abstract_methods(file, name, members, definition_modifiers(definition), all_modules, definition, member_errors)
-    else if definition_kind(definition) == "trait"
-        then
-            let parent_errors = validate_non_class_parents(file, "Trait `" + name + "`", definition_parents(definition), all_modules, errors)
-            validate_trait_members(file, name, members, blocks, statements, all_modules, definition, 0, [], parent_errors)
-        else
-            let parent_errors = validate_interface_parents(file, name, definition_parents(definition), all_modules, errors)
-            validate_interface_members(file, name, members, 0, [], parent_errors)
+    case "trait" ->
+        let parent_errors = validate_non_class_parents(file, "Trait `" + name + "`", definition_parents(definition), all_modules, errors)
+        validate_trait_members(file, name, members, blocks, statements, all_modules, definition, 0, [], parent_errors)
+    case _ ->
+        let parent_errors = validate_interface_parents(file, name, definition_parents(definition), all_modules, errors)
+        validate_interface_members(file, name, members, 0, [], parent_errors)
 
 private fun validate_class_modifiers(file: String, name: String, modifiers: List[String], errors: List[Tuple[int, int, String, String]]): List[Tuple[int, int, String, String]] =
     if oo_list_contains(modifiers, "open") & oo_list_contains(modifiers, "abstract")
@@ -692,28 +691,27 @@ private fun validate_class_member(
     owner_definition: Tuple[String, String, List[Tuple[String, String]], List[String], List[String]],
     errors: List[Tuple[int, int, String, String]]
 ): List[Tuple[int, int, String, String]] =
-    if member_kind(member) == "field"
-    then
+    match member_kind(member) with
+    case "field" ->
         if !member_has_initializer(member) & !parameters_contain_name(constructor_parameters, member_name(member))
         then errors + error(file, "Field `" + class_name + "." + member_name(member) + "` must be initialized or backed by a constructor parameter")
         else errors
-    else if member_kind(member) == "method"
-        then
-            let owner = class_name + "." + member_name(member)
-            let parameter_errors = validate_duplicate_parameters(file, "Method `" + owner + "`", member_parameters(member), errors)
-            let shape_errors = validate_class_method_shape(file, class_name, member_name(member), member_visibility(member), member_modifiers(member), member_has_body(member), definition_is_abstract_class(owner_definition), parameter_errors)
-            let override_errors = validate_class_method_override(file, class_name, member, all_modules, owner_definition, shape_errors)
-            let unsafe_errors = validate_member_body_unsafe_run(file, owner, member_has_body(member), member_body(member), blocks, statements, override_errors)
-            let local_errors =
-                if member_has_body(member) & body_kind(member_body(member)) == "block"
-                then validate_block(file, owner, blocks, statements, body_block_id(member_body(member)), scope_from_parameters(member_parameters(member)), unsafe_errors)
-                else unsafe_errors
-            validate_method_return(file, owner, member_type(member), member_has_body(member), member_body(member), blocks, statements, local_errors)
-        else
-            let owner = class_name + ".init"
-            let unsafe_errors = validate_block_unsafe_run(file, owner, blocks, statements, member_body_block_id(member), errors)
-            let return_errors = validate_no_return_in_block(file, owner, blocks, statements, member_body_block_id(member), unsafe_errors)
-            validate_block(file, owner, blocks, statements, member_body_block_id(member), scope_from_parameters(constructor_parameters), return_errors)
+    case "method" ->
+        let owner = class_name + "." + member_name(member)
+        let parameter_errors = validate_duplicate_parameters(file, "Method `" + owner + "`", member_parameters(member), errors)
+        let shape_errors = validate_class_method_shape(file, class_name, member_name(member), member_visibility(member), member_modifiers(member), member_has_body(member), definition_is_abstract_class(owner_definition), parameter_errors)
+        let override_errors = validate_class_method_override(file, class_name, member, all_modules, owner_definition, shape_errors)
+        let unsafe_errors = validate_member_body_unsafe_run(file, owner, member_has_body(member), member_body(member), blocks, statements, override_errors)
+        let local_errors =
+            if member_has_body(member) & body_kind(member_body(member)) == "block"
+            then validate_block(file, owner, blocks, statements, body_block_id(member_body(member)), scope_from_parameters(member_parameters(member)), unsafe_errors)
+            else unsafe_errors
+        validate_method_return(file, owner, member_type(member), member_has_body(member), member_body(member), blocks, statements, local_errors)
+    case _ ->
+        let owner = class_name + ".init"
+        let unsafe_errors = validate_block_unsafe_run(file, owner, blocks, statements, member_body_block_id(member), errors)
+        let return_errors = validate_no_return_in_block(file, owner, blocks, statements, member_body_block_id(member), unsafe_errors)
+        validate_block(file, owner, blocks, statements, member_body_block_id(member), scope_from_parameters(constructor_parameters), return_errors)
 
 private fun validate_class_method_shape(
     file: String,
@@ -850,35 +848,34 @@ private fun validate_trait_member(
     owner_definition: Tuple[String, String, List[Tuple[String, String]], List[String], List[String]],
     errors: List[Tuple[int, int, String, String]]
 ): List[Tuple[int, int, String, String]] =
-    if member_kind(member) == "field"
-    then errors
-    else if member_kind(member) == "init"
-        then errors + error(file, "Trait `" + trait_name + "` cannot declare init blocks")
-        else
-            let owner = trait_name + "." + member_name(member)
-            let parameter_errors = validate_duplicate_parameters(file, "Method `" + owner + "`", member_parameters(member), errors)
-            let private_body_errors =
-                if member_visibility(member) == "private" & !member_has_body(member)
-                then parameter_errors + error(file, "Trait method `" + owner + "` cannot be private without a body")
-                else parameter_errors
-            let override_errors =
-                if oo_list_contains(member_modifiers(member), "override")
-                then private_body_errors + error(file, "Trait method `" + owner + "` cannot declare `override`")
-                else private_body_errors
-            let final_errors =
-                if oo_list_contains(member_modifiers(member), "final")
-                then override_errors + error(file, "Trait method `" + owner + "` cannot declare `final`")
-                else override_errors
-            let local_errors =
-                if member_visibility(member) != "public" & member_visibility(member) != "private"
-                then final_errors + error(file, "Trait method `" + owner + "` must be public or private")
-                else final_errors
-            let unsafe_errors = validate_member_body_unsafe_run(file, owner, member_has_body(member), member_body(member), blocks, statements, local_errors)
-            let block_errors =
-                if member_has_body(member) & body_kind(member_body(member)) == "block"
-                then validate_block(file, owner, blocks, statements, body_block_id(member_body(member)), scope_from_parameters(member_parameters(member)), unsafe_errors)
-                else unsafe_errors
-            validate_method_return(file, owner, member_type(member), member_has_body(member), member_body(member), blocks, statements, block_errors)
+    match member_kind(member) with
+    case "field" -> errors
+    case "init" -> errors + error(file, "Trait `" + trait_name + "` cannot declare init blocks")
+    case _ ->
+        let owner = trait_name + "." + member_name(member)
+        let parameter_errors = validate_duplicate_parameters(file, "Method `" + owner + "`", member_parameters(member), errors)
+        let private_body_errors =
+            if member_visibility(member) == "private" & !member_has_body(member)
+            then parameter_errors + error(file, "Trait method `" + owner + "` cannot be private without a body")
+            else parameter_errors
+        let override_errors =
+            if oo_list_contains(member_modifiers(member), "override")
+            then private_body_errors + error(file, "Trait method `" + owner + "` cannot declare `override`")
+            else private_body_errors
+        let final_errors =
+            if oo_list_contains(member_modifiers(member), "final")
+            then override_errors + error(file, "Trait method `" + owner + "` cannot declare `final`")
+            else override_errors
+        let local_errors =
+            if member_visibility(member) != "public" & member_visibility(member) != "private"
+            then final_errors + error(file, "Trait method `" + owner + "` must be public or private")
+            else final_errors
+        let unsafe_errors = validate_member_body_unsafe_run(file, owner, member_has_body(member), member_body(member), blocks, statements, local_errors)
+        let block_errors =
+            if member_has_body(member) & body_kind(member_body(member)) == "block"
+            then validate_block(file, owner, blocks, statements, body_block_id(member_body(member)), scope_from_parameters(member_parameters(member)), unsafe_errors)
+            else unsafe_errors
+        validate_method_return(file, owner, member_type(member), member_has_body(member), member_body(member), blocks, statements, block_errors)
 
 private fun validate_interface_members(
     file: String,
@@ -1112,29 +1109,20 @@ private fun validate_statement_unsafe_run(
     statements: List[Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]],
     errors: List[Tuple[int, int, String, String]]
 ): List[Tuple[int, int, String, String]] =
-    if statement_kind(statement) == "let"
-    then validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
-    else if statement_kind(statement) == "local_method"
-        then validate_body_unsafe_run(file, owner + "." + statement_name(statement), statement_body(statement), blocks, statements, errors)
-        else if statement_kind(statement) == "mutable"
-            then validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
-            else if statement_kind(statement) == "assignment"
-                then validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
-                else if statement_kind(statement) == "expression"
-                    then validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
-                    else if statement_kind(statement) == "throw"
-                        then validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
-                        else if statement_kind(statement) == "return"
-                            then validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
-                            else if statement_kind(statement) == "if"
-                                then validate_if_unsafe_run(file, owner, statement, blocks, statements, validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
-                                else if statement_kind(statement) == "try"
-                                    then validate_catches_unsafe_run(file, owner, statement_catches(statement), blocks, statements, 0, validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), errors))
-                                    else if statement_kind(statement) == "while" | statement_kind(statement) == "do_while"
-                                        then validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
-                                        else if statement_kind(statement) == "foreach"
-                                            then validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
-                                            else validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), errors)
+    match statement_kind(statement) with
+    case "let" -> validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
+    case "local_method" -> validate_body_unsafe_run(file, owner + "." + statement_name(statement), statement_body(statement), blocks, statements, errors)
+    case "mutable" -> validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
+    case "assignment" -> validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
+    case "expression" -> validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
+    case "throw" -> validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
+    case "return" -> validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors)
+    case "if" -> validate_if_unsafe_run(file, owner, statement, blocks, statements, validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
+    case "try" -> validate_catches_unsafe_run(file, owner, statement_catches(statement), blocks, statements, 0, validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), errors))
+    case "while" -> validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
+    case "do_while" -> validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
+    case "foreach" -> validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), validate_expression_unsafe_run(file, owner, statement_raw_expression(statement), errors))
+    case _ -> validate_block_unsafe_run(file, owner, blocks, statements, statement_body_id(statement), errors)
 
 private fun validate_if_unsafe_run(
     file: String,
@@ -1234,17 +1222,14 @@ private fun statement_return_validation(
     blocks: List[Tuple[int, List[int]]],
     statements: List[Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String]]
 ): Tuple[bool, bool] =
-    if statement_kind(statement) == "return"
-    then rv(true, true)
-    else if statement_kind(statement) == "throw"
-        then rv(true, false)
-        else if statement_kind(statement) == "if"
-            then if_return_validation(statement, blocks, statements)
-            else if statement_kind(statement) == "try"
-                then try_return_validation(statement, blocks, statements)
-                else if statement_kind(statement) == "do_while" | statement_kind(statement) == "block"
-                    then statement_block_return_validation(blocks, statements, statement_body_id(statement))
-                    else rv(false, false)
+    match statement_kind(statement) with
+    case "return" -> rv(true, true)
+    case "throw" -> rv(true, false)
+    case "if" -> if_return_validation(statement, blocks, statements)
+    case "try" -> try_return_validation(statement, blocks, statements)
+    case "do_while" -> statement_block_return_validation(blocks, statements, statement_body_id(statement))
+    case "block" -> statement_block_return_validation(blocks, statements, statement_body_id(statement))
+    case _ -> rv(false, false)
 
 private fun if_return_validation(
     statement: Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String],
@@ -1335,27 +1320,19 @@ private fun validate_statement(
     scope: List[Tuple[String, String]],
     errors: List[Tuple[int, int, String, String]]
 ): Tuple[List[Tuple[String, String]], List[Tuple[int, int, String, String]]] =
-    if statement_kind(statement) == "let"
-    then (declare_scope(scope, statement_name(statement), "IMMUTABLE"), errors)
-    else if statement_kind(statement) == "local_method"
-        then validate_local_method_statement(file, owner, statement, blocks, statements, scope, errors)
-        else if statement_kind(statement) == "mutable"
-            then (declare_scope(scope, statement_name(statement), "MUTABLE"), errors)
-            else if statement_kind(statement) == "assignment"
-                then (scope, validate_assignment(file, owner, statement_name(statement), scope, errors))
-                else if statement_kind(statement) == "expression"
-                    then (scope, validate_expression_statement(file, owner, statement_raw_expression(statement), errors))
-                    else if statement_kind(statement) == "if"
-                        then (scope, validate_if_statement(file, owner, statement, blocks, statements, scope, errors))
-                        else if statement_kind(statement) == "try"
-                            then (scope, validate_try_statement(file, owner, statement, blocks, statements, scope, errors))
-                            else if statement_kind(statement) == "while" | statement_kind(statement) == "do_while"
-                                then (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), scope, errors))
-                                else if statement_kind(statement) == "foreach"
-                                    then (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), declare_scope(scope, statement_name(statement), "IMMUTABLE"), errors))
-                                    else if statement_kind(statement) == "block"
-                                        then (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), scope, errors))
-                                        else (scope, errors)
+    match statement_kind(statement) with
+    case "let" -> (declare_scope(scope, statement_name(statement), "IMMUTABLE"), errors)
+    case "local_method" -> validate_local_method_statement(file, owner, statement, blocks, statements, scope, errors)
+    case "mutable" -> (declare_scope(scope, statement_name(statement), "MUTABLE"), errors)
+    case "assignment" -> (scope, validate_assignment(file, owner, statement_name(statement), scope, errors))
+    case "expression" -> (scope, validate_expression_statement(file, owner, statement_raw_expression(statement), errors))
+    case "if" -> (scope, validate_if_statement(file, owner, statement, blocks, statements, scope, errors))
+    case "try" -> (scope, validate_try_statement(file, owner, statement, blocks, statements, scope, errors))
+    case "while" -> (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), scope, errors))
+    case "do_while" -> (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), scope, errors))
+    case "foreach" -> (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), declare_scope(scope, statement_name(statement), "IMMUTABLE"), errors))
+    case "block" -> (scope, validate_block(file, owner, blocks, statements, statement_body_id(statement), scope, errors))
+    case _ -> (scope, errors)
 
 private fun validate_local_method_statement(
     file: String,
@@ -1520,25 +1497,21 @@ private fun collect_mutable_captures_statement(
     scope: List[Tuple[String, String]],
     captures: List[String]
 ): Tuple[List[Tuple[String, String]], List[String]] =
-    if statement_kind(statement) == "let"
-    then (declare_scope(scope, statement_name(statement), "IMMUTABLE"), collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
-    else if statement_kind(statement) == "local_method"
-        then (declare_scope(scope, statement_name(statement), "IMMUTABLE"), captures)
-        else if statement_kind(statement) == "mutable"
-            then (declare_scope(scope, statement_name(statement), "MUTABLE"), collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
-            else if statement_kind(statement) == "assignment" | statement_kind(statement) == "expression" | statement_kind(statement) == "throw" | statement_kind(statement) == "return"
-                then (scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
-                else if statement_kind(statement) == "if"
-                    then collect_mutable_captures_if(statement, blocks, statements, scope, captures)
-                    else if statement_kind(statement) == "try"
-                        then (scope, collect_mutable_captures_catches(statement_catches(statement), blocks, statements, scope, 0, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, captures)))
-                        else if statement_kind(statement) == "while" | statement_kind(statement) == "do_while"
-                            then (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures)))
-                            else if statement_kind(statement) == "foreach"
-                                then (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), declare_scope(scope, statement_name(statement), "IMMUTABLE"), collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures)))
-                                else if statement_kind(statement) == "block"
-                                    then (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, captures))
-                                    else (scope, captures)
+    match statement_kind(statement) with
+    case "let" -> (declare_scope(scope, statement_name(statement), "IMMUTABLE"), collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
+    case "local_method" -> (declare_scope(scope, statement_name(statement), "IMMUTABLE"), captures)
+    case "mutable" -> (declare_scope(scope, statement_name(statement), "MUTABLE"), collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
+    case "assignment" -> (scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
+    case "expression" -> (scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
+    case "throw" -> (scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
+    case "return" -> (scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures))
+    case "if" -> collect_mutable_captures_if(statement, blocks, statements, scope, captures)
+    case "try" -> (scope, collect_mutable_captures_catches(statement_catches(statement), blocks, statements, scope, 0, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, captures)))
+    case "while" -> (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures)))
+    case "do_while" -> (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures)))
+    case "foreach" -> (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), declare_scope(scope, statement_name(statement), "IMMUTABLE"), collect_mutable_captures_expression(statement_raw_expression(statement), scope, captures)))
+    case "block" -> (scope, collect_mutable_captures_block(blocks, statements, statement_body_id(statement), scope, captures))
+    case _ -> (scope, captures)
 
 private fun collect_mutable_captures_if(
     statement: Tuple[int, String, String, String, String, List[Tuple[String, String]], Tuple[String, String, int], int, int, List[Tuple[String, int]], String],
@@ -1926,18 +1899,16 @@ private fun method_key(name: String, arity: int): String =
     name + "/" + int_to_string(arity)
 
 private fun member_signature_key(member: Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]): String =
-    if member_kind(member) == "field"
-    then "field/" + member_name(member)
-    else if member_kind(member) == "method"
-        then "method/" + method_key(member_name(member), list_size(member_parameters(member)))
-        else ""
+    match member_kind(member) with
+    case "field" -> "field/" + member_name(member)
+    case "method" -> "method/" + method_key(member_name(member), list_size(member_parameters(member)))
+    case _ -> ""
 
 private fun member_display_name(member: Tuple[String, String, String, String, String, List[String], bool, Tuple[String, String, int], bool, String, List[Tuple[String, String]]]): String =
-    if member_kind(member) == "field"
-    then member_name(member)
-    else if member_kind(member) == "method"
-        then member_name(member) + "/" + int_to_string(list_size(member_parameters(member)))
-        else "init"
+    match member_kind(member) with
+    case "field" -> member_name(member)
+    case "method" -> member_name(member) + "/" + int_to_string(list_size(member_parameters(member)))
+    case _ -> "init"
 
 private fun definition_is_class(definition: Tuple[String, String, List[Tuple[String, String]], List[String], List[String]]): bool =
     definition_kind(definition) == "class"
@@ -1965,11 +1936,10 @@ private fun visibility_can_override(parent_visibility: String, child_visibility:
     visibility_rank(child_visibility) >= visibility_rank(parent_visibility)
 
 private fun visibility_rank(visibility: String): int =
-    if visibility == "private"
-    then 0
-    else if visibility == "protected"
-        then 1
-        else 2
+    match visibility with
+    case "private" -> 0
+    case "protected" -> 1
+    case _ -> 2
 
 private fun rv(definitely_returns: bool, has_value_return: bool): Tuple[bool, bool] =
     (definitely_returns, has_value_return)

@@ -259,12 +259,9 @@ private fun py_string_body(value: String, idx: int, output: String): String =
     case _ -> output
 
 private fun py_string_char(char: String): String =
-    if char == "\\"
-    then "\\\\"
-    else if char == "'"
-        then "\\'"
-        else if char == '\r'
-            then "\\r"
-            else if char == '\n'
-                then "\\n"
-                else char
+    match char with
+    case "\\" -> "\\\\"
+    case "'" -> "\\'"
+    case '\r' -> "\\r"
+    case '\n' -> "\\n"
+    case _ -> char

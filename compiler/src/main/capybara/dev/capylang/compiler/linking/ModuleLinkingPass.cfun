@@ -209,11 +209,10 @@ fun visible_members(
 fun is_visible_from_module(current_module_path: String, owner_module_path: String, visibility: String): bool =
     let current = normalize_module_path(current_module_path)
     let owner = normalize_module_path(owner_module_path)
-    if visibility == "PUBLIC"
-    then true
-    else if visibility == "LOCAL"
-        then current == owner | string_starts_with(current, owner + "/")
-        else current == owner
+    match visibility with
+    case "PUBLIC" -> true
+    case "LOCAL" -> current == owner | string_starts_with(current, owner + "/")
+    case _ -> current == owner
 
 private fun success(value: T): Tuple[bool, T, String] =
     (true, value, "")
@@ -557,13 +556,11 @@ private fun add_member_to_declaration_index(
     List[Tuple[String, List[Tuple[String, String, String]]]]
 ] =
     let kind = module_member_kind(member)
-    if kind == "FUNCTION"
-    then (append_member(index[0], member), index[1], index[2], index[3])
-    else if kind == "TYPE"
-        then (index[0], append_member(index[1], member), index[2], index[3])
-        else if kind == "DERIVER"
-            then (index[0], index[1], append_member(index[2], member), index[3])
-            else (index[0], index[1], index[2], append_member(index[3], member))
+    match kind with
+    case "FUNCTION" -> (append_member(index[0], member), index[1], index[2], index[3])
+    case "TYPE" -> (index[0], append_member(index[1], member), index[2], index[3])
+    case "DERIVER" -> (index[0], index[1], append_member(index[2], member), index[3])
+    case _ -> (index[0], index[1], index[2], append_member(index[3], member))
 
 private fun append_member(
     entries: List[Tuple[String, List[Tuple[String, String, String]]]],

@@ -157,29 +157,19 @@ data CompiledProgram {
 }
 
 fun findPrimitiveLinkedType(name: String): Option[PrimitiveLinkedType] =
-    if name == "BYTE"
-    then Some { BYTE }
-    else if name == "INT"
-        then Some { INT }
-        else if name == "LONG"
-            then Some { LONG }
-            else if name == "FLOAT"
-                then Some { FLOAT }
-                else if name == "DOUBLE"
-                    then Some { DOUBLE }
-                    else if name == "STRING"
-                        then Some { STRING }
-                        else if name == "BOOL"
-                            then Some { BOOL }
-                            else if name == "NOTHING"
-                                then Some { NOTHING }
-                                else if name == "ANY"
-                                    then Some { ANY }
-                                    else if name == "DATA"
-                                        then Some { DATA }
-                                        else if name == "ENUM"
-                                            then Some { ENUM }
-                                            else None {}
+    match name with
+    case "BYTE" -> Some { BYTE }
+    case "INT" -> Some { INT }
+    case "LONG" -> Some { LONG }
+    case "FLOAT" -> Some { FLOAT }
+    case "DOUBLE" -> Some { DOUBLE }
+    case "STRING" -> Some { STRING }
+    case "BOOL" -> Some { BOOL }
+    case "NOTHING" -> Some { NOTHING }
+    case "ANY" -> Some { ANY }
+    case "DATA" -> Some { DATA }
+    case "ENUM" -> Some { ENUM }
+    case _ -> None {}
 
 fun CompiledType.name(): String =
     compiledTypeName(this)
@@ -198,27 +188,18 @@ fun GenericDataType.visibility(): Visibility =
     genericDataTypeVisibility(this)
 
 fun PrimitiveLinkedType.ordinal(): int =
-    if this.name == "BYTE"
-    then 0
-    else if this.name == "INT"
-        then 1
-        else if this.name == "LONG"
-            then 2
-            else if this.name == "FLOAT"
-                then 3
-                else if this.name == "DOUBLE"
-                    then 4
-                    else if this.name == "STRING"
-                        then 5
-                        else if this.name == "BOOL"
-                            then 6
-                            else if this.name == "NOTHING"
-                                then 7
-                                else if this.name == "ANY"
-                                    then 8
-                                    else if this.name == "DATA"
-                                        then 9
-                                        else 10
+    match this.name with
+    case "BYTE" -> 0
+    case "INT" -> 1
+    case "LONG" -> 2
+    case "FLOAT" -> 3
+    case "DOUBLE" -> 4
+    case "STRING" -> 5
+    case "BOOL" -> 6
+    case "NOTHING" -> 7
+    case "ANY" -> 8
+    case "DATA" -> 9
+    case _ -> 10
 
 fun compiledTypeName(type: CompiledType): String =
     match type with

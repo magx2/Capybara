@@ -260,17 +260,13 @@ private fun escape_java_string(value: String, idx: int, output: String): String 
     case _ -> output
 
 private fun escaped_java_char(char: String): String =
-    if char == "\\"
-    then "\\\\"
-    else if char == "\""
-        then "\\\""
-        else if char == '\n'
-            then "\\n"
-            else if char == '\r'
-                then "\\r"
-                else if char == '\t'
-                    then "\\t"
-                    else char
+    match char with
+    case "\\" -> "\\\\"
+    case "\"" -> "\\\""
+    case '\n' -> "\\n"
+    case '\r' -> "\\r"
+    case '\t' -> "\\t"
+    case _ -> char
 
 private fun normalize_string_literal(raw: String): String =
     let size = rvi_string_size(raw)
@@ -308,27 +304,18 @@ private fun join_strings(values: List[String], separator: String, idx: int, outp
     case _ -> output
 
 private fun lower_primitive_name(name: String): String =
-    if name == "BYTE"
-    then "byte"
-    else if name == "INT"
-        then "int"
-        else if name == "LONG"
-            then "long"
-            else if name == "FLOAT"
-                then "float"
-                else if name == "DOUBLE"
-                    then "double"
-                    else if name == "BOOL"
-                        then "bool"
-                        else if name == "NOTHING"
-                            then "nothing"
-                            else if name == "ANY"
-                                then "any"
-                                else if name == "DATA"
-                                    then "data"
-                                    else if name == "ENUM"
-                                        then "enum"
-                                        else name
+    match name with
+    case "BYTE" -> "byte"
+    case "INT" -> "int"
+    case "LONG" -> "long"
+    case "FLOAT" -> "float"
+    case "DOUBLE" -> "double"
+    case "BOOL" -> "bool"
+    case "NOTHING" -> "nothing"
+    case "ANY" -> "any"
+    case "DATA" -> "data"
+    case "ENUM" -> "enum"
+    case _ -> name
 
 private fun strip_leading_slash(value: String): String =
     if rvi_string_size(value) > 0 & value[0, 1] == "/"

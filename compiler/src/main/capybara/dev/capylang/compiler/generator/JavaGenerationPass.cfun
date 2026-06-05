@@ -155,14 +155,10 @@ private fun java_string_body(value: String, idx: int, output: String): String =
     case _ -> output
 
 private fun java_string_char(char: String): String =
-    if char == "\\"
-    then "\\\\"
-    else if char == "\""
-        then "\\\""
-        else if char == '\n'
-            then "\\n"
-            else if char == '\r'
-                then "\\r"
-                else if char == '\t'
-                    then "\\t"
-                    else char
+    match char with
+    case "\\" -> "\\\\"
+    case "\"" -> "\\\""
+    case '\n' -> "\\n"
+    case '\r' -> "\\r"
+    case '\t' -> "\\t"
+    case _ -> char

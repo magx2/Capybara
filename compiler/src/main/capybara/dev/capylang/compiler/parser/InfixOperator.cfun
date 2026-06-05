@@ -31,61 +31,35 @@ enum InfixOperator {
 }
 
 fun fromSymbol(value: String): Option[InfixOperator] =
-    if value == "+"
-    then Some { InfixOperator.PLUS }
-    else if value == "-"
-        then Some { InfixOperator.MINUS }
-        else if value == "*"
-            then Some { InfixOperator.MUL }
-            else if value == "/"
-                then Some { InfixOperator.DIV }
-                else if value == "%"
-                    then Some { InfixOperator.MOD }
-                    else if value == "^"
-                        then Some { InfixOperator.POWER }
-                        else if value == ".and."
-                            then Some { InfixOperator.BITWISE_AND }
-                            else if value == ".nand."
-                                then Some { InfixOperator.BITWISE_NAND }
-                                else if value == ".or."
-                                    then Some { InfixOperator.BITWISE_OR }
-                                    else if value == ".xor."
-                                        then Some { InfixOperator.BITWISE_XOR }
-                                        else if value == ".not."
-                                            then Some { InfixOperator.BITWISE_NOT }
-                                            else if value == ">"
-                                                then Some { InfixOperator.GT }
-                                                else if value == "<"
-                                                    then Some { InfixOperator.LT }
-                                                    else if value == "=="
-                                                        then Some { InfixOperator.EQUAL }
-                                                        else if value == "!="
-                                                            then Some { InfixOperator.NOTEQUAL }
-                                                            else if value == "<="
-                                                                then Some { InfixOperator.LE }
-                                                                else if value == ">="
-                                                                    then Some { InfixOperator.GE }
-                                                                    else if value == "&"
-                                                                        then Some { InfixOperator.AND }
-                                                                        else if value == "?"
-                                                                            then Some { InfixOperator.QUESTION }
-                                                                            else if value == "~"
-                                                                                then Some { InfixOperator.TILDE }
-                                                                                else if value == "~~"
-                                                                                    then Some { InfixOperator.TILDE_TILDE }
-                                                                                    else if value == "~>"
-                                                                                        then Some { InfixOperator.TILDE_GT }
-                                                                                        else if value == "/>"
-                                                                                            then Some { InfixOperator.DIV_GT }
-                                                                                            else if value == "|"
-                                                                                                then Some { InfixOperator.PIPE }
-                                                                                                else if value == "|-"
-                                                                                                    then Some { InfixOperator.PIPE_MINUS }
-                                                                                                    else if value == "|*"
-                                                                                                        then Some { InfixOperator.PIPE_FLATMAP }
-                                                                                                        else if value == "|>"
-                                                                                                            then Some { InfixOperator.PIPE_REDUCE }
-                                                                                                            else None {}
+    match value with
+    case "+" -> Some { InfixOperator.PLUS }
+    case "-" -> Some { InfixOperator.MINUS }
+    case "*" -> Some { InfixOperator.MUL }
+    case "/" -> Some { InfixOperator.DIV }
+    case "%" -> Some { InfixOperator.MOD }
+    case "^" -> Some { InfixOperator.POWER }
+    case ".and." -> Some { InfixOperator.BITWISE_AND }
+    case ".nand." -> Some { InfixOperator.BITWISE_NAND }
+    case ".or." -> Some { InfixOperator.BITWISE_OR }
+    case ".xor." -> Some { InfixOperator.BITWISE_XOR }
+    case ".not." -> Some { InfixOperator.BITWISE_NOT }
+    case ">" -> Some { InfixOperator.GT }
+    case "<" -> Some { InfixOperator.LT }
+    case "==" -> Some { InfixOperator.EQUAL }
+    case "!=" -> Some { InfixOperator.NOTEQUAL }
+    case "<=" -> Some { InfixOperator.LE }
+    case ">=" -> Some { InfixOperator.GE }
+    case "&" -> Some { InfixOperator.AND }
+    case "?" -> Some { InfixOperator.QUESTION }
+    case "~" -> Some { InfixOperator.TILDE }
+    case "~~" -> Some { InfixOperator.TILDE_TILDE }
+    case "~>" -> Some { InfixOperator.TILDE_GT }
+    case "/>" -> Some { InfixOperator.DIV_GT }
+    case "|" -> Some { InfixOperator.PIPE }
+    case "|-" -> Some { InfixOperator.PIPE_MINUS }
+    case "|*" -> Some { InfixOperator.PIPE_FLATMAP }
+    case "|>" -> Some { InfixOperator.PIPE_REDUCE }
+    case _ -> None {}
 
 fun symbol(operator: InfixOperator): String =
     match operator with
