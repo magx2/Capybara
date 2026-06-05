@@ -12,7 +12,7 @@ from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 from /capy/serialization/Json import { * }
 from /dev/capylang/compiler/CapybaraCompiler import { compile }
-from /dev/capylang/compiler/CompiledProgram import { CompiledModule, CompiledProgram, CompilerError, NativeProviderManifest, empty_native_provider_catalog, empty_native_provider_manifest }
+from /dev/capylang/compiler/CompiledProgram import { CompiledModule, CompiledProgram, CompilerError, NativeProviderCatalog, NativeProviderManifest, empty_native_provider_catalog, empty_native_provider_manifest }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 from /dev/capylang/compiler/parser/RawModule import { FUNCTIONAL, OBJECT_ORIENTED, RawModule, SourceKind }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedModule, GeneratedProgram }
@@ -44,7 +44,7 @@ fun execute_generate(args: List[String]): Effect[/capy/lang/Program] =
 fun execute_compile_generate(args: List[String]): Effect[/capy/lang/Program] =
     match parseCompileGenerateOptions(args) with
     case UsageError { message } -> usageError(message)
-    case ParsedArgs { options } -> runCompileGenerate(options)
+    case ParsedArgs { options } -> run_compile_generate(options)
 
 fun execute_package(args: List[String]): Effect[/capy/lang/Program] =
     match parsePackageOptions(args) with
@@ -489,16 +489,23 @@ fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
 private fun compileConfiguration(options: CompileOptions): Result[CompileConfiguration] =
     if options.compile_tests
     then Error { message: "`compile --compile-tests` is not available until test augmentation is translated to CFUN." }
-    else
-        match readLibraryModules(options.libs) with
+    else compilerConfiguration(options.libs, options.native_wiring)
+
+private fun compileGenerateConfiguration(options: CompileGenerateOptions): Result[CompileConfiguration] =
+    if options.compile_tests
+    then Error { message: "`compile-generate --compile-tests` is not available until test augmentation is translated to CFUN." }
+    else compilerConfiguration(options.libs, options.native_wiring)
+
+private fun compilerConfiguration(libs: Option[String], nativeWiring: Option[String]): Result[CompileConfiguration] =
+    match readLibraryModules(libs) with
+    case Error e -> e
+    case Success { libraries } ->
+        match readNativeProviderManifest(nativeWiring) with
         case Error e -> e
-        case Success { libraries } ->
-            match readNativeProviderManifest(options.native_wiring) with
-            case Error e -> e
-            case Success { native_providers } -> Success { CompileConfiguration {
-                libraries: libraries,
-                native_providers: native_providers
-            }}
+        case Success { native_providers } -> Success { CompileConfiguration {
+            libraries: libraries,
+            native_providers: native_providers
+        }}
 
 private fun readLibraryModules(libs: Option[String]): Result[Set[CompiledModule]] =
     match libs with
@@ -506,12 +513,12 @@ private fun readLibraryModules(libs: Option[String]): Result[Set[CompiledModule]
     case Some { value } ->
         if value.trim().is_empty()
         then Success { {} }
-        else Error { message: "`compile --libs` is not available until linked program deserialization is translated to CFUN." }
+        else Error { message: "`--libs` is not available until linked program deserialization is translated to CFUN." }
 
-private fun readNativeProviderManifest(native_wiring: Option[String]): Result[NativeProviderManifest] =
-    match native_wiring with
+private fun readNativeProviderManifest(nativeWiring: Option[String]): Result[NativeProviderManifest] =
+    match nativeWiring with
     case None -> Success { empty_native_provider_manifest() }
-    case Some { _ } -> Error { message: "`compile --native-wiring` is not available until native provider manifest deserialization is translated to CFUN." }
+    case Some { _ } -> Error { message: "`--native-wiring` is not available until native provider manifest deserialization is translated to CFUN." }
 
 private fun validateInputDirectory(path: Path, raw_path: String): Effect[Result[Path]] =
     exists(path).flat_map(present =>
@@ -534,6 +541,114 @@ private fun validateOutputDirectory(path: Path, raw_path: String): Effect[Result
             else Error { message: "Compile output path is not a directory: " + raw_path }
         )
     )
+
+private fun compileSourceDirectory(inputPath: Path, rawInput: String, configuration: CompileConfiguration): Effect[Either[CompiledProgram, List[CompilerError]]] =
+    validateInputDirectory(inputPath, rawInput).flat_map(inputResult =>
+        match inputResult with
+        case Error { message } -> pure(Right { [CompilerError {
+            message: message,
+            moduleName: "",
+            line: 0,
+            column: 0
+        }] })
+        case Success _ ->
+            readSourceModules(inputPath, rawInput).flat_map(modulesResult =>
+                match modulesResult with
+                case Error { message } -> pure(Right { [CompilerError {
+                    message: message,
+                    moduleName: "",
+                    line: 0,
+                    column: 0
+                }] })
+                case Success { raw_modules } -> compile(
+                    raw_modules,
+                    configuration.libraries,
+                    configuration.native_providers,
+                    empty_native_provider_manifest()
+                )
+            )
+    )
+
+private fun writeCompileGenerateLinkedOutput(linkedOutput: Option[String], program: CompiledProgram): Effect[Result[String]] =
+    match linkedOutput with
+    case None -> pure(Success { "linked output skipped" })
+    case Some { rawLinkedOutput } ->
+        let linkedOutputPath = from_string(rawLinkedOutput)
+        validateOutputDirectory(linkedOutputPath, rawLinkedOutput).flat_map(outputResult =>
+            match outputResult with
+            case Error e -> pure(e)
+            case Success _ -> writeCompilationOutput(linkedOutputPath, program)
+        )
+
+private fun compileGenerateTests(
+    options: CompileGenerateOptions,
+    configuration: CompileConfiguration,
+    mainProgram: CompiledProgram
+): Effect[Result[Option[CompiledProgram]]] =
+    match options.test_input with
+    case None ->
+        match options.test_output with
+        case None -> pure(Success { None {} })
+        case Some _ -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
+    case Some { rawTestInput } ->
+        match options.test_output with
+        case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
+        case Some { rawTestOutput } ->
+            let testInputPath = from_string(rawTestInput)
+            let testOutputPath = from_string(rawTestOutput)
+            validateOutputDirectory(testOutputPath, rawTestOutput).flat_map(outputResult =>
+                match outputResult with
+                case Error e -> pure(e)
+                case Success _ ->
+                    compileSourceDirectory(testInputPath, rawTestInput, configuration.with(libraries: mergeLibraries(configuration.libraries, mainProgram))).flat_map(compilation =>
+                        match compilation with
+                        case Right { errors } -> pure(Error { message: compilerErrorsText(errors) })
+                        case Left { program } ->
+                            let testProgram = testGenerationProgram(options.output_type, mainProgram, program)
+                            pure(Success { Some { testProgram } })
+                    )
+            )
+
+private fun writeCompileGenerateTestOutput(options: CompileGenerateOptions, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
+    match testProgram with
+    case None -> pure(Success { "test output skipped" })
+    case Some { program } ->
+        match options.test_output with
+        case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
+        case Some { rawTestOutput } -> writeGeneratedProgram(from_string(rawTestOutput), generate(program, options.output_type))
+
+private fun mergeLibraries(libraries: Set[CompiledModule], program: CompiledProgram): Set[CompiledModule] =
+    addModulesToLibraries(libraries, program.modules)
+
+private fun addModulesToLibraries(libraries: Set[CompiledModule], modules: List[CompiledModule]): Set[CompiledModule] =
+    match modules[0] with
+    case None -> libraries
+    case Some { module } -> addModulesToLibraries(libraries + module, modules[1:])
+
+private fun testGenerationProgram(outputType: OutputType, mainProgram: CompiledProgram, testProgram: CompiledProgram): CompiledProgram =
+    match outputType with
+    case JAVASCRIPT | PYTHON -> mergePrograms(mainProgram, testProgram)
+    case JAVA -> testProgram
+
+private fun mergePrograms(first: CompiledProgram, second: CompiledProgram): CompiledProgram =
+    CompiledProgram {
+        modules: first.modules + second.modules,
+        objectOrientedModules: first.objectOrientedModules + second.objectOrientedModules,
+        nativeProviders: mergeNativeProviders(first.nativeProviders, second.nativeProviders),
+        nativeProviderCatalog: mergeNativeProviderCatalog(first.nativeProviderCatalog, second.nativeProviderCatalog)
+    }
+
+private fun mergeNativeProviders(first: NativeProviderManifest, second: NativeProviderManifest): NativeProviderManifest =
+    if first.providers.is_empty()
+    then second
+    else
+        first
+
+private fun mergeNativeProviderCatalog(first: NativeProviderCatalog, second: NativeProviderCatalog): NativeProviderCatalog =
+    NativeProviderCatalog {
+        declarations: first.declarations + second.declarations,
+        bindings: first.bindings + second.bindings
+    }
 
 private fun readSourceModules(root: Path, raw_root: String): Effect[Result[List[RawModule]]] =
     listSourceFiles(root).flat_map(files_result =>
@@ -863,8 +978,44 @@ private fun writeGeneratedModule(outputDir: Path, module: GeneratedModule): Effe
         case Success _ -> write_text(outputFile, module.code)
     )
 
-private fun runCompileGenerate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
-    commandNotReady("compile-generate")
+fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
+    match compileGenerateConfiguration(options) with
+    case Error { message } -> runtimeError(message)
+    case Success { configuration } ->
+        let inputPath = from_string(options.input)
+        let outputPath = from_string(options.output)
+        validateOutputDirectory(outputPath, options.output).flat_map(outputResult =>
+            match outputResult with
+            case Error { message } -> runtimeError(message)
+            case Success _ ->
+                compileSourceDirectory(inputPath, options.input, configuration).flat_map(compilation =>
+                    match compilation with
+                    case Right { errors } ->
+                        printCompilerErrors(errors)
+                            .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                    case Left { program } ->
+                        writeCompileGenerateLinkedOutput(options.linked_output, program).flat_map(linkedResult =>
+                            match linkedResult with
+                            case Error { message } -> runtimeError(message)
+                            case Success _ ->
+                                compileGenerateTests(options, configuration, program).flat_map(testResult =>
+                                    match testResult with
+                                    case Error { message } -> runtimeError(message)
+                                    case Success { testProgram } ->
+                                        writeGeneratedProgram(outputPath, generate(program, options.output_type)).flat_map(writeResult =>
+                                            match writeResult with
+                                            case Error { message } -> runtimeError(message)
+                                            case Success _ ->
+                                                writeCompileGenerateTestOutput(options, testProgram).flat_map(testWriteResult =>
+                                                    match testWriteResult with
+                                                    case Error { message } -> runtimeError(message)
+                                                    case Success _ -> pure(/capy/lang/Program.Success {})
+                                                )
+                                        )
+                                )
+                        )
+                )
+        )
 
 private fun runPackage(options: PackageOptions): Effect[/capy/lang/Program] =
     commandNotReady("package")
