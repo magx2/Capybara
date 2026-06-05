@@ -1,9 +1,0 @@
-from /capy/lang/String import { * }
-from OutputType import { OutputType }
-
-fun compile(rawModules: List[RawModule],
-    libraries: Set[CompiledModule],
-    nativeProviders: NativeProviderManifest,
-    nativeImplementationProviders: NativeProviderManifest): Effect[Either[CompiledProgram, List[CompilerError]] =
-    // todo(codex): implement the compile function, which is the main entry point for the compiler. It should take in the raw modules, libraries, and native providers, and return a compiled program or an error.
-    ???

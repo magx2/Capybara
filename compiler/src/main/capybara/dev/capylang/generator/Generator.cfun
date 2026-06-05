@@ -1,9 +1,0 @@
-fun generate(program: CompiledProgram, output_type: OutputType): GeneratedProgram =
-    let generator = find_generator(output_type)
-    generator(program)
-
-private fun find_generator(output_type: OutputType): CompiledProgram => GeneratedProgram =
-    match output_type with
-    case JAVA -> :java_generator
-    case JAVASCRIPT -> :java_script_generator
-    case PYTHON -> :python_generator

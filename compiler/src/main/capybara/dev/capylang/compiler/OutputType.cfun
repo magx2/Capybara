@@ -1,5 +1,0 @@
-enum OutputType {
-    JAVA,
-    JAVASCRIPT,
-    PYTHON,
-}

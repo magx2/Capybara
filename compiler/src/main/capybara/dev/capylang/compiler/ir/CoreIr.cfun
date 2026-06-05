@@ -1,0 +1,648 @@
+enum SourceKind { FUNCTIONAL, OBJECT_ORIENTED }
+enum OutputType { JAVA, JAVASCRIPT, PYTHON }
+enum Visibility { LOCAL, PRIVATE }
+enum PrimitiveType { BYTE, INT, LONG, DOUBLE, STRING, BOOL, FLOAT, ANY, DATA, ENUM, NOTHING }
+enum InfixOperator {
+    PLUS,
+    MINUS,
+    MUL,
+    DIV,
+    MOD,
+    POWER,
+    BITWISE_AND,
+    BITWISE_NAND,
+    BITWISE_OR,
+    BITWISE_XOR,
+    BITWISE_NOT,
+    GT,
+    LT,
+    EQUAL,
+    NOTEQUAL,
+    LE,
+    GE,
+    AND,
+    QUESTION,
+    TILDE,
+    TILDE_TILDE,
+    TILDE_GT,
+    DIV_GT,
+    PIPE,
+    PIPE_MINUS,
+    PIPE_FLATMAP,
+    PIPE_REDUCE
+}
+enum LetKind { ASSIGN, RESULT_BIND }
+enum NativeProviderBackend { JAVA, JAVASCRIPT, PYTHON }
+enum CompiledObjectKind { CLASS, ABSTRACT_CLASS, TRAIT, INTERFACE }
+
+union Option[T] = Some[T] | None
+data Some[T] { value: T }
+data None {}
+
+data ModuleId { name: String, path: String }
+data SourcePosition { line: int, column: int, length: Option[int] }
+data SourceDescriptor { module: ModuleId, input: String, source_kind: SourceKind }
+data Import { module_name: String, symbols: List[String], excluded_symbols: List[String], qualified_only: bool }
+
+union IrResult[T] = IrSuccess[T] | IrFailure
+data IrSuccess[T] { value: T }
+data IrFailure { diagnostics: List[Diagnostic] }
+
+union Diagnostic = SyntaxDiagnostic | CompilationDiagnostic | NativeProviderDiagnostic
+data SyntaxDiagnostic { file: String, line: int, column: int, message: String }
+data CompilationDiagnostic { file: String, line: int, column: int, message: String }
+data NativeProviderDiagnostic { interface_id: String, qualifier: String, backend: Option[NativeProviderBackend], message: String }
+
+union ParsedType =
+    ParsedPrimitiveType
+    | ParsedDataType
+    | ParsedListType
+    | ParsedSetType
+    | ParsedDictType
+    | ParsedFunctionType
+    | ParsedTupleType
+data ParsedPrimitiveType { value: PrimitiveType }
+data ParsedDataType { name: String }
+data ParsedListType { element_type: ParsedType }
+data ParsedSetType { element_type: ParsedType }
+data ParsedDictType { value_type: ParsedType }
+data ParsedFunctionType { argument_type: ParsedType, return_type: ParsedType }
+data ParsedTupleType { element_types: List[ParsedType] }
+
+data Parameter { type: ParsedType, name: String, position: Option[SourcePosition] }
+data DataField { name: String, type: ParsedType, annotations: List[AnnotationUsage] }
+data DeriveDirective { name: String, position: Option[SourcePosition] }
+
+union AnnotationValue =
+    StringAnnotationValue
+    | IntAnnotationValue
+    | LongAnnotationValue
+    | FloatAnnotationValue
+    | DoubleAnnotationValue
+    | BoolAnnotationValue
+    | NothingAnnotationValue
+    | TypeNameAnnotationValue
+data StringAnnotationValue { value: String, position: Option[SourcePosition] }
+data IntAnnotationValue { value: String, position: Option[SourcePosition] }
+data LongAnnotationValue { value: String, position: Option[SourcePosition] }
+data FloatAnnotationValue { value: String, position: Option[SourcePosition] }
+data DoubleAnnotationValue { value: String, position: Option[SourcePosition] }
+data BoolAnnotationValue { value: bool, position: Option[SourcePosition] }
+data NothingAnnotationValue { position: Option[SourcePosition] }
+data TypeNameAnnotationValue { name: String, position: Option[SourcePosition] }
+
+data AnnotationArgument { name: String, value: AnnotationValue, position: Option[SourcePosition] }
+data AnnotationUsage { name: String, arguments: List[AnnotationArgument], position: Option[SourcePosition] }
+data AnnotationTarget { name: String, position: Option[SourcePosition] }
+data AnnotationFieldDeclaration { name: String, type: String, default_value: Option[AnnotationValue], position: Option[SourcePosition] }
+data AnnotationDeclaration {
+    name: String,
+    targets: List[AnnotationTarget],
+    fields: List[AnnotationFieldDeclaration],
+    multiple: bool,
+    comments: List[String],
+    visibility: Option[Visibility],
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+
+union ParsedPattern =
+    ParsedIntPattern
+    | ParsedLongPattern
+    | ParsedStringPattern
+    | ParsedBoolPattern
+    | ParsedFloatPattern
+    | ParsedTypedPattern
+    | ParsedVariablePattern
+    | ParsedWildcardPattern
+    | ParsedWildcardBindingPattern
+    | ParsedConstructorPattern
+data ParsedIntPattern { value: String }
+data ParsedLongPattern { value: String }
+data ParsedStringPattern { value: String }
+data ParsedBoolPattern { value: String }
+data ParsedFloatPattern { value: String }
+data ParsedTypedPattern { type: ParsedType, name: String }
+data ParsedVariablePattern { name: String }
+data ParsedWildcardPattern {}
+data ParsedWildcardBindingPattern { name: String }
+data ParsedConstructorPattern { constructor_name: String, field_patterns: List[ParsedPattern] }
+data ParsedMatchCase { pattern: ParsedPattern, guard: Option[ParsedExpression], expression: ParsedExpression }
+
+union ParsedExpression =
+    ParsedBoolExpression
+    | ParsedByteExpression
+    | ParsedIntExpression
+    | ParsedLongExpression
+    | ParsedFloatExpression
+    | ParsedDoubleExpression
+    | ParsedStringExpression
+    | ParsedNothingExpression
+    | ParsedValueExpression
+    | ParsedFunctionCallExpression
+    | ParsedFunctionInvokeExpression
+    | ParsedFunctionReferenceExpression
+    | ParsedIfExpression
+    | ParsedIndexExpression
+    | ParsedInfixExpression
+    | ParsedLambdaExpression
+    | ParsedLetExpression
+    | ParsedReduceExpression
+    | ParsedSliceExpression
+    | ParsedMatchExpression
+    | ParsedNewDataExpression
+    | ParsedConstructorDataExpression
+    | ParsedWithExpression
+    | ParsedNewListExpression
+    | ParsedNewSetExpression
+    | ParsedNewDictExpression
+    | ParsedTupleExpression
+    | ParsedUnwrapExpression
+    | ParsedPlaceholderExpression
+    | ParsedFieldAccessExpression
+data ParsedBoolExpression { value: bool, position: Option[SourcePosition] }
+data ParsedByteExpression { value: String, position: Option[SourcePosition] }
+data ParsedIntExpression { value: String, position: Option[SourcePosition] }
+data ParsedLongExpression { value: String, position: Option[SourcePosition] }
+data ParsedFloatExpression { value: String, position: Option[SourcePosition] }
+data ParsedDoubleExpression { value: String, position: Option[SourcePosition] }
+data ParsedStringExpression { value: String, position: Option[SourcePosition] }
+data ParsedNothingExpression { literal: String, position: Option[SourcePosition] }
+data ParsedValueExpression { name: String, position: Option[SourcePosition] }
+data ParsedFunctionCallExpression { module_name: Option[String], name: String, arguments: List[ParsedExpression], position: Option[SourcePosition] }
+data ParsedFunctionInvokeExpression { function: ParsedExpression, arguments: List[ParsedExpression], position: Option[SourcePosition] }
+data ParsedFunctionReferenceExpression { name: String, position: Option[SourcePosition] }
+data ParsedIfExpression { condition: ParsedExpression, then_branch: ParsedExpression, else_branch: ParsedExpression, position: Option[SourcePosition] }
+data ParsedIndexExpression { source: ParsedExpression, arguments: List[ParsedExpression], position: Option[SourcePosition] }
+data ParsedInfixExpression { left: ParsedExpression, operator: InfixOperator, right: ParsedExpression, position: Option[SourcePosition] }
+data ParsedLambdaExpression { argument_names: List[String], expression: ParsedExpression, position: Option[SourcePosition] }
+data ParsedLetExpression { name: String, declared_type: Option[ParsedType], kind: LetKind, value: ParsedExpression, rest: ParsedExpression, position: Option[SourcePosition] }
+data ParsedReduceExpression {
+    initial_value: ParsedExpression,
+    accumulator_name: String,
+    key_name: Option[String],
+    value_name: String,
+    reducer_expression: ParsedExpression,
+    position: Option[SourcePosition]
+}
+data ParsedSliceExpression { source: ParsedExpression, start: Option[ParsedExpression], end: Option[ParsedExpression], position: Option[SourcePosition] }
+data ParsedMatchExpression { match_with: ParsedExpression, cases: List[ParsedMatchCase], position: Option[SourcePosition] }
+data ParsedFieldAssignment { name: String, value: ParsedExpression }
+data ParsedNewDataExpression {
+    type: ParsedType,
+    bypass_constructor: bool,
+    assignments: List[ParsedFieldAssignment],
+    positional_arguments: List[ParsedExpression],
+    spreads: List[ParsedExpression],
+    position: Option[SourcePosition]
+}
+data ParsedConstructorDataExpression {
+    assignments: List[ParsedFieldAssignment],
+    positional_arguments: List[ParsedExpression],
+    spreads: List[ParsedExpression],
+    position: Option[SourcePosition]
+}
+data ParsedWithExpression { source: ParsedExpression, assignments: List[ParsedFieldAssignment], position: Option[SourcePosition] }
+data ParsedNewListExpression { values: List[ParsedExpression], position: Option[SourcePosition] }
+data ParsedNewSetExpression { values: List[ParsedExpression], position: Option[SourcePosition] }
+data ParsedDictEntry { key: ParsedExpression, value: ParsedExpression }
+data ParsedNewDictExpression { entries: List[ParsedDictEntry], position: Option[SourcePosition] }
+data ParsedTupleExpression { values: List[ParsedExpression], position: Option[SourcePosition] }
+data ParsedUnwrapExpression { expression: ParsedExpression, position: Option[SourcePosition] }
+data ParsedPlaceholderExpression { position: Option[SourcePosition] }
+data ParsedFieldAccessExpression { source: ParsedExpression, field: String, position: Option[SourcePosition] }
+
+union FunctionalDeclaration =
+    FunctionDeclaration
+    | PrimitiveBackedTypeDeclaration
+    | UnionDeclaration
+    | DataDeclaration
+    | EnumDeclaration
+    | DeriverDeclaration
+    | AnnotationDeclaration
+data FunctionDeclaration {
+    name: String,
+    parameters: List[Parameter],
+    return_type: Option[ParsedType],
+    expression: ParsedExpression,
+    comments: List[String],
+    visibility: Option[Visibility],
+    position: Option[SourcePosition],
+    tail_recursive: bool,
+    annotations: List[AnnotationUsage]
+}
+data PrimitiveBackedTypeDeclaration {
+    name: String,
+    backing_type: PrimitiveType,
+    constructor_expression: Option[ParsedExpression],
+    comments: List[String],
+    visibility: Option[Visibility],
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+data UnionDeclaration {
+    name: String,
+    sub_types: List[String],
+    fields: List[DataField],
+    type_parameters: List[String],
+    constructor_expression: Option[ParsedExpression],
+    derives: List[DeriveDirective],
+    comments: List[String],
+    visibility: Option[Visibility],
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+data DataDeclaration {
+    name: String,
+    fields: List[DataField],
+    extends_types: List[String],
+    type_parameters: List[String],
+    constructor_expression: Option[ParsedExpression],
+    derives: List[DeriveDirective],
+    comments: List[String],
+    visibility: Option[Visibility],
+    native_type: bool,
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+data EnumDeclaration { name: String, values: List[String], comments: List[String], position: Option[SourcePosition], annotations: List[AnnotationUsage] }
+data DeriverMethod {
+    name: String,
+    parameters: List[Parameter],
+    return_type: ParsedType,
+    expression: ParsedExpression,
+    comments: List[String],
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+data DeriverDeclaration {
+    name: String,
+    methods: List[DeriverMethod],
+    comments: List[String],
+    visibility: Option[Visibility],
+    position: Option[SourcePosition],
+    annotations: List[AnnotationUsage]
+}
+data FunctionalModule {
+    module: ModuleId,
+    definitions: List[FunctionalDeclaration],
+    imports: List[Import],
+    source_kind: SourceKind
+}
+data FunctionalProgram { modules: List[FunctionalModule] }
+
+data OoParameter { name: String, type: String }
+data OoTypeReference { name: String }
+data OoNativeProviderDeclaration { name: String, target_type: String, qualifier: String, comments: List[String] }
+
+union OoMethodBody = OoExpressionBody | OoStatementBlock
+data OoExpressionBody { raw_expression: String }
+data OoStatementBlock { statements: List[OoStatement] }
+
+union OoStatement =
+    OoLetStatement
+    | OoLocalMethodStatement
+    | OoMutableVariableStatement
+    | OoAssignmentStatement
+    | OoExpressionStatement
+    | OoThrowStatement
+    | OoReturnStatement
+    | OoIfStatement
+    | OoTryCatchStatement
+    | OoWhileStatement
+    | OoDoWhileStatement
+    | OoForEachStatement
+    | OoStatementBlock
+data OoLetStatement { name: String, type: Option[String], raw_expression: String }
+data OoLocalMethodStatement { name: String, parameters: List[OoParameter], return_type: String, body: OoMethodBody, comments: List[String] }
+data OoMutableVariableStatement { name: String, type: Option[String], raw_expression: String }
+data OoAssignmentStatement { name: String, raw_expression: String }
+data OoExpressionStatement { raw_expression: String }
+data OoThrowStatement { raw_expression: String }
+data OoReturnStatement { raw_expression: String }
+data OoIfStatement { raw_condition: String, then_branch: OoStatementBlock, else_branch: Option[OoStatement] }
+data OoCatchClause { name: String, body: OoStatementBlock }
+data OoTryCatchStatement { try_block: OoStatementBlock, catches: List[OoCatchClause] }
+data OoWhileStatement { raw_condition: String, body: OoStatementBlock }
+data OoDoWhileStatement { body: OoStatementBlock, raw_condition: String }
+data OoForEachStatement { name: String, type: Option[String], iterable: String, body: OoStatementBlock }
+
+union OoMemberDeclaration = OoFieldDeclaration | OoMethodDeclaration | OoInitBlock
+data OoFieldDeclaration {
+    name: String,
+    type: String,
+    visibility: String,
+    initializer: Option[String],
+    comments: List[String],
+    annotations: List[AnnotationUsage],
+    linked_annotations: List[CompiledAnnotation]
+}
+data OoMethodDeclaration {
+    name: String,
+    parameters: List[OoParameter],
+    return_type: String,
+    visibility: String,
+    modifiers: List[String],
+    body: Option[OoMethodBody],
+    comments: List[String],
+    annotations: List[AnnotationUsage],
+    linked_annotations: List[CompiledAnnotation]
+}
+data OoInitBlock {
+    body: OoStatementBlock,
+    comments: List[String],
+    annotations: List[AnnotationUsage],
+    linked_annotations: List[CompiledAnnotation]
+}
+
+union OoDeclaration = OoClassDeclaration | OoTraitDeclaration | OoInterfaceDeclaration
+data OoClassDeclaration {
+    name: String,
+    constructor_parameters: List[OoParameter],
+    parents: List[OoTypeReference],
+    members: List[OoMemberDeclaration],
+    modifiers: List[String],
+    comments: List[String],
+    annotations: List[AnnotationUsage],
+    linked_annotations: List[CompiledAnnotation]
+}
+data OoTraitDeclaration {
+    name: String,
+    parents: List[OoTypeReference],
+    members: List[OoMemberDeclaration],
+    comments: List[String],
+    annotations: List[AnnotationUsage],
+    linked_annotations: List[CompiledAnnotation]
+}
+data OoInterfaceDeclaration {
+    name: String,
+    parents: List[OoTypeReference],
+    members: List[OoMemberDeclaration],
+    comments: List[String],
+    annotations: List[AnnotationUsage],
+    linked_annotations: List[CompiledAnnotation]
+}
+data ObjectOrientedModule {
+    module: ModuleId,
+    definitions: List[OoDeclaration],
+    native_providers: List[OoNativeProviderDeclaration],
+    imports: List[Import],
+    source_kind: SourceKind
+}
+
+union CompiledAnnotationValue =
+    CompiledStringAnnotationValue
+    | CompiledIntAnnotationValue
+    | CompiledLongAnnotationValue
+    | CompiledFloatAnnotationValue
+    | CompiledDoubleAnnotationValue
+    | CompiledBoolAnnotationValue
+    | CompiledNothingAnnotationValue
+    | CompiledTypeNameAnnotationValue
+data CompiledStringAnnotationValue { value: String }
+data CompiledIntAnnotationValue { value: String }
+data CompiledLongAnnotationValue { value: String }
+data CompiledFloatAnnotationValue { value: String }
+data CompiledDoubleAnnotationValue { value: String }
+data CompiledBoolAnnotationValue { value: bool }
+data CompiledNothingAnnotationValue {}
+data CompiledTypeNameAnnotationValue { name: String }
+data CompiledAnnotationArgument { name: String, value: CompiledAnnotationValue }
+data CompiledAnnotation { name: String, package_name: String, package_path: String, arguments: List[CompiledAnnotationArgument] }
+
+union CompiledType =
+    PrimitiveCompiledType
+    | CompiledCollectionType
+    | CompiledGenericTypeParameter
+    | CompiledFunctionType
+    | CompiledTupleType
+    | GenericCompiledType
+union CompiledCollectionType = CompiledListType | CompiledSetType | CompiledDictType
+union GenericCompiledType = CompiledDataType | CompiledDataParentType | CompiledObjectType | CompiledPrimitiveBackedType
+data PrimitiveCompiledType { value: PrimitiveType }
+data CompiledListType { element_type: CompiledType }
+data CompiledSetType { element_type: CompiledType }
+data CompiledDictType { value_type: CompiledType }
+data CompiledGenericTypeParameter { name: String }
+data CompiledFunctionType { argument_type: CompiledType, return_type: CompiledType }
+data CompiledTupleType { element_types: List[CompiledType] }
+data CompiledField { name: String, type: CompiledType, annotations: List[CompiledAnnotation] }
+data CompiledDataType {
+    name: String,
+    fields: List[CompiledField],
+    type_parameters: List[String],
+    extended_types: List[String],
+    comments: List[String],
+    visibility: Option[Visibility],
+    singleton: bool,
+    native_type: bool,
+    enum_value: bool,
+    annotations: List[CompiledAnnotation]
+}
+data CompiledDataParentType {
+    name: String,
+    fields: List[CompiledField],
+    sub_types: List[CompiledDataType],
+    type_parameters: List[String],
+    comments: List[String],
+    visibility: Option[Visibility],
+    enum_type: bool,
+    annotations: List[CompiledAnnotation]
+}
+data BackendMethodName { backend: NativeProviderBackend, name: String }
+data CompiledObjectMethodParameter { name: String, type: String }
+data CompiledObjectMethod { name: String, parameters: List[CompiledObjectMethodParameter], return_type: String, backend_method_names: List[BackendMethodName] }
+data CompiledObjectType {
+    name: String,
+    backend_class_name: String,
+    parents: List[String],
+    visibility: Option[Visibility],
+    annotations: List[CompiledAnnotation],
+    kind: CompiledObjectKind,
+    methods: List[CompiledObjectMethod]
+}
+data CompiledPrimitiveBackedType {
+    name: String,
+    backing_type: PrimitiveType,
+    cfun_type: String,
+    comments: List[String],
+    visibility: Option[Visibility],
+    annotations: List[CompiledAnnotation]
+}
+
+union CompiledPattern =
+    CompiledIntPattern
+    | CompiledLongPattern
+    | CompiledStringPattern
+    | CompiledBoolPattern
+    | CompiledFloatPattern
+    | CompiledTypedPattern
+    | CompiledVariablePattern
+    | CompiledWildcardPattern
+    | CompiledWildcardBindingPattern
+    | CompiledConstructorPattern
+data CompiledIntPattern { value: String }
+data CompiledLongPattern { value: String }
+data CompiledStringPattern { value: String }
+data CompiledBoolPattern { value: String }
+data CompiledFloatPattern { value: String }
+data CompiledTypedPattern { type: CompiledType, name: String }
+data CompiledVariablePattern { name: String }
+data CompiledWildcardPattern {}
+data CompiledWildcardBindingPattern { name: String }
+data CompiledConstructorPattern { constructor_name: String, field_patterns: List[CompiledPattern] }
+data CompiledMatchCase { pattern: CompiledPattern, guard: Option[CompiledExpression], expression: CompiledExpression }
+
+union CompiledExpression =
+    CompiledBoolExpression
+    | CompiledByteExpression
+    | CompiledIntExpression
+    | CompiledLongExpression
+    | CompiledFloatExpression
+    | CompiledDoubleExpression
+    | CompiledStringExpression
+    | CompiledNothingExpression
+    | CompiledVariableExpression
+    | CompiledFunctionCallExpression
+    | CompiledFunctionInvokeExpression
+    | CompiledIfExpression
+    | CompiledIndexExpression
+    | CompiledInfixExpression
+    | CompiledLambdaExpression
+    | CompiledLetExpression
+    | CompiledFieldAccessExpression
+    | CompiledNumericWideningExpression
+    | CompiledEffectExpression
+    | CompiledEffectBindExpression
+    | CompiledPipeExpression
+    | CompiledPipeFilterOutExpression
+    | CompiledPipeFlatMapExpression
+    | CompiledPipeReduceExpression
+    | CompiledReflectionValueExpression
+    | CompiledSliceExpression
+    | CompiledTupleExpression
+    | CompiledUnwrapExpression
+    | CompiledNewDictExpression
+    | CompiledNewListExpression
+    | CompiledNewSetExpression
+    | CompiledNewDataExpression
+    | CompiledMatchExpression
+    | CompiledObjectConstructionExpression
+data CompiledBoolExpression { value: bool }
+data CompiledByteExpression { value: String }
+data CompiledIntExpression { value: String }
+data CompiledLongExpression { value: String }
+data CompiledFloatExpression { value: String }
+data CompiledDoubleExpression { value: String }
+data CompiledStringExpression { value: String }
+data CompiledNothingExpression { position: Option[SourcePosition], message: String }
+data CompiledVariableExpression { name: String, type: CompiledType, empty_shape_compatible: bool }
+data CompiledFunctionCallExpression { name: String, arguments: List[CompiledExpression], return_type: CompiledType }
+data CompiledFunctionInvokeExpression { function: CompiledExpression, arguments: List[CompiledExpression], return_type: CompiledType }
+data CompiledIfExpression { condition: CompiledExpression, then_branch: CompiledExpression, else_branch: CompiledExpression, type: CompiledType }
+data CompiledIndexExpression { source: CompiledExpression, index: CompiledExpression, element_type: CompiledType, type: CompiledType }
+data CompiledInfixExpression { left: CompiledExpression, operator: InfixOperator, right: CompiledExpression, type: CompiledType }
+data CompiledLambdaExpression { argument_name: String, expression: CompiledExpression, function_type: CompiledFunctionType }
+data CompiledLetExpression { name: String, value: CompiledExpression, declared_type: Option[CompiledType], rest: CompiledExpression }
+data CompiledFieldAccessExpression { source: CompiledExpression, field: String, type: CompiledType }
+data CompiledNumericWideningExpression { expression: CompiledExpression, type: PrimitiveType }
+data CompiledEffectExpression { body: CompiledExpression, effect_type: CompiledDataParentType }
+data CompiledEffectBindExpression {
+    name: String,
+    source: CompiledExpression,
+    payload_type: CompiledType,
+    let_type: CompiledType,
+    declared_type: Option[CompiledType],
+    rest: CompiledExpression,
+    effect_type: CompiledDataParentType
+}
+data CompiledPipeExpression { source: CompiledExpression, argument_name: String, mapper: CompiledExpression, type: CompiledType }
+data CompiledPipeFilterOutExpression { source: CompiledExpression, argument_name: String, predicate: CompiledExpression, type: CompiledType }
+data CompiledPipeFlatMapExpression { source: CompiledExpression, argument_name: String, mapper: CompiledExpression, type: CompiledType }
+data CompiledPipeReduceExpression {
+    source: CompiledExpression,
+    initial_value: CompiledExpression,
+    accumulator_name: String,
+    key_name: Option[String],
+    value_name: String,
+    reducer_expression: CompiledExpression,
+    type: CompiledType
+}
+data CompiledReflectionField { name: String, type: CompiledType, annotations: List[CompiledAnnotation] }
+data CompiledReflectionValueExpression {
+    target: CompiledExpression,
+    name: String,
+    package_name: String,
+    package_path: String,
+    fields: List[CompiledReflectionField],
+    annotations: List[CompiledAnnotation],
+    type: CompiledType
+}
+data CompiledSliceExpression { source: CompiledExpression, start: Option[CompiledExpression], end: Option[CompiledExpression], type: CompiledType }
+data CompiledTupleExpression { values: List[CompiledExpression], type: CompiledTupleType }
+data CompiledUnwrapExpression { expression: CompiledExpression, type: PrimitiveType }
+data CompiledNewDictEntry { key: CompiledExpression, value: CompiledExpression }
+data CompiledNewDictExpression { entries: List[CompiledNewDictEntry], type: CompiledType }
+data CompiledNewListExpression { values: List[CompiledExpression], type: CompiledType }
+data CompiledNewSetExpression { values: List[CompiledExpression], type: CompiledType }
+data CompiledNewDataFieldAssignment { name: String, value: CompiledExpression }
+data CompiledNewDataExpression { type: CompiledType, assignments: List[CompiledNewDataFieldAssignment] }
+data CompiledMatchExpression { match_with: CompiledExpression, cases: List[CompiledMatchCase], type: CompiledType }
+data CompiledObjectConstructionExpression { object_type: CompiledObjectType, arguments: List[CompiledExpression], effect_type: CompiledDataParentType }
+
+data CompiledFunctionParameter { name: String, type: CompiledType }
+data CompiledFunction {
+    name: String,
+    return_type: CompiledType,
+    parameters: List[CompiledFunctionParameter],
+    expression: CompiledExpression,
+    comments: List[String],
+    visibility: Option[Visibility],
+    program_main: bool,
+    recursive: bool,
+    tail_recursive: bool,
+    annotations: List[CompiledAnnotation]
+}
+data StaticImport { class_name: String, member_name: String, enum_value: bool }
+data CompiledTypeEntry { name: String, type: GenericCompiledType }
+data CompiledModule {
+    module: ModuleId,
+    types: List[CompiledTypeEntry],
+    visible_primitive_backed_types: List[CompiledPrimitiveBackedType],
+    functions: List[CompiledFunction],
+    static_imports: List[StaticImport]
+}
+
+union NativeProviderBackendBinding = JavaNativeProviderBinding | JavascriptNativeProviderBinding | PythonNativeProviderBinding
+data JavaNativeProviderBinding { class_name: String, factory: Option[String] }
+data JavascriptNativeProviderBinding { module_name: String, export_name: String, factory: Option[String] }
+data PythonNativeProviderBinding { module_name: String, class_name: String, factory: Option[String] }
+data NativeProviderBinding { interface_id: String, qualifier: String, bindings: List[NativeProviderBackendBinding] }
+data NativeProviderManifest { providers: List[NativeProviderBinding], source_file: Option[String] }
+data CompiledNativeProviderDeclaration {
+    provider_name: String,
+    source_module_path: String,
+    source_module_name: String,
+    target_type_name: String,
+    interface_id: String,
+    qualifier: String,
+    lifetime: String,
+    source_file: String
+}
+data CompiledNativeProviderBinding { interface_id: String, qualifier: String, bindings: List[NativeProviderBackendBinding] }
+data NativeProviderCatalog { declarations: List[CompiledNativeProviderDeclaration], bindings: List[CompiledNativeProviderBinding] }
+
+data CompiledProgram {
+    modules: List[CompiledModule],
+    object_oriented_modules: List[ObjectOrientedModule],
+    native_providers: NativeProviderManifest,
+    native_provider_catalog: NativeProviderCatalog
+}
+
+data GeneratedModule { relative_path: String, code: String }
+data GeneratedProgram { modules: List[GeneratedModule] }
+
+fun pass_through_functional_program(program: FunctionalProgram): FunctionalProgram = program
+fun pass_through_object_oriented_module(module: ObjectOrientedModule): ObjectOrientedModule = module
+fun pass_through_compiled_program(program: CompiledProgram): CompiledProgram = program
+fun pass_through_generated_program(program: GeneratedProgram): GeneratedProgram = program

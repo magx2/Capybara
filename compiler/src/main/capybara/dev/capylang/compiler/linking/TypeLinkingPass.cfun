@@ -1,0 +1,393 @@
+/// Pure helpers for parser type names and compiled type descriptors.
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+
+fun parse_type_argument(raw: String): String =
+    tl_parse_type_argument_descriptor(tl_string_trim(raw))
+
+fun parse_data_type_name(raw_name: String): Tuple[String, List[String]] =
+    let idx = tl_index_of(raw_name, "[")
+    if idx <= 0 | !tl_string_ends_with(raw_name, "]")
+    then (raw_name, [])
+    else (raw_name[0, idx], split_top_level_type_arguments(raw_name[idx + 1, tl_string_size(raw_name) - 1]))
+
+fun split_top_level_type_arguments(content: String): List[String] =
+    fun scan(content: String, idx: int, depth: int, current: String, result: List[String]): List[String] =
+        match content[idx] with
+        case Some { char } ->
+            if char == "["
+            then scan(content, idx + 1, depth + 1, current + char, result)
+            else if char == "]"
+                then scan(content, idx + 1, tl_max_int(0, depth - 1), current + char, result)
+                else if char == "," & depth == 0
+                    then scan(content, idx + 1, depth, "", tl_append_non_empty_trimmed(result, current))
+                    else scan(content, idx + 1, depth, current + char, result)
+        case _ -> tl_append_non_empty_trimmed(result, current)
+    ---
+    scan(content, 0, 0, "", [])
+
+fun resolve_data_type(
+    raw_name: String,
+    data_type_keys: List[String],
+    sorted_data_type_keys: List[String]
+): Tuple[bool, String, String, List[String], String] =
+    let parsed_name = parse_data_type_name(raw_name)
+    let base_name = tl_parsed_data_type_base_name(parsed_name)
+    let type_arguments = tl_parsed_data_type_arguments(parsed_name)
+    if tl_list_contains_string(data_type_keys, base_name)
+    then (true, base_name, base_name, type_arguments, "")
+    else
+        match tl_match_by_simple_type_name(base_name, data_type_keys, sorted_data_type_keys) with
+        case Some { simple_match } -> (true, simple_match, base_name, type_arguments, "")
+        case _ ->
+            match tl_match_qualified_by_module_tail(base_name, data_type_keys) with
+            case Some { qualified_match } -> (true, qualified_match, qualified_match, type_arguments, "")
+            case _ ->
+                match tl_normalize_qualified_name(base_name) with
+                case Some { normalized } ->
+                    if tl_list_contains_string(data_type_keys, normalized)
+                    then (true, normalized, normalized, type_arguments, "")
+                    else (false, "", base_name, type_arguments, "Data type \"" + base_name + "\" not found")
+                case _ -> (false, "", base_name, type_arguments, "Data type \"" + base_name + "\" not found")
+
+fun substitute_type_descriptor(descriptor: String, substitutions: List[Tuple[String, String]]): String =
+    if tl_string_is_blank(descriptor)
+    then descriptor
+    else tl_substitute_type_descriptor_trimmed(tl_string_trim(descriptor), substitutions)
+
+fun type_cache_key(type: String): String =
+    type
+
+fun type_descriptor(type: String): String =
+    type
+
+private fun tl_parse_type_argument_descriptor(trimmed: String): String =
+    if tl_is_primitive_type_name(trimmed)
+    then trimmed
+    else if tl_string_starts_with(trimmed, "List[") & tl_string_ends_with(trimmed, "]")
+        then "List[" + parse_type_argument(trimmed[5, tl_string_size(trimmed) - 1]) + "]"
+        else if tl_string_starts_with(trimmed, "Set[") & tl_string_ends_with(trimmed, "]")
+            then "Set[" + parse_type_argument(trimmed[4, tl_string_size(trimmed) - 1]) + "]"
+            else if tl_string_starts_with(trimmed, "Dict[") & tl_string_ends_with(trimmed, "]")
+                then "Dict[" + parse_type_argument(trimmed[5, tl_string_size(trimmed) - 1]) + "]"
+                else if tl_string_starts_with(trimmed, "Tuple[") & tl_string_ends_with(trimmed, "]")
+                    then "Tuple[" + tl_parse_descriptor_arguments(split_top_level_type_arguments(trimmed[6, tl_string_size(trimmed) - 1]), 0, "") + "]"
+                    else
+                        let fat_arrow_index = tl_index_of_top_level_arrow(trimmed, "=>")
+                        if fat_arrow_index > 0
+                        then
+                            let left = tl_string_trim(trimmed[0, fat_arrow_index])
+                            let right = tl_string_trim(trimmed[fat_arrow_index + 2, tl_string_size(trimmed)])
+                            "(" + parse_type_argument(tl_strip_optional_parentheses(left)) + " => " + parse_type_argument(right) + ")"
+                        else
+                            let slim_arrow_index = tl_index_of_top_level_arrow(trimmed, "->")
+                            if slim_arrow_index > 0
+                            then
+                                let left = tl_string_trim(trimmed[0, slim_arrow_index])
+                                let right = tl_string_trim(trimmed[slim_arrow_index + 2, tl_string_size(trimmed)])
+                                "(" + parse_type_argument(tl_strip_optional_parentheses(left)) + " => " + parse_type_argument(right) + ")"
+                            else trimmed
+
+private fun tl_parse_descriptor_arguments(args: List[String], idx: int, output: String): String =
+    match args[idx] with
+    case Some { arg } -> tl_parse_descriptor_arguments(args, idx + 1, tl_append_joined(output, parse_type_argument(arg)))
+    case _ -> output
+
+private fun tl_index_of_top_level_arrow(value: String, arrow: String): int =
+    fun scan(value: String, arrow: String, idx: int, square: int, paren: int): int =
+        if idx >= tl_string_size(value) - 1
+        then -1
+        else
+            match value[idx] with
+            case Some { char } ->
+                if char == "["
+                then scan(value, arrow, idx + 1, square + 1, paren)
+                else if char == "]"
+                    then scan(value, arrow, idx + 1, tl_max_int(0, square - 1), paren)
+                    else if char == "("
+                        then scan(value, arrow, idx + 1, square, paren + 1)
+                        else if char == ")"
+                            then scan(value, arrow, idx + 1, square, tl_max_int(0, paren - 1))
+                            else if square == 0 & paren == 0 & tl_string_starts_with(value[idx, tl_string_size(value)], arrow)
+                                then idx
+                                else scan(value, arrow, idx + 1, square, paren)
+            case _ -> -1
+    ---
+    scan(value, arrow, 0, 0, 0)
+
+private fun tl_strip_optional_parentheses(value: String): String =
+    let trimmed = tl_string_trim(value)
+    if trimmed == "()"
+    then "nothing"
+    else if !tl_string_starts_with(trimmed, "(") | !tl_string_ends_with(trimmed, ")")
+        then trimmed
+        else
+            let inner = trimmed[1, tl_string_size(trimmed) - 1]
+            if tl_has_top_level_comma(inner, 0, 0, 0)
+            then trimmed
+            else tl_string_trim(inner)
+
+private fun tl_has_top_level_comma(inner: String, idx: int, square: int, paren: int): bool =
+    match inner[idx] with
+    case Some { char } ->
+        if char == "["
+        then tl_has_top_level_comma(inner, idx + 1, square + 1, paren)
+        else if char == "]"
+            then tl_has_top_level_comma(inner, idx + 1, tl_max_int(0, square - 1), paren)
+            else if char == "("
+                then tl_has_top_level_comma(inner, idx + 1, square, paren + 1)
+                else if char == ")"
+                    then tl_has_top_level_comma(inner, idx + 1, square, tl_max_int(0, paren - 1))
+                    else if square == 0 & paren == 0 & idx < tl_string_size(inner) - 1 & char == ","
+                        then true
+                        else tl_has_top_level_comma(inner, idx + 1, square, paren)
+    case _ -> false
+
+private fun tl_substitute_type_descriptor_trimmed(trimmed: String, substitutions: List[Tuple[String, String]]): String =
+    match tl_get_substitution(substitutions, trimmed, 0) with
+    case Some { direct } -> direct
+    case _ ->
+        if tl_string_starts_with(trimmed, "List[") & tl_string_ends_with(trimmed, "]")
+        then "List[" + substitute_type_descriptor(trimmed[5, tl_string_size(trimmed) - 1], substitutions) + "]"
+        else if tl_string_starts_with(trimmed, "Set[") & tl_string_ends_with(trimmed, "]")
+            then "Set[" + substitute_type_descriptor(trimmed[4, tl_string_size(trimmed) - 1], substitutions) + "]"
+            else if tl_string_starts_with(trimmed, "Dict[") & tl_string_ends_with(trimmed, "]")
+                then "Dict[" + substitute_type_descriptor(trimmed[5, tl_string_size(trimmed) - 1], substitutions) + "]"
+                else if tl_string_starts_with(trimmed, "Tuple[") & tl_string_ends_with(trimmed, "]")
+                    then "Tuple[" + tl_substitute_descriptor_arguments(split_top_level_type_arguments(trimmed[6, tl_string_size(trimmed) - 1]), substitutions, 0, "") + "]"
+                    else
+                        let arrow_index = tl_index_of_top_level_arrow(trimmed, "=>")
+                        if tl_string_starts_with(trimmed, "(") & tl_string_ends_with(trimmed, ")") & arrow_index > 0
+                        then tl_substitute_function_descriptor(trimmed, substitutions)
+                        else tl_substitute_data_descriptor(trimmed, substitutions)
+
+private fun tl_substitute_function_descriptor(trimmed: String, substitutions: List[Tuple[String, String]]): String =
+    let inner = tl_string_trim(trimmed[1, tl_string_size(trimmed) - 1])
+    let inner_arrow = tl_index_of_top_level_arrow(inner, "=>")
+    if inner_arrow > 0
+    then "(" + substitute_type_descriptor(inner[0, inner_arrow], substitutions)
+        + " => " + substitute_type_descriptor(inner[inner_arrow + 2, tl_string_size(inner)], substitutions) + ")"
+    else trimmed
+
+private fun tl_substitute_data_descriptor(trimmed: String, substitutions: List[Tuple[String, String]]): String =
+    let parsed = parse_data_type_name(trimmed)
+    if tl_list_size(tl_parsed_data_type_arguments(parsed)) > 0
+    then tl_parsed_data_type_base_name(parsed) + "[" + tl_substitute_descriptor_arguments(tl_parsed_data_type_arguments(parsed), substitutions, 0, "") + "]"
+    else trimmed
+
+private fun tl_substitute_descriptor_arguments(args: List[String], substitutions: List[Tuple[String, String]], idx: int, output: String): String =
+    match args[idx] with
+    case Some { arg } ->
+        let rendered = substitute_type_descriptor(arg, substitutions)
+        tl_substitute_descriptor_arguments(args, substitutions, idx + 1, tl_append_joined(output, rendered))
+    case _ -> output
+
+private fun tl_match_by_simple_type_name(raw_name: String, data_type_keys: List[String], sorted_data_type_keys: List[String]): Option[String] =
+    if tl_string_starts_with(raw_name, "/")
+    then None {}
+    else if tl_list_contains_string(data_type_keys, raw_name)
+        then Some { raw_name }
+        else
+            let qualified_path_candidates = tl_matching_keys(sorted_data_type_keys, "/" + raw_name + "." + raw_name)
+            match qualified_path_candidates[0] with
+            case Some { qualified_path_candidate } -> Some { qualified_path_candidate }
+            case _ ->
+                let module_qualified_candidates = tl_matching_keys(sorted_data_type_keys, "." + raw_name)
+                let path_qualified_candidates = tl_filter_starts_with(module_qualified_candidates, "/")
+                match path_qualified_candidates[0] with
+                case Some { path_qualified_candidate } -> Some { path_qualified_candidate }
+                case _ ->
+                    if tl_list_size(module_qualified_candidates) == 1
+                    then module_qualified_candidates[0]
+                    else None {}
+
+private fun tl_match_qualified_by_module_tail(raw_name: String, data_type_keys: List[String]): Option[String] =
+    if !tl_string_starts_with(raw_name, "/")
+    then None {}
+    else
+        let slash_idx = tl_last_index_of(raw_name, "/")
+        if slash_idx < 0 | slash_idx >= tl_string_size(raw_name) - 1
+        then None {}
+        else tl_first_key_ending_with(data_type_keys, "/" + raw_name[slash_idx + 1, tl_string_size(raw_name)], 0)
+
+private fun tl_normalize_qualified_name(raw_name: String): Option[String] =
+    if !tl_string_starts_with(raw_name, "/")
+    then None {}
+    else
+        let dot_idx = tl_last_index_of(raw_name, ".")
+        let slash_idx = tl_last_index_of(raw_name, "/")
+        if dot_idx < 0 | slash_idx < 0 | slash_idx >= dot_idx
+        then None {}
+        else Some { raw_name[slash_idx + 1, tl_string_size(raw_name)] }
+
+private fun tl_matching_keys(keys: List[String], suffix: String): List[String] =
+    fun scan(keys: List[String], suffix: String, idx: int, matches: List[String]): List[String] =
+        match keys[idx] with
+        case Some { key } ->
+            if tl_string_ends_with(key, suffix)
+            then scan(keys, suffix, idx + 1, matches + key)
+            else scan(keys, suffix, idx + 1, matches)
+        case _ -> matches
+    ---
+    scan(keys, suffix, 0, [])
+
+private fun tl_filter_starts_with(values: List[String], prefix: String): List[String] =
+    fun scan(values: List[String], prefix: String, idx: int, matches: List[String]): List[String] =
+        match values[idx] with
+        case Some { value } ->
+            if tl_string_starts_with(value, prefix)
+            then scan(values, prefix, idx + 1, matches + value)
+            else scan(values, prefix, idx + 1, matches)
+        case _ -> matches
+    ---
+    scan(values, prefix, 0, [])
+
+private fun tl_first_key_ending_with(keys: List[String], suffix: String, idx: int): Option[String] =
+    match keys[idx] with
+    case Some { key } ->
+        if tl_string_ends_with(key, suffix)
+        then Some { key }
+        else tl_first_key_ending_with(keys, suffix, idx + 1)
+    case _ -> None {}
+
+private fun tl_parsed_data_type_base_name(parsed: Tuple[String, List[String]]): String =
+    parsed[0]
+
+private fun tl_parsed_data_type_arguments(parsed: Tuple[String, List[String]]): List[String] =
+    parsed[1]
+
+private fun tl_is_primitive_type_name(name: String): bool =
+    name == "byte" | name == "int" | name == "long" | name == "double" | name == "String" | name == "bool"
+        | name == "float" | name == "any" | name == "data" | name == "enum" | name == "nothing"
+
+private fun tl_append_joined(output: String, value: String): String =
+    if tl_string_is_empty(output)
+    then value
+    else output + ", " + value
+
+private fun tl_append_non_empty_trimmed(values: List[String], value: String): List[String] =
+    let trimmed = tl_string_trim(value)
+    if tl_string_is_empty(trimmed)
+    then values
+    else values + trimmed
+
+private fun tl_get_substitution(entries: List[Tuple[String, String]], key: String, idx: int): Option[String] =
+    match entries[idx] with
+    case Some { entry } ->
+        if entry[0] == key
+        then Some { entry[1] }
+        else tl_get_substitution(entries, key, idx + 1)
+    case _ -> None {}
+
+private fun tl_list_contains_string(values: List[String], value: String): bool =
+    match values[0] with
+    case Some _ -> tl_list_contains_string_scan(values, value, 0)
+    case _ -> false
+
+private fun tl_list_contains_string_scan(values: List[String], value: String, idx: int): bool =
+    match values[idx] with
+    case Some { current } ->
+        if current == value
+        then true
+        else tl_list_contains_string_scan(values, value, idx + 1)
+    case _ -> false
+
+private fun tl_list_size(values: List[String]): int =
+    fun scan(values: List[String], idx: int): int =
+        match values[idx] with
+        case Some _ -> scan(values, idx + 1)
+        case _ -> idx
+    ---
+    scan(values, 0)
+
+private fun tl_index_of(value: String, target: String): int =
+    tl_index_of_from(value, target, 0)
+
+private fun tl_index_of_from(value: String, target: String, idx: int): int =
+    if idx > tl_string_size(value) - tl_string_size(target)
+    then -1
+    else if tl_string_starts_with(value[idx, tl_string_size(value)], target)
+        then idx
+        else tl_index_of_from(value, target, idx + 1)
+
+private fun tl_last_index_of(value: String, target: String): int =
+    tl_last_index_of_from(value, target, tl_string_size(value) - tl_string_size(target))
+
+private fun tl_last_index_of_from(value: String, target: String, idx: int): int =
+    if idx < 0
+    then -1
+    else if tl_string_starts_with(value[idx, tl_string_size(value)], target)
+        then idx
+        else tl_last_index_of_from(value, target, idx - 1)
+
+private fun tl_string_size(value: String): int =
+    fun scan(value: String, idx: int): int =
+        match value[idx] with
+        case Some _ -> scan(value, idx + 1)
+        case _ -> idx
+    ---
+    scan(value, 0)
+
+private fun tl_string_is_empty(value: String): bool =
+    tl_string_size(value) == 0
+
+private fun tl_string_is_blank(value: String): bool =
+    fun scan(value: String, idx: int): bool =
+        match value[idx] with
+        case Some { char } ->
+            if tl_is_whitespace(char)
+            then scan(value, idx + 1)
+            else false
+        case _ -> true
+    ---
+    scan(value, 0)
+
+private fun tl_string_trim(value: String): String =
+    tl_trim_right(tl_trim_left(value))
+
+private fun tl_trim_left(value: String): String =
+    fun scan(value: String, idx: int): String =
+        match value[idx] with
+        case Some { char } ->
+            if tl_is_whitespace(char)
+            then scan(value, idx + 1)
+            else value[idx, tl_string_size(value)]
+        case _ -> ""
+    ---
+    scan(value, 0)
+
+private fun tl_trim_right(value: String): String =
+    fun scan(value: String, idx: int): String =
+        if idx < 0
+        then ""
+        else
+            match value[idx] with
+            case Some { char } ->
+                if tl_is_whitespace(char)
+                then scan(value, idx - 1)
+                else value[0, idx + 1]
+            case _ -> ""
+    ---
+    scan(value, tl_string_size(value) - 1)
+
+private fun tl_is_whitespace(char: String): bool =
+    char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
+
+private fun tl_string_starts_with(value: String, prefix: String): bool =
+    let prefix_size = tl_string_size(prefix)
+    if tl_string_size(value) < prefix_size
+    then false
+    else value[0, prefix_size] == prefix
+
+private fun tl_string_ends_with(value: String, suffix: String): bool =
+    let value_size = tl_string_size(value)
+    let suffix_size = tl_string_size(suffix)
+    if value_size < suffix_size
+    then false
+    else value[value_size - suffix_size, value_size] == suffix
+
+private fun tl_max_int(left: int, right: int): int =
+    if left > right then left else right

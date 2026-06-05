@@ -1,0 +1,168 @@
+/// Capybara-owned Java backend output planning.
+///
+/// This production source uses tuple DTOs, matching the other migrated compiler
+/// passes. That keeps compiler main independent of the Capybara runtime model
+/// classes while the Java emitters are migrated incrementally.
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+fun List[T].`+`(other: List[T]): List[T] = <native>
+
+fun generated_java_file(relative_path: String, code: String): Tuple[String, String] =
+    (relative_path, code)
+
+fun generated_java_file_relative_path(file: Tuple[String, String]): String =
+    file[0]
+
+fun generated_java_file_code(file: Tuple[String, String]): String =
+    file[1]
+
+fun java_native_provider_info(
+    provider_symbol_name: String,
+    bootstrap_method_name: String,
+    interface_id: String,
+    qualifier: String,
+    lifetime: String,
+    target_backend_type: String,
+    source_file: String,
+    java_class_name: String,
+    java_factory: String
+): Tuple[String, String, String, String, String, String, String, String, String] =
+    (
+        provider_symbol_name,
+        bootstrap_method_name,
+        interface_id,
+        qualifier,
+        lifetime,
+        target_backend_type,
+        source_file,
+        java_class_name,
+        java_factory
+    )
+
+fun plan_java_generation(
+    rendered_files: List[Tuple[String, String]],
+    native_providers: List[Tuple[String, String, String, String, String, String, String, String, String]]
+): List[Tuple[String, String]] =
+    generated_file_order(rendered_files + native_provider_bootstrap_files(native_providers))
+
+fun generated_file_order(files: List[Tuple[String, String]]): List[Tuple[String, String]] =
+    files
+
+fun native_provider_bootstrap_files(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String]]
+): List[Tuple[String, String]] =
+    match providers[0] with
+    case Some _ -> [generated_java_file("dev/capylang/NativeProviderBootstrap.java", render_native_provider_bootstrap(providers))]
+    case _ -> []
+
+fun render_native_provider_bootstrap(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String]]
+): String =
+    "package dev.capylang;" + nl() + nl()
+    + "@javax.annotation.processing.Generated(\"Capybara Compiler\")" + nl()
+    + "public final class NativeProviderBootstrap {" + nl()
+    + "    private static final NativeProviders PROVIDERS = NativeProviders.of(" + nl()
+    + render_native_provider_registrations(providers, 0)
+    + "    );" + nl() + nl()
+    + "    private NativeProviderBootstrap() {" + nl()
+    + "    }" + nl() + nl()
+    + render_native_provider_methods(providers, 0)
+    + "}" + nl()
+
+private fun render_native_provider_registrations(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String]],
+    idx: int
+): String =
+    match providers[idx] with
+    case Some { provider } ->
+        let separator = match providers[idx + 1] with
+            case Some _ -> ","
+            case _ -> ""
+        render_native_provider_registration(provider) + separator + nl()
+            + render_native_provider_registrations(providers, idx + 1)
+    case _ -> ""
+
+private fun render_native_provider_registration(
+    provider: Tuple[String, String, String, String, String, String, String, String, String]
+): String =
+    "            NativeProviders.factory(" + nl()
+    + "                    " + java_string(native_provider_interface_id(provider)) + "," + nl()
+    + "                    " + java_string(native_provider_qualifier(provider)) + "," + nl()
+    + "                    " + java_string(native_provider_symbol_name(provider)) + "," + nl()
+    + "                    \"java\"," + nl()
+    + "                    " + java_string(native_provider_source_file(provider)) + "," + nl()
+    + "                    " + java_string(native_provider_lifetime(provider)) + "," + nl()
+    + "                    " + native_provider_target_backend_type(provider) + ".class," + nl()
+    + "                    " + native_provider_java_class_name(provider) + "::new" + nl()
+    + "            )"
+
+private fun render_native_provider_methods(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String]],
+    idx: int
+): String =
+    match providers[idx] with
+    case Some { provider } ->
+        render_native_provider_method(provider) + nl() + render_native_provider_methods(providers, idx + 1)
+    case _ -> ""
+
+private fun render_native_provider_method(
+    provider: Tuple[String, String, String, String, String, String, String, String, String]
+): String =
+    "    public static " + native_provider_target_backend_type(provider) + " " + native_provider_bootstrap_method_name(provider) + "() {" + nl()
+    + "        return PROVIDERS.resolve(" + java_string(native_provider_interface_id(provider))
+    + ", " + java_string(native_provider_qualifier(provider))
+    + ", " + java_string(native_provider_symbol_name(provider))
+    + ", \"java\""
+    + ", " + java_string(native_provider_source_file(provider))
+    + ", " + native_provider_target_backend_type(provider) + ".class);" + nl()
+    + "    }" + nl()
+
+private fun native_provider_symbol_name(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[0]
+
+private fun native_provider_bootstrap_method_name(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[1]
+
+private fun native_provider_interface_id(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[2]
+
+private fun native_provider_qualifier(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[3]
+
+private fun native_provider_lifetime(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[4]
+
+private fun native_provider_target_backend_type(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[5]
+
+private fun native_provider_source_file(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[6]
+
+private fun native_provider_java_class_name(provider: Tuple[String, String, String, String, String, String, String, String, String]): String =
+    provider[7]
+
+private fun nl(): String = '\n'
+
+private fun java_string(value: String): String =
+    "\"" + java_string_body(value, 0, "") + "\""
+
+private fun java_string_body(value: String, idx: int, output: String): String =
+    match value[idx] with
+    case Some { char } -> java_string_body(value, idx + 1, output + java_string_char(char))
+    case _ -> output
+
+private fun java_string_char(char: String): String =
+    if char == "\\"
+    then "\\\\"
+    else if char == "\""
+        then "\\\""
+        else if char == '\n'
+            then "\\n"
+            else if char == '\r'
+                then "\\r"
+                else if char == '\t'
+                    then "\\t"
+                    else char

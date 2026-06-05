@@ -1,0 +1,328 @@
+/// Capybara-owned JavaScript backend output planning.
+///
+/// Java still renders the transition modules while this pass owns file
+/// ordering and native-provider bootstrap output.
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+fun List[T].`+`(other: List[T]): List[T] = <native>
+
+fun generated_javascript_file(relative_path: String, code: String): Tuple[String, String] =
+    (relative_path, code)
+
+fun generated_javascript_file_relative_path(file: Tuple[String, String]): String =
+    file[0]
+
+fun generated_javascript_file_code(file: Tuple[String, String]): String =
+    file[1]
+
+fun javascript_native_provider_method_info(name: String, arity: int): Tuple[String, int] =
+    (name, arity)
+
+fun javascript_native_provider_info(
+    provider_symbol_name: String,
+    bootstrap_function_name: String,
+    interface_id: String,
+    qualifier: String,
+    lifetime: String,
+    source_file: String,
+    module_name: String,
+    export_name: String,
+    factory: String,
+    methods: List[Tuple[String, int]]
+): Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]] =
+    (
+        provider_symbol_name,
+        bootstrap_function_name,
+        interface_id,
+        qualifier,
+        lifetime,
+        source_file,
+        module_name,
+        export_name,
+        factory,
+        methods
+    )
+
+fun plan_javascript_generation(
+    rendered_files: List[Tuple[String, String]],
+    native_providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
+): List[Tuple[String, String]] =
+    generated_file_order(rendered_files + native_provider_bootstrap_files(native_providers))
+
+fun generated_file_order(files: List[Tuple[String, String]]): List[Tuple[String, String]] =
+    files
+
+fun native_provider_bootstrap_files(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
+): List[Tuple[String, String]] =
+    match providers[0] with
+    case Some _ -> [generated_javascript_file("dev/capylang/native_providers.js", render_native_provider_bootstrap(providers))]
+    case _ -> []
+
+fun render_native_provider_bootstrap(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]]
+): String =
+    "'use strict';" + js_nl() + js_nl()
+    + "const capy = require('./capybara.js');" + js_nl()
+    + render_native_provider_requires(providers, 0)
+    + js_nl()
+    + "const providers = capy.defineNativeProviders({" + js_nl()
+    + render_native_provider_entries(providers, 0)
+    + "});" + js_nl() + js_nl()
+    + render_native_provider_functions(providers, 0)
+    + "module.exports = {" + js_nl()
+    + render_native_provider_exports(providers, 0)
+    + "};" + js_nl()
+
+private fun render_native_provider_requires(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    idx: int
+): String =
+    match providers[idx] with
+    case Some { provider } ->
+        "const " + native_provider_module_variable(provider)
+        + " = capy.requireNativeProviderModule("
+        + js_string(native_provider_module_name(provider))
+        + ", __filename, "
+        + render_native_provider_load_metadata(provider)
+        + ");" + js_nl()
+        + render_native_provider_requires(providers, idx + 1)
+    case _ -> ""
+
+private fun render_native_provider_load_metadata(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    "{"
+    + " interfaceId: " + js_string(native_provider_interface_id(provider))
+    + ", qualifier: " + js_string(native_provider_qualifier(provider))
+    + ", providerSymbol: " + js_string(native_provider_symbol_name(provider))
+    + ", backend: 'javascript'"
+    + ", sourceFile: " + js_string(native_provider_source_file(provider))
+    + ", moduleName: " + js_string(native_provider_module_name(provider))
+    + ", exportName: " + js_string(native_provider_export_name(provider))
+    + " }"
+
+private fun render_native_provider_entries(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    idx: int
+): String =
+    match providers[idx] with
+    case Some { provider } ->
+        render_native_provider_entry(provider)
+        + render_native_provider_entries(providers, idx + 1)
+    case _ -> ""
+
+private fun render_native_provider_entry(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    let module_variable = native_provider_module_variable(provider)
+    let export_access = render_property_access(module_variable, native_provider_export_name(provider))
+    "    " + js_string(native_provider_bootstrap_key(provider)) + ": capy.nativeFactory({" + js_nl()
+    + "        interfaceId: " + js_string(native_provider_interface_id(provider)) + "," + js_nl()
+    + "        qualifier: " + js_string(native_provider_qualifier(provider)) + "," + js_nl()
+    + "        providerSymbol: " + js_string(native_provider_symbol_name(provider)) + "," + js_nl()
+    + "        backend: 'javascript'," + js_nl()
+    + "        sourceFile: " + js_string(native_provider_source_file(provider)) + "," + js_nl()
+    + "        moduleName: " + js_string(native_provider_module_name(provider)) + "," + js_nl()
+    + "        exportName: " + js_string(native_provider_export_name(provider)) + "," + js_nl()
+    + "        exportExists: Object.prototype.hasOwnProperty.call(" + module_variable + ", " + js_string(native_provider_export_name(provider)) + ")," + js_nl()
+    + "        exportValue: " + export_access + "," + js_nl()
+    + "        factory: " + js_string(native_provider_factory(provider)) + "," + js_nl()
+    + "        lifetime: " + js_string(native_provider_lifetime(provider)) + "," + js_nl()
+    + "        metadata: {" + js_nl()
+    + "            methods: " + render_native_provider_methods(native_provider_methods(provider), 0) + js_nl()
+    + "        }," + js_nl()
+    + "        create: () => " + render_native_provider_factory(provider, export_access) + js_nl()
+    + "    })," + js_nl()
+
+private fun render_native_provider_methods(methods: List[Tuple[String, int]], idx: int): String =
+    match methods[idx] with
+    case Some { method } ->
+        let separator = match methods[idx + 1] with
+            case Some _ -> ", "
+            case _ -> ""
+        if idx == 0
+        then "[" + render_native_provider_method(method) + separator + render_native_provider_methods(methods, idx + 1)
+        else render_native_provider_method(method) + separator + render_native_provider_methods(methods, idx + 1)
+    case _ ->
+        if idx == 0
+        then "[]"
+        else "]"
+
+private fun render_native_provider_method(method: Tuple[String, int]): String =
+    "{ name: " + js_string(native_provider_method_name(method)) + ", arity: " + native_provider_method_arity(method) + " }"
+
+private fun render_native_provider_functions(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    idx: int
+): String =
+    match providers[idx] with
+    case Some { provider } ->
+        render_native_provider_function(provider) + js_nl()
+        + render_native_provider_functions(providers, idx + 1)
+    case _ -> ""
+
+private fun render_native_provider_function(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    "function " + native_provider_bootstrap_function_name(provider) + "() {" + js_nl()
+    + "    return providers.resolve(" + js_string(native_provider_interface_id(provider))
+    + ", " + js_string(native_provider_qualifier(provider))
+    + ", " + js_string(native_provider_symbol_name(provider))
+    + ", 'javascript', " + js_string(native_provider_source_file(provider)) + ");" + js_nl()
+    + "}" + js_nl()
+
+private fun render_native_provider_exports(
+    providers: List[Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]],
+    idx: int
+): String =
+    match providers[idx] with
+    case Some { provider } ->
+        "    " + native_provider_bootstrap_function_name(provider) + "," + js_nl()
+        + render_native_provider_exports(providers, idx + 1)
+    case _ -> ""
+
+private fun render_native_provider_factory(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]],
+    factory: String
+): String =
+    if native_provider_factory(provider) == "new"
+    then "new " + factory + "()"
+    else factory + "()"
+
+private fun native_provider_module_variable(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    "__capy_provider_" + native_provider_bootstrap_function_name(provider) + "_module"
+
+private fun native_provider_bootstrap_key(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    native_provider_interface_id(provider) + "#" + native_provider_qualifier(provider)
+
+private fun render_property_access(target: String, property_name: String): String =
+    if is_valid_js_identifier(property_name) & !is_js_keyword(property_name)
+    then target + "." + property_name
+    else target + "[" + js_string(property_name) + "]"
+
+private fun native_provider_symbol_name(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[0]
+
+private fun native_provider_bootstrap_function_name(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[1]
+
+private fun native_provider_interface_id(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[2]
+
+private fun native_provider_qualifier(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[3]
+
+private fun native_provider_lifetime(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[4]
+
+private fun native_provider_source_file(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[5]
+
+private fun native_provider_module_name(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[6]
+
+private fun native_provider_export_name(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[7]
+
+private fun native_provider_factory(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): String =
+    provider[8]
+
+private fun native_provider_methods(
+    provider: Tuple[String, String, String, String, String, String, String, String, String, List[Tuple[String, int]]]
+): List[Tuple[String, int]] =
+    provider[9]
+
+private fun native_provider_method_name(method: Tuple[String, int]): String =
+    method[0]
+
+private fun native_provider_method_arity(method: Tuple[String, int]): int =
+    method[1]
+
+private fun js_nl(): String = '\n'
+
+private fun js_string(value: String): String =
+    "'" + js_string_body(value, 0, "") + "'"
+
+private fun js_string_body(value: String, idx: int, output: String): String =
+    match value[idx] with
+    case Some { char } -> js_string_body(value, idx + 1, output + js_string_char(char))
+    case _ -> output
+
+private fun js_string_char(char: String): String =
+    if char == "\\"
+    then "\\\\"
+    else if char == "'"
+        then "\\'"
+        else if char == '\r'
+            then "\\r"
+            else if char == '\n'
+                then "\\n"
+                else char
+
+private fun is_valid_js_identifier(value: String): bool =
+    match value[0] with
+    case Some { first } -> is_js_identifier_start(first) & is_valid_js_identifier_tail(value, 1)
+    case _ -> false
+
+private fun is_valid_js_identifier_tail(value: String, idx: int): bool =
+    match value[idx] with
+    case Some { char } ->
+        if is_js_identifier_part(char)
+        then is_valid_js_identifier_tail(value, idx + 1)
+        else false
+    case _ -> true
+
+private fun is_js_identifier_start(char: String): bool =
+    is_ascii_letter(char) | char == "_" | char == "$"
+
+private fun is_js_identifier_part(char: String): bool =
+    is_ascii_letter(char) | is_ascii_digit(char) | char == "_" | char == "$"
+
+private fun is_ascii_letter(char: String): bool =
+    match char with
+    case "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M" -> true
+    case "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z" -> true
+    case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m" -> true
+    case "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" -> true
+    case _ -> false
+
+private fun is_ascii_digit(char: String): bool =
+    match char with
+    case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" -> true
+    case _ -> false
+
+private fun is_js_keyword(value: String): bool =
+    match value with
+    case "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default" -> true
+    case "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for" -> true
+    case "function", "if", "implements", "import", "in", "instanceof", "interface", "let" -> true
+    case "new", "null", "package", "private", "protected", "public", "return", "super" -> true
+    case "switch", "static", "this", "throw", "try", "true", "typeof", "var", "void" -> true
+    case "while", "with", "yield" -> true
+    case _ -> false

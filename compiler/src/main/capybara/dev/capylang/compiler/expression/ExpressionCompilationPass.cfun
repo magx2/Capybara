@@ -1,0 +1,387 @@
+/// Pure expression compiler decisions shared with the Java linker while the
+/// expression slice is migrated family by family.
+data String { <native> }
+data List[T] { <native> }
+
+fun String.`+`(value: any): String = <native>
+fun List[T].`+`(value: T): List[T] = <native>
+
+fun expression_forms(): List[Tuple[String, String]] = [
+    ("literals", "BooleanValue, ByteValue, IntValue, LongValue, FloatValue, DoubleValue, StringValue, NothingValue"),
+    ("variables", "Value"),
+    ("calls", "FunctionCall, FunctionInvoke, FunctionReference"),
+    ("field_access", "FieldAccess"),
+    ("let", "LetExpression"),
+    ("lambdas", "LambdaExpression"),
+    ("branches", "IfExpression, MatchExpression"),
+    ("collections", "NewListExpression, NewSetExpression, NewDictExpression, TupleExpression"),
+    ("infix", "InfixExpression"),
+    ("index_slice", "IndexExpression, SliceExpression"),
+    ("bind_unwrap", "UnwrapExpression, LetExpression.RESULT_BIND"),
+    ("reflection", "reflection intrinsic"),
+    ("object_interop", "object construction and method calls")
+]
+
+fun literal_type(kind: String): String =
+    if kind == "BOOL"
+    then "BOOL"
+    else if kind == "BYTE"
+        then "BYTE"
+        else if kind == "INT"
+            then "INT"
+            else if kind == "LONG"
+                then "LONG"
+                else if kind == "FLOAT"
+                    then "FLOAT"
+                    else if kind == "DOUBLE"
+                        then "DOUBLE"
+                        else if kind == "STRING"
+                            then "STRING"
+                            else if kind == "NOTHING"
+                                then "NOTHING"
+                                else "ANY"
+
+fun higher_type_decision(
+    left: String,
+    left_primitive: bool,
+    left_enum_like: bool,
+    right: String,
+    right_primitive: bool,
+    right_enum_like: bool
+): String =
+    if left == right
+    then "LEFT"
+    else if left == "NOTHING"
+        then "RIGHT"
+        else if right == "NOTHING"
+            then "LEFT"
+            else if left == "ANY" | right == "ANY"
+                then "ANY"
+                else if left == "ENUM" & right_enum_like
+                    then "ENUM"
+                    else if right == "ENUM" & left_enum_like
+                        then "ENUM"
+                        else if left == "DATA" & !right_primitive
+                            then "DATA"
+                            else if right == "DATA" & !left_primitive
+                                then "DATA"
+                                else if left_primitive & right_primitive
+                                    then ep_higher_primitive_type(left, right)
+                                    else "ANY"
+
+fun is_program_main_signature(
+    name: String,
+    return_type_name: String,
+    return_type_parameters: List[String],
+    parameter_type_descriptors: List[String]
+): bool =
+    name == "main"
+    & has_program_main_arguments(parameter_type_descriptors)
+    & returns_effect_program(return_type_name, return_type_parameters)
+
+fun has_program_main_arguments(parameter_type_descriptors: List[String]): bool =
+    match parameter_type_descriptors[0] with
+    case Some { first } ->
+        parameter_type_descriptors[1] == None {}
+        & first == "List[String]"
+    case _ -> false
+
+fun returns_effect_program(return_type_name: String, return_type_parameters: List[String]): bool =
+    ep_is_effect_type(return_type_name)
+    & match return_type_parameters[0] with
+        case Some { parameter } ->
+            return_type_parameters[1] == None {}
+            & ep_is_program_type_descriptor(parameter)
+        case _ -> false
+
+fun is_direct_self_call(
+    call_name: String,
+    argument_type_descriptors: List[String],
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String]
+): bool =
+    ep_string_list_contains(self_call_names, call_name)
+    & ep_string_lists_equal(argument_type_descriptors, parameter_type_descriptors)
+
+fun expression_node(
+    id: int,
+    kind: String,
+    name: String,
+    argument_type_descriptors: List[String],
+    child_ids: List[int]
+): Tuple[int, String, String, List[String], List[int]] =
+    (id, kind, name, argument_type_descriptors, child_ids)
+
+fun analyze_tail_recursion(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    root_id: int,
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String]
+): Tuple[bool, int] =
+    analyze_tail_recursion_node(nodes, root_id, self_call_names, parameter_type_descriptors, true)
+
+private fun analyze_tail_recursion_node(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    node_id: int,
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String],
+    tail_position: bool
+): Tuple[bool, int] =
+    match find_expression_node(nodes, node_id, 0) with
+    case Some { node } ->
+        let kind = expression_node_kind(node)
+        if kind == "CALL"
+        then analyze_tail_recursion_call(nodes, node, self_call_names, parameter_type_descriptors, tail_position)
+        else if kind == "IF"
+            then merge_analysis_list([
+                analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+                analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position),
+                analyze_child_at(nodes, expression_node_child_ids(node), 2, self_call_names, parameter_type_descriptors, tail_position)
+            ], 0, empty_analysis())
+            else if kind == "LET"
+                then merge_analysis_list([
+                    analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+                    analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
+                ], 0, empty_analysis())
+                else if kind == "MATCH"
+                    then merge_analysis(
+                        analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+                        analyze_children_from(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
+                    )
+                    else if kind == "MATCH_CASE"
+                        then analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, tail_position)
+                        else if kind == "MATCH_CASE_GUARD"
+                            then merge_analysis_list([
+                                analyze_child_at(nodes, expression_node_child_ids(node), 0, self_call_names, parameter_type_descriptors, false),
+                                analyze_child_at(nodes, expression_node_child_ids(node), 1, self_call_names, parameter_type_descriptors, tail_position)
+                            ], 0, empty_analysis())
+                            else analyze_all_children(nodes, expression_node_child_ids(node), self_call_names, parameter_type_descriptors, false)
+    case _ -> empty_analysis()
+
+private fun analyze_tail_recursion_call(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    node: Tuple[int, String, String, List[String], List[int]],
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String],
+    tail_position: bool
+): Tuple[bool, int] =
+    let child_analysis = analyze_all_children(nodes, expression_node_child_ids(node), self_call_names, parameter_type_descriptors, false)
+    if is_direct_self_call(expression_node_name(node), expression_node_argument_type_descriptors(node), self_call_names, parameter_type_descriptors)
+    then
+        let self_analysis = if tail_position then tail_call_analysis() else non_tail_call_analysis(expression_node_id(node))
+        merge_analysis(self_analysis, child_analysis)
+    else child_analysis
+
+private fun analyze_all_children(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    child_ids: List[int],
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String],
+    tail_position: bool
+): Tuple[bool, int] =
+    analyze_children_from(nodes, child_ids, 0, self_call_names, parameter_type_descriptors, tail_position)
+
+private fun analyze_children_from(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    child_ids: List[int],
+    start: int,
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String],
+    tail_position: bool
+): Tuple[bool, int] =
+    fun scan(
+        nodes: List[Tuple[int, String, String, List[String], List[int]]],
+        child_ids: List[int],
+        idx: int,
+        self_call_names: List[String],
+        parameter_type_descriptors: List[String],
+        tail_position: bool,
+        acc: Tuple[bool, int]
+    ): Tuple[bool, int] =
+        match child_ids[idx] with
+        case Some { child_id } ->
+            let next = analyze_tail_recursion_node(nodes, child_id, self_call_names, parameter_type_descriptors, tail_position)
+            scan(nodes, child_ids, idx + 1, self_call_names, parameter_type_descriptors, tail_position, merge_analysis(acc, next))
+        case _ -> acc
+    ---
+    scan(nodes, child_ids, start, self_call_names, parameter_type_descriptors, tail_position, empty_analysis())
+
+private fun analyze_child_at(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    child_ids: List[int],
+    child_index: int,
+    self_call_names: List[String],
+    parameter_type_descriptors: List[String],
+    tail_position: bool
+): Tuple[bool, int] =
+    match child_ids[child_index] with
+    case Some { child_id } -> analyze_tail_recursion_node(nodes, child_id, self_call_names, parameter_type_descriptors, tail_position)
+    case _ -> empty_analysis()
+
+private fun merge_analysis_list(
+    analyses: List[Tuple[bool, int]],
+    idx: int,
+    acc: Tuple[bool, int]
+): Tuple[bool, int] =
+    match analyses[idx] with
+    case Some { analysis } -> merge_analysis_list(analyses, idx + 1, merge_analysis(acc, analysis))
+    case _ -> acc
+
+private fun merge_analysis(left: Tuple[bool, int], right: Tuple[bool, int]): Tuple[bool, int] =
+    let has_self_call = analysis_has_self_call(left) | analysis_has_self_call(right)
+    if analysis_first_non_tail_call_id(left) >= 0
+    then (has_self_call, analysis_first_non_tail_call_id(left))
+    else (has_self_call, analysis_first_non_tail_call_id(right))
+
+private fun empty_analysis(): Tuple[bool, int] =
+    (false, -1)
+
+private fun tail_call_analysis(): Tuple[bool, int] =
+    (true, -1)
+
+private fun non_tail_call_analysis(node_id: int): Tuple[bool, int] =
+    (true, node_id)
+
+private fun analysis_has_self_call(analysis: Tuple[bool, int]): bool =
+    analysis[0]
+
+private fun analysis_first_non_tail_call_id(analysis: Tuple[bool, int]): int =
+    analysis[1]
+
+private fun find_expression_node(
+    nodes: List[Tuple[int, String, String, List[String], List[int]]],
+    id: int,
+    idx: int
+): Option[Tuple[int, String, String, List[String], List[int]]] =
+    match nodes[idx] with
+    case Some { node } ->
+        if expression_node_id(node) == id
+        then Some { node }
+        else find_expression_node(nodes, id, idx + 1)
+    case _ -> None {}
+
+private fun expression_node_id(node: Tuple[int, String, String, List[String], List[int]]): int =
+    node[0]
+
+private fun expression_node_kind(node: Tuple[int, String, String, List[String], List[int]]): String =
+    node[1]
+
+private fun expression_node_name(node: Tuple[int, String, String, List[String], List[int]]): String =
+    node[2]
+
+private fun expression_node_argument_type_descriptors(node: Tuple[int, String, String, List[String], List[int]]): List[String] =
+    node[3]
+
+private fun expression_node_child_ids(node: Tuple[int, String, String, List[String], List[int]]): List[int] =
+    node[4]
+
+private fun ep_higher_primitive_type(left: String, right: String): String =
+    if left == "NOTHING"
+    then right
+    else if right == "NOTHING"
+        then left
+        else if left == "ANY" | right == "ANY"
+            then "ANY"
+            else if left == "DATA" | right == "DATA"
+                then if (left == "DATA" & right == "DATA") | left == "ENUM" | right == "ENUM" then "DATA" else "ANY"
+                else if left == "ENUM" | right == "ENUM"
+                    then if left == "ENUM" & right == "ENUM" then "ENUM" else "ANY"
+                    else ep_higher_ordered_primitive_type(left, right)
+
+private fun ep_higher_ordered_primitive_type(left: String, right: String): String =
+    if ep_primitive_rank(left) < ep_primitive_rank(right)
+    then right
+    else left
+
+private fun ep_primitive_rank(name: String): int =
+    if name == "BYTE"
+    then 0
+    else if name == "INT"
+        then 1
+        else if name == "LONG"
+            then 2
+            else if name == "FLOAT"
+                then 3
+                else if name == "DOUBLE"
+                    then 4
+                    else if name == "STRING"
+                        then 5
+                        else if name == "BOOL"
+                            then 6
+                            else if name == "NOTHING"
+                                then 7
+                                else if name == "ANY"
+                                    then 8
+                                    else if name == "DATA"
+                                        then 9
+                                        else if name == "ENUM"
+                                            then 10
+                                            else 8
+
+private fun ep_is_effect_type(type_name: String): bool =
+    type_name == "Effect" | ep_normalize_qualified_type_name(type_name) == "/capy/lang/Effect"
+
+private fun ep_is_program_type_descriptor(descriptor: String): bool =
+    let raw_type = ep_strip_type_arguments(descriptor)
+    raw_type == "Program" | ep_normalize_qualified_type_name(raw_type) == "/capy/lang/Program"
+
+private fun ep_normalize_qualified_type_name(type_name: String): String =
+    let normalized = ep_replace_char(type_name, "\\", "/")
+    if ep_string_starts_with(normalized, "/")
+    then normalized
+    else "/" + normalized
+
+private fun ep_strip_type_arguments(descriptor: String): String =
+    let generic_start = ep_index_of(descriptor, "[")
+    if generic_start >= 0
+    then descriptor[0, generic_start]
+    else descriptor
+
+private fun ep_string_lists_equal(left: List[String], right: List[String]): bool =
+    left == right
+
+private fun ep_index_of(value: String, needle: String): int =
+    fun scan(value: String, needle: String, idx: int): int =
+        if idx >= ep_string_size(value)
+        then -1
+        else if ep_string_starts_with(value[idx, ep_string_size(value)], needle)
+            then idx
+            else scan(value, needle, idx + 1)
+    ---
+    scan(value, needle, 0)
+
+private fun ep_replace_char(value: String, old: String, new_: String): String =
+    fun scan(value: String, old: String, new_: String, idx: int, output: String): String =
+        match value[idx] with
+        case Some { char } ->
+            if char == old
+            then scan(value, old, new_, idx + 1, output + new_)
+            else scan(value, old, new_, idx + 1, output + char)
+        case _ -> output
+    ---
+    scan(value, old, new_, 0, "")
+
+private fun ep_string_starts_with(value: String, prefix: String): bool =
+    let prefix_size = ep_string_size(prefix)
+    if ep_string_size(value) < prefix_size
+    then false
+    else value[0, prefix_size] == prefix
+
+private fun ep_string_size(value: String): int =
+    fun scan(value: String, idx: int): int =
+        match value[idx] with
+        case Some { _ } -> scan(value, idx + 1)
+        case _ -> idx
+    ---
+    scan(value, 0)
+
+private fun ep_string_list_contains(values: List[String], value: String): bool =
+    fun scan(values: List[String], value: String, idx: int): bool =
+        match values[idx] with
+        case Some { candidate } ->
+            if candidate == value
+            then true
+            else scan(values, value, idx + 1)
+        case _ -> false
+    ---
+    scan(values, value, 0)
