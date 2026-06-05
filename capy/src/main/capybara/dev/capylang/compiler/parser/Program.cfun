@@ -1,8 +1,20 @@
-from RawModule import { SourceKind }
-
 data Program { modules: List[Module] }
 data Module { name: String, path: String, functional: Functional, imports: List[ImportDeclaration], sourceKind: SourceKind }
 data Functional { definitions: List[Definition] }
+data ImportDeclaration {}
+data AnnotationDeclaration {}
+data DataDeclaration {}
+data DeriverDeclaration {}
+data EnumDeclaration {}
+data Function {}
+data PrimitiveBackedTypeDeclaration {}
+data TypeDeclaration {}
+
+enum SourceKind {
+    FUNCTIONAL,
+    OBJECT_ORIENTED,
+}
+
 union Definition = AnnotationDeclaration
                  | DataDeclaration
                  | DeriverDeclaration

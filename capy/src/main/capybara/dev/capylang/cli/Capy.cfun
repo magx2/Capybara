@@ -1,8 +1,8 @@
 from /capy/collection/List import { * }
-from /capy/collection/Set import { Set }
+from /capy/collection/Set import { * }
 from /capy/io/Console import { println, println_error }
 from /capy/io/IO import { create_directories, exists, is_directory, is_file, list_entries, read_text, write_text }
-from /capy/io/Path import { Path, PathRoot, RELATIVE, ABSOLUTE, HOME, from_string }
+from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { * }
 from /capy/lang/Option import { * }
@@ -13,10 +13,10 @@ from /capy/lang/System import { current_millis }
 from /capy/meta_prog/Recursive import { Recursive }
 from /capy/serialization/Json import { * }
 from /dev/capylang/compiler/CapybaraCompiler import { compile }
-from /dev/capylang/compiler/CompiledProgram import { CompiledModule, CompiledProgram, CompilerError, NativeProviderCatalog, NativeProviderManifest, empty_native_provider_catalog, empty_native_provider_manifest }
+from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
-from /dev/capylang/compiler/parser/RawModule import { FUNCTIONAL, OBJECT_ORIENTED, RawModule, SourceKind }
-from /dev/capylang/generator/GeneratedProgram import { GeneratedModule, GeneratedProgram }
+from /dev/capylang/compiler/parser/RawModule import { * }
+from /dev/capylang/generator/GeneratedProgram import { * }
 from /dev/capylang/generator/Generator import { generate }
 
 const COMPILER_VERSION = "0.4.0-SNAPSHOT"
@@ -368,27 +368,22 @@ private fun option_or(option: Option[String], default_value: String): String =
     case Some { value } -> value
     case None -> default_value
 
+private fun option_present(option: Option[String]): bool =
+    match option with
+    case Some _ -> true
+    case None -> false
+
 private fun validate_test_outputs(options: NamedOptions): CliArgs[NamedOptions] =
-    match options.test_input with
-    case Some { _ } ->
-        match options.test_output with
-        case Some { _ } -> ParsedArgs { options }
-        case None -> UsageError { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." }
-    case None ->
-        match options.test_output with
-        case Some { _ } -> UsageError { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." }
-        case None -> ParsedArgs { options }
+    if option_present(options.test_input) == option_present(options.test_output)
+    then ParsedArgs { options }
+    else UsageError { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." }
 
 private fun validate_package_inputs(options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
-    match options.compiled_input with
-    case Some { _ } ->
-        match options.input with
-        case Some { _ } -> UsageError { message: "Package accepts only one of `--compiled-input` or `--input`." }
-        case None -> ParsedArgs { options }
-    case None ->
-        match options.input with
-        case Some { _ } -> ParsedArgs { options }
-        case None -> UsageError { message: "Package requires either `--compiled-input` or `--input`." }
+    if option_present(options.compiled_input) & option_present(options.input)
+    then UsageError { message: "Package accepts only one of `--compiled-input` or `--input`." }
+    else if option_present(options.compiled_input) | option_present(options.input)
+    then ParsedArgs { options }
+    else UsageError { message: "Package requires either `--compiled-input` or `--input`." }
 
 private fun parse_output_type(value: String): CliArgs[OutputType] =
     match value with
@@ -453,11 +448,6 @@ private fun capy_override_field(arg: String): String =
             case Some { char } -> copy_suffix(value, idx + 1, acc + char)
     ---
     copy_suffix(arg, 7, "")
-
-data CompileConfiguration {
-    libraries: Set[CompiledModule],
-    native_providers: NativeProviderManifest
-}
 
 fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
     match compile_configuration(options) with
@@ -597,29 +587,27 @@ private fun compile_generate_tests(
     configuration: CompileConfiguration,
     mainProgram: CompiledProgram
 ): Effect[Result[Option[CompiledProgram]]] =
-    match options.test_input with
-    case None ->
-        match options.test_output with
-        case None -> pure(Success { None {} })
-        case Some _ -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
-    case Some { rawTestInput } ->
-        match options.test_output with
-        case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
-        case Some { rawTestOutput } ->
-            let testInputPath = from_string(rawTestInput)
-            let testOutputPath = from_string(rawTestOutput)
-            validate_output_directory(testOutputPath, rawTestOutput).flat_map(outputResult =>
-                match outputResult with
-                case Error e -> pure(e)
-                case Success _ ->
-                    compile_source_directory(testInputPath, rawTestInput, configuration.with(libraries: merge_libraries(configuration.libraries, mainProgram))).flat_map(compilation =>
-                        match compilation with
-                        case Right { errors } -> pure(Error { message: compiler_errors_text(errors) })
-                        case Left { program } ->
-                            let testProgram = test_generation_program(options.output_type, mainProgram, program)
-                            pure(Success { Some { testProgram } })
-                    )
-            )
+    if !option_present(options.test_input) & !option_present(options.test_output)
+    then pure(Success { None {} })
+    else if !option_present(options.test_input) | !option_present(options.test_output)
+    then pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
+    else
+        let rawTestInput = option_or(options.test_input, "")
+        let rawTestOutput = option_or(options.test_output, "")
+        let testInputPath = from_string(rawTestInput)
+        let testOutputPath = from_string(rawTestOutput)
+        validate_output_directory(testOutputPath, rawTestOutput).flat_map(outputResult =>
+            match outputResult with
+            case Error e -> pure(e)
+            case Success _ ->
+                compile_source_directory(testInputPath, rawTestInput, configuration.with(libraries: merge_libraries(configuration.libraries, mainProgram))).flat_map(compilation =>
+                    match compilation with
+                    case Right { errors } -> pure(Error { message: compiler_errors_text(errors) })
+                    case Left { program } ->
+                        let testProgram = test_generation_program(options.output_type, mainProgram, program)
+                        pure(Success { Some { testProgram } })
+                )
+        )
 
 private fun write_compile_generate_test_output(options: CompileGenerateOptions, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
     match testProgram with
@@ -700,7 +688,7 @@ private fun build_raw_module(relative_path: Path, source: String): Result[RawMod
             name: strip_source_extension(file_name),
             path: module_path(relative_path),
             input: source,
-            source_kind: kind
+            sourceKind: kind
         }}
 
 private fun list_source_files(path: Path): Effect[Result[List[Path]]] =
@@ -749,18 +737,22 @@ private fun source_file(path: Path): bool =
         case Some _ -> true
 
 private fun source_kind(file_name: String): Option[SourceKind] =
-    if file_name.end_with(FUNCTIONAL.extension())
+    if file_name.end_with(functional_extension())
     then Some { FUNCTIONAL }
-    else if file_name.end_with(OBJECT_ORIENTED.extension())
+    else if file_name.end_with(object_oriented_extension())
     then Some { OBJECT_ORIENTED }
     else None {}
 
 private fun strip_source_extension(file_name: String): String =
-    if file_name.end_with(FUNCTIONAL.extension())
-    then file_name[0, file_name.size().value - FUNCTIONAL.extension().size().value]
-    else if file_name.end_with(OBJECT_ORIENTED.extension())
-    then file_name[0, file_name.size().value - OBJECT_ORIENTED.extension().size().value]
+    if file_name.end_with(functional_extension())
+    then file_name[0, file_name.size().value - functional_extension().size().value]
+    else if file_name.end_with(object_oriented_extension())
+    then file_name[0, file_name.size().value - object_oriented_extension().size().value]
     else file_name
+
+private fun functional_extension(): String = ".cfun"
+
+private fun object_oriented_extension(): String = ".coo"
 
 private fun module_path(relative_path: Path): String =
     match relative_path.parent() with
@@ -935,12 +927,12 @@ private fun parse_linked_modules(modules: List[Json]): Result[List[CompiledModul
 
 private fun parse_linked_module(json: Json): Result[CompiledModule] =
     match json with
-    case JsonObject { moduleFields } ->
+    case JsonObject { moduleFields } -> {
         match required_json_string(JsonObject { moduleFields }, "name") with
-        case Error e -> e
+        case Error { message } -> linked_module_object_error(message)
         case Success { name } ->
             match required_json_string(JsonObject { moduleFields }, "path") with
-            case Error e -> e
+            case Error { message } -> linked_module_object_error(message)
             case Success { path } -> Success { CompiledModule {
                 name: name,
                 path: path,
@@ -951,7 +943,18 @@ private fun parse_linked_module(json: Json): Result[CompiledModule] =
                 annotations: {:},
                 staticImports: []
             }}
-    case _ -> Error { message: "Linked program `modules` must contain objects." }
+    }
+    case JsonArray _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonString _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonValueObject _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonNumberDouble _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonNumberLong _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonValueArray _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonBool _ -> linked_module_object_error("Linked program `modules` must contain objects.")
+    case JsonNull -> linked_module_object_error("Linked program `modules` must contain objects.")
+
+private fun linked_module_object_error(message: String): Result[CompiledModule] =
+    Error { message: message }
 
 private fun required_json_array(json: JsonObject, fieldName: String): Result[JsonArray] =
     match json.get(fieldName) with
