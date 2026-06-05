@@ -9,6 +9,7 @@ from /capy/lang/Option import { * }
 from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
+from /capy/lang/System import { current_millis }
 from /capy/meta_prog/Recursive import { Recursive }
 from /capy/serialization/Json import { * }
 from /dev/capylang/compiler/CapybaraCompiler import { compile }
@@ -49,7 +50,7 @@ fun execute_compile_generate(args: List[String]): Effect[/capy/lang/Program] =
 fun execute_package(args: List[String]): Effect[/capy/lang/Program] =
     match parsePackageOptions(args) with
     case UsageError { message } -> usageError(message)
-    case ParsedArgs { options } -> runPackage(options)
+    case ParsedArgs { options } -> run_package(options)
 
 data CompileOptions {
     input: String,
@@ -93,6 +94,17 @@ data PackageOptions {
 data CapyOverride {
     field: String,
     value: String
+}
+
+data PackageArchive {
+    format: String,
+    module: String,
+    files: List[PackageFile]
+}
+
+data PackageFile {
+    path: String,
+    content: String
 }
 
 enum LogLevel {
@@ -978,6 +990,182 @@ private fun writeGeneratedModule(outputDir: Path, module: GeneratedModule): Effe
         case Success _ -> write_text(outputFile, module.code)
     )
 
+private fun validateModuleFile(path: Path, rawPath: String): Effect[Result[Path]] =
+    exists(path).flat_map(present =>
+        if !present
+        then pure(Error { message: "Module file does not exist: " + rawPath })
+        else is_file(path).map(file =>
+            if file
+            then Success { path }
+            else Error { message: "Module path is not a file: " + rawPath }
+        )
+    )
+
+private fun packageOutputPath(moduleFile: Path): Path =
+    match moduleFile.parent() with
+    case None -> from_string("capy.cbin")
+    case Some { parent } -> parent / "capy.cbin"
+
+private fun packageArchive(
+    options: PackageOptions,
+    moduleText: String,
+    files: List[PackageFile],
+    buildMillis: long
+): PackageArchive =
+    PackageArchive {
+        format: "capy-cbin-json-v1",
+        module: packageModuleDefinition(moduleText, options.capy_overrides, buildMillis),
+        files: files
+    }
+
+private fun packageModuleDefinition(moduleText: String, overrides: List[CapyOverride], buildMillis: long): String =
+    ensureTrailingNewline(moduleText)
+    + "capybara_compiler_version: " + yamlString(COMPILER_VERSION) + "\n"
+    + "build_date_time: " + yamlString("unix_millis:" + buildMillis) + "\n"
+    + "os: " + yamlString("unknown") + "\n"
+    + packageOverrideLines(overrides)
+
+private fun ensureTrailingNewline(value: String): String =
+    if value.is_empty()
+    then ""
+    else if value.end_with("\n")
+    then value
+    else value + "\n"
+
+private fun packageOverrideLines(overrides: List[CapyOverride]): String =
+    match overrides[0] with
+    case None -> ""
+    case Some { override } -> override.field + ": " + yamlString(override.value) + "\n" + packageOverrideLines(overrides[1:])
+
+private fun yamlString(value: String): String =
+    "\"" + value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    + "\""
+
+private fun findPackageFiles(options: PackageOptions): Effect[Result[List[PackageFile]]] =
+    match options.compiled_input with
+    case Some { rawCompiledInput } ->
+        let compiledInputPath = from_string(rawCompiledInput)
+        validateInputDirectory(compiledInputPath, rawCompiledInput).flat_map(inputResult =>
+            match inputResult with
+            case Error e -> pure(e)
+            case Success _ -> readPackageFiles(compiledInputPath, rawCompiledInput)
+        )
+    case None ->
+        match options.input with
+        case None -> pure(Error { message: "Package requires either `--compiled-input` or `--input`." })
+        case Some { rawInput } ->
+            let inputPath = from_string(rawInput)
+            let configuration = CompileConfiguration {
+                libraries: {},
+                native_providers: empty_native_provider_manifest()
+            }
+            compileSourceDirectory(inputPath, rawInput, configuration).map(compilation =>
+                match compilation with
+                case Right { errors } -> Error { message: compilerErrorsText(errors) }
+                case Left { program } -> packageFilesFromProgram(program)
+            )
+
+private fun readPackageFiles(root: Path, rawRoot: String): Effect[Result[List[PackageFile]]] =
+    listRegularFiles(root).flat_map(filesResult =>
+        match filesResult with
+        case Error e -> pure(e)
+        case Success { files } ->
+            if files.is_empty()
+            then pure(Error { message: "No compiled package files found under: " + rawRoot })
+            else readPackageFiles(root, files)
+    )
+
+private fun readPackageFiles(root: Path, files: List[Path]): Effect[Result[List[PackageFile]]] =
+    match files[0] with
+    case None -> pure(Success { [] })
+    case Some { file } ->
+        read_text(file).flat_map(readResult =>
+            match readResult with
+            case Error e -> pure(e)
+            case Success { content } ->
+                readPackageFiles(root, files[1:]).map(restResult =>
+                    match restResult with
+                    case Error e -> e
+                    case Success { rest } -> Success { [PackageFile {
+                        path: pathToString(relativeTo(root, file)),
+                        content: content
+                    }] + rest }
+                )
+        )
+
+private fun listRegularFiles(path: Path): Effect[Result[List[Path]]] =
+    list_entries(path).flat_map(entriesResult =>
+        match entriesResult with
+        case Error e -> pure(e)
+        case Success { entries } -> listRegularFilesFromEntries(entries)
+    )
+
+private fun listRegularFilesFromEntries(entries: List[Path]): Effect[Result[List[Path]]] =
+    match entries[0] with
+    case None -> pure(Success { [] })
+    case Some { entry } ->
+        is_file(entry).flat_map(file =>
+            if file
+            then listRegularFilesFromEntries(entries[1:]).map(restResult =>
+                match restResult with
+                case Error e -> e
+                case Success { rest } -> Success { [entry] + rest }
+            )
+            else is_directory(entry).flat_map(directory =>
+                if directory
+                then listRegularFiles(entry).flat_map(childrenResult =>
+                    match childrenResult with
+                    case Error e -> pure(e)
+                    case Success { children } ->
+                        listRegularFilesFromEntries(entries[1:]).map(restResult =>
+                            match restResult with
+                            case Error e -> e
+                            case Success { rest } -> Success { children + rest }
+                        )
+                )
+                else listRegularFilesFromEntries(entries[1:])
+            )
+        )
+
+private fun packageFilesFromProgram(program: CompiledProgram): Result[List[PackageFile]] =
+    match jsonPackageFile("program.json", program) with
+    case Error e -> e
+    case Success { programFile } ->
+        match packageFilesFromModules(program.modules) with
+        case Error e -> e
+        case Success { moduleFiles } -> Success { [programFile] + moduleFiles }
+
+private fun packageFilesFromModules(modules: List[CompiledModule]): Result[List[PackageFile]] =
+    match modules[0] with
+    case None -> Success { [] }
+    case Some { module } ->
+        match jsonPackageFile(pathToString(linkedModuleFile(from_string(""), module)), module) with
+        case Error e -> e
+        case Success { moduleFile } ->
+            match packageFilesFromModules(modules[1:]) with
+            case Error e -> e
+            case Success { rest } -> Success { [moduleFile] + rest }
+
+private fun jsonPackageFile(path: String, value: data): Result[PackageFile] =
+    match to_json(value) with
+    case Error { message } -> Error { message: "Unable to serialize package file `" + path + "`: " + message }
+    case Success { json } -> Success { PackageFile {
+        path: path,
+        content: serialize(json)
+    }}
+
+private fun writePackageArchive(outputFile: Path, archive: PackageArchive): Effect[Result[String]] =
+    createParentDirectories(outputFile).flat_map(parentResult =>
+        match parentResult with
+        case Error e -> pure(e)
+        case Success _ -> writeJsonFile(outputFile, archive)
+    )
+
 fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
     match compileGenerateConfiguration(options) with
     case Error { message } -> runtimeError(message)
@@ -1017,5 +1205,30 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
                 )
         )
 
-private fun runPackage(options: PackageOptions): Effect[/capy/lang/Program] =
-    commandNotReady("package")
+fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
+    let moduleFile = from_string(options.module)
+    validateModuleFile(moduleFile, options.module).flat_map(moduleResult =>
+        match moduleResult with
+        case Error { message } -> runtimeError(message)
+        case Success _ ->
+            read_text(moduleFile).flat_map(moduleReadResult =>
+                match moduleReadResult with
+                case Error { message } -> runtimeError("Unable to read module YAML: " + options.module + ": " + message)
+                case Success { moduleText } ->
+                    findPackageFiles(options).flat_map(filesResult =>
+                        match filesResult with
+                        case Error { message } -> runtimeError(message)
+                        case Success { files } ->
+                            current_millis().flat_map(buildMillis =>
+                                writePackageArchive(
+                                    packageOutputPath(moduleFile),
+                                    packageArchive(options, moduleText, files, buildMillis)
+                                ).flat_map(writeResult =>
+                                    match writeResult with
+                                    case Error { message } -> runtimeError(message)
+                                    case Success _ -> pure(/capy/lang/Program.Success {})
+                                )
+                            )
+                    )
+            )
+    )
