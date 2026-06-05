@@ -5,29 +5,29 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedModule, Generate
 
 fun java_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
-        modules: javaModules(program.modules)
+        modules: java_modules(program.modules)
     }
 
-private fun javaModules(modules: List[CompiledModule]): List[GeneratedModule] =
+private fun java_modules(modules: List[CompiledModule]): List[GeneratedModule] =
     match modules[0] with
     case None -> []
     case Some { module } -> [GeneratedModule {
-        relativePath: moduleRelativePath(module, ".java"),
-        code: javaModuleCode(module)
-    }] + javaModules(modules[1:])
+        relativePath: module_relative_path(module, ".java"),
+        code: java_module_code(module)
+    }] + java_modules(modules[1:])
 
-private fun javaModuleCode(module: CompiledModule): String =
-    javaPackage(module)
+private fun java_module_code(module: CompiledModule): String =
+    java_package(module)
     + "public final class " + module.name + " {\n"
     + "    private " + module.name + "() {}\n"
     + "}\n"
 
-private fun javaPackage(module: CompiledModule): String =
+private fun java_package(module: CompiledModule): String =
     if module.path.is_empty()
     then ""
     else "package " + module.path.replace("/", ".") + ";\n\n"
 
-private fun moduleRelativePath(module: CompiledModule, extension: String): String =
+private fun module_relative_path(module: CompiledModule, extension: String): String =
     if module.path.is_empty()
     then module.name + extension
     else module.path + "/" + module.name + extension
