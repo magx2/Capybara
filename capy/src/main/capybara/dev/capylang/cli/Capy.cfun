@@ -1,0 +1,35 @@
+from /capy/lang/Effect import { pure }
+from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+
+fun main(args: List[String]): Effect[Program] =
+    parse_task(args)
+        .map(task => Success {
+            match task with
+            case COMPILE_CODE => execute_compile(args[1:])
+            case GENERATE_CODE => execute_generate(args[1:])
+            case COMPILE_GENERATE_CODE => execute_compile_generate(args[1:])
+            case PACKAGE => execute_package(args[1:])
+        })
+        .or_else(error => pure(DEFAULT_FAILED_EXIT_CODE))
+
+private fun parse_task(args: List[String]): Result[Task] =
+    match args[0] with
+    case Some { "compile" } -> Success { COMPILE_CODE }
+    case Some { "generate" } -> Success { GENERATE_CODE }
+    case Some { "compile-generate" } -> Success { COMPILE_GENERATE_CODE }
+    case Some { "package" } -> Success { PACKAGE }
+    case Some { msg } -> Error { "Unknown command `{msg}`!" }
+    case None -> Error { "No command passed!" }
+
+enum Task {
+    COMPILE_CODE,
+    GENERATE_CODE,
+    COMPILE_GENERATE_CODE,
+    PACKAGE
+}
+
+// TODO(codex): Implement the actual logic for each task
+fun execute_compile(args: List[String]): Effect[Program] = ???
+fun execute_generate(args: List[String]): Effect[Program] = ???
+fun execute_compile_generate(args: List[String]): Effect[Program] = ???
+fun execute_package(args: List[String]): Effect[Program] = ???

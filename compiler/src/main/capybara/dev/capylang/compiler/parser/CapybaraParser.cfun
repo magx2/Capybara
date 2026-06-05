@@ -1,0 +1,2 @@
+@NativeProvider
+fun parser(): Effect[CapybaraParser] = <native>
