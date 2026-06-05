@@ -1,9 +1,49 @@
+from /capy/collection/List import { * }
+from /capy/collection/Set import { Set }
+from /capy/lang/Effect import { Effect, pure }
+from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
-from OutputType import { OutputType }
+from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/parser/RawModule import { RawModule }
 
-fun compile(rawModules: List[RawModule],
+fun compile(
+    rawModules: List[RawModule],
     libraries: Set[CompiledModule],
     nativeProviders: NativeProviderManifest,
-    nativeImplementationProviders: NativeProviderManifest): Effect[Either[CompiledProgram, List[CompilerError]] =
-    // todo(codex): implement the compile function, which is the main entry point for the compiler. It should take in the raw modules, libraries, and native providers, and return a compiled program or an error.
-    ???
+    nativeImplementationProviders: NativeProviderManifest
+): Effect[Either[CompiledProgram, List[CompilerError]]] =
+    if rawModules.is_empty()
+    then pure(Right { [CompilerError {
+        message: "No Capybara source modules found.",
+        moduleName: "",
+        line: 0,
+        column: 0
+    }] })
+    else pure(Left { CompiledProgram {
+        modules: compileModules(rawModules),
+        objectOrientedModules: [],
+        nativeProviders: nativeProviders,
+        nativeProviderCatalog: empty_native_provider_catalog()
+    }})
+
+private fun compileModules(raw_modules: List[RawModule]): List[CompiledModule] =
+    match raw_modules[0] with
+    case None -> []
+    case Some { raw_module } -> [compileModule(raw_module)] + compileModules(raw_modules[1:])
+
+private fun compileModule(raw_module: RawModule): CompiledModule =
+    CompiledModule {
+        name: raw_module.name,
+        path: normalizeModulePath(raw_module.path),
+        types: {:},
+        visiblePrimitiveBackedTypes: {:},
+        functions: [],
+        derivers: {:},
+        annotations: {:},
+        staticImports: []
+    }
+
+private fun normalizeModulePath(path: String): String =
+    if path.starts_with("/")
+    then normalizeModulePath(path[1, path.size()])
+    else path

@@ -1,44 +1,53 @@
 from /capy/collection/List import { * }
+from /capy/collection/Set import { Set }
 from /capy/io/Console import { println, println_error }
+from /capy/io/IO import { create_directories, exists, is_directory, is_file, list_entries, read_text, write_text }
+from /capy/io/Path import { Path, PathRoot, RELATIVE, ABSOLUTE, HOME, from_string }
 from /capy/lang/Effect import { * }
+from /capy/lang/Either import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
+from /capy/serialization/Json import { serialize, to_json }
+from /dev/capylang/compiler/CapybaraCompiler import { compile }
+from /dev/capylang/compiler/CompiledProgram import { CompiledModule, CompiledProgram, CompilerError, NativeProviderManifest, empty_native_provider_manifest }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
+from /dev/capylang/compiler/parser/RawModule import { FUNCTIONAL, OBJECT_ORIENTED, RawModule, SourceKind }
 
 const COMPILER_VERSION = "0.4.0-SNAPSHOT"
 
 fun main(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
-    case None -> usage_error("No command passed!")
-    case Some { "-h" } | Some { "--help" } -> print_help()
-    case Some { "-v" } | Some { "--version" } -> print_version()
+    case None -> usageError("No command passed!")
+    case Some { "-h" } | Some { "--help" } -> printHelp()
+    case Some { "-v" } | Some { "--version" } -> printVersion()
     case Some { "compile" } -> execute_compile(args[1:])
     case Some { "generate" } -> execute_generate(args[1:])
     case Some { "compile-generate" } -> execute_compile_generate(args[1:])
     case Some { "package" } -> execute_package(args[1:])
-    case Some { command } -> usage_error("Unknown command `" + command + "`.")
+    case Some { command } -> usageError("Unknown command `" + command + "`.")
 
 fun execute_compile(args: List[String]): Effect[/capy/lang/Program] =
-    match parse_compile_options(args) with
-    case UsageError { message } -> usage_error(message)
+    match parseCompileOptions(args) with
+    case UsageError { message } -> usageError(message)
     case ParsedArgs { options } -> run_compile(options)
 
 fun execute_generate(args: List[String]): Effect[/capy/lang/Program] =
-    match parse_generate_options(args) with
-    case UsageError { message } -> usage_error(message)
-    case ParsedArgs { options } -> run_generate(options)
+    match parseGenerateOptions(args) with
+    case UsageError { message } -> usageError(message)
+    case ParsedArgs { options } -> runGenerate(options)
 
 fun execute_compile_generate(args: List[String]): Effect[/capy/lang/Program] =
-    match parse_compile_generate_options(args) with
-    case UsageError { message } -> usage_error(message)
-    case ParsedArgs { options } -> run_compile_generate(options)
+    match parseCompileGenerateOptions(args) with
+    case UsageError { message } -> usageError(message)
+    case ParsedArgs { options } -> runCompileGenerate(options)
 
 fun execute_package(args: List[String]): Effect[/capy/lang/Program] =
-    match parse_package_options(args) with
-    case UsageError { message } -> usage_error(message)
-    case ParsedArgs { options } -> run_package(options)
+    match parsePackageOptions(args) with
+    case UsageError { message } -> usageError(message)
+    case ParsedArgs { options } -> runPackage(options)
 
 data CompileOptions {
     input: String,
@@ -128,40 +137,40 @@ fun CliArgs[T].`|`(map: T => CliArgs[Y]): CliArgs[Y] =
     case UsageError e -> e
     case ParsedArgs { value } -> map(value)
 
-private fun parse_compile_options(args: List[String]): CliArgs[CompileOptions] =
-    match parse_named_options(args, 0, empty_named_options(), NamedOptionRules {
+private fun parseCompileOptions(args: List[String]): CliArgs[CompileOptions] =
+    match parseNamedOptions(args, 0, emptyNamedOptions(), NamedOptionRules {
         allow_libs: true,
         allow_skip_java_lib: false,
         allow_linked_output: false,
         allow_test_outputs: false
     }) with
     case UsageError e -> e
-    case ParsedArgs { options } -> compile_options_from_named(options)
+    case ParsedArgs { options } -> compileOptionsFromNamed(options)
 
-private fun parse_generate_options(args: List[String]): CliArgs[GenerateOptions] =
+private fun parseGenerateOptions(args: List[String]): CliArgs[GenerateOptions] =
     match args[0] with
     case None -> UsageError { message: "Missing output type for `generate`." }
     case Some { output_type_name } ->
-        match parse_output_type(output_type_name) with
+        match parseOutputType(output_type_name) with
         case UsageError e -> e
         case ParsedArgs { output_type } ->
-            match parse_named_options(args[1:], 0, empty_named_options(), NamedOptionRules {
+            match parseNamedOptions(args[1:], 0, emptyNamedOptions(), NamedOptionRules {
                 allow_libs: false,
                 allow_skip_java_lib: true,
                 allow_linked_output: false,
                 allow_test_outputs: false
             }) with
             case UsageError e -> e
-            case ParsedArgs { options } -> generate_options_from_named(output_type, options)
+            case ParsedArgs { options } -> generateOptionsFromNamed(output_type, options)
 
-private fun parse_compile_generate_options(args: List[String]): CliArgs[CompileGenerateOptions] =
+private fun parseCompileGenerateOptions(args: List[String]): CliArgs[CompileGenerateOptions] =
     match args[0] with
     case None -> UsageError { message: "Missing output type for `compile-generate`." }
     case Some { output_type_name } ->
-        match parse_output_type(output_type_name) with
+        match parseOutputType(output_type_name) with
         case UsageError e -> e
         case ParsedArgs { output_type } ->
-            match parse_named_options(args[1:], 0, empty_named_options(), NamedOptionRules {
+            match parseNamedOptions(args[1:], 0, emptyNamedOptions(), NamedOptionRules {
                 allow_libs: true,
                 allow_skip_java_lib: true,
                 allow_linked_output: true,
@@ -169,12 +178,12 @@ private fun parse_compile_generate_options(args: List[String]): CliArgs[CompileG
             }) with
             case UsageError e -> e
             case ParsedArgs { options } ->
-                match validate_test_outputs(options) with
+                match validateTestOutputs(options) with
                 case UsageError e -> e
-                case ParsedArgs { validated_options } -> compile_generate_options_from_named(output_type, validated_options)
+                case ParsedArgs { validated_options } -> compileGenerateOptionsFromNamed(output_type, validated_options)
 
-private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
-    match parse_package_options(args, 0, PartialPackageOptions {
+private fun parsePackageOptions(args: List[String]): CliArgs[PackageOptions] =
+    match parsePackageOptions(args, 0, PartialPackageOptions {
         compiled_input: None {},
         input: None {},
         module: None {},
@@ -183,15 +192,15 @@ private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
     }) with
     case UsageError e -> e
     case ParsedArgs { options } ->
-        match validate_package_inputs(options) with
+        match validatePackageInputs(options) with
         case UsageError e -> e
-        case ParsedArgs { validated_options } -> package_options_from_partial(validated_options)
+        case ParsedArgs { validated_options } -> packageOptionsFromPartial(validated_options)
 
-private fun compile_options_from_named(options: NamedOptions): CliArgs[CompileOptions] =
-    match required_option(options.input, "input", "compile") with
+private fun compileOptionsFromNamed(options: NamedOptions): CliArgs[CompileOptions] =
+    match requiredOption(options.input, "input", "compile") with
     case UsageError e -> e
     case ParsedArgs { input } ->
-        match required_option(options.output, "output", "compile") with
+        match requiredOption(options.output, "output", "compile") with
         case UsageError e -> e
         case ParsedArgs { output } -> ParsedArgs { CompileOptions {
             input: input,
@@ -202,22 +211,22 @@ private fun compile_options_from_named(options: NamedOptions): CliArgs[CompileOp
             log_level: options.log_level
         }}
 
-private fun generate_options_from_named(output_type: OutputType, options: NamedOptions): CliArgs[GenerateOptions] =
-    match required_option(options.output, "output", "generate") with
+private fun generateOptionsFromNamed(output_type: OutputType, options: NamedOptions): CliArgs[GenerateOptions] =
+    match requiredOption(options.output, "output", "generate") with
     case UsageError e -> e
     case ParsedArgs { output } -> ParsedArgs { GenerateOptions {
         output_type: output_type,
-        input: option_or(options.input, "."),
+        input: optionOr(options.input, "."),
         output: output,
         include_java_lib_resources: !options.skip_java_lib,
         log_level: options.log_level
     }}
 
-private fun compile_generate_options_from_named(output_type: OutputType, options: NamedOptions): CliArgs[CompileGenerateOptions] =
-    match required_option(options.input, "input", "compile-generate") with
+private fun compileGenerateOptionsFromNamed(output_type: OutputType, options: NamedOptions): CliArgs[CompileGenerateOptions] =
+    match requiredOption(options.input, "input", "compile-generate") with
     case UsageError e -> e
     case ParsedArgs { input } ->
-        match required_option(options.output, "output", "compile-generate") with
+        match requiredOption(options.output, "output", "compile-generate") with
         case UsageError e -> e
         case ParsedArgs { output } -> ParsedArgs { CompileGenerateOptions {
             output_type: output_type,
@@ -233,8 +242,8 @@ private fun compile_generate_options_from_named(output_type: OutputType, options
             log_level: options.log_level
         }}
 
-private fun package_options_from_partial(options: PartialPackageOptions): CliArgs[PackageOptions] =
-    match required_option(options.module, "module", "package") with
+private fun packageOptionsFromPartial(options: PartialPackageOptions): CliArgs[PackageOptions] =
+    match requiredOption(options.module, "module", "package") with
     case UsageError e -> e
     case ParsedArgs { module } -> ParsedArgs { PackageOptions {
         compiled_input: options.compiled_input,
@@ -244,79 +253,79 @@ private fun package_options_from_partial(options: PartialPackageOptions): CliArg
         log_level: options.log_level
     }}
 
-private fun parse_named_options(args: List[String], idx: int, options: NamedOptions, rules: NamedOptionRules): CliArgs[NamedOptions] =
+private fun parseNamedOptions(args: List[String], idx: int, options: NamedOptions, rules: NamedOptionRules): CliArgs[NamedOptions] =
     match args[idx] with
     case None -> ParsedArgs { options }
     case Some { "--log" } ->
-        next_value(args, idx, "--log")
-        | value => parse_log_level(value)
-        | log_level => parse_named_options(args, idx + 2, options.with(log_level: log_level), rules)
+        nextValue(args, idx, "--log")
+        | value => parseLogLevel(value)
+        | log_level => parseNamedOptions(args, idx + 2, options.with(log_level: log_level), rules)
     case Some { "-i" } | Some { "--input" } ->
-        next_value(args, idx, "input")
-        | value => parse_named_options(args, idx + 2, options.with(input: Some { value }), rules)
+        nextValue(args, idx, "input")
+        | value => parseNamedOptions(args, idx + 2, options.with(input: Some { value }), rules)
     case Some { "-o" } | Some { "--output" } ->
-        next_value(args, idx, "output")
-        | value => parse_named_options(args, idx + 2, options.with(output: Some { value }), rules)
+        nextValue(args, idx, "output")
+        | value => parseNamedOptions(args, idx + 2, options.with(output: Some { value }), rules)
     case Some { "--linked-output" } ->
         if !rules.allow_linked_output
         then UsageError { message: "Option `--linked-output` is supported only for `compile-generate`." }
-        else next_value(args, idx, "--linked-output")
-            | value => parse_named_options(args, idx + 2, options.with(linked_output: Some { value }), rules)
+        else nextValue(args, idx, "--linked-output")
+            | value => parseNamedOptions(args, idx + 2, options.with(linked_output: Some { value }), rules)
     case Some { "--test-input" } ->
         if !rules.allow_test_outputs
         then UsageError { message: "Option `--test-input` is supported only for `compile-generate`." }
-        else next_value(args, idx, "--test-input")
-            | value => parse_named_options(args, idx + 2, options.with(test_input: Some { value }), rules)
+        else nextValue(args, idx, "--test-input")
+            | value => parseNamedOptions(args, idx + 2, options.with(test_input: Some { value }), rules)
     case Some { "--test-output" } ->
         if !rules.allow_test_outputs
         then UsageError { message: "Option `--test-output` is supported only for `compile-generate`." }
-        else next_value(args, idx, "--test-output")
-            | value => parse_named_options(args, idx + 2, options.with(test_output: Some { value }), rules)
+        else nextValue(args, idx, "--test-output")
+            | value => parseNamedOptions(args, idx + 2, options.with(test_output: Some { value }), rules)
     case Some { "-l" } | Some { "--libs" } ->
         if !rules.allow_libs
         then UsageError { message: "Option `--libs` is supported only for `compile` and `compile-generate`." }
-        else next_value(args, idx, "--libs")
-            | value => parse_named_options(args, idx + 2, options.with(libs: Some { value }), rules)
+        else nextValue(args, idx, "--libs")
+            | value => parseNamedOptions(args, idx + 2, options.with(libs: Some { value }), rules)
     case Some { "--native-wiring" } ->
         if !rules.allow_libs
         then UsageError { message: "Option `--native-wiring` is supported only for `compile` and `compile-generate`." }
-        else next_value(args, idx, "--native-wiring")
-            | value => parse_named_options(args, idx + 2, options.with(native_wiring: Some { value }), rules)
+        else nextValue(args, idx, "--native-wiring")
+            | value => parseNamedOptions(args, idx + 2, options.with(native_wiring: Some { value }), rules)
     case Some { "--compile-tests" } ->
         if !rules.allow_libs
         then UsageError { message: "Option `--compile-tests` is supported only for `compile` and `compile-generate`." }
-        else parse_named_options(args, idx + 1, options.with(compile_tests: true), rules)
+        else parseNamedOptions(args, idx + 1, options.with(compile_tests: true), rules)
     case Some { "--skip-java-lib" } ->
         if !rules.allow_skip_java_lib
         then UsageError { message: "Option `--skip-java-lib` is supported only for `generate` and `compile-generate`." }
-        else parse_named_options(args, idx + 1, options.with(skip_java_lib: true), rules)
+        else parseNamedOptions(args, idx + 1, options.with(skip_java_lib: true), rules)
     case Some { arg } -> UsageError { message: "Unknown option `" + arg + "`." }
 
-private fun parse_package_options(args: List[String], idx: int, options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
+private fun parsePackageOptions(args: List[String], idx: int, options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
     match args[idx] with
     case None -> ParsedArgs { options }
     case Some { "--log" } ->
-        next_value(args, idx, "--log")
-        | value => parse_log_level(value)
-        | log_level => parse_package_options(args, idx + 2, options.with(log_level: log_level))
+        nextValue(args, idx, "--log")
+        | value => parseLogLevel(value)
+        | log_level => parsePackageOptions(args, idx + 2, options.with(log_level: log_level))
     case Some { "-ci" } | Some { "--compiled-input" } ->
-        next_value(args, idx, "--compiled-input")
-        | value => parse_package_options(args, idx + 2, options.with(compiled_input: Some { value }))
+        nextValue(args, idx, "--compiled-input")
+        | value => parsePackageOptions(args, idx + 2, options.with(compiled_input: Some { value }))
     case Some { "-i" } | Some { "--input" } ->
-        next_value(args, idx, "--input")
-        | value => parse_package_options(args, idx + 2, options.with(input: Some { value }))
+        nextValue(args, idx, "--input")
+        | value => parsePackageOptions(args, idx + 2, options.with(input: Some { value }))
     case Some { "-m" } | Some { "--module" } ->
-        next_value(args, idx, "--module")
-        | value => parse_package_options(args, idx + 2, options.with(module: Some { value }))
+        nextValue(args, idx, "--module")
+        | value => parsePackageOptions(args, idx + 2, options.with(module: Some { value }))
     case Some { arg } when arg.starts_with("--capy.") ->
-        next_value(args, idx, arg)
-        | value => parse_package_options(args, idx + 2, options.with(capy_overrides: options.capy_overrides + CapyOverride {
-            field: capy_override_field(arg),
+        nextValue(args, idx, arg)
+        | value => parsePackageOptions(args, idx + 2, options.with(capy_overrides: options.capy_overrides + CapyOverride {
+            field: capyOverrideField(arg),
             value: value
         }))
     case Some { arg } -> UsageError { message: "Unknown option `" + arg + "`." }
 
-private fun empty_named_options(): NamedOptions =
+private fun emptyNamedOptions(): NamedOptions =
     NamedOptions {
         input: None {},
         output: None {},
@@ -330,22 +339,22 @@ private fun empty_named_options(): NamedOptions =
         log_level: INFO
     }
 
-private fun next_value(args: List[String], idx: int, option: String): CliArgs[String] =
+private fun nextValue(args: List[String], idx: int, option: String): CliArgs[String] =
     match args[idx + 1] with
     case Some { value } -> ParsedArgs { value }
     case None -> UsageError { message: "Missing value for `" + option + "`." }
 
-private fun required_option(option: Option[String], name: String, command: String): CliArgs[String] =
+private fun requiredOption(option: Option[String], name: String, command: String): CliArgs[String] =
     match option with
     case Some { value } -> ParsedArgs { value }
     case None -> UsageError { message: "Missing required option `--" + name + "` for `" + command + "`." }
 
-private fun option_or(option: Option[String], default_value: String): String =
+private fun optionOr(option: Option[String], default_value: String): String =
     match option with
     case Some { value } -> value
     case None -> default_value
 
-private fun validate_test_outputs(options: NamedOptions): CliArgs[NamedOptions] =
+private fun validateTestOutputs(options: NamedOptions): CliArgs[NamedOptions] =
     match options.test_input with
     case Some { _ } ->
         match options.test_output with
@@ -356,7 +365,7 @@ private fun validate_test_outputs(options: NamedOptions): CliArgs[NamedOptions] 
         case Some { _ } -> UsageError { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." }
         case None -> ParsedArgs { options }
 
-private fun validate_package_inputs(options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
+private fun validatePackageInputs(options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
     match options.compiled_input with
     case Some { _ } ->
         match options.input with
@@ -367,14 +376,14 @@ private fun validate_package_inputs(options: PartialPackageOptions): CliArgs[Par
         case Some { _ } -> ParsedArgs { options }
         case None -> UsageError { message: "Package requires either `--compiled-input` or `--input`." }
 
-private fun parse_output_type(value: String): CliArgs[OutputType] =
+private fun parseOutputType(value: String): CliArgs[OutputType] =
     match value with
     case "java" | "JAVA" -> ParsedArgs { JAVA }
     case "javascript" | "JAVASCRIPT" | "js" | "JS" -> ParsedArgs { JAVASCRIPT }
     case "python" | "PYTHON" | "py" | "PY" -> ParsedArgs { PYTHON }
     case _ -> UsageError { message: "Unknown output type `" + value + "`. Use java, python, py, javascript, or js." }
 
-private fun parse_log_level(value: String): CliArgs[LogLevel] =
+private fun parseLogLevel(value: String): CliArgs[LogLevel] =
     match value with
     case "DEBUG" | "debug" -> ParsedArgs { DEBUG }
     case "INFO" | "info" -> ParsedArgs { INFO }
@@ -382,26 +391,26 @@ private fun parse_log_level(value: String): CliArgs[LogLevel] =
     case "ERROR" | "error" -> ParsedArgs { ERROR }
     case _ -> UsageError { message: "Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR." }
 
-private fun print_version(): Effect[/capy/lang/Program] =
-    println(version_text())
+private fun printVersion(): Effect[/capy/lang/Program] =
+    println(versionText())
         .map(_ => /capy/lang/Program.Success {})
 
-private fun print_help(): Effect[/capy/lang/Program] =
-    println(version_text() + "\n\n" + help_text())
+private fun printHelp(): Effect[/capy/lang/Program] =
+    println(versionText() + "\n\n" + helpText())
         .map(_ => /capy/lang/Program.Success {})
 
-private fun usage_error(message: String): Effect[/capy/lang/Program] =
-    println_error(message + "\n\n" + help_text())
+private fun usageError(message: String): Effect[/capy/lang/Program] =
+    println_error(message + "\n\n" + helpText())
         .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
 
-private fun command_not_ready(command: String): Effect[/capy/lang/Program] =
+private fun commandNotReady(command: String): Effect[/capy/lang/Program] =
     println_error("Command `" + command + "` parsed successfully, but execution is not implemented yet.")
         .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
 
-private fun version_text(): String =
+private fun versionText(): String =
     "Capybara compiler version: " + COMPILER_VERSION
 
-private fun help_text(): String =
+private fun helpText(): String =
     "Usage:\n"
     + "  capy -v | --version\n"
     + "  capy -h | --help\n"
@@ -420,7 +429,7 @@ private fun help_text(): String =
     + "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath.\n"
     + "  package writes `capy.cbin` next to the provided `capy.yml`."
 
-private fun capy_override_field(arg: String): String =
+private fun capyOverrideField(arg: String): String =
     @Recursive
     fun copy_suffix(value: String, idx: int, acc: String): String =
         if idx >= value.size().value
@@ -431,14 +440,316 @@ private fun capy_override_field(arg: String): String =
     ---
     copy_suffix(arg, 7, "")
 
-private fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
-    command_not_ready("compile")
+data CompileConfiguration {
+    libraries: Set[CompiledModule],
+    native_providers: NativeProviderManifest
+}
 
-private fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
-    command_not_ready("generate")
+fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
+    match compileConfiguration(options) with
+    case Error { message } -> runtimeError(message)
+    case Success { configuration } ->
+        let input_path = from_string(options.input)
+        let output_path = from_string(options.output)
+        validateInputDirectory(input_path, options.input).flat_map(input_result =>
+            match input_result with
+            case Error { message } -> runtimeError(message)
+            case Success _ ->
+                validateOutputDirectory(output_path, options.output).flat_map(output_result =>
+                    match output_result with
+                    case Error { message } -> runtimeError(message)
+                    case Success _ ->
+                        readSourceModules(input_path, options.input).flat_map(modules_result =>
+                            match modules_result with
+                            case Error { message } -> runtimeError(message)
+                            case Success { raw_modules } ->
+                                compile(
+                                    raw_modules,
+                                    configuration.libraries,
+                                    configuration.native_providers,
+                                    empty_native_provider_manifest()
+                                ).flat_map(compilation =>
+                                    match compilation with
+                                    case Left { program } ->
+                                        writeCompilationOutput(output_path, program).flat_map(write_result =>
+                                            match write_result with
+                                            case Error { message } -> runtimeError(message)
+                                            case Success _ -> pure(/capy/lang/Program.Success {})
+                                        )
+                                    case Right { errors } ->
+                                        printCompilerErrors(errors)
+                                            .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                                )
+                        )
+                )
+        )
 
-private fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
-    command_not_ready("compile-generate")
+private fun compileConfiguration(options: CompileOptions): Result[CompileConfiguration] =
+    if options.compile_tests
+    then Error { message: "`compile --compile-tests` is not available until test augmentation is translated to CFUN." }
+    else
+        match readLibraryModules(options.libs) with
+        case Error e -> e
+        case Success { libraries } ->
+            match readNativeProviderManifest(options.native_wiring) with
+            case Error e -> e
+            case Success { native_providers } -> Success { CompileConfiguration {
+                libraries: libraries,
+                native_providers: native_providers
+            }}
 
-private fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
-    command_not_ready("package")
+private fun readLibraryModules(libs: Option[String]): Result[Set[CompiledModule]] =
+    match libs with
+    case None -> Success { {} }
+    case Some { value } ->
+        if value.trim().is_empty()
+        then Success { {} }
+        else Error { message: "`compile --libs` is not available until linked program deserialization is translated to CFUN." }
+
+private fun readNativeProviderManifest(native_wiring: Option[String]): Result[NativeProviderManifest] =
+    match native_wiring with
+    case None -> Success { empty_native_provider_manifest() }
+    case Some { _ } -> Error { message: "`compile --native-wiring` is not available until native provider manifest deserialization is translated to CFUN." }
+
+private fun validateInputDirectory(path: Path, raw_path: String): Effect[Result[Path]] =
+    exists(path).flat_map(present =>
+        if !present
+        then pure(Error { message: "Input path does not exist: " + raw_path })
+        else is_directory(path).map(directory =>
+            if directory
+            then Success { path }
+            else Error { message: "Input path is not a directory: " + raw_path }
+        )
+    )
+
+private fun validateOutputDirectory(path: Path, raw_path: String): Effect[Result[Path]] =
+    exists(path).flat_map(present =>
+        if !present
+        then create_directories(path)
+        else is_directory(path).map(directory =>
+            if directory
+            then Success { path }
+            else Error { message: "Compile output path is not a directory: " + raw_path }
+        )
+    )
+
+private fun readSourceModules(root: Path, raw_root: String): Effect[Result[List[RawModule]]] =
+    listSourceFiles(root).flat_map(files_result =>
+        match files_result with
+        case Error e -> pure(e)
+        case Success { files } ->
+            if files.is_empty()
+            then pure(Error { message: "No Capybara source files found under: " + raw_root })
+            else readSourceModules(root, files)
+    )
+
+private fun readSourceModules(root: Path, files: List[Path]): Effect[Result[List[RawModule]]] =
+    match files[0] with
+    case None -> pure(Success { [] })
+    case Some { file } ->
+        read_text(file).flat_map(read_result =>
+            match read_result with
+            case Error e -> pure(e)
+            case Success { source } ->
+                match buildRawModule(relativeTo(root, file), source) with
+                case Error e -> pure(e)
+                case Success { raw_module } ->
+                    readSourceModules(root, files[1:]).map(rest_result =>
+                        match rest_result with
+                        case Error e -> e
+                        case Success { rest } -> Success { [raw_module] + rest }
+                    )
+        )
+
+private fun buildRawModule(relative_path: Path, source: String): Result[RawModule] =
+    match lastSegment(relative_path.normalize().segments) with
+    case None -> Error { message: "Unable to infer module name for source path: " + pathToString(relative_path) }
+    case Some { file_name } ->
+        match sourceKind(file_name) with
+        case None -> Error { message: "Unsupported source file extension: " + file_name }
+        case Some { kind } -> Success { RawModule {
+            name: stripSourceExtension(file_name),
+            path: modulePath(relative_path),
+            input: source,
+            sourceKind: kind
+        }}
+
+private fun listSourceFiles(path: Path): Effect[Result[List[Path]]] =
+    list_entries(path).flat_map(entries_result =>
+        match entries_result with
+        case Error e -> pure(e)
+        case Success { entries } -> listSourceFilesFromEntries(entries)
+    )
+
+private fun listSourceFilesFromEntries(entries: List[Path]): Effect[Result[List[Path]]] =
+    match entries[0] with
+    case None -> pure(Success { [] })
+    case Some { entry } ->
+        is_file(entry).flat_map(file =>
+            if file
+            then listSourceFilesFromEntries(entries[1:]).map(rest_result =>
+                match rest_result with
+                case Error e -> e
+                case Success { rest } ->
+                    if sourceFile(entry)
+                    then Success { [entry] + rest }
+                    else Success { rest }
+            )
+            else is_directory(entry).flat_map(directory =>
+                if directory
+                then listSourceFiles(entry).flat_map(children_result =>
+                    match children_result with
+                    case Error e -> pure(e)
+                    case Success { children } ->
+                        listSourceFilesFromEntries(entries[1:]).map(rest_result =>
+                            match rest_result with
+                            case Error e -> e
+                            case Success { rest } -> Success { children + rest }
+                        )
+                )
+                else listSourceFilesFromEntries(entries[1:])
+            )
+        )
+
+private fun sourceFile(path: Path): bool =
+    match lastSegment(path.normalize().segments) with
+    case None -> false
+    case Some { file_name } ->
+        match sourceKind(file_name) with
+        case None -> false
+        case Some _ -> true
+
+private fun sourceKind(file_name: String): Option[SourceKind] =
+    if file_name.end_with(FUNCTIONAL.extension())
+    then Some { FUNCTIONAL }
+    else if file_name.end_with(OBJECT_ORIENTED.extension())
+    then Some { OBJECT_ORIENTED }
+    else None {}
+
+private fun stripSourceExtension(file_name: String): String =
+    if file_name.end_with(FUNCTIONAL.extension())
+    then file_name[0, file_name.size().value - FUNCTIONAL.extension().size().value]
+    else if file_name.end_with(OBJECT_ORIENTED.extension())
+    then file_name[0, file_name.size().value - OBJECT_ORIENTED.extension().size().value]
+    else file_name
+
+private fun modulePath(relative_path: Path): String =
+    match relative_path.parent() with
+    case None -> ""
+    case Some { parent } -> pathSegmentsToString(parent.normalize().segments)
+
+private fun lastSegment(segments: List[String]): Option[String] =
+    match segments[0] with
+    case None -> None {}
+    case Some { segment } ->
+        match segments[1] with
+        case None -> Some { segment }
+        case Some _ -> lastSegment(segments[1:])
+
+private fun relativeTo(base: Path, path: Path): Path =
+    from_string(pathSegmentsToString(dropPrefixSegments(base.normalize().segments, path.normalize().segments)))
+
+@Recursive
+private fun dropPrefixSegments(prefix: List[String], segments: List[String]): List[String] =
+    match prefix[0] with
+    case None -> segments
+    case Some { expected } ->
+        match segments[0] with
+        case None -> []
+        case Some { actual } ->
+            if expected == actual
+            then dropPrefixSegments(prefix[1:], segments[1:])
+            else segments
+
+private fun pathSegmentsToString(segments: List[String]): String =
+    @Recursive
+    fun pathSegmentsToString(segments: List[String], acc: String): String =
+        match segments[0] with
+        case None -> acc
+        case Some { segment } ->
+            let next = if acc.is_empty() then segment else acc + "/" + segment
+            pathSegmentsToString(segments[1:], next)
+    ---
+    pathSegmentsToString(segments, "")
+
+private fun pathToString(path: Path): String =
+    let normalized = path.normalize()
+    let body = pathSegmentsToString(normalized.segments)
+    match normalized.root with
+    case RELATIVE -> if body.is_empty() then "." else body
+    case ABSOLUTE -> "/" + body
+    case HOME -> if body.is_empty() then "~" else "~/" + body
+
+private fun writeCompilationOutput(output_dir: Path, program: CompiledProgram): Effect[Result[String]] =
+    create_directories(output_dir).flat_map(directory_result =>
+        match directory_result with
+        case Error e -> pure(e)
+        case Success _ ->
+            writeJsonFile(output_dir / "program.json", program).flat_map(program_result =>
+                match program_result with
+                case Error e -> pure(e)
+                case Success _ -> writeLinkedModules(output_dir, program.modules)
+            )
+    )
+
+private fun writeLinkedModules(output_dir: Path, modules: List[CompiledModule]): Effect[Result[String]] =
+    match modules[0] with
+    case None -> pure(Success { "linked modules written" })
+    case Some { module } ->
+        writeLinkedModule(output_dir, module).flat_map(module_result =>
+            match module_result with
+            case Error e -> pure(e)
+            case Success _ -> writeLinkedModules(output_dir, modules[1:])
+        )
+
+private fun writeLinkedModule(output_dir: Path, module: CompiledModule): Effect[Result[String]] =
+    let module_file = linkedModuleFile(output_dir, module)
+    createParentDirectories(module_file).flat_map(parent_result =>
+        match parent_result with
+        case Error e -> pure(e)
+        case Success _ -> writeJsonFile(module_file, module)
+    )
+
+private fun linkedModuleFile(output_dir: Path, module: CompiledModule): Path =
+    let base =
+        if module.path.is_empty()
+        then output_dir
+        else output_dir / from_string(module.path)
+    base / (module.name + ".json")
+
+private fun createParentDirectories(path: Path): Effect[Result[Path]] =
+    match path.parent() with
+    case None -> pure(Success { path })
+    case Some { parent } -> create_directories(parent)
+
+private fun writeJsonFile(path: Path, value: data): Effect[Result[String]] =
+    match to_json(value) with
+    case Error { message } -> pure(Error { message: "Unable to serialize linked JSON for `" + pathToString(path) + "`: " + message })
+    case Success { json } -> write_text(path, serialize(json))
+
+private fun printCompilerErrors(errors: List[CompilerError]): Effect[String] =
+    println_error(compilerErrorsText(errors))
+
+private fun compilerErrorsText(errors: List[CompilerError]): String =
+    "Compilation failed with " + errors.size().value + " error(s):"
+    + (errors |> "", (acc, error) => acc + "\n" + compilerErrorText(error))
+
+private fun compilerErrorText(error: CompilerError): String =
+    let location =
+        if error.moduleName.is_empty()
+        then ""
+        else error.moduleName + ":" + error.line + ":" + error.column + ": "
+    location + error.message
+
+private fun runtimeError(message: String): Effect[/capy/lang/Program] =
+    println_error(message)
+        .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+
+private fun runGenerate(options: GenerateOptions): Effect[/capy/lang/Program] =
+    commandNotReady("generate")
+
+private fun runCompileGenerate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
+    commandNotReady("compile-generate")
+
+private fun runPackage(options: PackageOptions): Effect[/capy/lang/Program] =
+    commandNotReady("package")
