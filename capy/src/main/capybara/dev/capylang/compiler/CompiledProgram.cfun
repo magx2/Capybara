@@ -1,5 +1,6 @@
 from /capy/collection/Dict import { Dict }
 from /capy/collection/List import { List }
+from /capy/collection/Set import { Set }
 from /capy/lang/Option import { Option }
 
 data CompiledProgram {
@@ -39,6 +40,11 @@ data ObjectOrientedModule {
 
 data NativeProviderManifest {
     providers: List[NativeProviderBinding]
+}
+
+data CompileConfiguration {
+    libraries: Set[CompiledModule],
+    native_providers: NativeProviderManifest
 }
 
 data NativeProviderBinding {
