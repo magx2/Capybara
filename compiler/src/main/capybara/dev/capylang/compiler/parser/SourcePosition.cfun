@@ -1,7 +1,0 @@
-from /capy/lang/Option import { * }
-
-data SourcePosition {
-    line: int,
-    column: int,
-    length: Option[int]
-}

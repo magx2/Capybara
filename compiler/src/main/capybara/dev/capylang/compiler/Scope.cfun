@@ -1,9 +1,0 @@
-from /capy/collection/Dict import { * }
-from /capy/collection/Set import { * }
-from /dev/capylang/compiler/CompiledIr import { Scope }
-
-const EMPTY: Scope = Scope {
-    localValues: {:},
-    variableNameToUniqueName: {:},
-    emptyShapeCompatibleValues: {}
-}

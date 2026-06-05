@@ -1,8 +1,0 @@
-from AntlrParseResults import { ModuleParseResult, ObjectOrientedModuleParseResult, ObjectOrientedModulesParseResult, ProgramParseResult }
-
-interface AntlrParser {
-    def parse_modules(raw_modules: any): ProgramParseResult
-    def parse_module(module: any): ModuleParseResult
-    def parse_object_oriented_module(module: any): ObjectOrientedModuleParseResult
-    def parse_object_oriented_modules(modules: any): ObjectOrientedModulesParseResult
-}

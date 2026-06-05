@@ -1,8 +1,0 @@
-from /dev/capylang/compiler/CompiledAnnotationArgument import { CompiledAnnotationArgument }
-
-data CompiledAnnotation {
-    name: String,
-    packageName: String,
-    packagePath: String,
-    arguments: List[CompiledAnnotationArgument]
-}

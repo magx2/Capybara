@@ -1,8 +1,0 @@
-from /dev/capylang/compiler/CompiledObjectMethodParameter import { CompiledObjectMethodParameter }
-
-data CompiledObjectMethod {
-    name: String,
-    parameters: List[CompiledObjectMethodParameter],
-    returnType: String,
-    backendMethodNames: Dict[String]
-}

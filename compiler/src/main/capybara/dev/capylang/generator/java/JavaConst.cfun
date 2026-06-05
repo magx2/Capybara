@@ -1,9 +1,0 @@
-from /dev/capylang/generator/java/JavaType import { JavaType }
-
-data JavaConst {
-    name: String,
-    isPrivate: bool,
-    type: JavaType,
-    expression: any,
-    comments: List[String]
-}

@@ -1,6 +1,0 @@
-from /capy/lang/Effect import { Effect }
-from /capy/meta_prog/NativeProvider import { NativeProvider }
-from AntlrParser import { AntlrParser }
-
-@NativeProvider(qualifier: "antlr")
-fun antlr_parser(): Effect[AntlrParser] = <native>

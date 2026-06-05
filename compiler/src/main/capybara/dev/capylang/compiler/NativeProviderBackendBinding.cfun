@@ -1,9 +1,0 @@
-data NativeProviderBackendBinding {
-    className: String,
-    module: String,
-    export: String,
-    factory: String
-}
-
-fun NativeProviderBackendBinding.module_name(): String = this.module
-fun NativeProviderBackendBinding.export_name(): String = this.export
