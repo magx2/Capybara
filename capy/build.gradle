@@ -1,37 +1,48 @@
 import com.github.gradle.node.task.NodeTask
-import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
-import org.gradle.api.file.ConfigurableFileCollection
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.provider.ListProperty
-import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Classpath
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.Optional
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.options.Option
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
-import java.net.URL
-import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.TreeSet
+
+buildscript {
+    repositories {
+        mavenCentral()
+        ivy {
+            name = 'CapybaraRelease'
+            url = uri('https://github.com/magx2/Capybara/releases/download/release/0.3.0')
+            patternLayout {
+                artifact('[artifact]-[revision].[ext]')
+            }
+            metadataSources {
+                artifact()
+            }
+        }
+    }
+    dependencies {
+        classpath 'dev.capylang:gradle:0.3.0@jar'
+        classpath 'dev.capylang:capy:0.3.0@jar'
+    }
+}
 
 plugins {
     id 'buildlogic.java-application-conventions'
     id 'antlr'
     id "com.github.node-gradle.node" version "7.1.0"
     id "com.pswidersk.python-plugin" version "3.2.9"
+}
+
+apply plugin: 'dev.capylang'
+
+repositories {
+    ivy {
+        name = 'CapybaraRelease'
+        url = uri('https://github.com/magx2/Capybara/releases/download/release/0.3.0')
+        patternLayout {
+            artifact('[artifact]-[revision].[ext]')
+        }
+        metadataSources {
+            artifact()
+        }
+    }
 }
 
 node {
@@ -332,6 +343,7 @@ abstract class CapybaraPythonTestTask extends Exec {
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
+    implementation 'dev.capylang:capybara-lib:0.3.0@jar'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
@@ -405,6 +417,10 @@ def capyRuntimeClasspath = files(
         capyRuntimeDependencies
 )
 
+tasks.named('compileJava') {
+    dependsOn tasks.named('patchGeneratedCapybaraJava')
+}
+
 sourceSets {
     integrationTest {
         java.srcDir file('src/integrationTest/java')
@@ -445,7 +461,7 @@ configurations {
 }
 
 dependencies {
-    e2eCfunImplementation project(':lib:capybara-lib')
+    e2eCfunImplementation 'dev.capylang:capybara-lib:0.3.0@jar'
     e2eCooImplementation project(':lib:capybara-lib')
     e2eCooJavaNativeImplementation project(':lib:capybara-lib')
 }

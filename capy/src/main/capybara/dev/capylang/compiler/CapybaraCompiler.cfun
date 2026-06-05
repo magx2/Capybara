@@ -4,7 +4,7 @@ from /capy/lang/Effect import { Effect, pure }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledProgram import { * }
-from /dev/capylang/compiler/parser/RawModule import { RawModule }
+from /dev/capylang/compiler/parser/RawModule import { * }
 
 fun compile(
     rawModules: List[RawModule],
