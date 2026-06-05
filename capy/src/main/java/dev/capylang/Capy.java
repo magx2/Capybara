@@ -1,13 +1,5 @@
 package dev.capylang;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -101,10 +93,6 @@ public class Capy {
     private static final int EXIT_USAGE = 1;
     private static final int EXIT_FAILURE = 2;
     private static final int EXIT_COMPILATION_ERROR = 100;
-    private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
-    private static final ObjectMapper NATIVE_MANIFEST_OBJECT_MAPPER = createNativeManifestObjectMapper();
-    private static final ObjectWriter PRETTY_JSON_WRITER = OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
-
     private static TreeSet<CompiledModule> compiledModuleTreeSet() {
         return new TreeSet<>(Comparator.comparing(CompiledIrModule::compiledModuleCompareKey));
     }
@@ -601,9 +589,9 @@ public class Capy {
         if (!Files.isRegularFile(manifestFile)) {
             throw new CliException("Native wiring manifest is not a file: " + manifestFile);
         }
-        try (var input = Files.newInputStream(manifestFile)) {
+        try {
             return nativeProviderManifestFromJson(
-                    NATIVE_MANIFEST_OBJECT_MAPPER.readValue(input, Object.class),
+                    LinkedJsonCodec.readPlain(Files.readString(manifestFile)),
                     manifestFile.toString()
             );
         } catch (IOException | IllegalArgumentException e) {
@@ -1861,14 +1849,13 @@ public class Capy {
         var tempFile = Files.createTempFile(tempDir, outputFile.getFileName().toString(), ".tmp");
         var tempFileNeedsCleanup = true;
         try {
-            try (var output = Files.newOutputStream(
+            Files.writeString(
                     tempFile,
+                    LinkedJsonCodec.write(value),
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE
-            )) {
-                PRETTY_JSON_WRITER.writeValue(output, value);
-            }
+            );
 
             if (Files.isRegularFile(outputFile)
                 && Files.size(outputFile) == Files.size(tempFile)
@@ -1919,10 +1906,12 @@ public class Capy {
             return null;
         }
 
-        try (var input = Files.newInputStream(buildInfoFile)) {
-            return objectMapper().readValue(input, BuildInfo.class);
+        try {
+            return LinkedJsonCodec.read(Files.readString(buildInfoFile), BuildInfo.class);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read build info JSON: " + buildInfoFile, e);
+        } catch (IllegalArgumentException e) {
+            throw new CliException("Unable to parse build info JSON `" + buildInfoFile + "`: " + rootCauseMessage(e));
         }
     }
 
@@ -1954,59 +1943,6 @@ public class Capy {
         var shouldCopyJavaLibResources = includeJavaLibResources
                                          && (!filteredProgram.modules().isEmpty() || !filteredProgram.objectOrientedModules().isEmpty());
         return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
-    }
-
-    static ObjectMapper objectMapper() {
-        return OBJECT_MAPPER;
-    }
-
-    private static ObjectMapper createNativeManifestObjectMapper() {
-        return createObjectMapper().deactivateDefaultTyping();
-    }
-
-    private static ObjectMapper createObjectMapper() {
-        var mapper = new ObjectMapper();
-        mapper.registerModule(new Jdk8Module());
-        mapper.addMixIn(NativeProviderBinding.class, NativeProviderBindingJsonMixin.class);
-        mapper.addMixIn(NativeProviderManifest.class, NativeProviderManifestJsonMixin.class);
-        mapper.activateDefaultTyping(
-                BasicPolymorphicTypeValidator.builder()
-                        .allowIfSubType("dev.capylang")
-                        .allowIfSubType("java.util.")
-                        .build(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-        return mapper;
-    }
-
-    private abstract static class NativeProviderBindingJsonMixin {
-        @JsonCreator
-        NativeProviderBindingJsonMixin(
-                @JsonProperty("interface") String interfaceId,
-                @JsonProperty("qualifier") String qualifier,
-                @JsonProperty("java") NativeProviderBackendBinding javaBinding,
-                @JsonProperty("javascript") NativeProviderBackendBinding javascriptBinding,
-                @JsonProperty("python") NativeProviderBackendBinding pythonBinding
-        ) {
-        }
-
-        @JsonProperty("interface")
-        abstract String interfaceId();
-
-        @JsonProperty("java")
-        abstract NativeProviderBackendBinding javaBinding();
-
-        @JsonProperty("javascript")
-        abstract NativeProviderBackendBinding javascriptBinding();
-
-        @JsonProperty("python")
-        abstract NativeProviderBackendBinding pythonBinding();
-    }
-
-    private abstract static class NativeProviderManifestJsonMixin {
-        @JsonIgnore
-        abstract String sourceFile();
     }
 
     static String readCompilerVersion() {
@@ -2080,10 +2016,12 @@ public class Capy {
     }
 
     private static CompiledProgram readLinkedProgramFile(Path linkedProgramFile) {
-        try (var input = Files.newInputStream(linkedProgramFile)) {
-            return objectMapper().readValue(input, CompiledProgram.class);
+        try {
+            return LinkedJsonCodec.read(Files.readString(linkedProgramFile), CompiledProgram.class);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
+        } catch (IllegalArgumentException e) {
+            throw new CliException("Unable to parse linked program JSON `" + linkedProgramFile + "`: " + rootCauseMessage(e));
         }
     }
 
@@ -2124,10 +2062,12 @@ public class Capy {
     }
 
     private static CompiledModule readLinkedModule(Path linkedModuleFile) {
-        try (var input = Files.newInputStream(linkedModuleFile)) {
-            return objectMapper().readValue(input, CompiledModule.class);
+        try {
+            return LinkedJsonCodec.read(Files.readString(linkedModuleFile), CompiledModule.class);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked module JSON: " + linkedModuleFile, e);
+        } catch (IllegalArgumentException e) {
+            throw new CliException("Unable to parse linked module JSON `" + linkedModuleFile + "`: " + rootCauseMessage(e));
         }
     }
 

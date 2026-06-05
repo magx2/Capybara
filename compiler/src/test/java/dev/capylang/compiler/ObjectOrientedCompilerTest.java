@@ -2,10 +2,6 @@ package dev.capylang.compiler;
 
 import capy.lang.Result;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.compiler.expression.CompiledEffectBindExpression;
@@ -394,15 +390,14 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
-    void shouldRoundTripCompiledProgramWithNativeProviderCatalogThroughJackson() throws Exception {
+    void shouldRoundTripCompiledProgramWithNativeProviderCatalogThroughLinkedJsonCodec() {
         var program = compileProviderSuccess(
                 List.of(clockObjectInterfaceModule(), clockProviderModule()),
                 providerManifest(providerBinding("/dev/capylang/test/Clock", "system"))
         );
-        var mapper = objectMapper();
 
-        var json = mapper.writeValueAsString(program);
-        var roundTripped = mapper.readValue(json, CompiledProgram.class);
+        var json = LinkedJsonCodec.write(program);
+        var roundTripped = LinkedJsonCodec.read(json, CompiledProgram.class);
 
         assertThat(roundTripped.nativeProviderCatalog().declarations())
                 .usingRecursiveFieldByFieldElementComparator()
@@ -744,21 +739,6 @@ class ObjectOrientedCompilerTest {
                     qualifier: String = ""
                 }
                 """, SourceKind.FUNCTIONAL);
-    }
-
-    private ObjectMapper objectMapper() {
-        var mapper = new ObjectMapper();
-        mapper.registerModule(new Jdk8Module());
-        var validator = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType("dev.capylang")
-                .allowIfSubType("java.util")
-                .build();
-        mapper.activateDefaultTyping(
-                validator,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-        return mapper;
     }
 
     private RawModule effectModule() {
