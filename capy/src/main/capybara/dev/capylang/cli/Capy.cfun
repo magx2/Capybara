@@ -1,35 +1,444 @@
-from /capy/lang/Effect import { pure }
+from /capy/collection/List import { * }
+from /capy/io/Console import { println, println_error }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
 from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
+from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 
-fun main(args: List[String]): Effect[Program] =
-    parse_task(args)
-        .map(task => Success {
-            match task with
-            case COMPILE_CODE => execute_compile(args[1:])
-            case GENERATE_CODE => execute_generate(args[1:])
-            case COMPILE_GENERATE_CODE => execute_compile_generate(args[1:])
-            case PACKAGE => execute_package(args[1:])
-        })
-        .or_else(error => pure(DEFAULT_FAILED_EXIT_CODE))
+const COMPILER_VERSION = "0.4.0-SNAPSHOT"
 
-private fun parse_task(args: List[String]): Result[Task] =
+fun main(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
-    case Some { "compile" } -> Success { COMPILE_CODE }
-    case Some { "generate" } -> Success { GENERATE_CODE }
-    case Some { "compile-generate" } -> Success { COMPILE_GENERATE_CODE }
-    case Some { "package" } -> Success { PACKAGE }
-    case Some { msg } -> Error { "Unknown command `{msg}`!" }
-    case None -> Error { "No command passed!" }
+    case None -> usage_error("No command passed!")
+    case Some { "-h" } | Some { "--help" } -> print_help()
+    case Some { "-v" } | Some { "--version" } -> print_version()
+    case Some { "compile" } -> execute_compile(args[1:])
+    case Some { "generate" } -> execute_generate(args[1:])
+    case Some { "compile-generate" } -> execute_compile_generate(args[1:])
+    case Some { "package" } -> execute_package(args[1:])
+    case Some { command } -> usage_error("Unknown command `" + command + "`.")
 
-enum Task {
-    COMPILE_CODE,
-    GENERATE_CODE,
-    COMPILE_GENERATE_CODE,
-    PACKAGE
+fun execute_compile(args: List[String]): Effect[/capy/lang/Program] =
+    match parse_compile_options(args) with
+    case UsageError { message } -> usage_error(message)
+    case ParsedArgs { options } -> run_compile(options)
+
+fun execute_generate(args: List[String]): Effect[/capy/lang/Program] =
+    match parse_generate_options(args) with
+    case UsageError { message } -> usage_error(message)
+    case ParsedArgs { options } -> run_generate(options)
+
+fun execute_compile_generate(args: List[String]): Effect[/capy/lang/Program] =
+    match parse_compile_generate_options(args) with
+    case UsageError { message } -> usage_error(message)
+    case ParsedArgs { options } -> run_compile_generate(options)
+
+fun execute_package(args: List[String]): Effect[/capy/lang/Program] =
+    match parse_package_options(args) with
+    case UsageError { message } -> usage_error(message)
+    case ParsedArgs { options } -> run_package(options)
+
+data CompileOptions {
+    input: String,
+    output: String,
+    libs: Option[String],
+    native_wiring: Option[String],
+    compile_tests: bool,
+    log_level: LogLevel
 }
 
-// TODO(codex): Implement the actual logic for each task
-fun execute_compile(args: List[String]): Effect[Program] = ???
-fun execute_generate(args: List[String]): Effect[Program] = ???
-fun execute_compile_generate(args: List[String]): Effect[Program] = ???
-fun execute_package(args: List[String]): Effect[Program] = ???
+data GenerateOptions {
+    output_type: OutputType,
+    input: String,
+    output: String,
+    include_java_lib_resources: bool,
+    log_level: LogLevel
+}
+
+data CompileGenerateOptions {
+    output_type: OutputType,
+    input: String,
+    output: String,
+    linked_output: Option[String],
+    test_input: Option[String],
+    test_output: Option[String],
+    libs: Option[String],
+    native_wiring: Option[String],
+    compile_tests: bool,
+    include_java_lib_resources: bool,
+    log_level: LogLevel
+}
+
+data PackageOptions {
+    compiled_input: Option[String],
+    input: Option[String],
+    module: String,
+    capy_overrides: List[CapyOverride],
+    log_level: LogLevel
+}
+
+data CapyOverride {
+    field: String,
+    value: String
+}
+
+enum LogLevel {
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR
+}
+
+union CliArgs[T] = ParsedArgs[T] | UsageError
+data ParsedArgs[T] { value: T }
+data UsageError { message: String }
+
+data NamedOptions {
+    input: Option[String],
+    output: Option[String],
+    libs: Option[String],
+    linked_output: Option[String],
+    test_input: Option[String],
+    test_output: Option[String],
+    native_wiring: Option[String],
+    compile_tests: bool,
+    skip_java_lib: bool,
+    log_level: LogLevel
+}
+
+data NamedOptionRules {
+    allow_libs: bool,
+    allow_skip_java_lib: bool,
+    allow_linked_output: bool,
+    allow_test_outputs: bool
+}
+
+data PartialPackageOptions {
+    compiled_input: Option[String],
+    input: Option[String],
+    module: Option[String],
+    capy_overrides: List[CapyOverride],
+    log_level: LogLevel
+}
+
+fun CliArgs[T].`|`(map: T => CliArgs[Y]): CliArgs[Y] =
+    match this with
+    case UsageError e -> e
+    case ParsedArgs { value } -> map(value)
+
+private fun parse_compile_options(args: List[String]): CliArgs[CompileOptions] =
+    match parse_named_options(args, 0, empty_named_options(), NamedOptionRules {
+        allow_libs: true,
+        allow_skip_java_lib: false,
+        allow_linked_output: false,
+        allow_test_outputs: false
+    }) with
+    case UsageError e -> e
+    case ParsedArgs { options } -> compile_options_from_named(options)
+
+private fun parse_generate_options(args: List[String]): CliArgs[GenerateOptions] =
+    match args[0] with
+    case None -> UsageError { message: "Missing output type for `generate`." }
+    case Some { output_type_name } ->
+        match parse_output_type(output_type_name) with
+        case UsageError e -> e
+        case ParsedArgs { output_type } ->
+            match parse_named_options(args[1:], 0, empty_named_options(), NamedOptionRules {
+                allow_libs: false,
+                allow_skip_java_lib: true,
+                allow_linked_output: false,
+                allow_test_outputs: false
+            }) with
+            case UsageError e -> e
+            case ParsedArgs { options } -> generate_options_from_named(output_type, options)
+
+private fun parse_compile_generate_options(args: List[String]): CliArgs[CompileGenerateOptions] =
+    match args[0] with
+    case None -> UsageError { message: "Missing output type for `compile-generate`." }
+    case Some { output_type_name } ->
+        match parse_output_type(output_type_name) with
+        case UsageError e -> e
+        case ParsedArgs { output_type } ->
+            match parse_named_options(args[1:], 0, empty_named_options(), NamedOptionRules {
+                allow_libs: true,
+                allow_skip_java_lib: true,
+                allow_linked_output: true,
+                allow_test_outputs: true
+            }) with
+            case UsageError e -> e
+            case ParsedArgs { options } ->
+                match validate_test_outputs(options) with
+                case UsageError e -> e
+                case ParsedArgs { validated_options } -> compile_generate_options_from_named(output_type, validated_options)
+
+private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
+    match parse_package_options(args, 0, PartialPackageOptions {
+        compiled_input: None {},
+        input: None {},
+        module: None {},
+        capy_overrides: [],
+        log_level: INFO
+    }) with
+    case UsageError e -> e
+    case ParsedArgs { options } ->
+        match validate_package_inputs(options) with
+        case UsageError e -> e
+        case ParsedArgs { validated_options } -> package_options_from_partial(validated_options)
+
+private fun compile_options_from_named(options: NamedOptions): CliArgs[CompileOptions] =
+    match required_option(options.input, "input", "compile") with
+    case UsageError e -> e
+    case ParsedArgs { input } ->
+        match required_option(options.output, "output", "compile") with
+        case UsageError e -> e
+        case ParsedArgs { output } -> ParsedArgs { CompileOptions {
+            input: input,
+            output: output,
+            libs: options.libs,
+            native_wiring: options.native_wiring,
+            compile_tests: options.compile_tests,
+            log_level: options.log_level
+        }}
+
+private fun generate_options_from_named(output_type: OutputType, options: NamedOptions): CliArgs[GenerateOptions] =
+    match required_option(options.output, "output", "generate") with
+    case UsageError e -> e
+    case ParsedArgs { output } -> ParsedArgs { GenerateOptions {
+        output_type: output_type,
+        input: option_or(options.input, "."),
+        output: output,
+        include_java_lib_resources: !options.skip_java_lib,
+        log_level: options.log_level
+    }}
+
+private fun compile_generate_options_from_named(output_type: OutputType, options: NamedOptions): CliArgs[CompileGenerateOptions] =
+    match required_option(options.input, "input", "compile-generate") with
+    case UsageError e -> e
+    case ParsedArgs { input } ->
+        match required_option(options.output, "output", "compile-generate") with
+        case UsageError e -> e
+        case ParsedArgs { output } -> ParsedArgs { CompileGenerateOptions {
+            output_type: output_type,
+            input: input,
+            output: output,
+            linked_output: options.linked_output,
+            test_input: options.test_input,
+            test_output: options.test_output,
+            libs: options.libs,
+            native_wiring: options.native_wiring,
+            compile_tests: options.compile_tests,
+            include_java_lib_resources: !options.skip_java_lib,
+            log_level: options.log_level
+        }}
+
+private fun package_options_from_partial(options: PartialPackageOptions): CliArgs[PackageOptions] =
+    match required_option(options.module, "module", "package") with
+    case UsageError e -> e
+    case ParsedArgs { module } -> ParsedArgs { PackageOptions {
+        compiled_input: options.compiled_input,
+        input: options.input,
+        module: module,
+        capy_overrides: options.capy_overrides,
+        log_level: options.log_level
+    }}
+
+private fun parse_named_options(args: List[String], idx: int, options: NamedOptions, rules: NamedOptionRules): CliArgs[NamedOptions] =
+    match args[idx] with
+    case None -> ParsedArgs { options }
+    case Some { "--log" } ->
+        next_value(args, idx, "--log")
+        | value => parse_log_level(value)
+        | log_level => parse_named_options(args, idx + 2, options.with(log_level: log_level), rules)
+    case Some { "-i" } | Some { "--input" } ->
+        next_value(args, idx, "input")
+        | value => parse_named_options(args, idx + 2, options.with(input: Some { value }), rules)
+    case Some { "-o" } | Some { "--output" } ->
+        next_value(args, idx, "output")
+        | value => parse_named_options(args, idx + 2, options.with(output: Some { value }), rules)
+    case Some { "--linked-output" } ->
+        if !rules.allow_linked_output
+        then UsageError { message: "Option `--linked-output` is supported only for `compile-generate`." }
+        else next_value(args, idx, "--linked-output")
+            | value => parse_named_options(args, idx + 2, options.with(linked_output: Some { value }), rules)
+    case Some { "--test-input" } ->
+        if !rules.allow_test_outputs
+        then UsageError { message: "Option `--test-input` is supported only for `compile-generate`." }
+        else next_value(args, idx, "--test-input")
+            | value => parse_named_options(args, idx + 2, options.with(test_input: Some { value }), rules)
+    case Some { "--test-output" } ->
+        if !rules.allow_test_outputs
+        then UsageError { message: "Option `--test-output` is supported only for `compile-generate`." }
+        else next_value(args, idx, "--test-output")
+            | value => parse_named_options(args, idx + 2, options.with(test_output: Some { value }), rules)
+    case Some { "-l" } | Some { "--libs" } ->
+        if !rules.allow_libs
+        then UsageError { message: "Option `--libs` is supported only for `compile` and `compile-generate`." }
+        else next_value(args, idx, "--libs")
+            | value => parse_named_options(args, idx + 2, options.with(libs: Some { value }), rules)
+    case Some { "--native-wiring" } ->
+        if !rules.allow_libs
+        then UsageError { message: "Option `--native-wiring` is supported only for `compile` and `compile-generate`." }
+        else next_value(args, idx, "--native-wiring")
+            | value => parse_named_options(args, idx + 2, options.with(native_wiring: Some { value }), rules)
+    case Some { "--compile-tests" } ->
+        if !rules.allow_libs
+        then UsageError { message: "Option `--compile-tests` is supported only for `compile` and `compile-generate`." }
+        else parse_named_options(args, idx + 1, options.with(compile_tests: true), rules)
+    case Some { "--skip-java-lib" } ->
+        if !rules.allow_skip_java_lib
+        then UsageError { message: "Option `--skip-java-lib` is supported only for `generate` and `compile-generate`." }
+        else parse_named_options(args, idx + 1, options.with(skip_java_lib: true), rules)
+    case Some { arg } -> UsageError { message: "Unknown option `" + arg + "`." }
+
+private fun parse_package_options(args: List[String], idx: int, options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
+    match args[idx] with
+    case None -> ParsedArgs { options }
+    case Some { "--log" } ->
+        next_value(args, idx, "--log")
+        | value => parse_log_level(value)
+        | log_level => parse_package_options(args, idx + 2, options.with(log_level: log_level))
+    case Some { "-ci" } | Some { "--compiled-input" } ->
+        next_value(args, idx, "--compiled-input")
+        | value => parse_package_options(args, idx + 2, options.with(compiled_input: Some { value }))
+    case Some { "-i" } | Some { "--input" } ->
+        next_value(args, idx, "--input")
+        | value => parse_package_options(args, idx + 2, options.with(input: Some { value }))
+    case Some { "-m" } | Some { "--module" } ->
+        next_value(args, idx, "--module")
+        | value => parse_package_options(args, idx + 2, options.with(module: Some { value }))
+    case Some { arg } when arg.starts_with("--capy.") ->
+        next_value(args, idx, arg)
+        | value => parse_package_options(args, idx + 2, options.with(capy_overrides: options.capy_overrides + CapyOverride {
+            field: capy_override_field(arg),
+            value: value
+        }))
+    case Some { arg } -> UsageError { message: "Unknown option `" + arg + "`." }
+
+private fun empty_named_options(): NamedOptions =
+    NamedOptions {
+        input: None {},
+        output: None {},
+        libs: None {},
+        linked_output: None {},
+        test_input: None {},
+        test_output: None {},
+        native_wiring: None {},
+        compile_tests: false,
+        skip_java_lib: false,
+        log_level: INFO
+    }
+
+private fun next_value(args: List[String], idx: int, option: String): CliArgs[String] =
+    match args[idx + 1] with
+    case Some { value } -> ParsedArgs { value }
+    case None -> UsageError { message: "Missing value for `" + option + "`." }
+
+private fun required_option(option: Option[String], name: String, command: String): CliArgs[String] =
+    match option with
+    case Some { value } -> ParsedArgs { value }
+    case None -> UsageError { message: "Missing required option `--" + name + "` for `" + command + "`." }
+
+private fun option_or(option: Option[String], default_value: String): String =
+    match option with
+    case Some { value } -> value
+    case None -> default_value
+
+private fun validate_test_outputs(options: NamedOptions): CliArgs[NamedOptions] =
+    match options.test_input with
+    case Some { _ } ->
+        match options.test_output with
+        case Some { _ } -> ParsedArgs { options }
+        case None -> UsageError { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." }
+    case None ->
+        match options.test_output with
+        case Some { _ } -> UsageError { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." }
+        case None -> ParsedArgs { options }
+
+private fun validate_package_inputs(options: PartialPackageOptions): CliArgs[PartialPackageOptions] =
+    match options.compiled_input with
+    case Some { _ } ->
+        match options.input with
+        case Some { _ } -> UsageError { message: "Package accepts only one of `--compiled-input` or `--input`." }
+        case None -> ParsedArgs { options }
+    case None ->
+        match options.input with
+        case Some { _ } -> ParsedArgs { options }
+        case None -> UsageError { message: "Package requires either `--compiled-input` or `--input`." }
+
+private fun parse_output_type(value: String): CliArgs[OutputType] =
+    match value with
+    case "java" | "JAVA" -> ParsedArgs { JAVA }
+    case "javascript" | "JAVASCRIPT" | "js" | "JS" -> ParsedArgs { JAVASCRIPT }
+    case "python" | "PYTHON" | "py" | "PY" -> ParsedArgs { PYTHON }
+    case _ -> UsageError { message: "Unknown output type `" + value + "`. Use java, python, py, javascript, or js." }
+
+private fun parse_log_level(value: String): CliArgs[LogLevel] =
+    match value with
+    case "DEBUG" | "debug" -> ParsedArgs { DEBUG }
+    case "INFO" | "info" -> ParsedArgs { INFO }
+    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN }
+    case "ERROR" | "error" -> ParsedArgs { ERROR }
+    case _ -> UsageError { message: "Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR." }
+
+private fun print_version(): Effect[/capy/lang/Program] =
+    println(version_text())
+        .map(_ => /capy/lang/Program.Success {})
+
+private fun print_help(): Effect[/capy/lang/Program] =
+    println(version_text() + "\n\n" + help_text())
+        .map(_ => /capy/lang/Program.Success {})
+
+private fun usage_error(message: String): Effect[/capy/lang/Program] =
+    println_error(message + "\n\n" + help_text())
+        .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+
+private fun command_not_ready(command: String): Effect[/capy/lang/Program] =
+    println_error("Command `" + command + "` parsed successfully, but execution is not implemented yet.")
+        .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+
+private fun version_text(): String =
+    "Capybara compiler version: " + COMPILER_VERSION
+
+private fun help_text(): String =
+    "Usage:\n"
+    + "  capy -v | --version\n"
+    + "  capy -h | --help\n"
+    + "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]\n"
+    + "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--linked-output <dir>] [--test-input <dir> --test-output <dir>] [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]\n"
+    + "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]\n"
+    + "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]\n"
+    + "\n"
+    + "Notes:\n"
+    + "  compile output directory may be reused; stale generated files are pruned automatically.\n"
+    + "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided.\n"
+    + "  --native-wiring <file> is supported by compile and compile-generate; it reads native provider bindings from a JSON manifest and stores them in linked program output.\n"
+    + "  compile-generate --test-input/--test-output also compiles test Capybara sources against the freshly compiled main program in the same invocation.\n"
+    + "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/List[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.\n"
+    + "  generate input directory defaults to the current directory.\n"
+    + "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath.\n"
+    + "  package writes `capy.cbin` next to the provided `capy.yml`."
+
+private fun capy_override_field(arg: String): String =
+    @Recursive
+    fun copy_suffix(value: String, idx: int, acc: String): String =
+        if idx >= value.size().value
+        then acc
+        else match value[idx] with
+            case None -> acc
+            case Some { char } -> copy_suffix(value, idx + 1, acc + char)
+    ---
+    copy_suffix(arg, 7, "")
+
+private fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
+    command_not_ready("compile")
+
+private fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
+    command_not_ready("generate")
+
+private fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
+    command_not_ready("compile-generate")
+
+private fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
+    command_not_ready("package")
