@@ -1,2 +1,4 @@
+from /capy/collection/List import { List }
+
 data GeneratedProgram { modules: List[GeneratedModule] }
 data GeneratedModule { relativePath: String, code: String }

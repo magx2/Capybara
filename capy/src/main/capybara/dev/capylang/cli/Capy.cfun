@@ -10,11 +10,13 @@ from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
-from /capy/serialization/Json import { serialize, to_json }
+from /capy/serialization/Json import { * }
 from /dev/capylang/compiler/CapybaraCompiler import { compile }
-from /dev/capylang/compiler/CompiledProgram import { CompiledModule, CompiledProgram, CompilerError, NativeProviderManifest, empty_native_provider_manifest }
+from /dev/capylang/compiler/CompiledProgram import { CompiledModule, CompiledProgram, CompilerError, NativeProviderManifest, empty_native_provider_catalog, empty_native_provider_manifest }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 from /dev/capylang/compiler/parser/RawModule import { FUNCTIONAL, OBJECT_ORIENTED, RawModule, SourceKind }
+from /dev/capylang/generator/GeneratedProgram import { GeneratedModule, GeneratedProgram }
+from /dev/capylang/generator/Generator import { generate }
 
 const COMPILER_VERSION = "0.4.0-SNAPSHOT"
 
@@ -37,7 +39,7 @@ fun execute_compile(args: List[String]): Effect[/capy/lang/Program] =
 fun execute_generate(args: List[String]): Effect[/capy/lang/Program] =
     match parseGenerateOptions(args) with
     case UsageError { message } -> usageError(message)
-    case ParsedArgs { options } -> runGenerate(options)
+    case ParsedArgs { options } -> run_generate(options)
 
 fun execute_compile_generate(args: List[String]): Effect[/capy/lang/Program] =
     match parseCompileGenerateOptions(args) with
@@ -745,8 +747,121 @@ private fun runtimeError(message: String): Effect[/capy/lang/Program] =
     println_error(message)
         .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
 
-private fun runGenerate(options: GenerateOptions): Effect[/capy/lang/Program] =
-    commandNotReady("generate")
+fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
+    let inputPath = from_string(options.input)
+    let outputPath = from_string(options.output)
+    validateInputDirectory(inputPath, options.input).flat_map(inputResult =>
+        match inputResult with
+        case Error { message } -> runtimeError(message)
+        case Success _ ->
+            validateOutputDirectory(outputPath, options.output).flat_map(outputResult =>
+                match outputResult with
+                case Error { message } -> runtimeError(message)
+                case Success _ ->
+                    readLinkedProgram(inputPath).flat_map(programResult =>
+                        match programResult with
+                        case Error { message } -> runtimeError(message)
+                        case Success { program } ->
+                            writeGeneratedProgram(outputPath, generate(program, options.output_type)).flat_map(writeResult =>
+                                match writeResult with
+                                case Error { message } -> runtimeError(message)
+                                case Success _ -> pure(/capy/lang/Program.Success {})
+                            )
+                    )
+            )
+    )
+
+private fun readLinkedProgram(inputDir: Path): Effect[Result[CompiledProgram]] =
+    let programFile = inputDir / "program.json"
+    read_text(programFile).map(readResult =>
+        match readResult with
+        case Error { message } -> Error { message: "Unable to read linked program `" + pathToString(programFile) + "`: " + message }
+        case Success { content } ->
+            match deserialize(content) with
+            case Error { message } -> Error { message: "Unable to parse linked program `" + pathToString(programFile) + "`: " + message }
+            case Success { json } -> parseLinkedProgram(json)
+    )
+
+private fun parseLinkedProgram(json: JsonObject): Result[CompiledProgram] =
+    match requiredJsonArray(json, "modules") with
+    case Error e -> e
+    case Success { modulesJson } ->
+        match parseLinkedModules(modulesJson.value) with
+        case Error e -> e
+        case Success { modules } -> Success { CompiledProgram {
+            modules: modules,
+            objectOrientedModules: [],
+            nativeProviders: empty_native_provider_manifest(),
+            nativeProviderCatalog: empty_native_provider_catalog()
+        }}
+
+private fun parseLinkedModules(modules: List[Json]): Result[List[CompiledModule]] =
+    match modules[0] with
+    case None -> Success { [] }
+    case Some { json } ->
+        match parseLinkedModule(json) with
+        case Error e -> e
+        case Success { module } ->
+            match parseLinkedModules(modules[1:]) with
+            case Error e -> e
+            case Success { rest } -> Success { [module] + rest }
+
+private fun parseLinkedModule(json: Json): Result[CompiledModule] =
+    match json with
+    case JsonObject { moduleFields } ->
+        match requiredJsonString(JsonObject { moduleFields }, "name") with
+        case Error e -> e
+        case Success { name } ->
+            match requiredJsonString(JsonObject { moduleFields }, "path") with
+            case Error e -> e
+            case Success { path } -> Success { CompiledModule {
+                name: name,
+                path: path,
+                types: {:},
+                visiblePrimitiveBackedTypes: {:},
+                functions: [],
+                derivers: {:},
+                annotations: {:},
+                staticImports: []
+            }}
+    case _ -> Error { message: "Linked program `modules` must contain objects." }
+
+private fun requiredJsonArray(json: JsonObject, fieldName: String): Result[JsonArray] =
+    match json.get(fieldName) with
+    case None -> Error { message: "Linked program is missing required field `" + fieldName + "`." }
+    case Some { value } ->
+        match value with
+        case JsonArray { values } -> Success { JsonArray { values } }
+        case _ -> Error { message: "Linked program field `" + fieldName + "` must be an array." }
+
+private fun requiredJsonString(json: JsonObject, fieldName: String): Result[String] =
+    match json.get(fieldName) with
+    case None -> Error { message: "Linked module is missing required field `" + fieldName + "`." }
+    case Some { value } ->
+        match value with
+        case JsonString { text } -> Success { text }
+        case _ -> Error { message: "Linked module field `" + fieldName + "` must be a string." }
+
+private fun writeGeneratedProgram(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
+    writeGeneratedModules(outputDir, program.modules)
+
+private fun writeGeneratedModules(outputDir: Path, modules: List[GeneratedModule]): Effect[Result[String]] =
+    match modules[0] with
+    case None -> pure(Success { "generated modules written" })
+    case Some { module } ->
+        writeGeneratedModule(outputDir, module).flat_map(moduleResult =>
+            match moduleResult with
+            case Error e -> pure(e)
+            case Success _ -> writeGeneratedModules(outputDir, modules[1:])
+        )
+
+private fun writeGeneratedModule(outputDir: Path, module: GeneratedModule): Effect[Result[String]] =
+    let outputFile = outputDir / from_string(module.relativePath)
+    createParentDirectories(outputFile).flat_map(parentResult =>
+        match parentResult with
+        case Error e -> pure(e)
+        case Success _ -> write_text(outputFile, module.code)
+    )
 
 private fun runCompileGenerate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
     commandNotReady("compile-generate")
