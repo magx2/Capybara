@@ -1,3 +1,7 @@
+from /capy/collection/Dict import { Dict }
+from /capy/collection/List import { List }
+from /capy/lang/Option import { Option }
+
 data CompiledProgram {
     modules: List[CompiledModule],
     objectOrientedModules: List[ObjectOrientedModule],
@@ -5,6 +9,83 @@ data CompiledProgram {
     nativeProviderCatalog: NativeProviderCatalog,
 }
 
-// TODO(codex): define all types for CompiledProgram from `master` branch, path `compiler/src/main/java/dev/capylang/compiler/CompiledProgram.java`
+data CompiledModule {
+    name: String,
+    path: String,
+    types: Dict[GenericDataType],
+    visiblePrimitiveBackedTypes: Dict[CompiledPrimitiveBackedType],
+    functions: List[CompiledFunction],
+    derivers: Dict[CompiledDeriverDeclaration],
+    annotations: Dict[CompiledAnnotationDeclaration],
+    staticImports: List[StaticImport]
+}
+
+data GenericDataType {}
+data CompiledPrimitiveBackedType {}
+data CompiledFunction {}
+data CompiledDeriverDeclaration {}
+data CompiledAnnotationDeclaration {}
+
+data StaticImport {
+    className: String,
+    memberName: String,
+    enumValue: bool
+}
+
+data ObjectOrientedModule {
+    name: String,
+    path: String
+}
+
+data NativeProviderManifest {
+    providers: List[NativeProviderBinding]
+}
+
+data NativeProviderBinding {
+    interfaceId: String,
+    qualifier: String,
+    javaBinding: Option[NativeProviderBackendBinding],
+    javascriptBinding: Option[NativeProviderBackendBinding],
+    pythonBinding: Option[NativeProviderBackendBinding]
+}
+
+data NativeProviderBackendBinding {
+    className: Option[String],
+    moduleName: Option[String],
+    exportName: Option[String],
+    factory: Option[String]
+}
+
+data NativeProviderCatalog {
+    declarations: List[CompiledNativeProviderDeclaration],
+    bindings: List[CompiledNativeProviderBinding]
+}
+
+data CompiledNativeProviderDeclaration {
+    providerName: String,
+    sourceModulePath: String,
+    sourceModuleName: String,
+    targetTypeName: String,
+    interfaceId: String,
+    qualifier: String,
+    sourceFile: String
+}
+
+data CompiledNativeProviderBinding {
+    interfaceId: String,
+    qualifier: String,
+    javaBinding: Option[NativeProviderBackendBinding],
+    javascriptBinding: Option[NativeProviderBackendBinding],
+    pythonBinding: Option[NativeProviderBackendBinding]
+}
+
+fun empty_native_provider_manifest(): NativeProviderManifest =
+    NativeProviderManifest { providers: [] }
+
+fun empty_native_provider_catalog(): NativeProviderCatalog =
+    NativeProviderCatalog {
+        declarations: [],
+        bindings: []
+    }
 
 data CompilerError { message: String, moduleName: String, line: int, column: int }
