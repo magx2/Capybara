@@ -10,6 +10,9 @@ fun or_binds_after_modulo_and_comparison(left: int, right: int): bool =
 fun multiplication_binds_before_addition(): bool =
     1 + 2 * 3 == 7
 
+fun braced_grouping_binds_before_multiplication(): bool =
+    {1 + 2} * 3 == 9
+
 fun power_binds_before_multiplication(): bool =
     2 * 3 ^ 2 == 18
 
