@@ -10,6 +10,10 @@ fun tests(): Effect[TestFile] =
         test("bit_or returns the bitwise or result", () => bit_or_returns_the_bitwise_or_result()),
         test("bit_xor returns the bitwise xor result", () => bit_xor_returns_the_bitwise_xor_result()),
         test("bit_not returns the inverted bits", () => bit_not_returns_the_inverted_bits()),
+        test("bit_long_or returns the long bitwise or result", () => bit_long_or_returns_the_long_bitwise_or_result()),
+        test("bit_byte_and returns the byte bitwise and result", () => bit_byte_and_returns_the_byte_bitwise_and_result()),
+        test("bit_byte_nand returns the byte negated bitwise and result", () => bit_byte_nand_returns_the_byte_negated_bitwise_and_result()),
+        test("bit_byte_not returns the inverted byte bits", () => bit_byte_not_returns_the_inverted_byte_bits()),
     ])
 
 private fun bit_and_returns_the_bitwise_and_result(): Assert =
@@ -26,3 +30,15 @@ private fun bit_xor_returns_the_bitwise_xor_result(): Assert =
 
 private fun bit_not_returns_the_inverted_bits(): Assert =
     assert_that(bit_not(12)).is_equal_to(-13)
+
+private fun bit_long_or_returns_the_long_bitwise_or_result(): Assert =
+    assert_that(bit_long_or(12L, 10L)).is_equal_to(14L)
+
+private fun bit_byte_and_returns_the_byte_bitwise_and_result(): Assert =
+    assert_that("" + bit_byte_and(0x0C, 0x0A)).is_equal_to("8")
+
+private fun bit_byte_nand_returns_the_byte_negated_bitwise_and_result(): Assert =
+    assert_that("" + bit_byte_nand(0x0C, 0x0A)).is_equal_to("-9")
+
+private fun bit_byte_not_returns_the_inverted_byte_bits(): Assert =
+    assert_that("" + bit_byte_not(0x0C)).is_equal_to("-13")

@@ -209,7 +209,7 @@ private fun expression_code(
         + " : " + expression_code(ifExpression.elseBranch, env, expectedType, module, allModules)
         + ")"
     case CompiledBinaryExpression binary -> binary_expression_code(binary, env, expectedType, module, allModules)
-    case CompiledUnaryExpression unary -> "(" + unary.operator + expression_code(unary.expression, env, expectedType, module, allModules) + ")"
+    case CompiledUnaryExpression unary -> unary_expression_code(unary, env, expectedType, module, allModules)
     case CompiledFunctionCallExpression call -> function_call_code(call, env, expectedType, module, allModules)
     case CompiledMethodCallExpression call -> method_call_code(call, env, expectedType, module, allModules)
     case CompiledLambdaExpression lambda -> lambda_code(lambda, env, module, allModules)
@@ -227,6 +227,16 @@ private fun expression_code(
 private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if binary.operator == "^"
     then "__capy_pow_int(" + expression_code(binary.left, env, int_type(), module, allModules) + ", " + expression_code(binary.right, env, int_type(), module, allModules) + ")"
+    else if binary.operator == ".nand."
+    then byte_result_code("(~(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+        + " & "
+        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + "))", expectedType)
+    else if bitwise_binary_operator(binary.operator)
+    then byte_result_code("(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+        + " " + java_bitwise_operator(binary.operator) + " "
+        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + ")", expectedType)
     else if binary.operator == "?"
     then expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
         + ".contains(" + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules) + ")"
@@ -239,6 +249,26 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
         + " " + binary.operator + " "
         + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
         + ")"
+
+private fun unary_expression_code(unary: CompiledUnaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if unary.operator == ".not."
+    then byte_result_code("(~" + expression_code(unary.expression, env, expression_type(unary.expression, env, module, allModules), module, allModules) + ")", expectedType)
+    else "(" + unary.operator + expression_code(unary.expression, env, expectedType, module, allModules) + ")"
+
+private fun byte_result_code(expression: String, expectedType: CompiledTypeReference): String =
+    if expectedType.name == "byte" then "((byte) " + expression + ")" else expression
+
+private fun bitwise_binary_operator(operator: String): bool =
+    operator == ".and." | operator == ".or." | operator == ".xor."
+
+private fun java_bitwise_operator(operator: String): String =
+    if operator == ".and."
+    then "&"
+    else if operator == ".or."
+    then "|"
+    else if operator == ".xor."
+    then "^"
+    else operator
 
 private fun int_literal_code(literal: CompiledIntLiteral, expectedType: CompiledTypeReference): String =
     if expectedType.name == "byte" & byte_literal_source(literal.source)
@@ -709,10 +739,10 @@ private fun lambda_parameters_supported(parameters: List[String]): bool =
 private fun java_binary_operator(operator: String): bool =
     operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
         | operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!="
-        | operator == "?"
+        | operator == "?" | operator == ".nand." | bitwise_binary_operator(operator)
 
 private fun java_unary_operator(operator: String): bool =
-    operator == "-" | operator == "!"
+    operator == "-" | operator == "!" | operator == ".not."
 
 private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = expression_type(binary.left, env, module, allModules)
@@ -721,6 +751,8 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     then leftType.name == "String" | rightType.name == "String" | (numeric_type(leftType) & numeric_type(rightType))
     else if binary.operator == "^"
     then leftType.name == "int" & rightType.name == "int"
+    else if binary.operator == ".nand." | bitwise_binary_operator(binary.operator)
+    then integer_type(leftType) & integer_type(rightType)
     else if binary.operator == "%"
     then remainder_type(leftType) & remainder_type(rightType)
     else if binary.operator == "-" | binary.operator == "*" | binary.operator == "/"
@@ -735,7 +767,11 @@ private fun java_unary_operator_emittable(unary: CompiledUnaryExpression, env: L
     let type = expression_type(unary.expression, env, module, allModules)
     if unary.operator == "!" then type.name == "bool"
     else if unary.operator == "-" then numeric_type(type)
+    else if unary.operator == ".not." then integer_type(type)
     else false
+
+private fun integer_type(type: CompiledTypeReference): bool =
+    type.name == "byte" | type.name == "int" | type.name == "long"
 
 private fun numeric_type(type: CompiledTypeReference): bool =
     type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
