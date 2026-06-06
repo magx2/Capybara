@@ -1,0 +1,48 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+union Expression =
+    UnsupportedExpression
+    | IntLiteral
+    | LongLiteral
+    | FloatLiteral
+    | DoubleLiteral
+    | BoolLiteral
+    | StringLiteral
+    | VariableExpression
+    | IfExpression
+    | BinaryExpression
+    | UnaryExpression
+    | FunctionCallExpression
+    | MethodCallExpression
+    | LambdaExpression
+    | ListLiteral
+    | SetLiteral
+    | DictLiteral
+    | TupleLiteral
+    | IndexExpression
+    | BlockExpression
+
+data UnsupportedExpression { source: String, location: SourceLocation }
+data IntLiteral { value: int, source: String, location: SourceLocation }
+data LongLiteral { value: long, source: String, location: SourceLocation }
+data FloatLiteral { value: float, source: String, location: SourceLocation }
+data DoubleLiteral { value: double, source: String, location: SourceLocation }
+data BoolLiteral { value: bool, source: String, location: SourceLocation }
+data StringLiteral { value: String, source: String, location: SourceLocation }
+data VariableExpression { name: String, location: SourceLocation }
+data IfExpression { condition: Expression, thenBranch: Expression, elseBranch: Expression, location: SourceLocation }
+data BinaryExpression { operator: String, left: Expression, right: Expression, location: SourceLocation }
+data UnaryExpression { operator: String, expression: Expression, location: SourceLocation }
+data FunctionCallExpression { name: String, arguments: List[Expression], location: SourceLocation }
+data MethodCallExpression { receiver: Expression, name: String, arguments: List[Expression], location: SourceLocation }
+data LambdaExpression { parameters: List[String], body: Expression, location: SourceLocation }
+data ListLiteral { values: List[Expression], location: SourceLocation }
+data SetLiteral { values: List[Expression], location: SourceLocation }
+data DictEntry { key: Expression, value: Expression, location: SourceLocation }
+data DictLiteral { entries: List[DictEntry], location: SourceLocation }
+data TupleLiteral { values: List[Expression], location: SourceLocation }
+data IndexExpression { receiver: Expression, index: Expression, location: SourceLocation }
+data LetBinding { name: String, typeReference: TypeReference, value: Expression, location: SourceLocation }
+data BlockExpression { bindings: List[LetBinding], result: Expression, location: SourceLocation }

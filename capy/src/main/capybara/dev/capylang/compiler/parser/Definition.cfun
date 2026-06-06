@@ -1,15 +1,19 @@
+from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
+
 data AnnotationDeclaration {}
 data DataDeclaration {}
 data DeriverDeclaration {}
 data EnumDeclaration {}
-data Function {}
 data PrimitiveBackedTypeDeclaration {}
 data TypeDeclaration {}
+data UnsupportedDefinition {}
+data FunctionDefinition { function: FunctionDeclaration }
 
 union Definition = AnnotationDeclaration
                  | DataDeclaration
                  | DeriverDeclaration
                  | EnumDeclaration
-                 | Function
+                 | FunctionDefinition
                  | PrimitiveBackedTypeDeclaration
                  | TypeDeclaration
+                 | UnsupportedDefinition

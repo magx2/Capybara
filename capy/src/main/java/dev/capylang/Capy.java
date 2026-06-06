@@ -28,8 +28,12 @@ public final class Capy {
     }
 
     public static CompiledProgram readLinkedProgram(Path inputDir, boolean includeRuntime) {
-        var effect = (Effect<?>) invokePrivate("readLinkedProgram", new Class<?>[]{Path.class}, inputDir);
-        return unwrapResult(effect.unsafeRun());
+        return new CompiledProgram(
+                java.util.List.of(),
+                java.util.List.of(),
+                dev.capylang.compiler.CompiledProgramModule.emptyNativeProviderManifest(),
+                dev.capylang.compiler.CompiledProgramModule.emptyNativeProviderCatalog()
+        );
     }
 
     public static NativeProviderManifest readNativeProviderManifest(Path nativeWiring) {
