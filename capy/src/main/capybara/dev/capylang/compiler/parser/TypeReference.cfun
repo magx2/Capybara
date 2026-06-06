@@ -1,0 +1,3 @@
+from /capy/collection/List import { List }
+
+data TypeReference { name: String, arguments: List[TypeReference] }

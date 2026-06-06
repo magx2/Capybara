@@ -16,6 +16,7 @@ from /dev/capylang/compiler/CompileConfiguration import { CompileConfiguration }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
 from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
@@ -509,9 +510,7 @@ private fun compile_configuration(options: CompileOptions): Result[CompileConfig
     else compiler_configuration(options.libs, options.native_wiring)
 
 private fun compile_generate_configuration(options: CompileGenerateOptions): Result[CompileConfiguration] =
-    if options.compile_tests
-    then Error { message: "`compile-generate --compile-tests` is not available until test augmentation is translated to CFUN." }
-    else compiler_configuration(options.libs, options.native_wiring)
+    compiler_configuration(options.libs, options.native_wiring)
 
 private fun compiler_configuration(libs: Option[String], nativeWiring: Option[String]): Result[CompileConfiguration] =
     match read_library_modules(libs) with
@@ -954,6 +953,7 @@ private fun parse_linked_module(json: Json): Result[CompiledModule] =
                 types: {:},
                 visiblePrimitiveBackedTypes: {:},
                 functions: [],
+                imports: [],
                 derivers: {:},
                 annotations: {:},
                 staticImports: []

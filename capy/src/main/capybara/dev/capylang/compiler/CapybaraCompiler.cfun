@@ -3,13 +3,26 @@ from /capy/collection/Set import { Set }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMethodCallExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
+from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/parser/Definition import { Definition, FunctionDefinition }
+from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FloatLiteral, FunctionCallExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MethodCallExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression }
+from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
+from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
+from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
 from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
 from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
 fun compile(
     rawModules: List[RawModule],
@@ -42,15 +55,16 @@ private fun compiled_program(
 private fun compile_modules(modules: List[ParsedModule]): List[CompiledModule] =
     match modules[0] with
     case None -> []
-    case Some { module } -> [compile_module(module.name, module.path)] + compile_modules(modules[1:])
+    case Some { module } -> [compile_module(module)] + compile_modules(modules[1:])
 
-private fun compile_module(name: String, path: String): CompiledModule =
+private fun compile_module(module: ParsedModule): CompiledModule =
     CompiledModule {
-        name: name,
-        path: normalize_module_path(path),
+        name: module.name,
+        path: normalize_module_path(module.path),
         types: {:},
         visiblePrimitiveBackedTypes: {:},
-        functions: [],
+        functions: compile_functions(module.definitions),
+        imports: compile_imports(module.imports),
         derivers: {:},
         annotations: {:},
         staticImports: []
@@ -60,3 +74,182 @@ private fun normalize_module_path(path: String): String =
     if path.starts_with("/")
     then normalize_module_path(path[1, path.size()])
     else path
+
+private fun compile_functions(definitions: List[Definition]): List[CompiledFunction] =
+    match definitions[0] with
+    case None -> []
+    case Some { definition } ->
+        match definition with
+        case FunctionDefinition { function } -> [compile_function(function)] + compile_functions(definitions[1:])
+        case _ -> compile_functions(definitions[1:])
+
+private fun compile_function(function: FunctionDeclaration): CompiledFunction =
+    CompiledFunction {
+        name: function.name,
+        visibility: function.visibility,
+        parameters: compile_parameters(function.parameters),
+        returnType: compile_type(function.returnType),
+        body: compile_expression(function.body),
+        location: compile_location(function.location)
+    }
+
+private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } -> [CompiledImportDeclaration {
+        modulePath: declaration.modulePath,
+        importedNames: declaration.importedNames,
+        wildcard: declaration.wildcard,
+        qualified: declaration.qualified,
+        location: compile_location(declaration.location)
+    }] + compile_imports(imports[1:])
+
+private fun compile_parameters(parameters: List[FunctionParameter]): List[CompiledFunctionParameter] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } -> [CompiledFunctionParameter {
+        name: parameter.name,
+        typeReference: compile_type(parameter.typeReference),
+        location: compile_location(parameter.location)
+    }] + compile_parameters(parameters[1:])
+
+private fun compile_type(type: TypeReference): CompiledTypeReference =
+    CompiledTypeReference {
+        name: type.name,
+        arguments: compile_types(type.arguments)
+    }
+
+private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =
+    match types[0] with
+    case None -> []
+    case Some { type } -> [compile_type(type)] + compile_types(types[1:])
+
+private fun compile_location(location: SourceLocation): CompiledSourceLocation =
+    CompiledSourceLocation {
+        line: location.line,
+        column: location.column
+    }
+
+private fun compile_expression(expression: Expression): CompiledExpression =
+    match expression with
+    case UnsupportedExpression { source, location } -> CompiledUnsupportedExpression {
+        source: source,
+        location: compile_location(location)
+    }
+    case IntLiteral { value, source, location } -> CompiledIntLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case LongLiteral { value, source, location } -> CompiledLongLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case FloatLiteral { value, source, location } -> CompiledFloatLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case DoubleLiteral { value, source, location } -> CompiledDoubleLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case BoolLiteral { value, source, location } -> CompiledBoolLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case StringLiteral { value, source, location } -> CompiledStringLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case VariableExpression { name, location } -> CompiledVariableExpression {
+        name: name,
+        location: compile_location(location)
+    }
+    case IfExpression { condition, thenBranch, elseBranch, location } -> CompiledIfExpression {
+        condition: compile_expression(condition),
+        thenBranch: compile_expression(thenBranch),
+        elseBranch: compile_expression(elseBranch),
+        location: compile_location(location)
+    }
+    case BinaryExpression { operator, left, right, location } -> CompiledBinaryExpression {
+        operator: operator,
+        left: compile_expression(left),
+        right: compile_expression(right),
+        location: compile_location(location)
+    }
+    case UnaryExpression unary -> CompiledUnaryExpression {
+        operator: unary.operator,
+        expression: compile_expression(unary.expression),
+        location: compile_location(unary.location)
+    }
+    case FunctionCallExpression { name, arguments, location } -> CompiledFunctionCallExpression {
+        name: name,
+        arguments: compile_expressions(arguments),
+        location: compile_location(location)
+    }
+    case MethodCallExpression { receiver, name, arguments, location } -> CompiledMethodCallExpression {
+        receiver: compile_expression(receiver),
+        name: name,
+        arguments: compile_expressions(arguments),
+        location: compile_location(location)
+    }
+    case LambdaExpression { parameters, body, location } -> CompiledLambdaExpression {
+        parameters: parameters,
+        body: compile_expression(body),
+        location: compile_location(location)
+    }
+    case ListLiteral { values, location } -> CompiledListLiteral {
+        values: compile_expressions(values),
+        location: compile_location(location)
+    }
+    case SetLiteral { values, location } -> CompiledSetLiteral {
+        values: compile_expressions(values),
+        location: compile_location(location)
+    }
+    case DictLiteral { entries, location } -> CompiledDictLiteral {
+        entries: compile_dict_entries(entries),
+        location: compile_location(location)
+    }
+    case TupleLiteral { values, location } -> CompiledTupleLiteral {
+        values: compile_expressions(values),
+        location: compile_location(location)
+    }
+    case IndexExpression { receiver, index, location } -> CompiledIndexExpression {
+        receiver: compile_expression(receiver),
+        index: compile_expression(index),
+        location: compile_location(location)
+    }
+    case BlockExpression { bindings, result, location } -> CompiledBlockExpression {
+        bindings: compile_let_bindings(bindings),
+        result: compile_expression(result),
+        location: compile_location(location)
+    }
+
+private fun compile_expressions(expressions: List[Expression]): List[CompiledExpression] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } -> [compile_expression(expression)] + compile_expressions(expressions[1:])
+
+private fun compile_dict_entries(entries: List[DictEntry]): List[CompiledDictEntry] =
+    match entries[0] with
+    case None -> []
+    case Some { entry } -> [CompiledDictEntry {
+        key: compile_expression(entry.key),
+        value: compile_expression(entry.value),
+        location: compile_location(entry.location)
+    }] + compile_dict_entries(entries[1:])
+
+private fun compile_let_bindings(bindings: List[LetBinding]): List[CompiledLetBinding] =
+    match bindings[0] with
+    case None -> []
+    case Some { binding } -> [CompiledLetBinding {
+        name: binding.name,
+        typeReference: compile_type(binding.typeReference),
+        value: compile_expression(binding.value),
+        location: compile_location(binding.location)
+    }] + compile_let_bindings(bindings[1:])
