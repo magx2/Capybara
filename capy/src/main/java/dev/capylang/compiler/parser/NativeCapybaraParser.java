@@ -77,7 +77,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
         var definitions = new ArrayList<Definition>();
         for (var definition : program.definition()) {
-            definitions.add(functionalDefinition(definition));
+            if (definition.dataDeclaration() != null) {
+                definitions.addAll(dataDeclarationDefinitions(definition.dataDeclaration()));
+            } else {
+                definitions.add(functionalDefinition(definition));
+            }
         }
         return List.copyOf(definitions);
     }
@@ -245,6 +249,102 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 functionBody(ctx.functionBody()),
                 location(ctx)
         );
+    }
+
+    private static List<Definition> dataDeclarationDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.DataDeclarationContext ctx
+    ) {
+        var declaration = ctx.genericTypeDeclaration();
+        var name = dataTypeName(declaration);
+        var location = location(ctx);
+        var definitions = new ArrayList<Definition>();
+        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
+
+        var typeParameters = dataTypeParameters(declaration);
+        for (var i = 0; i < typeParameters.size(); i++) {
+            definitions.add(schemaConstantDefinition(
+                    "__capy_schema_param|" + name + "|" + i,
+                    typeParameters.get(i),
+                    location
+            ));
+        }
+
+        var fields = dataDeclarationFields(ctx.dataBody());
+        for (var i = 0; i < fields.size(); i++) {
+            definitions.add(schemaConstantDefinition(
+                    "__capy_schema_field|" + name + "|" + i,
+                    fields.get(i),
+                    location
+            ));
+        }
+        return List.copyOf(definitions);
+    }
+
+    private static Definition schemaConstantDefinition(String name, String value, SourceLocation location) {
+        return new Definition.ConstantDefinition(new ConstantDeclaration(
+                name,
+                "schema",
+                stringType(),
+                new Expression.StringLiteral(value, quote(value), location),
+                location
+        ));
+    }
+
+    private static TypeReference stringType() {
+        return new TypeReference("String", List.of());
+    }
+
+    private static String quote(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    private static String dataTypeName(
+            dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext ctx
+    ) {
+        return ctx.TYPE(0).getText();
+    }
+
+    private static List<String> dataTypeParameters(
+            dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext ctx
+    ) {
+        var parameters = new ArrayList<String>();
+        for (var i = 1; i < ctx.TYPE().size(); i++) {
+            parameters.add(ctx.TYPE(i).getText());
+        }
+        return List.copyOf(parameters);
+    }
+
+    private static List<String> dataDeclarationFields(
+            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext ctx
+    ) {
+        if (ctx == null || ctx.fieldDeclarationList() == null) {
+            return List.of();
+        }
+        var fields = new ArrayList<String>();
+        for (var field : ctx.fieldDeclarationList().fieldDeclaration()) {
+            fields.add(dataFieldDeclaration(field));
+        }
+        return List.copyOf(fields);
+    }
+
+    private static String dataFieldDeclaration(
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationContext ctx
+    ) {
+        if (ctx.identifier() != null) {
+            return dataFieldSchema(ctx.identifier().getText(), ctx.type());
+        }
+        if (ctx.STRING_LITERAL() != null) {
+            return dataFieldSchema(unquote(ctx.STRING_LITERAL().getText()), ctx.type());
+        }
+        return "$unsupported|";
+    }
+
+    private static String dataFieldSchema(
+            String name,
+            dev.capylang.parser.antlr.FunctionalParser.TypeContext type
+    ) {
+        var typeReference = typeReference(type);
+        return name + "|" + typeReference.name();
     }
 
     private static FunctionParameter functionParameter(dev.capylang.parser.antlr.FunctionalParser.ParameterContext ctx) {
