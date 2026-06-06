@@ -310,9 +310,16 @@ private fun missing_argument(): CompiledExpression =
     }
 
 private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
-    + "." + java_method_name(call.name)
-    + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+    if primitive_conversion_method(call.name)
+    then primitive_conversion_code(call, env, module, allModules)
+    else expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
+        + "." + java_method_name(call.name)
+        + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun primitive_conversion_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((" + java_type(method_call_type(call, env, module, allModules)) + ") "
+    + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
+    + ")"
 
 private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let params = lambda_parameters(lambda.parameters)
@@ -537,6 +544,10 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
     then int_type()
+    else if call.name == "to_int"
+    then int_type()
+    else if call.name == "to_long"
+    then long_type()
     else assert_type()
 
 private fun first_expression_type(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -794,9 +805,26 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then (receiverType.name == "List" | receiverType.name == "Set" | receiverType.name == "Dict")
         & call.arguments.is_empty()
         & expression_emittable(call.receiver, env, module, allModules)
+    else if primitive_conversion_method(call.name)
+    then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
     else java_method_supported(call.name)
         & expression_emittable(call.receiver, env, module, allModules)
         & expressions_emittable(call.arguments, env, module, allModules)
+
+private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.arguments.is_empty()
+        & primitive_conversion_receiver(call.name, receiverType)
+        & expression_emittable(call.receiver, env, module, allModules)
+
+private fun primitive_conversion_method(name: String): bool =
+    name == "to_int" | name == "to_long"
+
+private fun primitive_conversion_receiver(name: String, receiverType: CompiledTypeReference): bool =
+    if name == "to_int"
+    then receiverType.name == "long" | receiverType.name == "float" | receiverType.name == "double"
+    else if name == "to_long"
+    then receiverType.name == "float" | receiverType.name == "double"
+    else false
 
 private fun constant_value_expression(expression: CompiledExpression): bool =
     match expression with
