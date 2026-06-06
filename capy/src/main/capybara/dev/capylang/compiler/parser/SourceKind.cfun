@@ -1,0 +1,9 @@
+enum SourceKind {
+    FUNCTIONAL,
+    OBJECT_ORIENTED,
+}
+
+fun SourceKind.extension(): String =
+    match this with
+    case FUNCTIONAL -> ".cfun"
+    case OBJECT_ORIENTED -> ".coo"

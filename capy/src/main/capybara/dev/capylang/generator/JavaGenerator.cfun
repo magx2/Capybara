@@ -1,7 +1,9 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledProgram import { * }
-from /dev/capylang/generator/GeneratedProgram import { * }
+from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
+from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 fun java_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {

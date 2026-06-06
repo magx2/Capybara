@@ -1,0 +1,10 @@
+from /capy/lang/Option import { Option }
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
+
+data CompiledNativeProviderBinding {
+    interfaceId: String,
+    qualifier: String,
+    javaBinding: Option[NativeProviderBackendBinding],
+    javascriptBinding: Option[NativeProviderBackendBinding],
+    pythonBinding: Option[NativeProviderBackendBinding]
+}
