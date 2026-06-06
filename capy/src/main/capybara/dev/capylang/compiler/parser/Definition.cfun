@@ -1,3 +1,4 @@
+from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 
 data AnnotationDeclaration {}
@@ -7,9 +8,11 @@ data EnumDeclaration {}
 data PrimitiveBackedTypeDeclaration {}
 data TypeDeclaration {}
 data UnsupportedDefinition {}
+data ConstantDefinition { constant: ConstantDeclaration }
 data FunctionDefinition { function: FunctionDeclaration }
 
 union Definition = AnnotationDeclaration
+                 | ConstantDefinition
                  | DataDeclaration
                  | DeriverDeclaration
                  | EnumDeclaration
