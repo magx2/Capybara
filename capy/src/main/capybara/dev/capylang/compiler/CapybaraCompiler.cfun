@@ -1,10 +1,15 @@
 from /capy/collection/List import { * }
 from /capy/collection/Set import { Set }
-from /capy/lang/Effect import { Effect, pure }
+from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledProgram import { * }
-from /dev/capylang/compiler/parser/RawModule import { * }
+from /dev/capylang/compiler/CompilerError import { CompilerError }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
+from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
+from /dev/capylang/compiler/parser/RawModule import { RawModule }
 
 fun compile(
     rawModules: List[RawModule],
@@ -19,22 +24,30 @@ fun compile(
         line: 0,
         column: 0
     }] })
-    else pure(Left { CompiledProgram {
-        modules: compile_modules(rawModules),
+    else
+        let capybara_parser <- parser()
+        capybara_parser.parse(rawModules).map(program => compiled_program(program, nativeProviders))
+
+private fun compiled_program(
+    program: /dev/capylang/compiler/parser/ParsedProgram,
+    nativeProviders: NativeProviderManifest
+): Either[CompiledProgram, List[CompilerError]] =
+    Left { CompiledProgram {
+        modules: compile_modules(program.modules),
         objectOrientedModules: [],
         nativeProviders: nativeProviders,
         nativeProviderCatalog: empty_native_provider_catalog()
-    }})
+    }}
 
-private fun compile_modules(raw_modules: List[RawModule]): List[CompiledModule] =
-    match raw_modules[0] with
+private fun compile_modules(modules: List[ParsedModule]): List[CompiledModule] =
+    match modules[0] with
     case None -> []
-    case Some { raw_module } -> [compile_module(raw_module)] + compile_modules(raw_modules[1:])
+    case Some { module } -> [compile_module(module.name, module.path)] + compile_modules(modules[1:])
 
-private fun compile_module(raw_module: RawModule): CompiledModule =
+private fun compile_module(name: String, path: String): CompiledModule =
     CompiledModule {
-        name: raw_module.name,
-        path: normalize_module_path(raw_module.path),
+        name: name,
+        path: normalize_module_path(path),
         types: {:},
         visiblePrimitiveBackedTypes: {:},
         functions: [],

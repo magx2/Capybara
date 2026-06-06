@@ -9,19 +9,34 @@ from /capy/lang/Option import { * }
 from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
-from /capy/lang/System import { current_millis }
 from /capy/meta_prog/Recursive import { Recursive }
 from /capy/serialization/Json import { * }
 from /dev/capylang/compiler/CapybaraCompiler import { compile }
+from /dev/capylang/compiler/CompileConfiguration import { CompileConfiguration }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompilerError import { CompilerError }
+from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/ObjectOrientedModule import { ObjectOrientedModule }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
-from /dev/capylang/compiler/parser/RawModule import { * }
-from /dev/capylang/generator/GeneratedProgram import { * }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
+from /dev/capylang/compiler/parser/RawModule import { RawModule }
+from /dev/capylang/compiler/parser/SourceKind import { FUNCTIONAL, OBJECT_ORIENTED, SourceKind }
+from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
+from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/Generator import { generate }
 
 const COMPILER_VERSION = "0.4.0-SNAPSHOT"
 
-fun main(args: List[String]): Effect[/capy/lang/Program] =
+fun run(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
     case None -> usage_error("No command passed!")
     case Some { "-h" } | Some { "--help" } -> print_help()
@@ -1222,7 +1237,7 @@ fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
                         match filesResult with
                         case Error { message } -> runtime_error(message)
                         case Success { files } ->
-                            current_millis().flat_map(buildMillis =>
+                            /capy/lang/System.current_millis().flat_map(buildMillis =>
                                 write_package_archive(
                                     package_output_path(moduleFile),
                                     package_archive(options, moduleText, files, buildMillis)
