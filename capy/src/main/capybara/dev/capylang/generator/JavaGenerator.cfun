@@ -196,7 +196,7 @@ private fun expression_code(
 ): String =
     match expression with
     case CompiledUnsupportedExpression unsupported -> "unsupported(\"" + escape_java_string(unsupported.source) + "\")"
-    case CompiledIntLiteral literal -> literal.source
+    case CompiledIntLiteral literal -> int_literal_code(literal, expectedType)
     case CompiledLongLiteral literal -> literal.source
     case CompiledFloatLiteral literal -> literal.source
     case CompiledDoubleLiteral literal -> literal.source
@@ -230,10 +230,20 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     else if binary.operator == "?"
     then expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
         + ".contains(" + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules) + ")"
+    else if binary.operator == "%" & expectedType.name == "byte"
+    then "((byte) (" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+        + " % "
+        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + "))"
     else "(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
         + " " + binary.operator + " "
         + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
         + ")"
+
+private fun int_literal_code(literal: CompiledIntLiteral, expectedType: CompiledTypeReference): String =
+    if expectedType.name == "byte" & byte_literal_source(literal.source)
+    then "((byte) " + literal.source + ")"
+    else literal.source
 
 private fun function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "assert_all"
@@ -446,7 +456,7 @@ private fun match_env(bindings: List[String], env: List[JavaBinding]): List[Java
 
 private fun expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expression with
-    case CompiledIntLiteral _ -> int_type()
+    case CompiledIntLiteral literal -> if byte_literal_source(literal.source) then byte_type() else int_type()
     case CompiledLongLiteral _ -> long_type()
     case CompiledFloatLiteral _ -> float_type()
     case CompiledDoubleLiteral _ -> double_type()
@@ -711,7 +721,9 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     then leftType.name == "String" | rightType.name == "String" | (numeric_type(leftType) & numeric_type(rightType))
     else if binary.operator == "^"
     then leftType.name == "int" & rightType.name == "int"
-    else if binary.operator == "-" | binary.operator == "*" | binary.operator == "/" | binary.operator == "%"
+    else if binary.operator == "%"
+    then remainder_type(leftType) & remainder_type(rightType)
+    else if binary.operator == "-" | binary.operator == "*" | binary.operator == "/"
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
@@ -727,6 +739,12 @@ private fun java_unary_operator_emittable(unary: CompiledUnaryExpression, env: L
 
 private fun numeric_type(type: CompiledTypeReference): bool =
     type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
+
+private fun remainder_type(type: CompiledTypeReference): bool =
+    type.name == "byte" | numeric_type(type)
+
+private fun byte_literal_source(source: String): bool =
+    source.starts_with("0x") | source.starts_with("0X")
 
 private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
