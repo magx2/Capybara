@@ -266,34 +266,73 @@ private fun expression_code(
     case CompiledBlockExpression block -> block_expression_code(block, env, expectedType, module, allModules)
 
 private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftType = expression_type(binary.left, env, module, allModules)
+    let rightType = expression_type(binary.right, env, module, allModules)
+    let resultType = binary_result_type(binary.operator, leftType, rightType)
     if boolean_binary_operator(binary.operator)
     then "(" + truthy_expression_code(binary.left, env, module, allModules)
         + " " + java_boolean_operator(binary.operator) + " "
         + truthy_expression_code(binary.right, env, module, allModules)
         + ")"
+    else if string_left_numeric_operator(binary.operator, leftType, rightType)
+    then "(" + expression_code(binary.left, env, leftType, module, allModules)
+        + " + "
+        + expression_code(binary.right, env, rightType, module, allModules)
+        + ")"
     else if binary.operator == "^"
-    then "__capy_pow_int(" + expression_code(binary.left, env, int_type(), module, allModules) + ", " + expression_code(binary.right, env, int_type(), module, allModules) + ")"
+    then power_expression_code(binary, resultType, env, module, allModules)
     else if binary.operator == ".nand."
-    then byte_result_code("(~(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+    then byte_result_code("(~(" + expression_code(binary.left, env, leftType, module, allModules)
         + " & "
-        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + expression_code(binary.right, env, rightType, module, allModules)
         + "))", expectedType)
     else if bitwise_binary_operator(binary.operator)
-    then byte_result_code("(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+    then byte_result_code("(" + expression_code(binary.left, env, leftType, module, allModules)
         + " " + java_bitwise_operator(binary.operator) + " "
-        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + expression_code(binary.right, env, rightType, module, allModules)
         + ")", expectedType)
     else if binary.operator == "?"
-    then expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
-        + ".contains(" + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules) + ")"
-    else if binary.operator == "%" & expectedType.name == "byte"
-    then "((byte) (" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+    then expression_code(binary.left, env, leftType, module, allModules)
+        + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
+    else if binary.operator == "%" & resultType.name == "byte"
+    then "((byte) (" + expression_code(binary.left, env, leftType, module, allModules)
         + " % "
-        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + expression_code(binary.right, env, rightType, module, allModules)
         + "))"
-    else "(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+    else byte_result_code("(" + expression_code(binary.left, env, leftType, module, allModules)
         + " " + binary.operator + " "
-        + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
+        + expression_code(binary.right, env, rightType, module, allModules)
+        + ")", resultType)
+
+private fun power_expression_code(binary: CompiledBinaryExpression, resultType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if resultType.name == "byte"
+    then "((byte) __capy_pow_int("
+        + expression_code(binary.left, env, int_type(), module, allModules)
+        + ", "
+        + expression_code(binary.right, env, int_type(), module, allModules)
+        + "))"
+    else if resultType.name == "int"
+    then "__capy_pow_int("
+        + expression_code(binary.left, env, int_type(), module, allModules)
+        + ", "
+        + expression_code(binary.right, env, int_type(), module, allModules)
+        + ")"
+    else if resultType.name == "long"
+    then "__capy_pow_long("
+        + expression_code(binary.left, env, long_type(), module, allModules)
+        + ", "
+        + expression_code(binary.right, env, long_type(), module, allModules)
+        + ")"
+    else if resultType.name == "float"
+    then "((float) java.lang.Math.pow("
+        + expression_code(binary.left, env, float_type(), module, allModules)
+        + ", "
+        + expression_code(binary.right, env, float_type(), module, allModules)
+        + "))"
+    else "java.lang.Math.pow("
+        + expression_code(binary.left, env, double_type(), module, allModules)
+        + ", "
+        + expression_code(binary.right, env, double_type(), module, allModules)
         + ")"
 
 private fun unary_expression_code(unary: CompiledUnaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -301,6 +340,8 @@ private fun unary_expression_code(unary: CompiledUnaryExpression, env: List[Java
     then "(!" + truthy_expression_code(unary.expression, env, module, allModules) + ")"
     else if unary.operator == ".not."
     then byte_result_code("(~" + expression_code(unary.expression, env, expression_type(unary.expression, env, module, allModules), module, allModules) + ")", expectedType)
+    else if unary.operator == "-"
+    then byte_result_code("(-" + expression_code(unary.expression, env, expression_type(unary.expression, env, module, allModules), module, allModules) + ")", expectedType)
     else "(" + unary.operator + expression_code(unary.expression, env, expectedType, module, allModules) + ")"
 
 private fun byte_result_code(expression: String, expectedType: CompiledTypeReference): String =
@@ -593,10 +634,11 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledVariableExpression variable -> lookup_binding(variable.name, env)
     case CompiledIfExpression ifExpression -> expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBinaryExpression binary ->
-        if boolean_binary_operator(binary.operator) then bool_type()
-        else if comparison_operator(binary.operator) then bool_type()
-        else if binary.operator == "+" & (expression_type(binary.left, env, module, allModules).name == "String" | expression_type(binary.right, env, module, allModules).name == "String") then string_type()
-        else expression_type(binary.left, env, module, allModules)
+        binary_result_type(
+            binary.operator,
+            expression_type(binary.left, env, module, allModules),
+            expression_type(binary.right, env, module, allModules)
+        )
     case CompiledUnaryExpression unary -> expression_type(unary.expression, env, module, allModules)
     case CompiledFunctionCallExpression call -> function_call_type(call, env, module, allModules)
     case CompiledMethodCallExpression call -> method_call_type(call, env, module, allModules)
@@ -781,6 +823,36 @@ private fun find_module_by_class(className: String, modules: List[CompiledModule
     case None -> /capy/lang/Option.None {}
     case Some { module } -> if module_fqcn(module) == className then /capy/lang/Option.Some { module } else find_module_by_class(className, modules[1:])
 
+private fun binary_result_type(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): CompiledTypeReference =
+    if boolean_binary_operator(operator)
+    then bool_type()
+    else if comparison_operator(operator)
+    then bool_type()
+    else if operator == "+" & (leftType.name == "String" | rightType.name == "String")
+    then string_type()
+    else if string_left_numeric_operator(operator, leftType, rightType)
+    then string_type()
+    else if numeric_binary_operator(operator) & numeric_type(leftType) & numeric_type(rightType)
+    then promoted_numeric_type(leftType, rightType)
+    else leftType
+
+private fun numeric_binary_operator(operator: String): bool =
+    operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
+
+private fun string_left_numeric_operator(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    (operator == "-" | operator == "*" | operator == "/" | operator == "^") & leftType.name == "String" & numeric_type(rightType)
+
+private fun promoted_numeric_type(leftType: CompiledTypeReference, rightType: CompiledTypeReference): CompiledTypeReference =
+    if leftType.name == "double" | rightType.name == "double"
+    then double_type()
+    else if leftType.name == "float" | rightType.name == "float"
+    then float_type()
+    else if leftType.name == "long" | rightType.name == "long"
+    then long_type()
+    else if leftType.name == "int" | rightType.name == "int"
+    then int_type()
+    else byte_type()
+
 private fun comparison_operator(operator: String): bool =
     operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
 
@@ -897,13 +969,13 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     else if boolean_binary_operator(binary.operator)
     then truthy_type(leftType) & truthy_type(rightType)
     else if binary.operator == "^"
-    then leftType.name == "int" & rightType.name == "int"
+    then (numeric_type(leftType) & numeric_type(rightType)) | string_left_numeric_operator(binary.operator, leftType, rightType)
     else if binary.operator == ".nand." | bitwise_binary_operator(binary.operator)
     then integer_type(leftType) & integer_type(rightType)
     else if binary.operator == "%"
     then remainder_type(leftType) & remainder_type(rightType)
     else if binary.operator == "-" | binary.operator == "*" | binary.operator == "/"
-    then numeric_type(leftType) & numeric_type(rightType)
+    then (numeric_type(leftType) & numeric_type(rightType)) | string_left_numeric_operator(binary.operator, leftType, rightType)
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == "?"
@@ -935,7 +1007,7 @@ private fun integer_type(type: CompiledTypeReference): bool =
     type.name == "byte" | type.name == "int" | type.name == "long"
 
 private fun numeric_type(type: CompiledTypeReference): bool =
-    type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
+    type.name == "byte" | type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
 
 private fun remainder_type(type: CompiledTypeReference): bool =
     type.name == "byte" | numeric_type(type)
@@ -1278,6 +1350,16 @@ private fun java_helpers(module: CompiledModule): String =
         + "        }" + newline()
         + "        int result = 1;" + newline()
         + "        for (int i = 0; i < exponent; i++) {" + newline()
+        + "            result *= base;" + newline()
+        + "        }" + newline()
+        + "        return result;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static long __capy_pow_long(long base, long exponent) {" + newline()
+        + "        if (exponent <= 0L) {" + newline()
+        + "            return 1L;" + newline()
+        + "        }" + newline()
+        + "        long result = 1L;" + newline()
+        + "        for (long i = 0L; i < exponent; i++) {" + newline()
         + "            result *= base;" + newline()
         + "        }" + newline()
         + "        return result;" + newline()
