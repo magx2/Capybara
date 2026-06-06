@@ -204,12 +204,7 @@ private fun compile_expression(expression: Expression): CompiledExpression =
         arguments: compile_expressions(arguments),
         location: compile_location(location)
     }
-    case MethodCallExpression { receiver, name, arguments, location } -> CompiledMethodCallExpression {
-        receiver: compile_expression(receiver),
-        name: name,
-        arguments: compile_expressions(arguments),
-        location: compile_location(location)
-    }
+    case MethodCallExpression call -> compile_method_call(call)
     case LambdaExpression { parameters, body, location } -> CompiledLambdaExpression {
         parameters: parameters,
         body: compile_expression(body),
@@ -241,11 +236,7 @@ private fun compile_expression(expression: Expression): CompiledExpression =
         fields: compile_data_fields(fields),
         location: compile_location(location)
     }
-    case FieldAccessExpression { receiver, name, location } -> CompiledFieldAccessExpression {
-        receiver: compile_expression(receiver),
-        name: name,
-        location: compile_location(location)
-    }
+    case FieldAccessExpression access -> compile_field_access(access)
     case ReduceExpression { receiver, initial, accumulatorName, valueName, body, location } -> CompiledReduceExpression {
         receiver: compile_expression(receiver),
         initial: compile_expression(initial),
@@ -263,6 +254,54 @@ private fun compile_expression(expression: Expression): CompiledExpression =
         bindings: compile_let_bindings(bindings),
         result: compile_expression(result),
         location: compile_location(location)
+    }
+
+private fun compile_method_call(call: MethodCallExpression): CompiledExpression =
+    match call.receiver with
+    case UnaryExpression { operator, expression, location } ->
+        if operator == "!"
+        then CompiledUnaryExpression {
+            operator: operator,
+            expression: CompiledMethodCallExpression {
+                receiver: compile_expression(expression),
+                name: call.name,
+                arguments: compile_expressions(call.arguments),
+                location: compile_location(call.location)
+            },
+            location: compile_location(location)
+        }
+        else compiled_method_call(call)
+    case _ -> compiled_method_call(call)
+
+private fun compiled_method_call(call: MethodCallExpression): CompiledExpression =
+    CompiledMethodCallExpression {
+        receiver: compile_expression(call.receiver),
+        name: call.name,
+        arguments: compile_expressions(call.arguments),
+        location: compile_location(call.location)
+    }
+
+private fun compile_field_access(access: FieldAccessExpression): CompiledExpression =
+    match access.receiver with
+    case UnaryExpression { operator, expression, location } ->
+        if operator == "!"
+        then CompiledUnaryExpression {
+            operator: operator,
+            expression: CompiledFieldAccessExpression {
+                receiver: compile_expression(expression),
+                name: access.name,
+                location: compile_location(access.location)
+            },
+            location: compile_location(location)
+        }
+        else compiled_field_access(access)
+    case _ -> compiled_field_access(access)
+
+private fun compiled_field_access(access: FieldAccessExpression): CompiledExpression =
+    CompiledFieldAccessExpression {
+        receiver: compile_expression(access.receiver),
+        name: access.name,
+        location: compile_location(access.location)
     }
 
 private fun compile_expressions(expressions: List[Expression]): List[CompiledExpression] =
