@@ -1,0 +1,11 @@
+from /dev/capylang/compiler/parser/Expression import { Expression }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+data ConstantDeclaration {
+    name: String,
+    visibility: String,
+    typeReference: TypeReference,
+    expression: Expression,
+    location: SourceLocation
+}

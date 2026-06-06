@@ -22,6 +22,10 @@ union Expression =
     | DictLiteral
     | TupleLiteral
     | IndexExpression
+    | DataLiteral
+    | FieldAccessExpression
+    | ReduceExpression
+    | MatchExpression
     | BlockExpression
 
 data UnsupportedExpression { source: String, location: SourceLocation }
@@ -44,5 +48,11 @@ data DictEntry { key: Expression, value: Expression, location: SourceLocation }
 data DictLiteral { entries: List[DictEntry], location: SourceLocation }
 data TupleLiteral { values: List[Expression], location: SourceLocation }
 data IndexExpression { receiver: Expression, index: Expression, location: SourceLocation }
+data DataField { name: String, value: Expression, location: SourceLocation }
+data DataLiteral { typeName: String, fields: List[DataField], location: SourceLocation }
+data FieldAccessExpression { receiver: Expression, name: String, location: SourceLocation }
+data ReduceExpression { receiver: Expression, initial: Expression, accumulatorName: String, valueName: String, body: Expression, location: SourceLocation }
+data MatchCase { typeName: String, bindings: List[String], body: Expression, location: SourceLocation }
+data MatchExpression { value: Expression, cases: List[MatchCase], location: SourceLocation }
 data LetBinding { name: String, typeReference: TypeReference, value: Expression, location: SourceLocation }
 data BlockExpression { bindings: List[LetBinding], result: Expression, location: SourceLocation }
