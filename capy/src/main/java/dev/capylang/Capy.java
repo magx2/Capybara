@@ -2,7 +2,6 @@ package dev.capylang;
 
 import capy.lang.Effect;
 import capy.lang.Program;
-import capy.lang.Result;
 import dev.capylang.cli.Capy.CompileGenerateOptions;
 import dev.capylang.cli.Capy.CompileOptions;
 import dev.capylang.cli.Capy.LogLevel;
@@ -11,7 +10,6 @@ import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.OutputType;
 
 import java.io.PrintStream;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -139,33 +137,6 @@ public final class Capy {
         } catch (RuntimeException exception) {
             errors.println(exception.getMessage());
             return Program.DEFAULT_FAILED_EXIT_CODE;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T unwrapResult(Object result) {
-        if (result instanceof Result.Success<?> success) {
-            return (T) success.value();
-        }
-        if (result instanceof Result.Error<?> error) {
-            throw error.ex();
-        }
-        throw new CapybaraException("Unexpected result: " + result);
-    }
-
-    private static Object invokePrivate(String name, Class<?>[] parameterTypes, Object... args) {
-        try {
-            var method = dev.capylang.cli.Capy.class.getDeclaredMethod(name, parameterTypes);
-            method.setAccessible(true);
-            return method.invoke(null, args);
-        } catch (NoSuchMethodException | IllegalAccessException exception) {
-            throw new CapybaraException(exception);
-        } catch (InvocationTargetException exception) {
-            var cause = exception.getCause();
-            if (cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            throw new CapybaraException(cause);
         }
     }
 }
