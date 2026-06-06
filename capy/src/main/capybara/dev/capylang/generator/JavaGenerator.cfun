@@ -1,6 +1,6 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMethodCallExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -35,6 +35,7 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     + java_imports(module, allModules)
     + "public final class " + module.name + " {" + newline()
     + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
+    + java_constants(constant_functions(module.functions), [], module, allModules)
     + java_functions(module.functions, module, allModules)
     + java_helpers(module)
     + "}" + newline()
@@ -89,14 +90,58 @@ private fun module_class_exists(className: String, modules: List[CompiledModule]
     case None -> false
     case Some { module } -> module_fqcn(module) == className | module_class_exists(className, modules[1:])
 
+private fun java_constants(constants: List[CompiledFunction], previous: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match constants[0] with
+    case None -> if previous.is_empty() then "" else newline()
+    case Some { constant } ->
+        java_constant(constant, constant_bindings(previous), module, allModules)
+        + java_constants(constants[1:], [constant] + previous, module, allModules)
+
+private fun java_constant(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let type = constant_type(constant, env, module, allModules)
+    "    " + constant_java_visibility(constant) + " static final " + java_type(type) + " " + java_identifier(constant.name)
+    + " = " + expression_code(constant.body, env, type, module, allModules) + ";" + newline()
+
+private fun constant_type(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if constant.returnType.name.is_empty()
+    then expression_type(constant.body, env, module, allModules)
+    else constant.returnType
+
+private fun constant_bindings(constants: List[CompiledFunction]): List[JavaBinding] =
+    match constants[0] with
+    case None -> []
+    case Some { constant } -> [JavaBinding { name: constant.name, typeReference: constant_type_reference(constant) }] + constant_bindings(constants[1:])
+
+private fun constant_type_reference(constant: CompiledFunction): CompiledTypeReference =
+    if constant.returnType.name.is_empty()
+    then object_type()
+    else constant.returnType
+
+private fun constant_functions(functions: List[CompiledFunction]): List[CompiledFunction] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_constant(function)
+        then [function] + constant_functions(functions[1:])
+        else constant_functions(functions[1:])
+
+private fun compiled_constant(function: CompiledFunction): bool =
+    function.visibility.starts_with("const:")
+
+private fun constant_java_visibility(function: CompiledFunction): String =
+    java_visibility(function.visibility.replace("const:", ""))
+
 private fun java_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
     case None -> ""
-    case Some { function } -> java_function(function, module, allModules) + newline() + java_functions(functions[1:], module, allModules)
+    case Some { function } ->
+        if compiled_constant(function)
+        then java_functions(functions[1:], module, allModules)
+        else java_function(function, module, allModules) + newline() + java_functions(functions[1:], module, allModules)
 
 private fun java_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     let returnType = java_type(function.returnType)
-    let env = parameter_bindings(function.parameters)
+    let env = parameter_bindings(function.parameters) + constant_bindings(constant_functions(module.functions))
     "    " + java_visibility(function.visibility) + " static " + returnType + " " + java_function_name(function) + "(" + java_parameters(function.parameters) + ") {" + newline()
     + java_function_body(function, env, module, allModules)
     + "    }" + newline()
@@ -173,11 +218,18 @@ private fun expression_code(
     case CompiledDictLiteral literal -> dict_code(literal.entries, env, module, allModules)
     case CompiledTupleLiteral literal -> "java.util.List.of(" + expression_list_code(literal.values, env, module, allModules) + ")"
     case CompiledIndexExpression index -> index_code(index, env, expectedType, module, allModules)
+    case CompiledDataLiteral literal -> data_literal_code(literal, env, module, allModules)
+    case CompiledFieldAccessExpression access -> field_access_code(access, env, expectedType, module, allModules)
+    case CompiledReduceExpression reduce -> reduce_expression_code(reduce, env, expectedType, module, allModules)
+    case CompiledMatchExpression matchExpression -> match_expression_code(matchExpression, env, expectedType, module, allModules)
     case CompiledBlockExpression block -> block_expression_code(block, env, expectedType, module, allModules)
 
 private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if binary.operator == "^"
     then "__capy_pow_int(" + expression_code(binary.left, env, int_type(), module, allModules) + ", " + expression_code(binary.right, env, int_type(), module, allModules) + ")"
+    else if binary.operator == "?"
+    then expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
+        + ".contains(" + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules) + ")"
     else "(" + expression_code(binary.left, env, expression_type(binary.left, env, module, allModules), module, allModules)
         + " " + binary.operator + " "
         + expression_code(binary.right, env, expression_type(binary.right, env, module, allModules), module, allModules)
@@ -316,6 +368,82 @@ private fun dict_entries_tail(entries: List[CompiledDictEntry], env: List[JavaBi
     case None -> ""
     case Some _ -> ", " + dict_entries_code(entries, env, module, allModules)
 
+private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"" + escape_java_string(literal.typeName) + "\", " + data_fields_code(literal.fields, env, module, allModules) + ")"
+
+private fun data_fields_code(fields: List[CompiledDataField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if fields.is_empty()
+    then "java.util.Map.of()"
+    else "java.util.Map.ofEntries(" + data_field_entries_code(fields, env, module, allModules) + ")"
+
+private fun data_field_entries_code(fields: List[CompiledDataField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        "java.util.Map.entry(\"" + escape_java_string(field.name) + "\", " + expression_code(field.value, env, expression_type(field.value, env, module, allModules), module, allModules) + ")"
+        + data_field_entries_tail(fields[1:], env, module, allModules)
+
+private fun data_field_entries_tail(fields: List[CompiledDataField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some _ -> ", " + data_field_entries_code(fields, env, module, allModules)
+
+private fun field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((" + boxed_java_type(expectedType) + ") __capy_data_field("
+    + expression_code(access.receiver, env, expression_type(access.receiver, env, module, allModules), module, allModules)
+    + ", \"" + escape_java_string(access.name) + "\"))"
+
+private fun reduce_expression_code(reduce: CompiledReduceExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultType = expression_type(reduce.initial, env, module, allModules)
+    let receiverType = expression_type(reduce.receiver, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    let reduceEnv = [JavaBinding { name: reduce.accumulatorName, typeReference: resultType }, JavaBinding { name: reduce.valueName, typeReference: valueType }] + env
+    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+    + "            " + java_type(resultType) + " " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.initial, env, resultType, module, allModules) + ";" + newline()
+    + "            for (" + java_type(valueType) + " " + java_identifier(reduce.valueName) + " : " + expression_code(reduce.receiver, env, receiverType, module, allModules) + ") {" + newline()
+    + "                " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.body, reduceEnv, resultType, module, allModules) + ";" + newline()
+    + "            }" + newline()
+    + "            return " + java_identifier(reduce.accumulatorName) + ";" + newline()
+    + "        }).get()"
+
+private fun collection_value_type(type: CompiledTypeReference): CompiledTypeReference =
+    if type.name == "List" | type.name == "Set"
+    then first_type_argument(type)
+    else object_type()
+
+private fun match_expression_code(matchExpression: CompiledMatchExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let valueType = expression_type(matchExpression.value, env, module, allModules)
+    let valueCode = expression_code(matchExpression.value, env, valueType, module, allModules)
+    match_cases_code(matchExpression.cases, valueCode, env, expectedType, module, allModules)
+
+private fun match_cases_code(cases: List[CompiledMatchCase], valueCode: String, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match cases[0] with
+    case None -> "unsupported(\"match\")"
+    case Some { matchCase } ->
+        "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") ? "
+        + match_case_body_code(matchCase, valueCode, env, expectedType, module, allModules)
+        + " : " + match_cases_code(cases[1:], valueCode, env, expectedType, module, allModules) + ")"
+
+private fun match_case_body_code(matchCase: CompiledMatchCase, valueCode: String, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if matchCase.bindings.is_empty()
+    then expression_code(matchCase.body, env, expectedType, module, allModules)
+    else "((java.util.function.Supplier<" + boxed_java_type(expectedType) + ">) () -> {" + newline()
+        + match_binding_statements(matchCase.bindings, valueCode, "            ")
+        + "            return " + expression_code(matchCase.body, match_env(matchCase.bindings, env), expectedType, module, allModules) + ";" + newline()
+        + "        }).get()"
+
+private fun match_binding_statements(bindings: List[String], valueCode: String, indent: String): String =
+    match bindings[0] with
+    case None -> ""
+    case Some { binding } ->
+        indent + "java.lang.Object " + java_identifier(binding) + " = __capy_data_field(" + valueCode + ", \"" + escape_java_string(binding) + "\");" + newline()
+        + match_binding_statements(bindings[1:], valueCode, indent)
+
+private fun match_env(bindings: List[String], env: List[JavaBinding]): List[JavaBinding] =
+    match bindings[0] with
+    case None -> env
+    case Some { binding } -> [JavaBinding { name: binding, typeReference: object_type() }] + match_env(bindings[1:], env)
+
 private fun expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expression with
     case CompiledIntLiteral _ -> int_type()
@@ -332,15 +460,24 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
         else expression_type(binary.left, env, module, allModules)
     case CompiledUnaryExpression unary -> expression_type(unary.expression, env, module, allModules)
     case CompiledFunctionCallExpression call -> function_call_type(call, env, module, allModules)
-    case CompiledMethodCallExpression _ -> assert_type()
+    case CompiledMethodCallExpression call -> method_call_type(call, env, module, allModules)
     case CompiledLambdaExpression _ -> supplier_type(assert_type())
     case CompiledListLiteral literal -> list_type(first_expression_type(literal.values, env, module, allModules))
     case CompiledSetLiteral literal -> set_type(first_expression_type(literal.values, env, module, allModules))
     case CompiledDictLiteral literal -> dict_type(first_dict_value_type(literal.entries, env, module, allModules))
     case CompiledTupleLiteral literal -> tuple_type(expression_types(literal.values, env, module, allModules))
     case CompiledIndexExpression index -> indexed_type(expression_type(index.receiver, env, module, allModules), index.index)
+    case CompiledDataLiteral literal -> CompiledTypeReference { name: literal.typeName, arguments: [] }
+    case CompiledFieldAccessExpression _ -> object_type()
+    case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
+    case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
     case CompiledBlockExpression block -> expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledUnsupportedExpression _ -> object_type()
+
+private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match cases[0] with
+    case None -> object_type()
+    case Some { matchCase } -> expression_type(matchCase.body, match_env(matchCase.bindings, env), module, allModules)
 
 private fun function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "assert_all" | call.name == "assert_that"
@@ -350,6 +487,11 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     else if call.name == "test_file"
     then effect_type(test_file_type())
     else lookup_function_type_in_scope(call.name, module, allModules)
+
+private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if call.name == "size"
+    then int_type()
+    else assert_type()
 
 private fun first_expression_type(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expressions[0] with
@@ -394,7 +536,7 @@ private fun lookup_function_type_in_scope(name: String, module: CompiledModule, 
 private fun lookup_function_type(name: String, functions: List[CompiledFunction], allModules: List[CompiledModule]): CompiledTypeReference =
     match functions[0] with
     case Some { function } ->
-        if function.name == name
+        if function.name == name & !compiled_constant(function)
         then function.returnType
         else lookup_function_type(name, functions[1:], allModules)
     case None -> lookup_function_type_in_modules(name, allModules)
@@ -410,12 +552,18 @@ private fun lookup_function_type_in_modules(name: String, modules: List[Compiled
 private fun find_function_type(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledTypeReference] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
-    case Some { function } -> if function.name == name then /capy/lang/Option.Some { function.returnType } else find_function_type(name, functions[1:])
+    case Some { function } ->
+        if function.name == name & !compiled_constant(function)
+        then /capy/lang/Option.Some { function.returnType }
+        else find_function_type(name, functions[1:])
 
 private fun find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
-    case Some { function } -> if function.name == name then /capy/lang/Option.Some { function } else find_function(name, functions[1:])
+    case Some { function } ->
+        if function.name == name & !compiled_constant(function)
+        then /capy/lang/Option.Some { function }
+        else find_function(name, functions[1:])
 
 private fun find_function_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match modules[0] with
@@ -449,7 +597,7 @@ private fun find_module_by_class(className: String, modules: List[CompiledModule
     case Some { module } -> if module_fqcn(module) == className then /capy/lang/Option.Some { module } else find_module_by_class(className, modules[1:])
 
 private fun comparison_operator(operator: String): bool =
-    operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!="
+    operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
 
 private fun expression_supported(expression: CompiledExpression): bool =
     match expression with
@@ -465,6 +613,10 @@ private fun expression_supported(expression: CompiledExpression): bool =
     case CompiledDictLiteral e -> dict_entries_supported(e.entries)
     case CompiledTupleLiteral e -> expressions_supported(e.values)
     case CompiledIndexExpression e -> expression_supported(e.receiver) & expression_supported(e.index)
+    case CompiledDataLiteral e -> data_fields_supported(e.fields)
+    case CompiledFieldAccessExpression e -> expression_supported(e.receiver)
+    case CompiledReduceExpression e -> expression_supported(e.receiver) & expression_supported(e.initial) & expression_supported(e.body)
+    case CompiledMatchExpression e -> expression_supported(e.value) & match_cases_supported(e.cases)
     case CompiledBlockExpression e -> let_bindings_supported(e.bindings) & expression_supported(e.result)
     case _ -> true
 
@@ -482,13 +634,17 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledBinaryExpression e -> java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
     case CompiledUnaryExpression e -> java_unary_operator_emittable(e, env, module, allModules) & expression_emittable(e.expression, env, module, allModules)
     case CompiledFunctionCallExpression e -> function_call_emittable(e, env, module, allModules)
-    case CompiledMethodCallExpression e -> java_method_supported(e.name) & expression_emittable(e.receiver, env, module, allModules) & expressions_emittable(e.arguments, env, module, allModules)
+    case CompiledMethodCallExpression e -> java_method_emittable(e, env, module, allModules)
     case CompiledLambdaExpression _ -> false
     case CompiledListLiteral e -> expressions_emittable(e.values, env, module, allModules)
     case CompiledSetLiteral e -> expressions_emittable(e.values, env, module, allModules)
     case CompiledDictLiteral e -> dict_entries_emittable(e.entries, env, module, allModules)
     case CompiledTupleLiteral e -> expressions_emittable(e.values, env, module, allModules)
     case CompiledIndexExpression e -> index_emittable(e, env, module, allModules)
+    case CompiledDataLiteral e -> data_fields_emittable(e.fields, env, module, allModules)
+    case CompiledFieldAccessExpression e -> constant_value_expression(e.receiver) & expression_emittable(e.receiver, env, module, allModules)
+    case CompiledReduceExpression e -> reduce_expression_emittable(e, env, module, allModules)
+    case CompiledMatchExpression e -> constant_value_expression(e.value) & expression_emittable(e.value, env, module, allModules) & match_cases_emittable(e.cases, env, module, allModules)
     case CompiledBlockExpression e -> let_bindings_emittable(e.bindings, env, module, allModules) & expression_emittable(e.result, block_env(e.bindings, env, module, allModules), module, allModules)
 
 private fun expressions_emittable(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -500,6 +656,28 @@ private fun dict_entries_emittable(entries: List[CompiledDictEntry], env: List[J
     match entries[0] with
     case None -> true
     case Some { entry } -> expression_emittable(entry.key, env, module, allModules) & expression_emittable(entry.value, env, module, allModules) & dict_entries_emittable(entries[1:], env, module, allModules)
+
+private fun data_fields_emittable(fields: List[CompiledDataField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match fields[0] with
+    case None -> true
+    case Some { field } -> expression_emittable(field.value, env, module, allModules) & data_fields_emittable(fields[1:], env, module, allModules)
+
+private fun reduce_expression_emittable(reduce: CompiledReduceExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let resultType = expression_type(reduce.initial, env, module, allModules)
+    let receiverType = expression_type(reduce.receiver, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    let reduceEnv = [JavaBinding { name: reduce.accumulatorName, typeReference: resultType }, JavaBinding { name: reduce.valueName, typeReference: valueType }] + env
+    let receiverReducible = receiverType.name == "List" | receiverType.name == "Set"
+    receiverReducible
+        & constant_value_expression(reduce.receiver)
+        & expression_emittable(reduce.receiver, env, module, allModules)
+        & expression_emittable(reduce.initial, env, module, allModules)
+        & expression_emittable(reduce.body, reduceEnv, module, allModules)
+
+private fun match_cases_emittable(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match cases[0] with
+    case None -> false
+    case Some { matchCase } -> expression_emittable(matchCase.body, match_env(matchCase.bindings, env), module, allModules) & (cases[1:].is_empty() | match_cases_emittable(cases[1:], env, module, allModules))
 
 private fun let_bindings_emittable(bindings: List[CompiledLetBinding], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match bindings[0] with
@@ -521,6 +699,7 @@ private fun lambda_parameters_supported(parameters: List[String]): bool =
 private fun java_binary_operator(operator: String): bool =
     operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
         | operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!="
+        | operator == "?"
 
 private fun java_unary_operator(operator: String): bool =
     operator == "-" | operator == "!"
@@ -536,6 +715,8 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
+    else if binary.operator == "?"
+    then (leftType.name == "List" | leftType.name == "Set" | leftType.name == "String") & !rightType.name.is_empty()
     else binary.operator == "==" | binary.operator == "!="
 
 private fun java_unary_operator_emittable(unary: CompiledUnaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -546,6 +727,26 @@ private fun java_unary_operator_emittable(unary: CompiledUnaryExpression, env: L
 
 private fun numeric_type(type: CompiledTypeReference): bool =
     type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
+
+private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    if call.name == "size"
+    then (receiverType.name == "List" | receiverType.name == "Set" | receiverType.name == "Dict")
+        & call.arguments.is_empty()
+        & expression_emittable(call.receiver, env, module, allModules)
+    else java_method_supported(call.name)
+        & expression_emittable(call.receiver, env, module, allModules)
+        & expressions_emittable(call.arguments, env, module, allModules)
+
+private fun constant_value_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledVariableExpression variable -> uppercase_constant_name(variable.name)
+    case _ -> false
+
+private fun uppercase_constant_name(name: String): bool =
+    match name[0] with
+    case None -> false
+    case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ_" ? char
 
 private fun function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "assert_all"
@@ -680,7 +881,7 @@ private fun java_method_supported(name: String): bool =
         | name == "is_greater_than" | name == "is_less_than"
         | name == "is_greater_or_equals_than" | name == "is_less_or_equals_than"
         | name == "starts_with" | name == "does_not_start_with" | name == "contains"
-        | name == "replace"
+        | name == "replace" | name == "size"
 
 private fun expressions_supported(expressions: List[CompiledExpression]): bool =
     match expressions[0] with
@@ -692,13 +893,24 @@ private fun dict_entries_supported(entries: List[CompiledDictEntry]): bool =
     case None -> true
     case Some { entry } -> expression_supported(entry.key) & expression_supported(entry.value) & dict_entries_supported(entries[1:])
 
+private fun data_fields_supported(fields: List[CompiledDataField]): bool =
+    match fields[0] with
+    case None -> true
+    case Some { field } -> expression_supported(field.value) & data_fields_supported(fields[1:])
+
+private fun match_cases_supported(cases: List[CompiledMatchCase]): bool =
+    match cases[0] with
+    case None -> true
+    case Some { matchCase } -> expression_supported(matchCase.body) & match_cases_supported(cases[1:])
+
 private fun let_bindings_supported(bindings: List[CompiledLetBinding]): bool =
     match bindings[0] with
     case None -> true
     case Some { binding } -> expression_supported(binding.value) & let_bindings_supported(bindings[1:])
 
 private fun java_type(type: CompiledTypeReference): String =
-    if type.name == "int" then "int"
+    if type.name == "byte" then "byte"
+    else if type.name == "int" then "int"
     else if type.name == "long" then "long"
     else if type.name == "float" then "float"
     else if type.name == "double" then "double"
@@ -706,7 +918,8 @@ private fun java_type(type: CompiledTypeReference): String =
     else boxed_java_type(type)
 
 private fun boxed_java_type(type: CompiledTypeReference): String =
-    if type.name == "int" then "java.lang.Integer"
+    if type.name == "byte" then "java.lang.Byte"
+    else if type.name == "int" then "java.lang.Integer"
     else if type.name == "long" then "java.lang.Long"
     else if type.name == "float" then "java.lang.Float"
     else if type.name == "double" then "java.lang.Double"
@@ -729,6 +942,7 @@ private fun first_type_argument(type: CompiledTypeReference): CompiledTypeRefere
     case Some { argument } -> argument
 
 private fun int_type(): CompiledTypeReference = CompiledTypeReference { name: "int", arguments: [] }
+private fun byte_type(): CompiledTypeReference = CompiledTypeReference { name: "byte", arguments: [] }
 private fun long_type(): CompiledTypeReference = CompiledTypeReference { name: "long", arguments: [] }
 private fun float_type(): CompiledTypeReference = CompiledTypeReference { name: "float", arguments: [] }
 private fun double_type(): CompiledTypeReference = CompiledTypeReference { name: "double", arguments: [] }
@@ -772,7 +986,7 @@ private fun test_gather_calls_for_module(functions: List[CompiledFunction], modu
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        let env = parameter_bindings(function.parameters)
+        let env = parameter_bindings(function.parameters) + constant_bindings(constant_functions(module.functions))
         let current =
             if function.name == "tests" & expression_emittable(function.body, env, module, allModules)
             then module_fqcn(module) + ".tests().unsafeRun()"
@@ -804,6 +1018,19 @@ private fun java_helpers(module: CompiledModule): String =
         + "    }" + newline() + newline()
         + "    private static <T> T unsupported(String source) {" + newline()
         + "        throw new UnsupportedOperationException(\"Unsupported CFUN expression: \" + source);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data(java.lang.String type, java.util.Map<java.lang.String, ?> fields) {" + newline()
+        + "        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>();" + newline()
+        + "        result.put(\"__type\", type);" + newline()
+        + "        result.putAll(fields);" + newline()
+        + "        return java.util.Collections.unmodifiableMap(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_data_is(java.lang.Object value, java.lang.String type) {" + newline()
+        + "        return value instanceof java.util.Map<?, ?> map && type.equals(map.get(\"__type\"));" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings(\"unchecked\")" + newline()
+        + "    private static <T> T __capy_data_field(java.lang.Object value, java.lang.String field) {" + newline()
+        + "        return (T) ((java.util.Map<java.lang.String, java.lang.Object>) value).get(field);" + newline()
         + "    }" + newline()
 
 private fun java_package(module: CompiledModule): String =

@@ -3,7 +3,7 @@ from /capy/collection/Set import { Set }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMethodCallExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -13,8 +13,9 @@ from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocati
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
-from /dev/capylang/compiler/parser/Definition import { Definition, FunctionDefinition }
-from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FloatLiteral, FunctionCallExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MethodCallExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression }
+from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
+from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, Definition, FunctionDefinition }
+from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
 from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
@@ -75,11 +76,22 @@ private fun normalize_module_path(path: String): String =
     then normalize_module_path(path[1, path.size()])
     else path
 
+private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
+    CompiledFunction {
+        name: constant.name,
+        visibility: "const:" + constant.visibility,
+        parameters: [],
+        returnType: compile_type(constant.typeReference),
+        body: compile_expression(constant.expression),
+        location: compile_location(constant.location)
+    }
+
 private fun compile_functions(definitions: List[Definition]): List[CompiledFunction] =
     match definitions[0] with
     case None -> []
     case Some { definition } ->
         match definition with
+        case ConstantDefinition { constant } -> [compile_constant(constant)] + compile_functions(definitions[1:])
         case FunctionDefinition { function } -> [compile_function(function)] + compile_functions(definitions[1:])
         case _ -> compile_functions(definitions[1:])
 
@@ -224,6 +236,29 @@ private fun compile_expression(expression: Expression): CompiledExpression =
         index: compile_expression(index),
         location: compile_location(location)
     }
+    case DataLiteral { typeName, fields, location } -> CompiledDataLiteral {
+        typeName: typeName,
+        fields: compile_data_fields(fields),
+        location: compile_location(location)
+    }
+    case FieldAccessExpression { receiver, name, location } -> CompiledFieldAccessExpression {
+        receiver: compile_expression(receiver),
+        name: name,
+        location: compile_location(location)
+    }
+    case ReduceExpression { receiver, initial, accumulatorName, valueName, body, location } -> CompiledReduceExpression {
+        receiver: compile_expression(receiver),
+        initial: compile_expression(initial),
+        accumulatorName: accumulatorName,
+        valueName: valueName,
+        body: compile_expression(body),
+        location: compile_location(location)
+    }
+    case MatchExpression { value, cases, location } -> CompiledMatchExpression {
+        value: compile_expression(value),
+        cases: compile_match_cases(cases),
+        location: compile_location(location)
+    }
     case BlockExpression { bindings, result, location } -> CompiledBlockExpression {
         bindings: compile_let_bindings(bindings),
         result: compile_expression(result),
@@ -243,6 +278,25 @@ private fun compile_dict_entries(entries: List[DictEntry]): List[CompiledDictEnt
         value: compile_expression(entry.value),
         location: compile_location(entry.location)
     }] + compile_dict_entries(entries[1:])
+
+private fun compile_data_fields(fields: List[DataField]): List[CompiledDataField] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> [CompiledDataField {
+        name: field.name,
+        value: compile_expression(field.value),
+        location: compile_location(field.location)
+    }] + compile_data_fields(fields[1:])
+
+private fun compile_match_cases(cases: List[MatchCase]): List[CompiledMatchCase] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } -> [CompiledMatchCase {
+        typeName: matchCase.typeName,
+        bindings: matchCase.bindings,
+        body: compile_expression(matchCase.body),
+        location: compile_location(matchCase.location)
+    }] + compile_match_cases(cases[1:])
 
 private fun compile_let_bindings(bindings: List[LetBinding]): List[CompiledLetBinding] =
     match bindings[0] with
