@@ -67,21 +67,6 @@ private fun imported_module_class(module: CompiledModule, modulePath: String): S
     then modulePath
     else module.path.replace("/", ".") + "." + modulePath
 
-private fun imported_module_name(modulePath: String): String =
-    if modulePath ? "/"
-    then last_path_segment(modulePath, 0, "")
-    else modulePath
-
-private fun last_path_segment(value: String, idx: int, current: String): String =
-    if idx >= value.size().value
-    then current
-    else match value[idx] with
-        case None -> current
-        case Some { char } ->
-            if char == "/"
-            then last_path_segment(value, idx + 1, "")
-            else last_path_segment(value, idx + 1, current + char)
-
 private fun path_to_class(path: String): String =
     path.replace("/", ".")
 
@@ -836,30 +821,6 @@ private fun find_function_in_scope(name: String, module: CompiledModule, allModu
     case Some { function } -> /capy/lang/Option.Some { function }
     case None -> find_function_in_imports(name, module.imports, module, allModules)
 
-private fun lookup_function_type(name: String, functions: List[CompiledFunction], allModules: List[CompiledModule]): CompiledTypeReference =
-    match functions[0] with
-    case Some { function } ->
-        if function.name == name & !compiled_constant(function)
-        then function.returnType
-        else lookup_function_type(name, functions[1:], allModules)
-    case None -> lookup_function_type_in_modules(name, allModules)
-
-private fun lookup_function_type_in_modules(name: String, modules: List[CompiledModule]): CompiledTypeReference =
-    match modules[0] with
-    case None -> object_type()
-    case Some { module } ->
-        match find_function_type(name, module.functions) with
-        case Some { type } -> type
-        case None -> lookup_function_type_in_modules(name, modules[1:])
-
-private fun find_function_type(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledTypeReference] =
-    match functions[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { function } ->
-        if function.name == name & !compiled_constant(function)
-        then /capy/lang/Option.Some { function.returnType }
-        else find_function_type(name, functions[1:])
-
 private fun find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
@@ -867,14 +828,6 @@ private fun find_function(name: String, functions: List[CompiledFunction]): /cap
         if function.name == name & !compiled_constant(function)
         then /capy/lang/Option.Some { function }
         else find_function(name, functions[1:])
-
-private fun find_function_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match modules[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { module } ->
-        match find_function(name, module.functions) with
-        case Some { function } -> /capy/lang/Option.Some { function }
-        case None -> find_function_in_modules(name, modules[1:])
 
 private fun find_function_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match imports[0] with
@@ -1031,19 +984,6 @@ private fun type_parameter_bindings(parameters: List[String], arguments: List[Co
         case Some { argument } -> [JavaBinding { name: parameter, typeReference: argument }] + type_parameter_bindings(parameters[1:], arguments[1:])
         case None -> [JavaBinding { name: parameter, typeReference: object_type() }] + type_parameter_bindings(parameters[1:], [])
 
-private fun substitute_type_parameters(type: CompiledTypeReference, bindings: List[JavaBinding]): CompiledTypeReference =
-    match lookup_type_parameter(type.name, bindings) with
-    case Some { value } -> value
-    case None -> CompiledTypeReference {
-        name: type.name,
-        arguments: substitute_type_parameter_arguments(type.arguments, bindings)
-    }
-
-private fun substitute_type_parameter_arguments(types: List[CompiledTypeReference], bindings: List[JavaBinding]): List[CompiledTypeReference] =
-    match types[0] with
-    case None -> []
-    case Some { type } -> [substitute_type_parameters(type, bindings)] + substitute_type_parameter_arguments(types[1:], bindings)
-
 private fun lookup_type_parameter(name: String, bindings: List[JavaBinding]): /capy/lang/Option[CompiledTypeReference] =
     match bindings[0] with
     case None -> /capy/lang/Option.None {}
@@ -1084,27 +1024,6 @@ private fun promoted_numeric_type(leftType: CompiledTypeReference, rightType: Co
 
 private fun comparison_operator(operator: String): bool =
     operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
-
-private fun expression_supported(expression: CompiledExpression): bool =
-    match expression with
-    case CompiledUnsupportedExpression _ -> false
-    case CompiledIfExpression e -> expression_supported(e.condition) & expression_supported(e.thenBranch) & expression_supported(e.elseBranch)
-    case CompiledBinaryExpression e -> java_binary_operator(e.operator) & expression_supported(e.left) & expression_supported(e.right)
-    case CompiledUnaryExpression e -> java_unary_operator(e.operator) & expression_supported(e.expression)
-    case CompiledFunctionCallExpression e -> expressions_supported(e.arguments)
-    case CompiledMethodCallExpression e -> expression_supported(e.receiver) & expressions_supported(e.arguments)
-    case CompiledLambdaExpression e -> lambda_parameters_supported(e.parameters) & expression_supported(e.body)
-    case CompiledListLiteral e -> expressions_supported(e.values)
-    case CompiledSetLiteral e -> expressions_supported(e.values)
-    case CompiledDictLiteral e -> dict_entries_supported(e.entries)
-    case CompiledTupleLiteral e -> expressions_supported(e.values)
-    case CompiledIndexExpression e -> expression_supported(e.receiver) & expression_supported(e.index)
-    case CompiledDataLiteral e -> data_fields_supported(e.fields)
-    case CompiledFieldAccessExpression e -> expression_supported(e.receiver)
-    case CompiledReduceExpression e -> expression_supported(e.receiver) & expression_supported(e.initial) & expression_supported(e.body)
-    case CompiledMatchExpression e -> expression_supported(e.value) & match_cases_supported(e.cases)
-    case CompiledBlockExpression e -> let_bindings_supported(e.bindings) & expression_supported(e.result)
-    case _ -> true
 
 private fun expression_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
@@ -1181,14 +1100,6 @@ private fun lambda_parameters_supported(parameters: List[String]): bool =
     match parameters[0] with
     case None -> true
     case Some { parameter } -> parameter != "_" & lambda_parameters_supported(parameters[1:])
-
-private fun java_binary_operator(operator: String): bool =
-    operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
-        | operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!="
-        | operator == "?" | operator == ".nand." | bitwise_binary_operator(operator) | boolean_binary_operator(operator)
-
-private fun java_unary_operator(operator: String): bool =
-    operator == "-" | operator == "!" | operator == ".not."
 
 private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = expression_type(binary.left, env, module, allModules)
@@ -1442,14 +1353,6 @@ private fun ordinary_call_arguments_emittable(expressions: List[CompiledExpressi
         case CompiledLambdaExpression _ -> false
         case _ -> expression_emittable(expression, env, module, allModules) & ordinary_call_arguments_emittable(expressions[1:], env, module, allModules)
 
-private fun function_call_resolves(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match find_function(name, module.functions) with
-    case Some _ -> true
-    case None ->
-        match find_function_in_imports(name, module.imports, module, allModules) with
-        case Some _ -> true
-        case None -> false
-
 private fun java_callable_name(name: String): bool =
     !(name ? "/") & !(name ? ".") & !(name ? "`")
 
@@ -1459,31 +1362,6 @@ private fun java_method_supported(name: String): bool =
         | name == "is_greater_or_equals_than" | name == "is_less_or_equals_than"
         | name == "starts_with" | name == "does_not_start_with" | name == "contains"
         | name == "replace" | name == "size"
-
-private fun expressions_supported(expressions: List[CompiledExpression]): bool =
-    match expressions[0] with
-    case None -> true
-    case Some { expression } -> expression_supported(expression) & expressions_supported(expressions[1:])
-
-private fun dict_entries_supported(entries: List[CompiledDictEntry]): bool =
-    match entries[0] with
-    case None -> true
-    case Some { entry } -> expression_supported(entry.key) & expression_supported(entry.value) & dict_entries_supported(entries[1:])
-
-private fun data_fields_supported(fields: List[CompiledDataField]): bool =
-    match fields[0] with
-    case None -> true
-    case Some { field } -> expression_supported(field.value) & data_fields_supported(fields[1:])
-
-private fun match_cases_supported(cases: List[CompiledMatchCase]): bool =
-    match cases[0] with
-    case None -> true
-    case Some { matchCase } -> expression_supported(matchCase.body) & match_cases_supported(cases[1:])
-
-private fun let_bindings_supported(bindings: List[CompiledLetBinding]): bool =
-    match bindings[0] with
-    case None -> true
-    case Some { binding } -> expression_supported(binding.value) & let_bindings_supported(bindings[1:])
 
 private fun java_type(type: CompiledTypeReference): String =
     if type.name == "byte" then "byte"
@@ -1691,16 +1569,6 @@ private fun java_method_name(name: String): String =
     else if name == "starts_with" then "startsWith"
     else if name == "does_not_start_with" then "doesNotStartWith"
     else java_identifier(name)
-
-private fun string_list(values: List[String]): String =
-    match values[0] with
-    case None -> ""
-    case Some { value } -> value + string_list_tail(values[1:])
-
-private fun string_list_tail(values: List[String]): String =
-    match values[0] with
-    case None -> ""
-    case Some { value } -> ", " + value + string_list_tail(values[1:])
 
 private fun java_identifier_list(values: List[String]): String =
     match values[0] with
