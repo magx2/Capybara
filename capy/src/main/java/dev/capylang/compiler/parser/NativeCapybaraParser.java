@@ -530,7 +530,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static boolean isGrouped(ParserRuleContext ctx) {
-        return ctx.getText().startsWith("(");
+        if (ctx.getChildCount() != 3) {
+            return false;
+        }
+        var open = ctx.getChild(0).getText();
+        var close = ctx.getChild(2).getText();
+        return (open.equals("(") && close.equals(")"))
+                || (open.equals("{") && close.equals("}"));
     }
 
     private static int precedence(String operator) {
