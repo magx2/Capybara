@@ -1,6 +1,2 @@
-from /capy/lang/Effect import { Effect, pure }
-
-data CapybaraParser {}
-
-fun parser(): Effect[CapybaraParser] =
-    pure(CapybaraParser {})
+@NativeProvider
+fun parser(): Effect[CapybaraParser] = <native>
