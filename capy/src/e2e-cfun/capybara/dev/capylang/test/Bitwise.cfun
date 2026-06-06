@@ -7,3 +7,11 @@ fun bit_or(a: int, b: int): int = a .or. b
 fun bit_xor(a: int, b: int): int = a .xor. b
 
 fun bit_not(a: int): int = .not.a
+
+fun bit_long_or(a: long, b: long): long = a .or. b
+
+fun bit_byte_and(a: byte, b: byte): byte = a .and. b
+
+fun bit_byte_nand(a: byte, b: byte): byte = a .nand. b
+
+fun bit_byte_not(a: byte): byte = .not.a
