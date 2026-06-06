@@ -1,0 +1,8 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/Functional import { Functional }
+from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
+from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
+
+data Parsed {}
+
+data ParsedModule { name: String, path: String, functional: Functional, imports: List[ImportDeclaration], sourceKind: SourceKind }

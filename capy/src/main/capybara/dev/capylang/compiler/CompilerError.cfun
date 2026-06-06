@@ -1,0 +1,1 @@
+data CompilerError { message: String, moduleName: String, line: int, column: int }

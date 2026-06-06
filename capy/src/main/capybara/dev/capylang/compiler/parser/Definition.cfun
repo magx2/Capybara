@@ -1,7 +1,3 @@
-data Program { modules: List[Module] }
-data Module { name: String, path: String, functional: Functional, imports: List[ImportDeclaration], sourceKind: SourceKind }
-data Functional { definitions: List[Definition] }
-data ImportDeclaration {}
 data AnnotationDeclaration {}
 data DataDeclaration {}
 data DeriverDeclaration {}
@@ -10,11 +6,6 @@ data Function {}
 data PrimitiveBackedTypeDeclaration {}
 data TypeDeclaration {}
 
-enum SourceKind {
-    FUNCTIONAL,
-    OBJECT_ORIENTED,
-}
-
 union Definition = AnnotationDeclaration
                  | DataDeclaration
                  | DeriverDeclaration
@@ -22,5 +13,3 @@ union Definition = AnnotationDeclaration
                  | Function
                  | PrimitiveBackedTypeDeclaration
                  | TypeDeclaration
-
-// TODO(codex): define all types for definition from `master` branch, path `compiler/src/main/java/dev/capylang/compiler/parser`

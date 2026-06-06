@@ -1,88 +1,17 @@
-from /capy/collection/Dict import { Dict }
 from /capy/collection/List import { List }
-from /capy/collection/Set import { Set }
-from /capy/lang/Option import { Option }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/ObjectOrientedModule import { ObjectOrientedModule }
 
 data CompiledProgram {
     modules: List[CompiledModule],
     objectOrientedModules: List[ObjectOrientedModule],
     nativeProviders: NativeProviderManifest,
     nativeProviderCatalog: NativeProviderCatalog,
-}
-
-data CompiledModule {
-    name: String,
-    path: String,
-    types: Dict[GenericDataType],
-    visiblePrimitiveBackedTypes: Dict[CompiledPrimitiveBackedType],
-    functions: List[CompiledFunction],
-    derivers: Dict[CompiledDeriverDeclaration],
-    annotations: Dict[CompiledAnnotationDeclaration],
-    staticImports: List[StaticImport]
-}
-
-data GenericDataType {}
-data CompiledPrimitiveBackedType {}
-data CompiledFunction {}
-data CompiledDeriverDeclaration {}
-data CompiledAnnotationDeclaration {}
-
-data StaticImport {
-    className: String,
-    memberName: String,
-    enumValue: bool
-}
-
-data ObjectOrientedModule {
-    name: String,
-    path: String
-}
-
-data NativeProviderManifest {
-    providers: List[NativeProviderBinding]
-}
-
-data CompileConfiguration {
-    libraries: Set[CompiledModule],
-    native_providers: NativeProviderManifest
-}
-
-data NativeProviderBinding {
-    interfaceId: String,
-    qualifier: String,
-    javaBinding: Option[NativeProviderBackendBinding],
-    javascriptBinding: Option[NativeProviderBackendBinding],
-    pythonBinding: Option[NativeProviderBackendBinding]
-}
-
-data NativeProviderBackendBinding {
-    className: Option[String],
-    moduleName: Option[String],
-    exportName: Option[String],
-    factory: Option[String]
-}
-
-data NativeProviderCatalog {
-    declarations: List[CompiledNativeProviderDeclaration],
-    bindings: List[CompiledNativeProviderBinding]
-}
-
-data CompiledNativeProviderDeclaration {
-    providerName: String,
-    sourceModulePath: String,
-    sourceModuleName: String,
-    targetTypeName: String,
-    interfaceId: String,
-    qualifier: String,
-    sourceFile: String
-}
-
-data CompiledNativeProviderBinding {
-    interfaceId: String,
-    qualifier: String,
-    javaBinding: Option[NativeProviderBackendBinding],
-    javascriptBinding: Option[NativeProviderBackendBinding],
-    pythonBinding: Option[NativeProviderBackendBinding]
 }
 
 fun empty_native_provider_manifest(): NativeProviderManifest =
@@ -93,5 +22,3 @@ fun empty_native_provider_catalog(): NativeProviderCatalog =
         declarations: [],
         bindings: []
     }
-
-data CompilerError { message: String, moduleName: String, line: int, column: int }

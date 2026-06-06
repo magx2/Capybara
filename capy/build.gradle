@@ -454,6 +454,16 @@ sourceSets {
     }
 }
 
+tasks.named('compileJava', JavaCompile) {
+    def generatedParserInterface = layout.buildDirectory
+            .file('generated/sources/capybara/java/dev/capylang/compiler/parser/CapybaraParser.java')
+            .get()
+            .asFile
+            .toPath()
+            .normalize()
+    source = source.filter { file -> file.toPath().normalize() != generatedParserInterface }
+}
+
 configurations {
     integrationTestImplementation.extendsFrom testImplementation
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly

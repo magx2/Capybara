@@ -1,0 +1,7 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+
+data NativeProviderManifest {
+    providers: List[NativeProviderBinding]
+}

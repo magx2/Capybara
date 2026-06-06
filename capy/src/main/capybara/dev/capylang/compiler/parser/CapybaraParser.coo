@@ -1,6 +1,3 @@
-from Program import { Program }
-from RawModule import { RawModule }
-
 interface CapybaraParser {
-    def parse(modules: List[RawModule]): Program
+    def parse(modules: List[/dev/capylang/compiler/parser/RawModule]): /dev/capylang/compiler/parser/ParsedProgram
 }
