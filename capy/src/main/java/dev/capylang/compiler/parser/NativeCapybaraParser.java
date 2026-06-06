@@ -379,11 +379,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
             );
         }
         if (isUnary(ctx)) {
-            return new Expression.UnaryExpression(
-                    ctx.getChild(0).getText(),
-                    expressionNoLet(ctx.expressionNoLet(0)),
-                    location(ctx)
-            );
+            var operator = ctx.getChild(0).getText();
+            return new Expression.UnaryExpression(operator, unaryOperand(operator, ctx.expressionNoLet(0)), location(ctx));
         }
         return unsupported(ctx);
     }
@@ -465,13 +462,57 @@ public final class NativeCapybaraParser implements CapybaraParser {
             );
         }
         if (isUnaryNoPipe(ctx)) {
-            return new Expression.UnaryExpression(
-                    ctx.getChild(0).getText(),
-                    expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)),
-                    location(ctx)
-            );
+            var operator = ctx.getChild(0).getText();
+            return new Expression.UnaryExpression(operator, unaryNoPipeOperand(operator, ctx.expressionNoLetNoPipe(0)), location(ctx));
         }
         return unsupported(ctx);
+    }
+
+    private static Expression unaryOperand(
+            String operator,
+            dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext operand
+    ) {
+        if (operator.equals("-")) {
+            var minLiteral = negatableMinLiteral(operand.value(), location(operand));
+            if (minLiteral != null) {
+                return minLiteral;
+            }
+        }
+        return expressionNoLet(operand);
+    }
+
+    private static Expression unaryNoPipeOperand(
+            String operator,
+            dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetNoPipeContext operand
+    ) {
+        if (operator.equals("-")) {
+            var minLiteral = negatableMinLiteral(operand.value(), location(operand));
+            if (minLiteral != null) {
+                return minLiteral;
+            }
+        }
+        return expressionNoLetNoPipe(operand);
+    }
+
+    private static Expression negatableMinLiteral(
+            dev.capylang.parser.antlr.FunctionalParser.ValueContext value,
+            SourceLocation location
+    ) {
+        if (value == null || value.literal() == null) {
+            return null;
+        }
+        var literal = value.literal();
+        var source = literal.getText();
+        if (literal.INT_LITERAL() != null && cleanNumber(source).equals("2147483648")) {
+            return new Expression.IntLiteral(Integer.MIN_VALUE, source, location);
+        }
+        if (literal.LONG_LITERAL() != null) {
+            var cleaned = cleanNumber(source.substring(0, source.length() - 1));
+            if (cleaned.equals("9223372036854775808")) {
+                return new Expression.LongLiteral(Long.MIN_VALUE, source, location);
+            }
+        }
+        return null;
     }
 
     private static Expression binaryExpression(String operator, Expression left, Expression right, SourceLocation location, boolean leftGrouped) {
