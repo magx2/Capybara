@@ -1,0 +1,48 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+
+union CompiledExpression =
+    CompiledUnsupportedExpression
+    | CompiledIntLiteral
+    | CompiledLongLiteral
+    | CompiledFloatLiteral
+    | CompiledDoubleLiteral
+    | CompiledBoolLiteral
+    | CompiledStringLiteral
+    | CompiledVariableExpression
+    | CompiledIfExpression
+    | CompiledBinaryExpression
+    | CompiledUnaryExpression
+    | CompiledFunctionCallExpression
+    | CompiledMethodCallExpression
+    | CompiledLambdaExpression
+    | CompiledListLiteral
+    | CompiledSetLiteral
+    | CompiledDictLiteral
+    | CompiledTupleLiteral
+    | CompiledIndexExpression
+    | CompiledBlockExpression
+
+data CompiledUnsupportedExpression { source: String, location: CompiledSourceLocation }
+data CompiledIntLiteral { value: int, source: String, location: CompiledSourceLocation }
+data CompiledLongLiteral { value: long, source: String, location: CompiledSourceLocation }
+data CompiledFloatLiteral { value: float, source: String, location: CompiledSourceLocation }
+data CompiledDoubleLiteral { value: double, source: String, location: CompiledSourceLocation }
+data CompiledBoolLiteral { value: bool, source: String, location: CompiledSourceLocation }
+data CompiledStringLiteral { value: String, source: String, location: CompiledSourceLocation }
+data CompiledVariableExpression { name: String, location: CompiledSourceLocation }
+data CompiledIfExpression { condition: CompiledExpression, thenBranch: CompiledExpression, elseBranch: CompiledExpression, location: CompiledSourceLocation }
+data CompiledBinaryExpression { operator: String, left: CompiledExpression, right: CompiledExpression, location: CompiledSourceLocation }
+data CompiledUnaryExpression { operator: String, expression: CompiledExpression, location: CompiledSourceLocation }
+data CompiledFunctionCallExpression { name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledMethodCallExpression { receiver: CompiledExpression, name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledLambdaExpression { parameters: List[String], body: CompiledExpression, location: CompiledSourceLocation }
+data CompiledListLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledSetLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledDictEntry { key: CompiledExpression, value: CompiledExpression, location: CompiledSourceLocation }
+data CompiledDictLiteral { entries: List[CompiledDictEntry], location: CompiledSourceLocation }
+data CompiledTupleLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledIndexExpression { receiver: CompiledExpression, index: CompiledExpression, location: CompiledSourceLocation }
+data CompiledLetBinding { name: String, typeReference: CompiledTypeReference, value: CompiledExpression, location: CompiledSourceLocation }
+data CompiledBlockExpression { bindings: List[CompiledLetBinding], result: CompiledExpression, location: CompiledSourceLocation }

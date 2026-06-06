@@ -1,0 +1,4 @@
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+data FunctionParameter { name: String, typeReference: TypeReference, location: SourceLocation }
