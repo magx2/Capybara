@@ -417,11 +417,16 @@ def capyRuntimeClasspath = files(
         capyRuntimeDependencies
 )
 
-tasks.named('compileJava') {
-    dependsOn tasks.named('patchGeneratedCapybaraJava')
-}
-
 sourceSets {
+    main {
+        java {
+            exclude 'e2e-cfun/**'
+            exclude 'e2e-coo/**'
+            exclude 'e2e-coo-java-native/**'
+            exclude 'e2e-coo-js-native/**'
+            exclude 'e2e-coo-py-native/**'
+        }
+    }
     integrationTest {
         java.srcDir file('src/integrationTest/java')
         resources.srcDir file('src/integrationTest/resources')
@@ -495,7 +500,6 @@ application {
 }
 
 test {
-    dependsOn ':lib:capybara-lib:classes'
     classpath = files(
             sourceSets.test.output,
             capyClassesDir,
@@ -513,19 +517,27 @@ def integrationTests = tasks.register('integrationTest', Test) {
     useJUnitPlatform()
 }
 
-def registerE2eTestTask = { String taskName, String taskDescription, sourceSet, runtimeDependencies, String compileJavaTaskName, testResultsDir ->
+def registerE2eTestTask = { String taskName, String taskDescription, sourceSet, runtimeDependencies, String compileJavaTaskName, testResultsDir, boolean includeSourceCapybaraLib ->
     tasks.register(taskName, InProcessCapybaraTestTask) {
         description = taskDescription
         group = 'verification'
-        dependsOn ':lib:capybara-lib:classes'
+        if (includeSourceCapybaraLib) {
+            dependsOn ':lib:capybara-lib:classes'
+        }
         dependsOn tasks.named(compileJavaTaskName)
-        runtimeClasspath.from(files(
-                sourceSet.output,
-                sourceSets.main.output,
-                capybaraLibClassesDir,
-                capybaraLibResourcesDir,
-                runtimeDependencies
-        ))
+        runtimeClasspath.from(includeSourceCapybaraLib
+                ? files(
+                        sourceSet.output,
+                        sourceSets.main.output,
+                        capybaraLibClassesDir,
+                        capybaraLibResourcesDir,
+                        runtimeDependencies
+                )
+                : files(
+                        sourceSet.output,
+                        sourceSets.main.output,
+                        runtimeDependencies
+                ))
         outputDir.set(testResultsDir)
         reportType.set('JUNIT')
         logType.set('TC')
@@ -541,7 +553,8 @@ def e2eCfunTests = registerE2eTestTask(
         sourceSets.e2eCfun,
         e2eCfunRuntimeDependencies,
         'compileE2eCfunJava',
-        e2eCfunTestResultsDir
+        e2eCfunTestResultsDir,
+        false
 )
 def e2eCooTests = registerE2eTestTask(
         'e2e-coo',
@@ -549,7 +562,8 @@ def e2eCooTests = registerE2eTestTask(
         sourceSets.e2eCoo,
         e2eCooRuntimeDependencies,
         'compileE2eCooJava',
-        e2eCooTestResultsDir
+        e2eCooTestResultsDir,
+        true
 )
 def e2eCooJavaNativeTests = registerE2eTestTask(
         'e2e-coo-java-native',
@@ -557,7 +571,8 @@ def e2eCooJavaNativeTests = registerE2eTestTask(
         sourceSets.e2eCooJavaNative,
         e2eCooJavaNativeRuntimeDependencies,
         'compileE2eCooJavaNativeJava',
-        e2eCooJavaNativeTestResultsDir
+        e2eCooJavaNativeTestResultsDir,
+        true
 )
 def jsTests = tasks.register('jsTests', NodeTask) {
     description = 'Runs JavaScript tests.'
