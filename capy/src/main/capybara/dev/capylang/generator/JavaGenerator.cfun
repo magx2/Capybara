@@ -2170,16 +2170,6 @@ private fun primitive_conversion_receiver(name: String, receiverType: CompiledTy
     then receiverType.name == "float" | receiverType.name == "double"
     else false
 
-private fun constant_value_expression(expression: CompiledExpression): bool =
-    match expression with
-    case CompiledVariableExpression variable -> uppercase_constant_name(variable.name)
-    case _ -> false
-
-private fun uppercase_constant_name(name: String): bool =
-    match name[0] with
-    case None -> false
-    case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ_" ? char
-
 private fun function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "delay"
     then delay_call_emittable(call.arguments, env, module, allModules)

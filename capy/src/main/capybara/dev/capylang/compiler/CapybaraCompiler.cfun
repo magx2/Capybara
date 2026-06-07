@@ -369,9 +369,6 @@ private fun compile_location(location: SourceLocation): CompiledSourceLocation =
         column: location.column
     }
 
-private fun compile_expression(expression: Expression): CompiledExpression =
-    compile_expression_in_function(expression, "")
-
 private fun compile_expression_in_function(expression: Expression, functionName: String): CompiledExpression =
     match expression with
     case UnsupportedExpression { source, location } -> CompiledUnsupportedExpression {

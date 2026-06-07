@@ -1508,6 +1508,12 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     offsetLocation(value.location(), lineOffset, columnOffset)
             );
         }
+        if (expression instanceof Expression.FunctionReferenceExpression value) {
+            return new Expression.FunctionReferenceExpression(
+                    value.name(),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
         if (expression instanceof Expression.MethodCallExpression value) {
             return new Expression.MethodCallExpression(
                     offsetExpression(value.receiver(), lineOffset, columnOffset),
