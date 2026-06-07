@@ -12,7 +12,9 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -79,6 +81,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
         for (var definition : program.definition()) {
             if (definition.dataDeclaration() != null) {
                 definitions.addAll(dataDeclarationDefinitions(definition.dataDeclaration()));
+            } else if (definition.functionDeclaration() != null) {
+                definitions.addAll(functionDefinitions(definition.functionDeclaration()));
             } else {
                 definitions.add(functionalDefinition(definition));
             }
@@ -199,9 +203,6 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (definition.enumDeclaration() != null) {
             return Definition.EnumDeclaration.INSTANCE;
         }
-        if (definition.functionDeclaration() != null) {
-            return new Definition.FunctionDefinition(functionDeclaration(definition.functionDeclaration()));
-        }
         if (definition.constDeclaration() != null) {
             return new Definition.ConstantDefinition(constantDeclaration(definition.constDeclaration()));
         }
@@ -228,8 +229,57 @@ public final class NativeCapybaraParser implements CapybaraParser {
         );
     }
 
+    private static List<Definition> functionDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext ctx
+    ) {
+        var definitions = new ArrayList<Definition>();
+        var localNames = localFunctionNames(ctx);
+        if (ctx.functionBody() != null) {
+            for (var definition : ctx.functionBody().localDefinition()) {
+                if (definition.localDataDeclaration() != null) {
+                    definitions.addAll(localDataDeclarationDefinitions(definition.localDataDeclaration()));
+                }
+            }
+            for (var definition : ctx.functionBody().localDefinition()) {
+                if (definition.localFunctionDeclaration() != null) {
+                    definitions.add(new Definition.FunctionDefinition(localFunctionDeclaration(
+                            definition.localFunctionDeclaration(),
+                            localNames
+                    )));
+                }
+            }
+        }
+        definitions.add(new Definition.FunctionDefinition(functionDeclaration(ctx, localNames)));
+        return List.copyOf(definitions);
+    }
+
+    private static Map<String, String> localFunctionNames(
+            dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext ctx
+    ) {
+        if (ctx.functionBody() == null) {
+            return Map.of();
+        }
+        var names = new LinkedHashMap<String, String>();
+        var outerName = ctx.functionNameDeclaration().getText();
+        for (var definition : ctx.functionBody().localDefinition()) {
+            if (definition.localFunctionDeclaration() != null) {
+                var local = definition.localFunctionDeclaration();
+                var localName = local.localFunctionNameDeclaration().getText();
+                names.put(localName, outerName + "__local__" + localName + "__" + location(local).line() + "_" + location(local).column());
+            }
+        }
+        return Map.copyOf(names);
+    }
+
     private static FunctionDeclaration functionDeclaration(
             dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext ctx
+    ) {
+        return functionDeclaration(ctx, Map.of());
+    }
+
+    private static FunctionDeclaration functionDeclaration(
+            dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext ctx,
+            Map<String, String> localNames
     ) {
         var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
         var parameters = new ArrayList<FunctionParameter>();
@@ -246,7 +296,31 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 visibility,
                 List.copyOf(parameters),
                 returnType,
-                functionBody(ctx.functionBody()),
+                functionBody(ctx.functionBody(), localNames),
+                location(ctx)
+        );
+    }
+
+    private static FunctionDeclaration localFunctionDeclaration(
+            dev.capylang.parser.antlr.FunctionalParser.LocalFunctionDeclarationContext ctx,
+            Map<String, String> localNames
+    ) {
+        var parameters = new ArrayList<FunctionParameter>();
+        if (ctx.parameters() != null) {
+            for (var parameter : ctx.parameters().parameter()) {
+                parameters.add(functionParameter(parameter));
+            }
+        }
+        var returnType = ctx.functionType() == null
+                ? missingType()
+                : typeReference(ctx.functionType().type());
+        var name = localNames.getOrDefault(ctx.localFunctionNameDeclaration().getText(), ctx.localFunctionNameDeclaration().getText());
+        return new FunctionDeclaration(
+                name,
+                "private",
+                List.copyOf(parameters),
+                returnType,
+                rewriteLocalFunctionCalls(expression(ctx.expression()), localNames),
                 location(ctx)
         );
     }
@@ -255,8 +329,22 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.DataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
+        return dataDeclarationDefinitions(declaration, ctx.dataBody(), location(ctx));
+    }
+
+    private static List<Definition> localDataDeclarationDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.LocalDataDeclarationContext ctx
+    ) {
+        var declaration = ctx.genericTypeDeclaration();
+        return dataDeclarationDefinitions(declaration, ctx.dataBody(), location(ctx));
+    }
+
+    private static List<Definition> dataDeclarationDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext declaration,
+            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
+            SourceLocation location
+    ) {
         var name = dataTypeName(declaration);
-        var location = location(ctx);
         var definitions = new ArrayList<Definition>();
         definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
 
@@ -269,7 +357,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             ));
         }
 
-        var fields = dataDeclarationFields(ctx.dataBody());
+        var fields = dataDeclarationFields(dataBody);
         for (var i = 0; i < fields.size(); i++) {
             definitions.add(schemaConstantDefinition(
                     "__capy_schema_field|" + name + "|" + i,
@@ -355,31 +443,232 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static Expression functionBody(dev.capylang.parser.antlr.FunctionalParser.FunctionBodyContext ctx) {
+        return functionBody(ctx, Map.of());
+    }
+
+    private static Expression functionBody(
+            dev.capylang.parser.antlr.FunctionalParser.FunctionBodyContext ctx,
+            Map<String, String> localNames
+    ) {
         if (ctx.localDefinition().isEmpty()) {
-            return expression(ctx.expression());
+            return rewriteLocalFunctionCalls(expression(ctx.expression()), localNames);
         }
 
         var bindings = new ArrayList<Expression.LetBinding>();
         for (var definition : ctx.localDefinition()) {
-            if (definition.localConstDeclaration() == null) {
-                return unsupported(ctx);
+            if (definition.localConstDeclaration() != null) {
+                bindings.add(localConstBinding(definition.localConstDeclaration(), localNames));
             }
-            bindings.add(localConstBinding(definition.localConstDeclaration()));
         }
-        return new Expression.BlockExpression(List.copyOf(bindings), expression(ctx.expression()), location(ctx));
+        var result = rewriteLocalFunctionCalls(expression(ctx.expression()), localNames);
+        if (bindings.isEmpty()) {
+            return result;
+        }
+        return new Expression.BlockExpression(List.copyOf(bindings), result, location(ctx));
     }
 
     private static Expression.LetBinding localConstBinding(
             dev.capylang.parser.antlr.FunctionalParser.LocalConstDeclarationContext ctx
+    ) {
+        return localConstBinding(ctx, Map.of());
+    }
+
+    private static Expression.LetBinding localConstBinding(
+            dev.capylang.parser.antlr.FunctionalParser.LocalConstDeclarationContext ctx,
+            Map<String, String> localNames
     ) {
         var type = ctx.type() == null ? missingType() : typeReference(ctx.type());
         return new Expression.LetBinding(
                 ctx.privateLocalConstName().getText(),
                 type,
                 "=",
-                expressionNoLet(ctx.expressionNoLet()),
+                rewriteLocalFunctionCalls(expressionNoLet(ctx.expressionNoLet()), localNames),
                 location(ctx)
         );
+    }
+
+    private static Expression rewriteLocalFunctionCalls(Expression expression, Map<String, String> localNames) {
+        if (localNames.isEmpty()) {
+            return expression;
+        }
+        if (expression instanceof Expression.IfExpression value) {
+            return new Expression.IfExpression(
+                    rewriteLocalFunctionCalls(value.condition(), localNames),
+                    rewriteLocalFunctionCalls(value.thenBranch(), localNames),
+                    rewriteLocalFunctionCalls(value.elseBranch(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.BinaryExpression value) {
+            return new Expression.BinaryExpression(
+                    value.operator(),
+                    rewriteLocalFunctionCalls(value.left(), localNames),
+                    rewriteLocalFunctionCalls(value.right(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.UnaryExpression value) {
+            return new Expression.UnaryExpression(
+                    value.operator(),
+                    rewriteLocalFunctionCalls(value.expression(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.FunctionCallExpression value) {
+            return new Expression.FunctionCallExpression(
+                    localNames.getOrDefault(value.name(), value.name()),
+                    rewriteLocalFunctionCalls(value.arguments(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.FunctionReferenceExpression value) {
+            return new Expression.FunctionReferenceExpression(
+                    localNames.getOrDefault(value.name(), value.name()),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.MethodCallExpression value) {
+            return new Expression.MethodCallExpression(
+                    rewriteLocalFunctionCalls(value.receiver(), localNames),
+                    value.name(),
+                    rewriteLocalFunctionCalls(value.arguments(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.LambdaExpression value) {
+            return new Expression.LambdaExpression(
+                    value.parameters(),
+                    rewriteLocalFunctionCalls(value.body(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.ListLiteral value) {
+            return new Expression.ListLiteral(rewriteLocalFunctionCalls(value.values(), localNames), value.location());
+        }
+        if (expression instanceof Expression.SetLiteral value) {
+            return new Expression.SetLiteral(rewriteLocalFunctionCalls(value.values(), localNames), value.location());
+        }
+        if (expression instanceof Expression.DictLiteral value) {
+            return new Expression.DictLiteral(rewriteDictEntries(value.entries(), localNames), value.location());
+        }
+        if (expression instanceof Expression.TupleLiteral value) {
+            return new Expression.TupleLiteral(rewriteLocalFunctionCalls(value.values(), localNames), value.location());
+        }
+        if (expression instanceof Expression.IndexExpression value) {
+            return new Expression.IndexExpression(
+                    rewriteLocalFunctionCalls(value.receiver(), localNames),
+                    rewriteLocalFunctionCalls(value.index(), localNames),
+                    rewriteLocalFunctionCalls(value.endIndex(), localNames),
+                    value.hasEndIndex(),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.DataLiteral value) {
+            return new Expression.DataLiteral(
+                    value.typeName(),
+                    rewriteDataFields(value.fields(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.FieldAccessExpression value) {
+            return new Expression.FieldAccessExpression(
+                    rewriteLocalFunctionCalls(value.receiver(), localNames),
+                    value.name(),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.ReduceExpression value) {
+            return new Expression.ReduceExpression(
+                    rewriteLocalFunctionCalls(value.receiver(), localNames),
+                    rewriteLocalFunctionCalls(value.initial(), localNames),
+                    value.accumulatorName(),
+                    value.keyName(),
+                    value.valueName(),
+                    rewriteLocalFunctionCalls(value.body(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.MatchExpression value) {
+            return new Expression.MatchExpression(
+                    rewriteLocalFunctionCalls(value.value(), localNames),
+                    rewriteMatchCases(value.cases(), localNames),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.BlockExpression value) {
+            return new Expression.BlockExpression(
+                    rewriteLetBindings(value.bindings(), localNames),
+                    rewriteLocalFunctionCalls(value.result(), localNames),
+                    value.location()
+            );
+        }
+        return expression;
+    }
+
+    private static List<Expression> rewriteLocalFunctionCalls(List<Expression> expressions, Map<String, String> localNames) {
+        return expressions.stream()
+                .map(expression -> rewriteLocalFunctionCalls(expression, localNames))
+                .toList();
+    }
+
+    private static List<Expression.DictEntry> rewriteDictEntries(
+            List<Expression.DictEntry> entries,
+            Map<String, String> localNames
+    ) {
+        return entries.stream()
+                .map(entry -> new Expression.DictEntry(
+                        rewriteLocalFunctionCalls(entry.key(), localNames),
+                        rewriteLocalFunctionCalls(entry.value(), localNames),
+                        entry.location()
+                ))
+                .toList();
+    }
+
+    private static List<Expression.DataField> rewriteDataFields(
+            List<Expression.DataField> fields,
+            Map<String, String> localNames
+    ) {
+        return fields.stream()
+                .map(field -> new Expression.DataField(
+                        field.name(),
+                        rewriteLocalFunctionCalls(field.value(), localNames),
+                        field.location()
+                ))
+                .toList();
+    }
+
+    private static List<Expression.MatchCase> rewriteMatchCases(
+            List<Expression.MatchCase> cases,
+            Map<String, String> localNames
+    ) {
+        return cases.stream()
+                .map(matchCase -> new Expression.MatchCase(
+                        matchCase.typeName(),
+                        matchCase.bindings(),
+                        rewriteLocalFunctionCalls(matchCase.literal(), localNames),
+                        matchCase.hasLiteral(),
+                        matchCase.wildcard(),
+                        rewriteLocalFunctionCalls(matchCase.guard(), localNames),
+                        matchCase.hasGuard(),
+                        rewriteLocalFunctionCalls(matchCase.body(), localNames),
+                        matchCase.location()
+                ))
+                .toList();
+    }
+
+    private static List<Expression.LetBinding> rewriteLetBindings(
+            List<Expression.LetBinding> bindings,
+            Map<String, String> localNames
+    ) {
+        return bindings.stream()
+                .map(binding -> new Expression.LetBinding(
+                        binding.name(),
+                        binding.typeReference(),
+                        binding.operator(),
+                        rewriteLocalFunctionCalls(binding.value(), localNames),
+                        binding.location()
+                ))
+                .toList();
     }
 
     private static Expression expression(dev.capylang.parser.antlr.FunctionalParser.ExpressionContext ctx) {
@@ -480,13 +769,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             );
         }
         if (isIndexExpression(ctx)) {
-            return new Expression.IndexExpression(
-                    expressionNoLet(ctx.expressionNoLet(0)),
-                    ctx.argumentList() == null || ctx.argumentList().expression().isEmpty()
-                            ? unsupported(ctx)
-                            : expression(ctx.argumentList().expression(0)),
-                    location(ctx)
-            );
+            return indexExpression(expressionNoLet(ctx.expressionNoLet(0)), ctx.argumentList(), location(ctx), ctx);
         }
         if (isUnary(ctx)) {
             var operator = ctx.getChild(0).getText();
@@ -572,13 +855,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             );
         }
         if (ctx.argumentList() != null && ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "[")) {
-            return new Expression.IndexExpression(
-                    expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)),
-                    ctx.argumentList().expression().isEmpty()
-                            ? unsupported(ctx)
-                            : expression(ctx.argumentList().expression(0)),
-                    location(ctx)
-            );
+            return indexExpression(expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)), ctx.argumentList(), location(ctx), ctx);
         }
         if (isUnaryNoPipe(ctx)) {
             var operator = ctx.getChild(0).getText();
@@ -785,6 +1062,22 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.TupleLiteral(List.copyOf(values), location(ctx));
     }
 
+    private static Expression indexExpression(
+            Expression receiver,
+            dev.capylang.parser.antlr.FunctionalParser.ArgumentListContext arguments,
+            SourceLocation location,
+            ParserRuleContext fallback
+    ) {
+        if (arguments == null || arguments.expression().isEmpty()) {
+            return new Expression.IndexExpression(receiver, unsupported(fallback), unsupported(fallback), false, location);
+        }
+        var index = expression(arguments.expression(0));
+        if (arguments.expression().size() > 1) {
+            return new Expression.IndexExpression(receiver, index, expression(arguments.expression(1)), true, location);
+        }
+        return new Expression.IndexExpression(receiver, index, unsupported(fallback), false, location);
+    }
+
     private static Expression dataLiteral(dev.capylang.parser.antlr.FunctionalParser.NewDataContext ctx) {
         return new Expression.DataLiteral(
                 ctx.type().getText(),
@@ -860,6 +1153,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.MatchCase(
                 patternTypeName(pattern),
                 patternBindings(pattern),
+                patternLiteral(pattern),
+                patternHasLiteral(pattern),
+                patternWildcard(pattern),
+                ctx.guard == null ? unsupported(ctx) : expression(ctx.guard),
+                ctx.guard != null,
                 expression(ctx.body),
                 location(ctx)
         );
@@ -872,6 +1170,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.MatchCase(
                 patternTypeName(pattern),
                 patternBindings(pattern),
+                patternLiteral(pattern),
+                patternHasLiteral(pattern),
+                patternWildcard(pattern),
+                ctx.guard == null ? unsupported(ctx) : expressionNoPipe(ctx.guard),
+                ctx.guard != null,
                 expressionNoPipe(ctx.body),
                 location(ctx)
         );
@@ -884,6 +1187,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx.constructorPattern() != null) {
             return ctx.constructorPattern().TYPE().getText();
         }
+        if (ctx.typedPattern() != null) {
+            return ctx.typedPattern().patternType().getText();
+        }
         if (ctx.TYPE() != null) {
             return ctx.TYPE().getText();
         }
@@ -891,16 +1197,75 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static List<String> patternBindings(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
-        if (ctx == null || ctx.constructorPattern() == null || ctx.constructorPattern().fieldPatternList() == null) {
+        if (ctx == null) {
+            return List.of();
+        }
+        if (ctx.typedPattern() != null && ctx.typedPattern().NAME() != null) {
+            return List.of(ctx.typedPattern().NAME().getText());
+        }
+        if (ctx.wildcardPattern() != null && ctx.wildcardPattern().NAME() != null) {
+            return List.of(ctx.wildcardPattern().NAME().getText());
+        }
+        if (ctx.constructorPattern() == null || ctx.constructorPattern().fieldPatternList() == null) {
             return List.of();
         }
         var bindings = new ArrayList<String>();
+        var idx = 0;
         for (var fieldPattern : ctx.constructorPattern().fieldPatternList().pattern()) {
             if (fieldPattern.identifier() != null) {
                 bindings.add(fieldPattern.identifier().getText());
+            } else if (fieldPattern.wildcardPattern() != null && fieldPattern.wildcardPattern().NAME() != null) {
+                bindings.add(fieldPattern.wildcardPattern().NAME().getText());
+            } else if (fieldPattern.wildcardPattern() != null) {
+                bindings.add("__capy_ignore_" + idx);
             }
+            idx++;
         }
         return List.copyOf(bindings);
+    }
+
+    private static boolean patternWildcard(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
+        return ctx != null && ctx.wildcardPattern() != null;
+    }
+
+    private static boolean patternHasLiteral(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
+        return ctx != null
+                && (ctx.INT_LITERAL() != null
+                || ctx.LONG_LITERAL() != null
+                || ctx.BOOL_LITERAL() != null
+                || ctx.STRING_LITERAL() != null
+                || ctx.FLOAT_LITERAL() != null);
+    }
+
+    private static Expression patternLiteral(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
+        if (ctx == null) {
+            return unsupportedLiteral();
+        }
+        var location = location(ctx);
+        if (ctx.INT_LITERAL() != null) {
+            var source = ctx.INT_LITERAL().getText();
+            return new Expression.IntLiteral(Integer.parseInt(cleanNumber(source)), source, location);
+        }
+        if (ctx.LONG_LITERAL() != null) {
+            var source = ctx.LONG_LITERAL().getText();
+            return new Expression.LongLiteral(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+        }
+        if (ctx.FLOAT_LITERAL() != null) {
+            var source = ctx.FLOAT_LITERAL().getText();
+            return new Expression.FloatLiteral(Float.parseFloat(cleanFloat(source)), source, location);
+        }
+        if (ctx.BOOL_LITERAL() != null) {
+            var source = ctx.BOOL_LITERAL().getText();
+            return new Expression.BoolLiteral(Boolean.parseBoolean(source), source, location);
+        }
+        if (ctx.STRING_LITERAL() != null) {
+            return stringLiteralExpression(ctx.STRING_LITERAL().getText(), location);
+        }
+        return unsupportedLiteral();
+    }
+
+    private static Expression.UnsupportedExpression unsupportedLiteral() {
+        return new Expression.UnsupportedExpression("", new SourceLocation(0, 0));
     }
 
     private static Expression value(dev.capylang.parser.antlr.FunctionalParser.ValueContext ctx) {
@@ -1186,6 +1551,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return new Expression.IndexExpression(
                     offsetExpression(value.receiver(), lineOffset, columnOffset),
                     offsetExpression(value.index(), lineOffset, columnOffset),
+                    offsetExpression(value.endIndex(), lineOffset, columnOffset),
+                    value.hasEndIndex(),
                     offsetLocation(value.location(), lineOffset, columnOffset)
             );
         }
@@ -1274,6 +1641,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(matchCase -> new Expression.MatchCase(
                         matchCase.typeName(),
                         matchCase.bindings(),
+                        offsetExpression(matchCase.literal(), lineOffset, columnOffset),
+                        matchCase.hasLiteral(),
+                        matchCase.wildcard(),
+                        offsetExpression(matchCase.guard(), lineOffset, columnOffset),
+                        matchCase.hasGuard(),
                         offsetExpression(matchCase.body(), lineOffset, columnOffset),
                         offsetLocation(matchCase.location(), lineOffset, columnOffset)
                 ))

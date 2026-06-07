@@ -49,12 +49,12 @@ data SetLiteral { values: List[Expression], location: SourceLocation }
 data DictEntry { key: Expression, value: Expression, location: SourceLocation }
 data DictLiteral { entries: List[DictEntry], location: SourceLocation }
 data TupleLiteral { values: List[Expression], location: SourceLocation }
-data IndexExpression { receiver: Expression, index: Expression, location: SourceLocation }
+data IndexExpression { receiver: Expression, index: Expression, endIndex: Expression, hasEndIndex: bool, location: SourceLocation }
 data DataField { name: String, value: Expression, location: SourceLocation }
 data DataLiteral { typeName: String, fields: List[DataField], location: SourceLocation }
 data FieldAccessExpression { receiver: Expression, name: String, location: SourceLocation }
 data ReduceExpression { receiver: Expression, initial: Expression, accumulatorName: String, keyName: String, valueName: String, body: Expression, location: SourceLocation }
-data MatchCase { typeName: String, bindings: List[String], body: Expression, location: SourceLocation }
+data MatchCase { typeName: String, bindings: List[String], literal: Expression, hasLiteral: bool, wildcard: bool, guard: Expression, hasGuard: bool, body: Expression, location: SourceLocation }
 data MatchExpression { value: Expression, cases: List[MatchCase], location: SourceLocation }
 data LetBinding { name: String, typeReference: TypeReference, operator: String, value: Expression, location: SourceLocation }
 data BlockExpression { bindings: List[LetBinding], result: Expression, location: SourceLocation }

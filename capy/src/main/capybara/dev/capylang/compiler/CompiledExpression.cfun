@@ -49,12 +49,12 @@ data CompiledSetLiteral { values: List[CompiledExpression], location: CompiledSo
 data CompiledDictEntry { key: CompiledExpression, value: CompiledExpression, location: CompiledSourceLocation }
 data CompiledDictLiteral { entries: List[CompiledDictEntry], location: CompiledSourceLocation }
 data CompiledTupleLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
-data CompiledIndexExpression { receiver: CompiledExpression, index: CompiledExpression, location: CompiledSourceLocation }
+data CompiledIndexExpression { receiver: CompiledExpression, index: CompiledExpression, endIndex: CompiledExpression, hasEndIndex: bool, location: CompiledSourceLocation }
 data CompiledDataField { name: String, value: CompiledExpression, location: CompiledSourceLocation }
 data CompiledDataLiteral { typeName: String, fields: List[CompiledDataField], location: CompiledSourceLocation }
 data CompiledFieldAccessExpression { receiver: CompiledExpression, name: String, location: CompiledSourceLocation }
 data CompiledReduceExpression { receiver: CompiledExpression, initial: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, body: CompiledExpression, location: CompiledSourceLocation }
-data CompiledMatchCase { typeName: String, bindings: List[String], body: CompiledExpression, location: CompiledSourceLocation }
+data CompiledMatchCase { typeName: String, bindings: List[String], literal: CompiledExpression, hasLiteral: bool, wildcard: bool, guard: CompiledExpression, hasGuard: bool, body: CompiledExpression, location: CompiledSourceLocation }
 data CompiledMatchExpression { value: CompiledExpression, cases: List[CompiledMatchCase], location: CompiledSourceLocation }
 data CompiledLetBinding { name: String, typeReference: CompiledTypeReference, operator: String, value: CompiledExpression, location: CompiledSourceLocation }
 data CompiledBlockExpression { bindings: List[CompiledLetBinding], result: CompiledExpression, location: CompiledSourceLocation }
