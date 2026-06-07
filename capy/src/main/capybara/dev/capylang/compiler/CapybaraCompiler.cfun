@@ -72,9 +72,23 @@ private fun compile_module(module: ParsedModule): CompiledModule =
     }
 
 private fun normalize_module_path(path: String): String =
-    if path.starts_with("/")
+    if compiler_string_has_prefix(path, "/")
     then normalize_module_path(path[1, path.size()])
     else path
+
+private fun compiler_string_has_prefix(value: String, prefix: String): bool =
+    compiler_string_has_prefix_at(value, prefix, 0)
+
+private fun compiler_string_has_prefix_at(value: String, prefix: String, idx: int): bool =
+    match prefix[idx] with
+    case None -> true
+    case Some { expected } ->
+        match value[idx] with
+        case None -> false
+        case Some { actual } ->
+            if actual == expected
+            then compiler_string_has_prefix_at(value, prefix, idx + 1)
+            else false
 
 private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
     CompiledFunction {

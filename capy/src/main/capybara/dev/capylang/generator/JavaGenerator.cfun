@@ -56,10 +56,10 @@ private fun static_imports(imports: List[CompiledImportDeclaration], module: Com
         else static_imports(imports[1:], module, allModules)
 
 private fun stdlib_import(modulePath: String): bool =
-    modulePath.starts_with("/capy/") | modulePath.starts_with("capy/")
+    java_generator_string_has_prefix(modulePath, "/capy/") | java_generator_string_has_prefix(modulePath, "capy/")
 
 private fun imported_module_class(module: CompiledModule, modulePath: String): String =
-    if modulePath.starts_with("/")
+    if java_generator_string_has_prefix(modulePath, "/")
     then path_to_class(modulePath[1, modulePath.size()])
     else if modulePath ? "/"
     then path_to_class(modulePath)
@@ -69,6 +69,20 @@ private fun imported_module_class(module: CompiledModule, modulePath: String): S
 
 private fun path_to_class(path: String): String =
     path.replace("/", ".")
+
+private fun java_generator_string_has_prefix(value: String, prefix: String): bool =
+    java_generator_string_has_prefix_at(value, prefix, 0)
+
+private fun java_generator_string_has_prefix_at(value: String, prefix: String, idx: int): bool =
+    match prefix[idx] with
+    case None -> true
+    case Some { expected } ->
+        match value[idx] with
+        case None -> false
+        case Some { actual } ->
+            if actual == expected
+            then java_generator_string_has_prefix_at(value, prefix, idx + 1)
+            else false
 
 private fun module_class_exists(className: String, modules: List[CompiledModule]): bool =
     match modules[0] with
@@ -111,10 +125,10 @@ private fun constant_functions(functions: List[CompiledFunction]): List[Compiled
         else constant_functions(functions[1:])
 
 private fun compiled_constant(function: CompiledFunction): bool =
-    function.visibility.starts_with("const:")
+    java_generator_string_has_prefix(function.visibility, "const:")
 
 private fun compiled_schema(function: CompiledFunction): bool =
-    function.visibility.starts_with("const:schema")
+    java_generator_string_has_prefix(function.visibility, "const:schema")
 
 private fun constant_java_visibility(function: CompiledFunction): String =
     java_visibility(function.visibility.replace("const:", ""))
@@ -266,7 +280,7 @@ private fun placeholder_message(placeholder: CompiledUnsupportedExpression, modu
     else "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + module_source_file(module) + ": the function `" + functionName + "` is not yet implemented"
 
 private fun compiled_placeholder_source(source: String): bool =
-    source.starts_with("__capy_placeholder__|")
+    java_generator_string_has_prefix(source, "__capy_placeholder__|")
 
 private fun placeholder_function_name(source: String): String =
     if compiled_placeholder_source(source)
@@ -519,11 +533,14 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
 
 private fun collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    collection_predicate_method(call.name)
-        & collection_receiver_type(receiverType)
-        & !call.arguments.is_empty()
-        & call.arguments[1:].is_empty()
-        & lambda_expression(argument(call.arguments, 0))
+    if collection_predicate_method(call.name) & collection_receiver_type(receiverType)
+    then match call.arguments[0] with
+        case None -> false
+        case Some { predicate } ->
+            match call.arguments[1] with
+            case None -> lambda_expression(predicate)
+            case Some _ -> false
+    else false
 
 private fun collection_predicate_method(name: String): bool =
     name == "any" | name == "all"
@@ -638,13 +655,20 @@ private fun tuple_lambda_env(parameters: List[String], types: List[CompiledTypeR
     match parameters[0] with
     case None -> env
     case Some { parameter } ->
-        let rest = tuple_lambda_env(parameters[1:], types[1:], env)
+        let rest = match types[0] with
+            case None -> tuple_lambda_env(parameters[1:], [], env)
+            case Some _ -> tuple_lambda_env(parameters[1:], types[1:], env)
         if parameter == "_"
         then rest
         else [JavaBinding { name: parameter, typeReference: tuple_argument(types, 0) }] + rest
 
 private fun tuple_lambda_parameters(parameters: List[String]): bool =
-    !parameters[1:].is_empty()
+    match parameters[0] with
+    case None -> false
+    case Some _ ->
+        match parameters[1] with
+        case None -> false
+        case Some _ -> true
 
 private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverCode = expression_code(index.receiver, env, expression_type(index.receiver, env, module, allModules), module, allModules)
@@ -699,7 +723,7 @@ private fun assert_that_code(expression: CompiledExpression, env: List[JavaBindi
     then "new capy.test.Assert.SetAssert(java.util.List.of(), " + actual + ")"
     else if actualType.name == "Dict"
     then "new capy.test.Assert.DictAssert(java.util.List.of(), " + actual + ")"
-    else "new capy.test.Assert.ListAssert(java.util.List.of(), " + actual + ")"
+    else "new capy.test.Assert.DataAssert(java.util.List.of(), " + actual + ")"
 
 private fun expression_list_code(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expressions[0] with
@@ -755,7 +779,7 @@ private fun data_field_entries_tail(fields: List[CompiledDataField], env: List[J
     case Some _ -> ", " + data_field_entries_code(fields, env, dataType, bindings, module, allModules)
 
 private fun data_constructor_field_name(name: String, dataType: /capy/lang/Option[String], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if name.starts_with("$")
+    if java_generator_string_has_prefix(name, "$")
     then match dataType with
         case Some { value } -> declared_positional_field_name(name, data_type_fields(value, module, allModules), 0)
         case None -> name
@@ -772,7 +796,7 @@ private fun declared_positional_field_name(name: String, fields: List[String], i
 private fun data_constructor_field_type(name: String, dataType: /capy/lang/Option[String], bindings: List[JavaBinding], fallback: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match dataType with
     case Some { value } ->
-        if name.starts_with("$")
+        if java_generator_string_has_prefix(name, "$")
         then declared_positional_field_type(name, data_type_fields(value, module, allModules), bindings, 0, fallback)
         else declared_named_field_type(name, data_type_fields(value, module, allModules), bindings, fallback)
     case None -> fallback
@@ -1131,7 +1155,7 @@ private fun schema_values(prefix: String, functions: List[CompiledFunction]): Li
     match functions[0] with
     case None -> []
     case Some { function } ->
-        if compiled_schema(function) & function.name.starts_with(prefix)
+        if compiled_schema(function) & java_generator_string_has_prefix(function.name, prefix)
         then [schema_value(function)] + schema_values(prefix, functions[1:])
         else schema_values(prefix, functions[1:])
 
@@ -1376,8 +1400,9 @@ private fun collection_pipe_emittable(binary: CompiledBinaryExpression, env: Lis
             case _ -> false
 
 private fun collection_lambda_emittable(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    lambda_parameter_shape_supported(lambda.parameters, valueType)
-        & expression_emittable(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+    if lambda_parameter_shape_supported(lambda.parameters, valueType)
+    then expression_emittable(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+    else false
 
 private fun lambda_parameter_shape_supported(parameters: List[String], valueType: CompiledTypeReference): bool =
     if tuple_lambda_parameters(parameters)
@@ -1449,7 +1474,7 @@ private fun remainder_type(type: CompiledTypeReference): bool =
     type.name == "byte" | numeric_type(type)
 
 private fun byte_literal_source(source: String): bool =
-    source.starts_with("0x") | source.starts_with("0X")
+    java_generator_string_has_prefix(source, "0x") | java_generator_string_has_prefix(source, "0X")
 
 private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -1481,15 +1506,19 @@ private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpres
         & expression_emittable(call.receiver, env, module, allModules)
 
 private fun collection_predicate_call_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !call.arguments.is_empty()
-        & call.arguments[1:].is_empty()
-        & expression_emittable(call.receiver, env, module, allModules)
-        & match argument(call.arguments, 0) with
-            case CompiledLambdaExpression lambda ->
-                let valueType = collection_value_type(receiverType)
-                collection_lambda_emittable(lambda, valueType, env, module, allModules)
-                    & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
-            case _ -> false
+    match call.arguments[0] with
+    case None -> false
+    case Some { predicate } ->
+        match call.arguments[1] with
+        case Some _ -> false
+        case None ->
+            expression_emittable(call.receiver, env, module, allModules)
+            & match predicate with
+                case CompiledLambdaExpression lambda ->
+                    let valueType = collection_value_type(receiverType)
+                    collection_lambda_emittable(lambda, valueType, env, module, allModules)
+                        & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
+                case _ -> false
 
 private fun primitive_conversion_method(name: String): bool =
     name == "to_int" | name == "to_long"
@@ -1560,6 +1589,23 @@ private fun assert_that_call_emittable(arguments: List[CompiledExpression], env:
 private fun assert_type_supported(type: CompiledTypeReference): bool =
     type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
         | type.name == "bool" | type.name == "String" | type.name == "List" | type.name == "Set" | type.name == "Dict"
+        | data_assert_type_supported(type)
+
+private fun data_assert_type_supported(type: CompiledTypeReference): bool =
+    concrete_return_type(type)
+        & !collection_assert_type(type.name)
+        & type.name != "Assert"
+        & type.name != "Effect"
+        & type.name != "Supplier"
+        & (type.name == "data" | type.name == "enum" | java_generator_string_has_prefix(type.name, "/") | uppercase_data_type_name(type.name))
+
+private fun collection_assert_type(name: String): bool =
+    name == "List" | name == "Set" | name == "Dict" | name == "Seq"
+
+private fun uppercase_data_type_name(name: String): bool =
+    match name[0] with
+    case None -> false
+    case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
 
 private fun delay_call_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
@@ -1638,8 +1684,20 @@ private fun parameters_assignable(parameters: List[CompiledFunctionParameter], a
         match arguments[0] with
         case None -> false
         case Some { argument } ->
-            type_assignable(parameter.typeReference, expression_type(argument, env, module, allModules))
+            parameter_argument_assignable(parameter.typeReference, argument, env, module, allModules)
             & parameters_assignable(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun parameter_argument_assignable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if empty_collection_literal_assignable(target, argument)
+    then true
+    else type_assignable(target, expression_type(argument, env, module, allModules))
+
+private fun empty_collection_literal_assignable(target: CompiledTypeReference, argument: CompiledExpression): bool =
+    match argument with
+    case CompiledListLiteral literal -> literal.values.is_empty() & target.name == "List"
+    case CompiledSetLiteral literal -> literal.values.is_empty() & target.name == "Set"
+    case CompiledDictLiteral literal -> literal.entries.is_empty() & target.name == "Dict"
+    case _ -> false
 
 private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeReference): bool =
     if type_parameter(target) | source.name == "nothing"
