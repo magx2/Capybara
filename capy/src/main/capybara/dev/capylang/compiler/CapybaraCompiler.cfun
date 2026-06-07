@@ -338,6 +338,7 @@ private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImpo
     case Some { declaration } -> [CompiledImportDeclaration {
         modulePath: declaration.modulePath,
         importedNames: declaration.importedNames,
+        excludedNames: declaration.excludedNames,
         wildcard: declaration.wildcard,
         qualified: declaration.qualified,
         location: compile_location(declaration.location)
