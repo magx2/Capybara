@@ -506,6 +506,28 @@ private fun compile_method_call(call: MethodCallExpression, functionName: String
             location: compile_location(location)
         }
         else compiled_method_call(call, functionName)
+    case FieldAccessExpression access -> compile_method_call_on_field_access(call, access, functionName)
+    case _ -> compiled_method_call(call, functionName)
+
+private fun compile_method_call_on_field_access(call: MethodCallExpression, access: FieldAccessExpression, functionName: String): CompiledExpression =
+    match access.receiver with
+    case UnaryExpression { operator, expression, location } ->
+        if operator == "!"
+        then CompiledUnaryExpression {
+            operator: operator,
+            expression: CompiledMethodCallExpression {
+                receiver: CompiledFieldAccessExpression {
+                    receiver: compile_expression_in_function(expression, functionName),
+                    name: access.name,
+                    location: compile_location(access.location)
+                },
+                name: call.name,
+                arguments: compile_expressions(call.arguments, functionName),
+                location: compile_location(call.location)
+            },
+            location: compile_location(location)
+        }
+        else compiled_method_call(call, functionName)
     case _ -> compiled_method_call(call, functionName)
 
 private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
