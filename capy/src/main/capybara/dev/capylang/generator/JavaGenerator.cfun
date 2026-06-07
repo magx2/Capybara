@@ -116,7 +116,7 @@ private fun java_constants(constants: List[CompiledFunction], previous: List[Com
 
 private fun java_constant(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let type = constant_type(constant, env, module, allModules)
-    "    " + constant_java_visibility(constant) + " static final " + java_type(type) + " " + java_identifier(constant.name)
+    "    " + constant_java_visibility(constant) + "static final " + java_type(type) + " " + java_identifier(constant.name)
     + " = " + expression_code(constant.body, env, type, module, allModules) + ";" + newline()
 
 private fun constant_type(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -155,7 +155,7 @@ private fun compiled_schema(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.visibility, "const:schema")
 
 private fun constant_java_visibility(function: CompiledFunction): String =
-    java_visibility(function.visibility.replace("const:", ""))
+    java_visibility_prefix(function.visibility.replace("const:", ""))
 
 private fun java_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
@@ -168,7 +168,7 @@ private fun java_functions(functions: List[CompiledFunction], module: CompiledMo
 private fun java_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     let returnType = java_type(function.returnType)
     let env = java_function_bindings(function) + constant_bindings(constant_functions(module.functions))
-    "    " + java_visibility(function.visibility) + " static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
+    "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
     + java_function_body(function, env, module, allModules)
     + "    }" + newline()
 
@@ -213,8 +213,12 @@ private fun last_dot_index_from(name: String, idx: int, found: int): int =
             let next = if char == "." then idx else found
             last_dot_index_from(name, idx + 1, next)
 
-private fun java_visibility(visibility: String): String =
-    if visibility == "private" then "private" else "public"
+private fun java_visibility_prefix(visibility: String): String =
+    if visibility == "private"
+    then "private "
+    else if visibility == "local"
+    then ""
+    else "public "
 
 private fun java_function_body(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match function.body with
