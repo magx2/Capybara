@@ -278,7 +278,9 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     let rightType = expression_type(binary.right, env, module, allModules)
     let naturalResultType = binary_result_type(binary.operator, leftType, rightType)
     let resultType = contextual_binary_result_type(naturalResultType, expectedType)
-    if boolean_binary_operator(binary.operator)
+    if collection_pipe_expression(binary, leftType)
+    then collection_pipe_code(binary, leftType, env, module, allModules)
+    else if boolean_binary_operator(binary.operator)
     then "(" + truthy_expression_code(binary.left, env, module, allModules)
         + " " + java_boolean_operator(binary.operator) + " "
         + truthy_expression_code(binary.right, env, module, allModules)
@@ -398,6 +400,37 @@ private fun boolean_binary_operator(operator: String): bool =
 private fun java_boolean_operator(operator: String): String =
     if operator == "&" then "&&" else "||"
 
+private fun collection_pipe_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
+    collection_pipe_operator(binary.operator) & collection_receiver_type(leftType) & lambda_expression(binary.right)
+
+private fun collection_pipe_operator(operator: String): bool =
+    operator == "|" | operator == "|-" | operator == "|*"
+
+private fun lambda_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression _ -> true
+    case _ -> false
+
+private fun collection_pipe_code(binary: CompiledBinaryExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverCode = seq_receiver_code(binary.left, receiverType, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    match binary.right with
+    case CompiledLambdaExpression lambda ->
+        if binary.operator == "|-"
+        then receiverCode + ".filter(" + lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules) + ")"
+        else if binary.operator == "|*"
+        then receiverCode + ".flatMap(" + flat_map_lambda_code(lambda, valueType, env, module, allModules) + ")"
+        else receiverCode + ".map(" + lambda_code_for_value(lambda, valueType, expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules), env, module, allModules) + ")"
+    case _ -> "unsupported(\"collection pipe\")"
+
+private fun seq_receiver_code(expression: CompiledExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverCode = expression_code(expression, env, receiverType, module, allModules)
+    if receiverType.name == "String"
+    then "capy.lang.String.chars(" + receiverCode + ")"
+    else if receiverType.name == "Seq"
+    then "((" + java_seq_type(receiverType) + ") " + receiverCode + ")"
+    else "capy.lang.Seq.toSeq(" + receiverCode + ")"
+
 private fun int_literal_code(literal: CompiledIntLiteral, expectedType: CompiledTypeReference): String =
     if expectedType.name == "byte" & byte_literal_source(literal.source)
     then "((byte) " + literal.source + ")"
@@ -472,13 +505,55 @@ private fun missing_argument(): CompiledExpression =
     }
 
 private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if primitive_conversion_method(call.name)
+    if collection_predicate_call(call, env, module, allModules)
+    then collection_predicate_call_code(call, env, module, allModules)
+    else if seq_as_list_call(call, env, module, allModules)
+    then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
+    else if primitive_conversion_method(call.name)
     then primitive_conversion_code(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
         case Some { function } -> extension_method_call_code(function, call, env, module, allModules)
         case None -> expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
             + "." + java_method_name(call.name)
             + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    collection_predicate_method(call.name)
+        & collection_receiver_type(receiverType)
+        & !call.arguments.is_empty()
+        & call.arguments[1:].is_empty()
+        & lambda_expression(argument(call.arguments, 0))
+
+private fun collection_predicate_method(name: String): bool =
+    name == "any" | name == "all"
+
+private fun collection_predicate_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    let receiverCode =
+        if receiverType.name == "Seq" | receiverType.name == "String"
+        then seq_receiver_code(call.receiver, receiverType, env, module, allModules)
+        else expression_code(call.receiver, env, receiverType, module, allModules)
+    match argument(call.arguments, 0) with
+    case CompiledLambdaExpression lambda ->
+        let lambdaCode = lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules)
+        if receiverType.name == "Seq" | receiverType.name == "String"
+        then collection_seq_predicate_code(call.name, receiverCode, lambdaCode)
+        else receiverCode + ".stream()." + java_stream_predicate_method(call.name) + "(" + lambdaCode + ")"
+    case _ -> "unsupported(\"collection predicate\")"
+
+private fun collection_seq_predicate_code(name: String, receiverCode: String, lambdaCode: String): String =
+    if name == "any"
+    then receiverCode + ".any(" + lambdaCode + ")"
+    else receiverCode + ".asList().stream().allMatch(" + lambdaCode + ")"
+
+private fun java_stream_predicate_method(name: String): String =
+    if name == "any" then "anyMatch" else "allMatch"
+
+private fun seq_as_list_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    call.name == "as_list" & receiverType.name == "Seq" & call.arguments.is_empty()
 
 private fun extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_function_name(function)
@@ -501,6 +576,44 @@ private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding]
     let params = lambda_parameters(lambda.parameters)
     params + " -> " + expression_code(lambda.body, lambda_env(lambda.parameters, env), expression_type(lambda.body, lambda_env(lambda.parameters, env), module, allModules), module, allModules)
 
+private fun lambda_code_for_value(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+    let bodyCode = expression_code(lambda.body, lambdaEnv, expectedType, module, allModules)
+    lambda_code_with_result(lambda.parameters, valueType, bodyCode)
+
+private fun flat_map_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+    let bodyType = expression_type(lambda.body, lambdaEnv, module, allModules)
+    let bodyCode = expression_code(lambda.body, lambdaEnv, bodyType, module, allModules)
+    let resultCode =
+        if collection_receiver_type(bodyType)
+        then seq_receiver_code(lambda.body, bodyType, lambdaEnv, module, allModules)
+        else bodyCode
+    lambda_code_with_result(lambda.parameters, valueType, resultCode)
+
+private fun lambda_code_with_result(parameters: List[String], valueType: CompiledTypeReference, resultCode: String): String =
+    if tuple_lambda_parameters(parameters)
+    then tuple_lambda_code(parameters, valueType, resultCode)
+    else lambda_parameters(parameters) + " -> " + resultCode
+
+private fun tuple_lambda_code(parameters: List[String], valueType: CompiledTypeReference, resultCode: String): String =
+    let tupleName = "__capy_tuple"
+    tupleName + " -> {" + newline()
+    + tuple_lambda_binding_statements(parameters, valueType.arguments, tupleName, 0, "            ")
+    + "            return " + resultCode + ";" + newline()
+    + "        }"
+
+private fun tuple_lambda_binding_statements(parameters: List[String], types: List[CompiledTypeReference], tupleName: String, idx: int, indent: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        let type = tuple_argument(types, 0)
+        let statement =
+            if parameter == "_"
+            then ""
+            else indent + java_type(type) + " " + java_identifier(parameter) + " = ((" + boxed_java_type(type) + ") ((java.util.List<?>) " + tupleName + ").get(" + idx + "));" + newline()
+        statement + tuple_lambda_binding_statements(parameters[1:], types[1:], tupleName, idx + 1, indent)
+
 private fun lambda_parameters(parameters: List[String]): String =
     if parameters.is_empty()
     then "()"
@@ -510,6 +623,28 @@ private fun lambda_env(parameters: List[String], env: List[JavaBinding]): List[J
     match parameters[0] with
     case None -> env
     case Some { parameter } -> [JavaBinding { name: parameter, typeReference: object_type() }] + lambda_env(parameters[1:], env)
+
+private fun lambda_value_env(parameters: List[String], valueType: CompiledTypeReference, env: List[JavaBinding]): List[JavaBinding] =
+    if tuple_lambda_parameters(parameters)
+    then tuple_lambda_env(parameters, valueType.arguments, env)
+    else lambda_single_value_env(parameters, valueType, env)
+
+private fun lambda_single_value_env(parameters: List[String], valueType: CompiledTypeReference, env: List[JavaBinding]): List[JavaBinding] =
+    match parameters[0] with
+    case None -> env
+    case Some { parameter } -> [JavaBinding { name: parameter, typeReference: valueType }] + env
+
+private fun tuple_lambda_env(parameters: List[String], types: List[CompiledTypeReference], env: List[JavaBinding]): List[JavaBinding] =
+    match parameters[0] with
+    case None -> env
+    case Some { parameter } ->
+        let rest = tuple_lambda_env(parameters[1:], types[1:], env)
+        if parameter == "_"
+        then rest
+        else [JavaBinding { name: parameter, typeReference: tuple_argument(types, 0) }] + rest
+
+private fun tuple_lambda_parameters(parameters: List[String]): bool =
+    !parameters[1:].is_empty()
 
 private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverCode = expression_code(index.receiver, env, expression_type(index.receiver, env, module, allModules), module, allModules)
@@ -694,9 +829,14 @@ private fun reduce_expression_code(reduce: CompiledReduceExpression, env: List[J
     + "        }).get()"
 
 private fun collection_value_type(type: CompiledTypeReference): CompiledTypeReference =
-    if type.name == "List" | type.name == "Set"
+    if type.name == "List" | type.name == "Set" | type.name == "Seq"
     then first_type_argument(type)
+    else if type.name == "String"
+    then string_type()
     else object_type()
+
+private fun collection_receiver_type(type: CompiledTypeReference): bool =
+    type.name == "List" | type.name == "Set" | type.name == "Seq" | type.name == "String"
 
 private fun match_expression_code(matchExpression: CompiledMatchExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = expression_type(matchExpression.value, env, module, allModules)
@@ -743,9 +883,12 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledVariableExpression variable -> lookup_binding(variable.name, env)
     case CompiledIfExpression ifExpression -> expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBinaryExpression binary ->
-        binary_result_type(
+        let leftType = expression_type(binary.left, env, module, allModules)
+        if collection_pipe_expression(binary, leftType)
+        then collection_pipe_result_type(binary, leftType, env, module, allModules)
+        else binary_result_type(
             binary.operator,
-            expression_type(binary.left, env, module, allModules),
+            leftType,
             expression_type(binary.right, env, module, allModules)
         )
     case CompiledUnaryExpression unary -> expression_type(unary.expression, env, module, allModules)
@@ -767,6 +910,23 @@ private fun match_expression_type(cases: List[CompiledMatchCase], env: List[Java
     match cases[0] with
     case None -> object_type()
     case Some { matchCase } -> expression_type(matchCase.body, match_env(matchCase.bindings, env), module, allModules)
+
+private fun collection_pipe_result_type(binary: CompiledBinaryExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let valueType = collection_value_type(receiverType)
+    match binary.right with
+    case CompiledLambdaExpression lambda ->
+        let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+        if binary.operator == "|-"
+        then seq_type(valueType)
+        else if binary.operator == "|*"
+        then flat_map_result_type(expression_type(lambda.body, lambdaEnv, module, allModules))
+        else seq_type(expression_type(lambda.body, lambdaEnv, module, allModules))
+    case _ -> object_type()
+
+private fun flat_map_result_type(bodyType: CompiledTypeReference): CompiledTypeReference =
+    if collection_receiver_type(bodyType)
+    then seq_type(collection_value_type(bodyType))
+    else seq_type(object_type())
 
 private fun field_access_type(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let receiverType = expression_type(access.receiver, env, module, allModules)
@@ -800,6 +960,10 @@ private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaB
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
     then int_type()
+    else if collection_predicate_call(call, env, module, allModules)
+    then bool_type()
+    else if seq_as_list_call(call, env, module, allModules)
+    then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
     else if call.name == "to_int"
     then int_type()
     else if call.name == "to_long"
@@ -1130,7 +1294,10 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledStringLiteral _ -> true
     case CompiledVariableExpression variable -> binding_exists(variable.name, env)
     case CompiledIfExpression e -> truthy_expression_emittable(e.condition, env, module, allModules) & expression_emittable(e.thenBranch, env, module, allModules) & expression_emittable(e.elseBranch, env, module, allModules)
-    case CompiledBinaryExpression e -> java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
+    case CompiledBinaryExpression e ->
+        if collection_pipe_expression(e, expression_type(e.left, env, module, allModules))
+        then collection_pipe_emittable(e, env, module, allModules)
+        else java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
     case CompiledUnaryExpression e -> java_unary_operator_emittable(e, env, module, allModules) & expression_emittable(e.expression, env, module, allModules)
     case CompiledFunctionCallExpression e -> function_call_emittable(e, env, module, allModules)
     case CompiledMethodCallExpression e -> java_method_emittable(e, env, module, allModules)
@@ -1195,6 +1362,41 @@ private fun lambda_parameters_supported(parameters: List[String]): bool =
     case None -> true
     case Some { parameter } -> parameter != "_" & lambda_parameters_supported(parameters[1:])
 
+private fun collection_pipe_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(binary.left, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    expression_emittable(binary.left, env, module, allModules)
+        & match binary.right with
+            case CompiledLambdaExpression lambda ->
+                if binary.operator == "|-"
+                then collection_lambda_emittable(lambda, valueType, env, module, allModules) & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
+                else if binary.operator == "|*"
+                then collection_lambda_emittable(lambda, valueType, env, module, allModules) & collection_receiver_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
+                else collection_lambda_emittable(lambda, valueType, env, module, allModules)
+            case _ -> false
+
+private fun collection_lambda_emittable(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    lambda_parameter_shape_supported(lambda.parameters, valueType)
+        & expression_emittable(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+
+private fun lambda_parameter_shape_supported(parameters: List[String], valueType: CompiledTypeReference): bool =
+    if tuple_lambda_parameters(parameters)
+    then valueType.name == "Tuple" & tuple_lambda_arity_supported(parameters, valueType.arguments)
+    else single_value_lambda_parameters_supported(parameters)
+
+private fun single_value_lambda_parameters_supported(parameters: List[String]): bool =
+    match parameters[0] with
+    case None -> true
+    case Some _ -> parameters[1:].is_empty()
+
+private fun tuple_lambda_arity_supported(parameters: List[String], types: List[CompiledTypeReference]): bool =
+    match parameters[0] with
+    case None -> types.is_empty()
+    case Some _ ->
+        match types[0] with
+        case None -> false
+        case Some _ -> tuple_lambda_arity_supported(parameters[1:], types[1:])
+
 private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = expression_type(binary.left, env, module, allModules)
     let rightType = expression_type(binary.right, env, module, allModules)
@@ -1255,6 +1457,10 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then (receiverType.name == "List" | receiverType.name == "Set" | receiverType.name == "Dict")
         & call.arguments.is_empty()
         & expression_emittable(call.receiver, env, module, allModules)
+    else if collection_predicate_call(call, env, module, allModules)
+    then collection_predicate_call_emittable(call, receiverType, env, module, allModules)
+    else if call.name == "as_list" & receiverType.name == "Seq"
+    then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -1273,6 +1479,17 @@ private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpres
     call.arguments.is_empty()
         & primitive_conversion_receiver(call.name, receiverType)
         & expression_emittable(call.receiver, env, module, allModules)
+
+private fun collection_predicate_call_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    !call.arguments.is_empty()
+        & call.arguments[1:].is_empty()
+        & expression_emittable(call.receiver, env, module, allModules)
+        & match argument(call.arguments, 0) with
+            case CompiledLambdaExpression lambda ->
+                let valueType = collection_value_type(receiverType)
+                collection_lambda_emittable(lambda, valueType, env, module, allModules)
+                    & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
+            case _ -> false
 
 private fun primitive_conversion_method(name: String): bool =
     name == "to_int" | name == "to_long"
@@ -1495,6 +1712,9 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "Supplier" then "java.util.function.Supplier<" + boxed_java_type(first_type_argument(type)) + ">"
     else "java.lang.Object"
 
+private fun java_seq_type(type: CompiledTypeReference): String =
+    "capy.lang.Seq<" + boxed_java_type(first_type_argument(type)) + ">"
+
 private fun first_type_argument(type: CompiledTypeReference): CompiledTypeReference =
     match type.arguments[0] with
     case None -> object_type()
@@ -1527,6 +1747,7 @@ private fun list_type(arg: CompiledTypeReference): CompiledTypeReference = Compi
 private fun set_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Set", arguments: [arg] }
 private fun dict_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Dict", arguments: [arg] }
 private fun tuple_type(args: List[CompiledTypeReference]): CompiledTypeReference = CompiledTypeReference { name: "Tuple", arguments: args }
+private fun seq_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Seq", arguments: [arg] }
 private fun effect_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Effect", arguments: [arg] }
 private fun supplier_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Supplier", arguments: [arg] }
 
@@ -1692,6 +1913,7 @@ private fun java_method_name(name: String): String =
     else if name == "is_less_or_equals_than" then "isLessOrEqualsThan"
     else if name == "starts_with" then "startsWith"
     else if name == "does_not_start_with" then "doesNotStartWith"
+    else if name == "as_list" then "asList"
     else java_identifier(name)
 
 private fun java_identifier_list(values: List[String]): String =
