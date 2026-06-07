@@ -343,8 +343,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             String name,
             dev.capylang.parser.antlr.FunctionalParser.TypeContext type
     ) {
-        var typeReference = typeReference(type);
-        return name + "|" + typeReference.name();
+        return name + "|" + type.getText();
     }
 
     private static FunctionParameter functionParameter(dev.capylang.parser.antlr.FunctionalParser.ParameterContext ctx) {
@@ -377,6 +376,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.LetBinding(
                 ctx.privateLocalConstName().getText(),
                 type,
+                "=",
                 expressionNoLet(ctx.expressionNoLet()),
                 location(ctx)
         );
@@ -399,6 +399,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.LetBinding(
                 ctx.identifier().getText(),
                 type,
+                ctx.letBindingOperator().getText(),
                 expressionNoLet(ctx.expressionNoLet()),
                 location(ctx)
         );
@@ -413,6 +414,12 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.functionCall() != null) {
             return functionCall(ctx.functionCall());
+        }
+        if (ctx.functionReference() != null) {
+            return new Expression.FunctionReferenceExpression(
+                    ctx.functionReference().identifier().getText(),
+                    location(ctx.functionReference())
+            );
         }
         if (ctx.placeholder() != null) {
             return placeholder(ctx.placeholder());
@@ -506,6 +513,12 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.functionCall() != null) {
             return functionCall(ctx.functionCall());
+        }
+        if (ctx.functionReference() != null) {
+            return new Expression.FunctionReferenceExpression(
+                    ctx.functionReference().identifier().getText(),
+                    location(ctx.functionReference())
+            );
         }
         if (ctx.placeholder() != null) {
             return placeholder(ctx.placeholder());
@@ -684,11 +697,14 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx.lambdaArgument().size() < 2) {
             return new Expression.UnsupportedExpression(ctx.getText(), location);
         }
+        var keyName = ctx.lambdaArgument().size() > 2 ? ctx.lambdaArgument(1).getText() : "";
+        var valueName = ctx.lambdaArgument().size() > 2 ? ctx.lambdaArgument(2).getText() : ctx.lambdaArgument(1).getText();
         return new Expression.ReduceExpression(
                 receiver,
                 expressionNoLetNoPipe(ctx.expressionNoLetNoPipe()),
                 ctx.lambdaArgument(0).getText(),
-                ctx.lambdaArgument(1).getText(),
+                keyName,
+                valueName,
                 expressionNoPipe(ctx.expressionNoPipe()),
                 location
         );
@@ -788,6 +804,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         for (var assignment : ctx.fieldAssignment()) {
             if (assignment.namedFieldAssignment() != null) {
                 fields.add(namedDataField(assignment.namedFieldAssignment()));
+                positionalIndex++;
             } else if (assignment.positionalFieldAssignment() != null) {
                 fields.add(new Expression.DataField(
                         "$" + positionalIndex,
@@ -801,6 +818,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         unsupported(assignment),
                         location(assignment)
                 ));
+                positionalIndex++;
             }
         }
         return List.copyOf(fields);
@@ -1190,6 +1208,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     offsetExpression(value.receiver(), lineOffset, columnOffset),
                     offsetExpression(value.initial(), lineOffset, columnOffset),
                     value.accumulatorName(),
+                    value.keyName(),
                     value.valueName(),
                     offsetExpression(value.body(), lineOffset, columnOffset),
                     offsetLocation(value.location(), lineOffset, columnOffset)
@@ -1270,6 +1289,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(binding -> new Expression.LetBinding(
                         binding.name(),
                         binding.typeReference(),
+                        binding.operator(),
                         offsetExpression(binding.value(), lineOffset, columnOffset),
                         offsetLocation(binding.location(), lineOffset, columnOffset)
                 ))
