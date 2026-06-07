@@ -2580,13 +2580,25 @@ private fun qualified_call_class_name(name: String, module: CompiledModule): Str
     else imported_module_class(module, qualifier)
 
 private fun find_qualified_function(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    find_qualified_function_in_imports(
-        qualified_call_class_name(name, module),
-        qualified_call_member(name),
+    let className = qualified_call_class_name(name, module)
+    let member = qualified_call_member(name)
+    if absolute_qualified_call_name(name)
+    then find_qualified_function_in_class(className, member, allModules)
+    else find_qualified_function_in_imports(
+        className,
+        member,
         module.imports,
         module,
         allModules
     )
+
+private fun absolute_qualified_call_name(name: String): bool =
+    java_generator_string_has_prefix(name, "/")
+
+private fun find_qualified_function_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_function(member, importedModule.functions)
+    case None -> /capy/lang/Option.None {}
 
 private fun find_qualified_function_in_imports(className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match imports[0] with

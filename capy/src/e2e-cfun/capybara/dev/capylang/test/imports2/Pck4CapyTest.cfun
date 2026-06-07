@@ -6,6 +6,7 @@ from Pck4 import { * }
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/imports2/Pck4.cfun", [
         test("awesome maps level thresholds to messages", () => awesome_maps_level_thresholds_to_messages()),
+        test("fully qualified package callable resolves awesome", () => fully_qualified_package_callable_resolves_awesome()),
     ])
 
 private fun awesome_maps_level_thresholds_to_messages(): Assert =
@@ -19,3 +20,6 @@ private fun awesome_maps_level_thresholds_to_messages(): Assert =
         assert_that(strong).is_equal_to("Not Bad B)"),
         assert_that(extreme).is_equal_to("IT'S OVER NINE THOUSAND!!!"),
     ])
+
+private fun fully_qualified_package_callable_resolves_awesome(): Assert =
+    assert_that(/dev/capylang/test/imports2/Pck4.awesome(101)).is_equal_to("Not Bad B)")
