@@ -460,9 +460,11 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         values: compile_expressions(values, functionName),
         location: compile_location(location)
     }
-    case IndexExpression { receiver, index, location } -> CompiledIndexExpression {
+    case IndexExpression { receiver, index, endIndex, hasEndIndex, location } -> CompiledIndexExpression {
         receiver: compile_expression_in_function(receiver, functionName),
         index: compile_expression_in_function(index, functionName),
+        endIndex: compile_expression_in_function(endIndex, functionName),
+        hasEndIndex: hasEndIndex,
         location: compile_location(location)
     }
     case DataLiteral { typeName, fields, location } -> CompiledDataLiteral {
@@ -568,6 +570,11 @@ private fun compile_match_cases(cases: List[MatchCase], functionName: String): L
     case Some { matchCase } -> [CompiledMatchCase {
         typeName: matchCase.typeName,
         bindings: matchCase.bindings,
+        literal: compile_expression_in_function(matchCase.literal, functionName),
+        hasLiteral: matchCase.hasLiteral,
+        wildcard: matchCase.wildcard,
+        guard: compile_expression_in_function(matchCase.guard, functionName),
+        hasGuard: matchCase.hasGuard,
         body: compile_expression_in_function(matchCase.body, functionName),
         location: compile_location(matchCase.location)
     }] + compile_match_cases(cases[1:], functionName)
