@@ -915,9 +915,361 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return new Expression.BoolLiteral(Boolean.parseBoolean(source), source, location(ctx));
         }
         if (literal.STRING_LITERAL() != null) {
-            return new Expression.StringLiteral(unquote(source), source, location(ctx));
+            return stringLiteralExpression(source, location(ctx));
         }
         return unsupported(ctx);
+    }
+
+    private static Expression stringLiteralExpression(String source, SourceLocation location) {
+        if (!source.startsWith("\"")) {
+            return new Expression.StringLiteral(unquote(source), source, location);
+        }
+        return interpolatedStringLiteralExpression(source, location);
+    }
+
+    private static Expression interpolatedStringLiteralExpression(String source, SourceLocation location) {
+        var content = source.substring(1, source.length() - 1);
+        var parts = new ArrayList<Expression>();
+        var segment = new StringBuilder();
+        var segmentStart = 0;
+        var foundInterpolation = false;
+
+        for (var i = 0; i < content.length(); ) {
+            var current = content.charAt(i);
+            if (current == '\\' && i + 1 < content.length()) {
+                if (content.charAt(i + 1) == '{' && i + 2 < content.length() && content.charAt(i + 2) == '{') {
+                    segment.append('{');
+                    i += 2;
+                } else {
+                    segment.append(current);
+                    segment.append(content.charAt(i + 1));
+                    i += 2;
+                }
+                continue;
+            }
+            if (current == '{') {
+                var end = interpolationEnd(content, i + 1);
+                if (end >= 0 && !content.substring(i + 1, end).isBlank()) {
+                    if (parts.isEmpty() && segment.isEmpty()) {
+                        parts.add(stringSegment("", location, 0));
+                    } else {
+                        addStringSegment(parts, segment, location, segmentStart);
+                    }
+                    segment.setLength(0);
+                    parts.add(interpolationExpression(
+                            content.substring(i + 1, end),
+                            stringContentLocation(location, i + 1)
+                    ));
+                    foundInterpolation = true;
+                    i = end + 1;
+                    segmentStart = i;
+                    continue;
+                }
+            }
+            segment.append(current);
+            i++;
+        }
+
+        if (!foundInterpolation) {
+            return new Expression.StringLiteral(unquote(source), source, location);
+        }
+
+        addStringSegment(parts, segment, location, segmentStart);
+        return concatenated(parts, location);
+    }
+
+    private static int interpolationEnd(String content, int start) {
+        var depth = 0;
+        var quote = '\0';
+        for (var i = start; i < content.length(); i++) {
+            var current = content.charAt(i);
+            if (current == '\\') {
+                i++;
+                continue;
+            }
+            if (quote != '\0') {
+                if (current == quote) {
+                    quote = '\0';
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                quote = current;
+            } else if (current == '{') {
+                depth++;
+            } else if (current == '}') {
+                if (depth == 0) {
+                    return i;
+                }
+                depth--;
+            }
+        }
+        return -1;
+    }
+
+    private static void addStringSegment(
+            List<Expression> parts,
+            StringBuilder segment,
+            SourceLocation literalLocation,
+            int segmentStart
+    ) {
+        if (!segment.isEmpty()) {
+            parts.add(stringSegment(segment.toString(), literalLocation, segmentStart));
+        }
+    }
+
+    private static Expression.StringLiteral stringSegment(String rawSegment, SourceLocation literalLocation, int segmentStart) {
+        var value = unescapeStringContent(rawSegment);
+        return new Expression.StringLiteral(value, quote(value), stringContentLocation(literalLocation, segmentStart));
+    }
+
+    private static SourceLocation stringContentLocation(SourceLocation literalLocation, int contentOffset) {
+        return new SourceLocation(literalLocation.line(), literalLocation.column() + 1 + contentOffset);
+    }
+
+    private static Expression concatenated(List<Expression> parts, SourceLocation location) {
+        if (parts.isEmpty()) {
+            return new Expression.StringLiteral("", "\"\"", location);
+        }
+        var result = parts.getFirst();
+        for (var i = 1; i < parts.size(); i++) {
+            result = new Expression.BinaryExpression("+", result, parts.get(i), location);
+        }
+        return result;
+    }
+
+    private static Expression interpolationExpression(String source, SourceLocation location) {
+        var lexer = new dev.capylang.parser.antlr.FunctionalLexer(CharStreams.fromString(source));
+        var tokens = new CommonTokenStream(lexer);
+        var parser = new dev.capylang.parser.antlr.FunctionalParser(tokens);
+        var errors = new ArrayList<SyntaxError>();
+        var listener = errorListener(errors);
+
+        lexer.removeErrorListeners();
+        parser.removeErrorListeners();
+        lexer.addErrorListener(listener);
+        parser.addErrorListener(listener);
+
+        var expression = parser.expression();
+        if (tokens.LA(1) != Token.EOF) {
+            errors.add(new SyntaxError(1, tokens.get(tokens.index()).getCharPositionInLine(), "extraneous input"));
+        }
+        if (!errors.isEmpty()) {
+            return new Expression.UnsupportedExpression(source, location);
+        }
+        return offsetExpression(expression(expression), location.line() - 1, location.column());
+    }
+
+    private static Expression offsetExpression(Expression expression, int lineOffset, int columnOffset) {
+        if (expression instanceof Expression.UnsupportedExpression value) {
+            return new Expression.UnsupportedExpression(value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.IntLiteral value) {
+            return new Expression.IntLiteral(value.value(), value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.LongLiteral value) {
+            return new Expression.LongLiteral(value.value(), value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.FloatLiteral value) {
+            return new Expression.FloatLiteral(value.value(), value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.DoubleLiteral value) {
+            return new Expression.DoubleLiteral(value.value(), value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.BoolLiteral value) {
+            return new Expression.BoolLiteral(value.value(), value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.StringLiteral value) {
+            return new Expression.StringLiteral(value.value(), value.source(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.VariableExpression value) {
+            return new Expression.VariableExpression(value.name(), offsetLocation(value.location(), lineOffset, columnOffset));
+        }
+        if (expression instanceof Expression.IfExpression value) {
+            return new Expression.IfExpression(
+                    offsetExpression(value.condition(), lineOffset, columnOffset),
+                    offsetExpression(value.thenBranch(), lineOffset, columnOffset),
+                    offsetExpression(value.elseBranch(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.BinaryExpression value) {
+            return new Expression.BinaryExpression(
+                    value.operator(),
+                    offsetExpression(value.left(), lineOffset, columnOffset),
+                    offsetExpression(value.right(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.UnaryExpression value) {
+            return new Expression.UnaryExpression(
+                    value.operator(),
+                    offsetExpression(value.expression(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.FunctionCallExpression value) {
+            return new Expression.FunctionCallExpression(
+                    value.name(),
+                    offsetExpressions(value.arguments(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.MethodCallExpression value) {
+            return new Expression.MethodCallExpression(
+                    offsetExpression(value.receiver(), lineOffset, columnOffset),
+                    value.name(),
+                    offsetExpressions(value.arguments(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.LambdaExpression value) {
+            return new Expression.LambdaExpression(
+                    value.parameters(),
+                    offsetExpression(value.body(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.ListLiteral value) {
+            return new Expression.ListLiteral(
+                    offsetExpressions(value.values(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.SetLiteral value) {
+            return new Expression.SetLiteral(
+                    offsetExpressions(value.values(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.DictLiteral value) {
+            return new Expression.DictLiteral(
+                    offsetDictEntries(value.entries(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.TupleLiteral value) {
+            return new Expression.TupleLiteral(
+                    offsetExpressions(value.values(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.IndexExpression value) {
+            return new Expression.IndexExpression(
+                    offsetExpression(value.receiver(), lineOffset, columnOffset),
+                    offsetExpression(value.index(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.DataLiteral value) {
+            return new Expression.DataLiteral(
+                    value.typeName(),
+                    offsetDataFields(value.fields(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.FieldAccessExpression value) {
+            return new Expression.FieldAccessExpression(
+                    offsetExpression(value.receiver(), lineOffset, columnOffset),
+                    value.name(),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.ReduceExpression value) {
+            return new Expression.ReduceExpression(
+                    offsetExpression(value.receiver(), lineOffset, columnOffset),
+                    offsetExpression(value.initial(), lineOffset, columnOffset),
+                    value.accumulatorName(),
+                    value.valueName(),
+                    offsetExpression(value.body(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.MatchExpression value) {
+            return new Expression.MatchExpression(
+                    offsetExpression(value.value(), lineOffset, columnOffset),
+                    offsetMatchCases(value.cases(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.BlockExpression value) {
+            return new Expression.BlockExpression(
+                    offsetLetBindings(value.bindings(), lineOffset, columnOffset),
+                    offsetExpression(value.result(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        return expression;
+    }
+
+    private static List<Expression> offsetExpressions(List<Expression> expressions, int lineOffset, int columnOffset) {
+        return expressions.stream()
+                .map(expression -> offsetExpression(expression, lineOffset, columnOffset))
+                .toList();
+    }
+
+    private static List<Expression.DictEntry> offsetDictEntries(
+            List<Expression.DictEntry> entries,
+            int lineOffset,
+            int columnOffset
+    ) {
+        return entries.stream()
+                .map(entry -> new Expression.DictEntry(
+                        offsetExpression(entry.key(), lineOffset, columnOffset),
+                        offsetExpression(entry.value(), lineOffset, columnOffset),
+                        offsetLocation(entry.location(), lineOffset, columnOffset)
+                ))
+                .toList();
+    }
+
+    private static List<Expression.DataField> offsetDataFields(
+            List<Expression.DataField> fields,
+            int lineOffset,
+            int columnOffset
+    ) {
+        return fields.stream()
+                .map(field -> new Expression.DataField(
+                        field.name(),
+                        offsetExpression(field.value(), lineOffset, columnOffset),
+                        offsetLocation(field.location(), lineOffset, columnOffset)
+                ))
+                .toList();
+    }
+
+    private static List<Expression.MatchCase> offsetMatchCases(
+            List<Expression.MatchCase> cases,
+            int lineOffset,
+            int columnOffset
+    ) {
+        return cases.stream()
+                .map(matchCase -> new Expression.MatchCase(
+                        matchCase.typeName(),
+                        matchCase.bindings(),
+                        offsetExpression(matchCase.body(), lineOffset, columnOffset),
+                        offsetLocation(matchCase.location(), lineOffset, columnOffset)
+                ))
+                .toList();
+    }
+
+    private static List<Expression.LetBinding> offsetLetBindings(
+            List<Expression.LetBinding> bindings,
+            int lineOffset,
+            int columnOffset
+    ) {
+        return bindings.stream()
+                .map(binding -> new Expression.LetBinding(
+                        binding.name(),
+                        binding.typeReference(),
+                        offsetExpression(binding.value(), lineOffset, columnOffset),
+                        offsetLocation(binding.location(), lineOffset, columnOffset)
+                ))
+                .toList();
+    }
+
+    private static SourceLocation offsetLocation(SourceLocation location, int lineOffset, int columnOffset) {
+        var line = location.line() + lineOffset;
+        var column = location.line() == 1 ? location.column() + columnOffset : location.column();
+        return new SourceLocation(line, column);
     }
 
     private static TypeReference typeReference(dev.capylang.parser.antlr.FunctionalParser.TypeContext ctx) {
@@ -1039,7 +1391,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (value.length() < 2) {
             return value;
         }
-        return value.substring(1, value.length() - 1)
+        return unescapeStringContent(value.substring(1, value.length() - 1));
+    }
+
+    private static String unescapeStringContent(String value) {
+        return value
                 .replace("\\\"", "\"")
                 .replace("\\'", "'")
                 .replace("\\n", "\n")
