@@ -414,6 +414,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx.functionCall() != null) {
             return functionCall(ctx.functionCall());
         }
+        if (ctx.placeholder() != null) {
+            return placeholder(ctx.placeholder());
+        }
         if (ctx.new_list() != null) {
             return listLiteral(ctx.new_list());
         }
@@ -503,6 +506,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.functionCall() != null) {
             return functionCall(ctx.functionCall());
+        }
+        if (ctx.placeholder() != null) {
+            return placeholder(ctx.placeholder());
         }
         if (ctx.new_list() != null) {
             return listLiteral(ctx.new_list());
@@ -693,6 +699,10 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ? ctx.TYPE().getText() + "." + ctx.identifier().getText()
                 : ctx.getChild(0).getText();
         return new Expression.FunctionCallExpression(name, arguments(ctx.argumentList()), location(ctx));
+    }
+
+    private static Expression placeholder(dev.capylang.parser.antlr.FunctionalParser.PlaceholderContext ctx) {
+        return unsupported(ctx);
     }
 
     private static List<Expression> arguments(dev.capylang.parser.antlr.FunctionalParser.ArgumentListContext ctx) {

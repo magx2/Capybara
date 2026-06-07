@@ -82,7 +82,7 @@ private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
         visibility: "const:" + constant.visibility,
         parameters: [],
         returnType: compile_type(constant.typeReference),
-        body: compile_expression(constant.expression),
+        body: compile_expression_in_function(constant.expression, constant.name),
         location: compile_location(constant.location)
     }
 
@@ -100,10 +100,32 @@ private fun compile_function(function: FunctionDeclaration): CompiledFunction =
         name: function.name,
         visibility: function.visibility,
         parameters: compile_parameters(function.parameters),
-        returnType: compile_type(function.returnType),
-        body: compile_expression(function.body),
+        returnType: compile_return_type(function.returnType, function.body),
+        body: compile_expression_in_function(function.body, function.name),
         location: compile_location(function.location)
     }
+
+private fun compile_return_type(type: TypeReference, body: Expression): CompiledTypeReference =
+    if type.name.is_empty()
+    then compile_type(infer_placeholder_return_type(body, 0))
+    else compile_type(type)
+
+private fun infer_placeholder_return_type(expression: Expression, depth: int): TypeReference =
+    if depth > 16
+    then missing_type()
+    else match expression with
+    case UnsupportedExpression unsupported -> if placeholder_source(unsupported.source) then nothing_type() else missing_type()
+    case BlockExpression block -> infer_placeholder_return_type(block.result, depth + 1)
+    case _ -> missing_type()
+
+private fun missing_type(): TypeReference =
+    TypeReference { name: "", arguments: [] }
+
+private fun nothing_type(): TypeReference =
+    TypeReference { name: "nothing", arguments: [] }
+
+private fun placeholder_source(source: String): bool =
+    source == "???"
 
 private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
     match imports[0] with
@@ -143,9 +165,12 @@ private fun compile_location(location: SourceLocation): CompiledSourceLocation =
     }
 
 private fun compile_expression(expression: Expression): CompiledExpression =
+    compile_expression_in_function(expression, "")
+
+private fun compile_expression_in_function(expression: Expression, functionName: String): CompiledExpression =
     match expression with
     case UnsupportedExpression { source, location } -> CompiledUnsupportedExpression {
-        source: source,
+        source: compiled_unsupported_source(source, functionName),
         location: compile_location(location)
     }
     case IntLiteral { value, source, location } -> CompiledIntLiteral {
@@ -183,166 +208,171 @@ private fun compile_expression(expression: Expression): CompiledExpression =
         location: compile_location(location)
     }
     case IfExpression { condition, thenBranch, elseBranch, location } -> CompiledIfExpression {
-        condition: compile_expression(condition),
-        thenBranch: compile_expression(thenBranch),
-        elseBranch: compile_expression(elseBranch),
+        condition: compile_expression_in_function(condition, functionName),
+        thenBranch: compile_expression_in_function(thenBranch, functionName),
+        elseBranch: compile_expression_in_function(elseBranch, functionName),
         location: compile_location(location)
     }
     case BinaryExpression { operator, left, right, location } -> CompiledBinaryExpression {
         operator: operator,
-        left: compile_expression(left),
-        right: compile_expression(right),
+        left: compile_expression_in_function(left, functionName),
+        right: compile_expression_in_function(right, functionName),
         location: compile_location(location)
     }
     case UnaryExpression unary -> CompiledUnaryExpression {
         operator: unary.operator,
-        expression: compile_expression(unary.expression),
+        expression: compile_expression_in_function(unary.expression, functionName),
         location: compile_location(unary.location)
     }
     case FunctionCallExpression { name, arguments, location } -> CompiledFunctionCallExpression {
         name: name,
-        arguments: compile_expressions(arguments),
+        arguments: compile_expressions(arguments, functionName),
         location: compile_location(location)
     }
-    case MethodCallExpression call -> compile_method_call(call)
+    case MethodCallExpression call -> compile_method_call(call, functionName)
     case LambdaExpression { parameters, body, location } -> CompiledLambdaExpression {
         parameters: parameters,
-        body: compile_expression(body),
+        body: compile_expression_in_function(body, functionName),
         location: compile_location(location)
     }
     case ListLiteral { values, location } -> CompiledListLiteral {
-        values: compile_expressions(values),
+        values: compile_expressions(values, functionName),
         location: compile_location(location)
     }
     case SetLiteral { values, location } -> CompiledSetLiteral {
-        values: compile_expressions(values),
+        values: compile_expressions(values, functionName),
         location: compile_location(location)
     }
     case DictLiteral { entries, location } -> CompiledDictLiteral {
-        entries: compile_dict_entries(entries),
+        entries: compile_dict_entries(entries, functionName),
         location: compile_location(location)
     }
     case TupleLiteral { values, location } -> CompiledTupleLiteral {
-        values: compile_expressions(values),
+        values: compile_expressions(values, functionName),
         location: compile_location(location)
     }
     case IndexExpression { receiver, index, location } -> CompiledIndexExpression {
-        receiver: compile_expression(receiver),
-        index: compile_expression(index),
+        receiver: compile_expression_in_function(receiver, functionName),
+        index: compile_expression_in_function(index, functionName),
         location: compile_location(location)
     }
     case DataLiteral { typeName, fields, location } -> CompiledDataLiteral {
         typeName: typeName,
-        fields: compile_data_fields(fields),
+        fields: compile_data_fields(fields, functionName),
         location: compile_location(location)
     }
-    case FieldAccessExpression access -> compile_field_access(access)
+    case FieldAccessExpression access -> compile_field_access(access, functionName)
     case ReduceExpression { receiver, initial, accumulatorName, valueName, body, location } -> CompiledReduceExpression {
-        receiver: compile_expression(receiver),
-        initial: compile_expression(initial),
+        receiver: compile_expression_in_function(receiver, functionName),
+        initial: compile_expression_in_function(initial, functionName),
         accumulatorName: accumulatorName,
         valueName: valueName,
-        body: compile_expression(body),
+        body: compile_expression_in_function(body, functionName),
         location: compile_location(location)
     }
     case MatchExpression { value, cases, location } -> CompiledMatchExpression {
-        value: compile_expression(value),
-        cases: compile_match_cases(cases),
+        value: compile_expression_in_function(value, functionName),
+        cases: compile_match_cases(cases, functionName),
         location: compile_location(location)
     }
     case BlockExpression { bindings, result, location } -> CompiledBlockExpression {
-        bindings: compile_let_bindings(bindings),
-        result: compile_expression(result),
+        bindings: compile_let_bindings(bindings, functionName),
+        result: compile_expression_in_function(result, functionName),
         location: compile_location(location)
     }
 
-private fun compile_method_call(call: MethodCallExpression): CompiledExpression =
+private fun compile_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
     match call.receiver with
     case UnaryExpression { operator, expression, location } ->
         if operator == "!"
         then CompiledUnaryExpression {
             operator: operator,
             expression: CompiledMethodCallExpression {
-                receiver: compile_expression(expression),
+                receiver: compile_expression_in_function(expression, functionName),
                 name: call.name,
-                arguments: compile_expressions(call.arguments),
+                arguments: compile_expressions(call.arguments, functionName),
                 location: compile_location(call.location)
             },
             location: compile_location(location)
         }
-        else compiled_method_call(call)
-    case _ -> compiled_method_call(call)
+        else compiled_method_call(call, functionName)
+    case _ -> compiled_method_call(call, functionName)
 
-private fun compiled_method_call(call: MethodCallExpression): CompiledExpression =
+private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
     CompiledMethodCallExpression {
-        receiver: compile_expression(call.receiver),
+        receiver: compile_expression_in_function(call.receiver, functionName),
         name: call.name,
-        arguments: compile_expressions(call.arguments),
+        arguments: compile_expressions(call.arguments, functionName),
         location: compile_location(call.location)
     }
 
-private fun compile_field_access(access: FieldAccessExpression): CompiledExpression =
+private fun compile_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
     match access.receiver with
     case UnaryExpression { operator, expression, location } ->
         if operator == "!"
         then CompiledUnaryExpression {
             operator: operator,
             expression: CompiledFieldAccessExpression {
-                receiver: compile_expression(expression),
+                receiver: compile_expression_in_function(expression, functionName),
                 name: access.name,
                 location: compile_location(access.location)
             },
             location: compile_location(location)
         }
-        else compiled_field_access(access)
-    case _ -> compiled_field_access(access)
+        else compiled_field_access(access, functionName)
+    case _ -> compiled_field_access(access, functionName)
 
-private fun compiled_field_access(access: FieldAccessExpression): CompiledExpression =
+private fun compiled_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
     CompiledFieldAccessExpression {
-        receiver: compile_expression(access.receiver),
+        receiver: compile_expression_in_function(access.receiver, functionName),
         name: access.name,
         location: compile_location(access.location)
     }
 
-private fun compile_expressions(expressions: List[Expression]): List[CompiledExpression] =
+private fun compile_expressions(expressions: List[Expression], functionName: String): List[CompiledExpression] =
     match expressions[0] with
     case None -> []
-    case Some { expression } -> [compile_expression(expression)] + compile_expressions(expressions[1:])
+    case Some { expression } -> [compile_expression_in_function(expression, functionName)] + compile_expressions(expressions[1:], functionName)
 
-private fun compile_dict_entries(entries: List[DictEntry]): List[CompiledDictEntry] =
+private fun compile_dict_entries(entries: List[DictEntry], functionName: String): List[CompiledDictEntry] =
     match entries[0] with
     case None -> []
     case Some { entry } -> [CompiledDictEntry {
-        key: compile_expression(entry.key),
-        value: compile_expression(entry.value),
+        key: compile_expression_in_function(entry.key, functionName),
+        value: compile_expression_in_function(entry.value, functionName),
         location: compile_location(entry.location)
-    }] + compile_dict_entries(entries[1:])
+    }] + compile_dict_entries(entries[1:], functionName)
 
-private fun compile_data_fields(fields: List[DataField]): List[CompiledDataField] =
+private fun compile_data_fields(fields: List[DataField], functionName: String): List[CompiledDataField] =
     match fields[0] with
     case None -> []
     case Some { field } -> [CompiledDataField {
         name: field.name,
-        value: compile_expression(field.value),
+        value: compile_expression_in_function(field.value, functionName),
         location: compile_location(field.location)
-    }] + compile_data_fields(fields[1:])
+    }] + compile_data_fields(fields[1:], functionName)
 
-private fun compile_match_cases(cases: List[MatchCase]): List[CompiledMatchCase] =
+private fun compile_match_cases(cases: List[MatchCase], functionName: String): List[CompiledMatchCase] =
     match cases[0] with
     case None -> []
     case Some { matchCase } -> [CompiledMatchCase {
         typeName: matchCase.typeName,
         bindings: matchCase.bindings,
-        body: compile_expression(matchCase.body),
+        body: compile_expression_in_function(matchCase.body, functionName),
         location: compile_location(matchCase.location)
-    }] + compile_match_cases(cases[1:])
+    }] + compile_match_cases(cases[1:], functionName)
 
-private fun compile_let_bindings(bindings: List[LetBinding]): List[CompiledLetBinding] =
+private fun compile_let_bindings(bindings: List[LetBinding], functionName: String): List[CompiledLetBinding] =
     match bindings[0] with
     case None -> []
     case Some { binding } -> [CompiledLetBinding {
         name: binding.name,
         typeReference: compile_type(binding.typeReference),
-        value: compile_expression(binding.value),
+        value: compile_expression_in_function(binding.value, functionName),
         location: compile_location(binding.location)
-    }] + compile_let_bindings(bindings[1:])
+    }] + compile_let_bindings(bindings[1:], functionName)
+
+private fun compiled_unsupported_source(source: String, functionName: String): String =
+    if placeholder_source(source)
+    then "__capy_placeholder__|" + functionName
+    else source
