@@ -114,29 +114,201 @@ private fun compile_function(function: FunctionDeclaration): CompiledFunction =
         name: function.name,
         visibility: function.visibility,
         parameters: compile_parameters(function.parameters),
-        returnType: compile_return_type(function.returnType, function.body),
+        returnType: compile_return_type(function.returnType, function.parameters, function.body),
         body: compile_expression_in_function(function.body, function.name),
         location: compile_location(function.location)
     }
 
-private fun compile_return_type(type: TypeReference, body: Expression): CompiledTypeReference =
+private fun compile_return_type(type: TypeReference, parameters: List[FunctionParameter], body: Expression): CompiledTypeReference =
     if type.name.is_empty()
-    then compile_type(infer_placeholder_return_type(body, 0))
+    then compile_type(infer_return_type(body, parameters, 0))
     else compile_type(type)
 
-private fun infer_placeholder_return_type(expression: Expression, depth: int): TypeReference =
+private fun infer_return_type(expression: Expression, env: List[FunctionParameter], depth: int): TypeReference =
     if depth > 16
     then missing_type()
     else match expression with
     case UnsupportedExpression unsupported -> if placeholder_source(unsupported.source) then nothing_type() else missing_type()
-    case BlockExpression block -> infer_placeholder_return_type(block.result, depth + 1)
-    case _ -> missing_type()
+    case IntLiteral _ -> compiler_int_type()
+    case LongLiteral _ -> compiler_long_type()
+    case FloatLiteral _ -> compiler_float_type()
+    case DoubleLiteral _ -> compiler_double_type()
+    case BoolLiteral _ -> compiler_bool_type()
+    case StringLiteral _ -> compiler_string_type()
+    case VariableExpression variable -> lookup_inferred_type(variable.name, env)
+    case IfExpression ifExpression -> infer_if_type(ifExpression, env, depth + 1)
+    case BinaryExpression binary -> infer_binary_type(binary, env, depth + 1)
+    case UnaryExpression unary -> infer_unary_type(unary, env, depth + 1)
+    case FunctionCallExpression _ -> missing_type()
+    case MethodCallExpression call -> infer_method_call_type(call, env, depth + 1)
+    case LambdaExpression _ -> missing_type()
+    case ListLiteral literal -> compiler_list_type(compiler_first_expression_type(literal.values, env, depth + 1))
+    case SetLiteral literal -> compiler_set_type(compiler_first_expression_type(literal.values, env, depth + 1))
+    case DictLiteral literal -> compiler_dict_type(compiler_first_dict_value_type(literal.entries, env, depth + 1))
+    case TupleLiteral literal -> compiler_tuple_type(compiler_expression_types(literal.values, env, depth + 1))
+    case IndexExpression _ -> missing_type()
+    case DataLiteral literal -> TypeReference { name: literal.typeName, arguments: [] }
+    case FieldAccessExpression _ -> missing_type()
+    case ReduceExpression reduce -> infer_return_type(reduce.initial, env, depth + 1)
+    case MatchExpression matchExpression -> compiler_match_expression_type(matchExpression.cases, env, depth + 1)
+    case BlockExpression block -> infer_return_type(block.result, block_type_env(block.bindings, env, depth + 1), depth + 1)
+
+private fun block_type_env(bindings: List[LetBinding], env: List[FunctionParameter], depth: int): List[FunctionParameter] =
+    match bindings[0] with
+    case None -> env
+    case Some { binding } ->
+        let bindingType = if binding.typeReference.name.is_empty() then infer_return_type(binding.value, env, depth + 1) else binding.typeReference
+        block_type_env(bindings[1:], [FunctionParameter {
+            name: binding.name,
+            typeReference: bindingType,
+            location: binding.location
+        }] + env, depth + 1)
+
+private fun lookup_inferred_type(name: String, env: List[FunctionParameter]): TypeReference =
+    match env[0] with
+    case None -> missing_type()
+    case Some { binding } ->
+        if binding.name == name
+        then binding.typeReference
+        else lookup_inferred_type(name, env[1:])
+
+private fun infer_if_type(ifExpression: IfExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    let thenType = infer_return_type(ifExpression.thenBranch, env, depth + 1)
+    let elseType = infer_return_type(ifExpression.elseBranch, env, depth + 1)
+    if thenType.name.is_empty()
+    then elseType
+    else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
+    then thenType
+    else missing_type()
+
+private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    compiler_binary_result_type(
+        binary.operator,
+        infer_return_type(binary.left, env, depth + 1),
+        infer_return_type(binary.right, env, depth + 1)
+    )
+
+private fun infer_unary_type(unary: UnaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    if unary.operator == "!"
+    then compiler_bool_type()
+    else infer_return_type(unary.expression, env, depth + 1)
+
+private fun infer_method_call_type(call: MethodCallExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    if call.name == "size"
+    then compiler_int_type()
+    else missing_type()
+
+private fun compiler_first_expression_type(expressions: List[Expression], env: List[FunctionParameter], depth: int): TypeReference =
+    match expressions[0] with
+    case None -> compiler_any_type()
+    case Some { expression } -> infer_return_type(expression, env, depth + 1)
+
+private fun compiler_first_dict_value_type(entries: List[DictEntry], env: List[FunctionParameter], depth: int): TypeReference =
+    match entries[0] with
+    case None -> compiler_any_type()
+    case Some { entry } -> infer_return_type(entry.value, env, depth + 1)
+
+private fun compiler_expression_types(expressions: List[Expression], env: List[FunctionParameter], depth: int): List[TypeReference] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } -> [infer_return_type(expression, env, depth + 1)] + compiler_expression_types(expressions[1:], env, depth + 1)
+
+private fun compiler_match_expression_type(cases: List[MatchCase], env: List[FunctionParameter], depth: int): TypeReference =
+    match cases[0] with
+    case None -> missing_type()
+    case Some { matchCase } -> infer_return_type(matchCase.body, env, depth + 1)
+
+private fun compiler_binary_result_type(operator: String, leftType: TypeReference, rightType: TypeReference): TypeReference =
+    if compiler_boolean_binary_operator(operator)
+    then compiler_bool_type()
+    else if compiler_comparison_operator(operator)
+    then compiler_bool_type()
+    else if operator == "+" & (leftType.name == "String" | rightType.name == "String")
+    then compiler_string_type()
+    else if compiler_string_left_numeric_operator(operator, leftType, rightType)
+    then compiler_string_type()
+    else if compiler_numeric_binary_operator(operator) & compiler_numeric_type(leftType) & compiler_numeric_type(rightType)
+    then compiler_promoted_numeric_type(leftType, rightType)
+    else missing_type()
+
+private fun compiler_boolean_binary_operator(operator: String): bool =
+    operator == "&" | operator == "|"
+
+private fun compiler_comparison_operator(operator: String): bool =
+    operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
+
+private fun compiler_numeric_binary_operator(operator: String): bool =
+    operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
+
+private fun compiler_string_left_numeric_operator(operator: String, leftType: TypeReference, rightType: TypeReference): bool =
+    (operator == "-" | operator == "*" | operator == "/" | operator == "^") & leftType.name == "String" & compiler_numeric_type(rightType)
+
+private fun compiler_promoted_numeric_type(leftType: TypeReference, rightType: TypeReference): TypeReference =
+    if leftType.name == "double" | rightType.name == "double"
+    then compiler_double_type()
+    else if leftType.name == "float" | rightType.name == "float"
+    then compiler_float_type()
+    else if leftType.name == "long" | rightType.name == "long"
+    then compiler_long_type()
+    else if leftType.name == "int" | rightType.name == "int"
+    then compiler_int_type()
+    else compiler_byte_type()
+
+private fun compiler_numeric_type(type: TypeReference): bool =
+    type.name == "byte" | type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
+
+private fun compiler_same_type(first: TypeReference, second: TypeReference): bool =
+    first.name == second.name & compiler_same_type_arguments(first.arguments, second.arguments)
+
+private fun compiler_same_type_arguments(first: List[TypeReference], second: List[TypeReference]): bool =
+    match first[0] with
+    case None -> second.is_empty()
+    case Some { firstType } ->
+        match second[0] with
+        case None -> false
+        case Some { secondType } -> compiler_same_type(firstType, secondType) & compiler_same_type_arguments(first[1:], second[1:])
 
 private fun missing_type(): TypeReference =
     TypeReference { name: "", arguments: [] }
 
+private fun compiler_byte_type(): TypeReference =
+    TypeReference { name: "byte", arguments: [] }
+
+private fun compiler_int_type(): TypeReference =
+    TypeReference { name: "int", arguments: [] }
+
+private fun compiler_long_type(): TypeReference =
+    TypeReference { name: "long", arguments: [] }
+
+private fun compiler_float_type(): TypeReference =
+    TypeReference { name: "float", arguments: [] }
+
+private fun compiler_double_type(): TypeReference =
+    TypeReference { name: "double", arguments: [] }
+
+private fun compiler_bool_type(): TypeReference =
+    TypeReference { name: "bool", arguments: [] }
+
+private fun compiler_string_type(): TypeReference =
+    TypeReference { name: "String", arguments: [] }
+
+private fun compiler_any_type(): TypeReference =
+    TypeReference { name: "any", arguments: [] }
+
 private fun nothing_type(): TypeReference =
     TypeReference { name: "nothing", arguments: [] }
+
+private fun compiler_list_type(argument: TypeReference): TypeReference =
+    TypeReference { name: "List", arguments: [argument] }
+
+private fun compiler_set_type(argument: TypeReference): TypeReference =
+    TypeReference { name: "Set", arguments: [argument] }
+
+private fun compiler_dict_type(argument: TypeReference): TypeReference =
+    TypeReference { name: "Dict", arguments: [argument] }
+
+private fun compiler_tuple_type(arguments: List[TypeReference]): TypeReference =
+    TypeReference { name: "Tuple", arguments: arguments }
 
 private fun placeholder_source(source: String): bool =
     source == "???"
