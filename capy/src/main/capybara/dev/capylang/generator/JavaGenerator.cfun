@@ -364,6 +364,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then collection_pipe_code(binary, leftType, env, module, allModules)
     else if collection_plus_expression(binary.operator, leftType, rightType)
     then collection_plus_code(binary, leftType, rightType, env, module, allModules)
+    else if collection_minus_expression(binary.operator, leftType, rightType)
+    then collection_minus_code(binary, leftType, rightType, env, module, allModules)
     else if boolean_binary_operator(binary.operator)
     then "(" + truthy_expression_code(binary.left, env, module, allModules)
         + " " + java_boolean_operator(binary.operator) + " "
@@ -410,7 +412,13 @@ private fun collection_plus_expression(operator: String, leftType: CompiledTypeR
     operator == "+"
         & (list_plus_expression(leftType, rightType) | set_plus_expression(leftType, rightType) | dict_plus_expression(leftType, rightType))
 
+private fun collection_minus_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    operator == "-" & list_minus_expression(leftType, rightType)
+
 private fun list_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    leftType.name == "List" & !rightType.name.is_empty()
+
+private fun list_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     leftType.name == "List" & !rightType.name.is_empty()
 
 private fun set_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
@@ -434,6 +442,12 @@ private fun collection_plus_code(binary: CompiledBinaryExpression, leftType: Com
     else if rightType.name == "Tuple"
     then "__capy_dict_append(" + leftCode + ", " + expression_code(binary.right, env, rightType, module, allModules) + ")"
     else "__capy_dict_concat(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
+
+private fun collection_minus_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftCode = expression_code(binary.left, env, leftType, module, allModules)
+    if rightType.name == "List"
+    then "__capy_list_remove_all(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
+    else "__capy_list_remove(" + leftCode + ", " + expression_code(binary.right, env, first_type_argument(leftType), module, allModules) + ")"
 
 private fun string_equality_operator(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     (operator == "==" | operator == "!=") & (leftType.name == "String" | rightType.name == "String")
@@ -2117,7 +2131,7 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     else if binary.operator == "%"
     then remainder_type(leftType) & remainder_type(rightType)
     else if binary.operator == "-" | binary.operator == "*" | binary.operator == "/"
-    then (numeric_type(leftType) & numeric_type(rightType)) | string_left_numeric_operator(binary.operator, leftType, rightType)
+    then collection_minus_expression(binary.operator, leftType, rightType) | (numeric_type(leftType) & numeric_type(rightType)) | string_left_numeric_operator(binary.operator, leftType, rightType)
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == "?"
@@ -2460,6 +2474,7 @@ private fun java_method_supported(name: String): bool =
     name == "is_equal_to" | name == "is_true" | name == "is_false"
         | name == "is_greater_than" | name == "is_less_than"
         | name == "is_greater_or_equals_than" | name == "is_less_or_equals_than"
+        | name == "is_zero"
         | name == "starts_with" | name == "does_not_start_with" | name == "contains"
         | name == "has_size" | name == "succeeds" | name == "fails"
         | name == "replace" | name == "size"
@@ -2827,6 +2842,18 @@ private fun java_helpers(module: CompiledModule): String =
         + "        return java.util.List.copyOf(result);" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.List __capy_list_remove(java.util.List values, java.lang.Object value) {" + newline()
+        + "        java.util.ArrayList result = new java.util.ArrayList(values);" + newline()
+        + "        result.removeIf(item -> java.util.Objects.equals(item, value));" + newline()
+        + "        return java.util.List.copyOf(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.List __capy_list_remove_all(java.util.List left, java.util.List right) {" + newline()
+        + "        java.util.ArrayList result = new java.util.ArrayList(left);" + newline()
+        + "        result.removeIf(right::contains);" + newline()
+        + "        return java.util.List.copyOf(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.Set __capy_set_append(java.util.Set values, java.lang.Object value) {" + newline()
         + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet(values);" + newline()
         + "        result.add(value);" + newline()
@@ -2919,6 +2946,7 @@ private fun java_method_name(name: String): String =
     else if name == "is_less_than" then "isLessThan"
     else if name == "is_greater_or_equals_than" then "isGreaterOrEqualsThan"
     else if name == "is_less_or_equals_than" then "isLessOrEqualsThan"
+    else if name == "is_zero" then "isZero"
     else if name == "starts_with" then "startsWith"
     else if name == "does_not_start_with" then "doesNotStartWith"
     else if name == "is_empty" then "isEmpty"
