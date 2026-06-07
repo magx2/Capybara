@@ -1,4 +1,4 @@
-from /dev/capylang/capybara/test/local_visibility/PackageLocalSupport import { add_local_offset, make_local, identity_local, unwrap_number, LocalValue, LocalNumber }
+from /dev/capylang/test/local_visibility/PackageLocalSupport import { add_local_offset, make_local, identity_local, unwrap_number, LocalValue, LocalNumber }
 
 fun child_can_use_local_members(x: int): int =
     let value: LocalValue = identity_local(make_local(x))

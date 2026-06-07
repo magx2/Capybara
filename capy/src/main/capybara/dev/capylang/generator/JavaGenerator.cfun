@@ -217,7 +217,7 @@ private fun java_visibility_prefix(visibility: String): String =
     if visibility == "private"
     then "private "
     else if visibility == "local"
-    then ""
+    then "public "
     else "public "
 
 private fun java_function_body(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
