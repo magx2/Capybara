@@ -224,7 +224,10 @@ private fun expression_code(
     allModules: List[CompiledModule]
 ): String =
     match expression with
-    case CompiledUnsupportedExpression unsupported -> "unsupported(\"" + escape_java_string(unsupported.source) + "\")"
+    case CompiledUnsupportedExpression unsupported ->
+        if compiled_placeholder_source(unsupported.source)
+        then placeholder_code(unsupported, module)
+        else "unsupported(\"" + escape_java_string(unsupported.source) + "\")"
     case CompiledIntLiteral literal -> numeric_widening_code(int_literal_code(literal, expectedType), expression_type(expression, env, module, allModules), expectedType)
     case CompiledLongLiteral literal -> numeric_widening_code(literal.source, long_type(), expectedType)
     case CompiledFloatLiteral literal -> numeric_widening_code(literal.source, float_type(), expectedType)
@@ -252,6 +255,23 @@ private fun expression_code(
     case CompiledReduceExpression reduce -> reduce_expression_code(reduce, env, expectedType, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_code(matchExpression, env, expectedType, module, allModules)
     case CompiledBlockExpression block -> block_expression_code(block, env, expectedType, module, allModules)
+
+private fun placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
+    "__capy_not_implemented(\"" + escape_java_string(placeholder_message(placeholder, module)) + "\")"
+
+private fun placeholder_message(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
+    let functionName = placeholder_function_name(placeholder.source)
+    if functionName.is_empty()
+    then "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + module_source_file(module) + ": placeholder expression is not yet implemented"
+    else "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + module_source_file(module) + ": the function `" + functionName + "` is not yet implemented"
+
+private fun compiled_placeholder_source(source: String): bool =
+    source.starts_with("__capy_placeholder__|")
+
+private fun placeholder_function_name(source: String): String =
+    if compiled_placeholder_source(source)
+    then source["__capy_placeholder__|".size().value, source.size().value]
+    else ""
 
 private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = expression_type(binary.left, env, module, allModules)
@@ -389,7 +409,9 @@ private fun numeric_widening_code(code: String, sourceType: CompiledTypeReferenc
     else code
 
 private fun function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if call.name == "assert_all"
+    if call.name == "delay"
+    then "capy.lang.Effect.delay(" + expression_code(argument(call.arguments, 0), env, supplier_type(first_type_argument(delay_call_type(call.arguments, env, module, allModules))), module, allModules) + ")"
+    else if call.name == "assert_all"
     then "capy.test.Assert.assertAll(" + expression_code(argument(call.arguments, 0), env, list_type(assert_type()), module, allModules) + ")"
     else if call.name == "assert_that"
     then assert_that_code(argument(call.arguments, 0), env, module, allModules)
@@ -711,6 +733,7 @@ private fun match_env(bindings: List[String], env: List[JavaBinding]): List[Java
 
 private fun expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expression with
+    case CompiledUnsupportedExpression unsupported -> if compiled_placeholder_source(unsupported.source) then nothing_type() else object_type()
     case CompiledIntLiteral literal -> if byte_literal_source(literal.source) then byte_type() else int_type()
     case CompiledLongLiteral _ -> long_type()
     case CompiledFloatLiteral _ -> float_type()
@@ -739,7 +762,6 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
     case CompiledBlockExpression block -> expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
-    case CompiledUnsupportedExpression _ -> object_type()
 
 private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match cases[0] with
@@ -755,7 +777,9 @@ private fun field_access_type(access: CompiledFieldAccessExpression, env: List[J
     case None -> object_type()
 
 private fun function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if call.name == "assert_all" | call.name == "assert_that"
+    if call.name == "delay"
+    then delay_call_type(call.arguments, env, module, allModules)
+    else if call.name == "assert_all" | call.name == "assert_that"
     then assert_type()
     else if call.name == "test"
     then test_case_type()
@@ -764,6 +788,14 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     else if stdlib_math_digits_call(call, module)
     then int_type()
     else lookup_function_type_in_scope(call.name, module, allModules)
+
+private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match arguments[0] with
+    case None -> effect_type(object_type())
+    case Some { expression } ->
+        match expression with
+        case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, lambda_env(lambda.parameters, env), module, allModules))
+        case _ -> effect_type(object_type())
 
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
@@ -1089,7 +1121,7 @@ private fun comparison_operator(operator: String): bool =
 
 private fun expression_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
-    case CompiledUnsupportedExpression _ -> false
+    case CompiledUnsupportedExpression unsupported -> compiled_placeholder_source(unsupported.source)
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
@@ -1263,7 +1295,9 @@ private fun uppercase_constant_name(name: String): bool =
     case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ_" ? char
 
 private fun function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if call.name == "assert_all"
+    if call.name == "delay"
+    then delay_call_emittable(call.arguments, env, module, allModules)
+    else if call.name == "assert_all"
     then expressions_emittable(call.arguments, env, module, allModules)
     else if call.name == "assert_that"
     then assert_that_call_emittable(call.arguments, env, module, allModules)
@@ -1309,6 +1343,12 @@ private fun assert_that_call_emittable(arguments: List[CompiledExpression], env:
 private fun assert_type_supported(type: CompiledTypeReference): bool =
     type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
         | type.name == "bool" | type.name == "String" | type.name == "List" | type.name == "Set" | type.name == "Dict"
+
+private fun delay_call_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { expression } ->
+        arguments[1:].is_empty() & lambda_argument_emittable(expression, env, module, allModules)
 
 private fun test_call_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
@@ -1385,7 +1425,9 @@ private fun parameters_assignable(parameters: List[CompiledFunctionParameter], a
             & parameters_assignable(parameters[1:], arguments[1:], env, module, allModules)
 
 private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeReference): bool =
-    if target.name.is_empty() | source.name.is_empty() | target.name == "any" | source.name == "any"
+    if type_parameter(target) | source.name == "nothing"
+    then true
+    else if target.name.is_empty() | source.name.is_empty() | target.name == "any" | source.name == "any"
     then false
     else if primitive_numeric_widening_assignable(target, source)
     then true
@@ -1446,7 +1488,7 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "Set" then "java.util.Set<" + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "Dict" then "java.util.Map<java.lang.String, " + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "Tuple" then "java.util.List<?>"
-    else if type.name == "Effect" then "capy.lang.Effect<" + boxed_java_type(first_type_argument(type)) + ">"
+    else if type.name == "Effect" then "capy.lang.Effect<" + generic_argument_java_type(first_type_argument(type)) + ">"
     else if type.name == "Assert" then "capy.test.Assert"
     else if type.name == "TestFile" then "capy.test.CapyTest.TestFile"
     else if type.name == "TestCase" then "capy.test.CapyTest.TestCase"
@@ -1458,6 +1500,17 @@ private fun first_type_argument(type: CompiledTypeReference): CompiledTypeRefere
     case None -> object_type()
     case Some { argument } -> argument
 
+private fun generic_argument_java_type(type: CompiledTypeReference): String =
+    if type_parameter(type) then "?" else boxed_java_type(type)
+
+private fun type_parameter(type: CompiledTypeReference): bool =
+    type.arguments.is_empty() & type.name.size().value == 1 & single_uppercase_name(type.name)
+
+private fun single_uppercase_name(name: String): bool =
+    match name[0] with
+    case None -> false
+    case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
+
 private fun int_type(): CompiledTypeReference = CompiledTypeReference { name: "int", arguments: [] }
 private fun byte_type(): CompiledTypeReference = CompiledTypeReference { name: "byte", arguments: [] }
 private fun long_type(): CompiledTypeReference = CompiledTypeReference { name: "long", arguments: [] }
@@ -1465,6 +1518,7 @@ private fun float_type(): CompiledTypeReference = CompiledTypeReference { name: 
 private fun double_type(): CompiledTypeReference = CompiledTypeReference { name: "double", arguments: [] }
 private fun bool_type(): CompiledTypeReference = CompiledTypeReference { name: "bool", arguments: [] }
 private fun string_type(): CompiledTypeReference = CompiledTypeReference { name: "String", arguments: [] }
+private fun nothing_type(): CompiledTypeReference = CompiledTypeReference { name: "nothing", arguments: [] }
 private fun object_type(): CompiledTypeReference = CompiledTypeReference { name: "any", arguments: [] }
 private fun assert_type(): CompiledTypeReference = CompiledTypeReference { name: "Assert", arguments: [] }
 private fun test_file_type(): CompiledTypeReference = CompiledTypeReference { name: "TestFile", arguments: [] }
@@ -1520,6 +1574,11 @@ private fun module_fqcn(module: CompiledModule): String =
     then module.name
     else module.path.replace("/", ".") + "." + module.name
 
+private fun module_source_file(module: CompiledModule): String =
+    if module.path.is_empty()
+    then "/" + module.name + ".cfun"
+    else "/" + module.path + "/" + module.name + ".cfun"
+
 private fun java_helpers(module: CompiledModule): String =
     if module.functions.is_empty()
     then ""
@@ -1545,6 +1604,9 @@ private fun java_helpers(module: CompiledModule): String =
         + "    }" + newline() + newline()
         + "    private static <T> T unsupported(String source) {" + newline()
         + "        throw new UnsupportedOperationException(\"Unsupported CFUN expression: \" + source);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static <T> T __capy_not_implemented(String message) {" + newline()
+        + "        throw new UnsupportedOperationException(message);" + newline()
         + "    }" + newline() + newline()
         + "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data(java.lang.String type, java.util.Map<java.lang.String, ?> fields) {" + newline()
         + "        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>();" + newline()
