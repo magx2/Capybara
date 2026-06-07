@@ -4,7 +4,7 @@ from /capy/lang/Effect import { * }
 from ImportsMainCompileGenerate import { * }
 
 fun tests(): Effect[TestFile] =
-    test_file("/dev/capylang/test/compile_generate/imports/Main.cfun", [
+    test_file("/dev/capylang/test/compile_generate/ImportsMainCompileGenerate.cfun", [
         test("swap returns a pair with left and right exchanged", () => swap_returns_pair_with_left_and_right_exchanged()),
     ])
 
