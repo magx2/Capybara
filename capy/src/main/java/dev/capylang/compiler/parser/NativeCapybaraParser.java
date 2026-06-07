@@ -150,6 +150,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 imports.add(new ImportDeclaration(
                         fromImport.group(1),
                         importNames(fromImport.group(2)),
+                        importNames(fromImport.group(3)),
                         importWildcard(fromImport.group(2)),
                         false,
                         new SourceLocation(lineNumber, leadingWhitespace(line))
@@ -158,6 +159,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             } else if (qualifiedImport.matches()) {
                 imports.add(new ImportDeclaration(
                         qualifiedImport.group(1),
+                        List.of(),
                         List.of(),
                         false,
                         true,
@@ -173,6 +175,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static List<String> importNames(String rawNames) {
+        if (rawNames == null) {
+            return List.of();
+        }
         if (importWildcard(rawNames)) {
             return List.of();
         }

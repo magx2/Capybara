@@ -51,9 +51,32 @@ private fun static_imports(imports: List[CompiledImportDeclaration], module: Com
     case None -> ""
     case Some { declaration } ->
         let className = imported_module_class(module, declaration.modulePath)
-        if declaration.wildcard & !stdlib_import(declaration.modulePath) & module_class_exists(className, allModules)
-        then "import static " + className + ".*;" + newline() + static_imports(imports[1:], module, allModules)
-        else static_imports(imports[1:], module, allModules)
+        if stdlib_import(declaration.modulePath) | declaration.qualified
+        then static_imports(imports[1:], module, allModules)
+        else match find_module_by_class(className, allModules) with
+            case Some { importedModule } ->
+                static_import_declaration(declaration, className, importedModule.functions)
+                    + static_imports(imports[1:], module, allModules)
+            case None -> static_imports(imports[1:], module, allModules)
+
+private fun static_import_declaration(declaration: CompiledImportDeclaration, className: String, functions: List[CompiledFunction]): String =
+    if declaration.wildcard & declaration.excludedNames.is_empty()
+    then "import static " + className + ".*;" + newline()
+    else explicit_static_imports(functions, declaration, className)
+
+private fun explicit_static_imports(functions: List[CompiledFunction], declaration: CompiledImportDeclaration, className: String): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if static_import_function(function, declaration)
+        then "import static " + className + "." + java_function_name(function) + ";" + newline()
+            + explicit_static_imports(functions[1:], declaration, className)
+        else explicit_static_imports(functions[1:], declaration, className)
+
+private fun static_import_function(function: CompiledFunction, declaration: CompiledImportDeclaration): bool =
+    !compiled_constant(function)
+        & function.visibility != "private"
+        & import_includes_name(function.name, declaration)
 
 private fun stdlib_import(modulePath: String): bool =
     java_generator_string_has_prefix(modulePath, "/capy/") | java_generator_string_has_prefix(modulePath, "capy/")
@@ -1614,9 +1637,14 @@ private fun find_function_in_imports(name: String, imports: List[CompiledImportD
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.wildcard & !stdlib_import(declaration.modulePath)
+        if function_import_matches(name, declaration)
         then find_function_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
         else find_function_in_imports(name, imports[1:], module, allModules)
+
+private fun function_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & import_includes_name(name, declaration)
 
 private fun find_extension_method(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -1642,7 +1670,10 @@ private fun find_extension_method_in_imports(ownerName: String, methodName: Stri
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.wildcard & !stdlib_import(declaration.modulePath)
+        if declaration.wildcard
+            & !stdlib_import(declaration.modulePath)
+            & !declaration.qualified
+            & !string_list_contains(declaration.excludedNames, methodName)
         then find_extension_method_in_import(ownerName, methodName, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
         else find_extension_method_in_imports(ownerName, methodName, imports[1:], module, allModules)
 
@@ -1853,7 +1884,14 @@ private fun data_type_fields_in_import(name: String, rest: List[CompiledImportDe
     case _ -> data_type_fields_in_imports(name, rest, module, allModules)
 
 private fun data_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
-    !stdlib_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, name))
+    !stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & import_includes_name(name, declaration)
+
+private fun import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
+    if declaration.wildcard
+    then !string_list_contains(declaration.excludedNames, name)
+    else string_list_contains(declaration.importedNames, name)
 
 private fun string_list_contains(values: List[String], expected: String): bool =
     match values[0] with
@@ -2245,7 +2283,9 @@ private fun stdlib_math_wildcard_import(imports: List[CompiledImportDeclaration]
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if declaration.wildcard & (declaration.modulePath == "/capy/lang/Math" | declaration.modulePath == "capy/lang/Math")
+        if declaration.wildcard
+            & (declaration.modulePath == "/capy/lang/Math" | declaration.modulePath == "capy/lang/Math")
+            & !string_list_contains(declaration.excludedNames, "digits")
         then true
         else stdlib_math_wildcard_import(imports[1:])
 
@@ -2342,7 +2382,7 @@ private fun imported_function_target_emittable(name: String, arguments: List[Com
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if declaration.wildcard & !stdlib_import(declaration.modulePath)
+        if function_import_matches(name, declaration)
         then imported_module_function_emittable(name, arguments, env, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
         else imported_function_target_emittable(name, arguments, env, imports[1:], module, allModules)
 
@@ -2487,7 +2527,7 @@ private fun program_member_imported(member: String, imports: List[CompiledImport
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if program_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, member))
+        if program_import(declaration.modulePath) & import_includes_name(member, declaration)
         then true
         else program_member_imported(member, imports[1:])
 
@@ -2498,7 +2538,7 @@ private fun effect_member_imported(member: String, imports: List[CompiledImportD
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if effect_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, member))
+        if effect_import(declaration.modulePath) & import_includes_name(member, declaration)
         then true
         else effect_member_imported(member, imports[1:])
 
@@ -2512,7 +2552,7 @@ private fun console_member_imported(member: String, imports: List[CompiledImport
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if console_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, member))
+        if console_import(declaration.modulePath) & import_includes_name(member, declaration)
         then true
         else console_member_imported(member, imports[1:])
 
@@ -2606,13 +2646,15 @@ private fun find_qualified_function(name: String, module: CompiledModule, allMod
     let member = qualified_call_member(name)
     if absolute_qualified_call_name(name)
     then find_qualified_function_in_class(className, member, allModules)
-    else find_qualified_function_in_imports(
-        className,
-        member,
-        module.imports,
-        module,
-        allModules
-    )
+    else match find_qualified_function_in_imports(
+            className,
+            member,
+            module.imports,
+            module,
+            allModules
+        ) with
+        case Some { function } -> /capy/lang/Option.Some { function }
+        case None -> find_qualified_function_in_class(className, member, allModules)
 
 private fun absolute_qualified_call_name(name: String): bool =
     java_generator_string_has_prefix(name, "/")
