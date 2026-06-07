@@ -62,7 +62,7 @@ private fun reduce_with_inline_success_empty_set_infers_result_set_type(): Asser
 
 private fun reduce_with_inline_success_empty_dict_infers_result_dict_type(): Assert =
     assert_that(reduce_dict_to_success_values({"a": 1, "b": 2}))
-        .succeeds(values => assert_that(values).is_equal_to({"a": 1, "b": 2}))
+        .succeeds({"a": 1, "b": 2})
 
 private fun reduce_with_inline_some_empty_list_infers_option_list_type(): Assert =
     assert_that(reduce_list_to_some_values([1, 2, 3])).contains([1, 2, 3])

@@ -9,26 +9,10 @@ from /capy/collection/Dict import { * }
 from /capy/collection/Seq import { * }
 
 fun reverse_ints(values: List[int]): List[int] =
-    fun rev(left: List[int], acc: List[int]): List[int] =
-        if left.size() == 0
-        then acc
-        else
-            match left[0] with
-            case Some { v } -> rev(left[1:], [v] + acc)
-            case None -> acc
-    ---
-    rev(values, [])
+    values |> [], (acc, value) => [value] + acc
 
 fun duplicate_strings(values: List[String]): List[String] =
-    fun dup(left: List[String], acc: List[String]): List[String] =
-        if left.size() == 0
-        then acc
-        else
-            match left[0] with
-            case Some { v } -> dup(left[1:], acc + [v, v])
-            case None -> acc
-    ---
-    dup(values, [])
+    values |> [], (acc, value) => acc + [value, value]
 
 fun empty_list_of_type_param(v: T): List[T] =
     []
@@ -82,10 +66,10 @@ fun reduce_dict_to_success_values(values: Dict[int]): Result[Dict[int]] =
 
 fun reduce_list_to_some_values(values: List[int]): Option[List[int]] =
     let initial: Option[List[int]] = Some { [] }
-    values |> initial, (acc_option, item) =>
-        match acc_option with
-        case Some { acc } -> Some { acc + item }
-        case None -> None {}
+    values |> initial, (acc_option, item) => {
+        let acc <- acc_option
+        Some { acc + item }
+    }
 
 fun reduce_list_to_box_values(values: List[int]): Box[List[int]] =
     let initial: Box[List[int]] = Box { [] }

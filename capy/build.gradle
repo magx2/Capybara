@@ -464,6 +464,10 @@ tasks.named('compileJava', JavaCompile) {
     source = source.filter { file -> file.toPath().normalize() != generatedParserInterface }
 }
 
+tasks.named('compileCapybara') {
+    writeLinkedOutput.set(false)
+}
+
 configurations {
     integrationTestImplementation.extendsFrom testImplementation
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly

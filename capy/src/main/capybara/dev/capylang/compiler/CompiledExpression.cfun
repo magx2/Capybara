@@ -15,6 +15,7 @@ union CompiledExpression =
     | CompiledBinaryExpression
     | CompiledUnaryExpression
     | CompiledFunctionCallExpression
+    | CompiledFunctionReferenceExpression
     | CompiledMethodCallExpression
     | CompiledLambdaExpression
     | CompiledListLiteral
@@ -40,6 +41,7 @@ data CompiledIfExpression { condition: CompiledExpression, thenBranch: CompiledE
 data CompiledBinaryExpression { operator: String, left: CompiledExpression, right: CompiledExpression, location: CompiledSourceLocation }
 data CompiledUnaryExpression { operator: String, expression: CompiledExpression, location: CompiledSourceLocation }
 data CompiledFunctionCallExpression { name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledFunctionReferenceExpression { name: String, location: CompiledSourceLocation }
 data CompiledMethodCallExpression { receiver: CompiledExpression, name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
 data CompiledLambdaExpression { parameters: List[String], body: CompiledExpression, location: CompiledSourceLocation }
 data CompiledListLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
@@ -51,8 +53,8 @@ data CompiledIndexExpression { receiver: CompiledExpression, index: CompiledExpr
 data CompiledDataField { name: String, value: CompiledExpression, location: CompiledSourceLocation }
 data CompiledDataLiteral { typeName: String, fields: List[CompiledDataField], location: CompiledSourceLocation }
 data CompiledFieldAccessExpression { receiver: CompiledExpression, name: String, location: CompiledSourceLocation }
-data CompiledReduceExpression { receiver: CompiledExpression, initial: CompiledExpression, accumulatorName: String, valueName: String, body: CompiledExpression, location: CompiledSourceLocation }
+data CompiledReduceExpression { receiver: CompiledExpression, initial: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, body: CompiledExpression, location: CompiledSourceLocation }
 data CompiledMatchCase { typeName: String, bindings: List[String], body: CompiledExpression, location: CompiledSourceLocation }
 data CompiledMatchExpression { value: CompiledExpression, cases: List[CompiledMatchCase], location: CompiledSourceLocation }
-data CompiledLetBinding { name: String, typeReference: CompiledTypeReference, value: CompiledExpression, location: CompiledSourceLocation }
+data CompiledLetBinding { name: String, typeReference: CompiledTypeReference, operator: String, value: CompiledExpression, location: CompiledSourceLocation }
 data CompiledBlockExpression { bindings: List[CompiledLetBinding], result: CompiledExpression, location: CompiledSourceLocation }
