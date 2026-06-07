@@ -1133,7 +1133,12 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
     else
         let dataType = find_data_type(literal.typeName, module, allModules)
         let bindings = data_type_bindings(dataType, expectedType, module, allModules)
-        "__capy_data(\"" + escape_java_string(literal.typeName) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
+        "__capy_data(\"" + escape_java_string(data_literal_type_name(literal.typeName, dataType)) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
+
+private fun data_literal_type_name(typeName: String, dataType: /capy/lang/Option[String]): String =
+    match dataType with
+    case Some { value } -> value
+    case None -> typeName
 
 private fun data_fields_code(fields: List[CompiledDataField], env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if fields.is_empty()
@@ -1667,11 +1672,28 @@ private fun find_module_by_class(className: String, modules: List[CompiledModule
     case Some { module } -> if module_fqcn(module) == className then /capy/lang/Option.Some { module } else find_module_by_class(className, modules[1:])
 
 private fun find_data_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    if schema_type_exists(name, module.functions)
+    if qualified_call_name(name)
+    then find_qualified_data_type(name, module, allModules)
+    else if schema_type_exists(name, module.functions)
     then /capy/lang/Option.Some { name }
     else match find_data_type_in_imports(name, module.imports, module, allModules) with
         case Some { value } -> /capy/lang/Option.Some { value }
         case None -> find_data_type_in_modules(name, allModules)
+
+private fun find_qualified_data_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    find_qualified_data_type_in_class(
+        qualified_call_class_name(name, module),
+        qualified_call_member(name),
+        allModules
+    )
+
+private fun find_qualified_data_type_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if schema_type_exists(member, importedModule.functions)
+        then /capy/lang/Option.Some { member }
+        else /capy/lang/Option.None {}
+    case None -> /capy/lang/Option.None {}
 
 private fun find_data_type_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     match imports[0] with
