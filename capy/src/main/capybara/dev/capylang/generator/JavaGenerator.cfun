@@ -151,6 +151,8 @@ private fun java_function(function: CompiledFunction, module: CompiledModule, al
 private fun java_function_name(function: CompiledFunction): String =
     if function.name == "tests"
     then "tests"
+    else if function.name == "main"
+    then "main"
     else java_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
 
 private fun java_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -191,13 +193,41 @@ private fun java_visibility(visibility: String): String =
     if visibility == "private" then "private" else "public"
 
 private fun java_function_body(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if !expression_emittable(function.body, env, module, allModules)
-    then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
-    else
-        match function.body with
-        case CompiledBlockExpression block -> block_statements(block.bindings, env, module, allModules, "        ")
+    match function.body with
+    case CompiledBlockExpression block ->
+        let effectBody =
+            match block.bindings[0] with
+            case Some { binding } ->
+                let valueType = binding_type(binding, env, module, allModules)
+                let boundEnv = [JavaBinding { name: binding.name, typeReference: first_type_argument(valueType) }] + env
+                if function.returnType.name == "Effect"
+                    & valueType.name == "Effect"
+                    & block.bindings[1:].is_empty()
+                    & expression_emittable(binding.value, env, module, allModules)
+                    & expression_emittable(block.result, boundEnv, module, allModules)
+                then
+                    let resultType = expression_type(block.result, boundEnv, module, allModules)
+                    if resultType.name == "Effect"
+                    then "        return " + expression_code(binding.value, env, valueType, module, allModules)
+                        + ".flatMap(" + java_identifier(binding.name) + " -> "
+                        + expression_code(block.result, boundEnv, function.returnType, module, allModules)
+                        + ");" + newline()
+                    else "        return " + expression_code(binding.value, env, valueType, module, allModules)
+                        + ".map(" + java_identifier(binding.name) + " -> "
+                        + expression_code(block.result, boundEnv, first_type_argument(function.returnType), module, allModules)
+                        + ");" + newline()
+                else ""
+            case None -> ""
+        if !effectBody.is_empty()
+        then effectBody
+        else if !expression_emittable(function.body, env, module, allModules)
+        then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
+        else block_statements(block.bindings, env, module, allModules, "        ")
             + "        return " + expression_code(block.result, block_env(block.bindings, env, module, allModules), function.returnType, module, allModules) + ";" + newline()
-        case _ -> "        return " + expression_code(function.body, env, function.returnType, module, allModules) + ";" + newline()
+    case _ ->
+        if !expression_emittable(function.body, env, module, allModules)
+        then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
+        else "        return " + expression_code(function.body, env, function.returnType, module, allModules) + ";" + newline()
 
 private fun java_parameters(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
@@ -248,7 +278,12 @@ private fun expression_code(
     case CompiledDoubleLiteral literal -> literal.source
     case CompiledBoolLiteral literal -> if literal.value then "true" else "false"
     case CompiledStringLiteral literal -> "\"" + escape_java_string(literal.value) + "\""
-    case CompiledVariableExpression variable -> numeric_widening_code(java_identifier(variable.name), lookup_binding(variable.name, env), expectedType)
+    case CompiledVariableExpression variable ->
+        if binding_exists(variable.name, env)
+        then numeric_widening_code(java_identifier(variable.name), lookup_binding(variable.name, env), expectedType)
+        else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
+        then numeric_widening_code("capy.lang.Program.DEFAULT_FAILED_EXIT_CODE", int_type(), expectedType)
+        else numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
     case CompiledIfExpression ifExpression -> "("
         + truthy_expression_code(ifExpression.condition, env, module, allModules)
         + " ? " + expression_code(ifExpression.thenBranch, env, expectedType, module, allModules)
@@ -458,6 +493,16 @@ private fun numeric_widening_code(code: String, sourceType: CompiledTypeReferenc
 private fun function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "delay"
     then "capy.lang.Effect.delay(" + expression_code(argument(call.arguments, 0), env, supplier_type(first_type_argument(delay_call_type(call.arguments, env, module, allModules))), module, allModules) + ")"
+    else if call.name == "pure" & effect_member_imported("pure", module.imports)
+    then
+        let valueType = if expectedType.name == "Effect" then first_type_argument(expectedType) else expression_type(argument(call.arguments, 0), env, module, allModules)
+        "capy.lang.Effect.pure(" + expression_code(argument(call.arguments, 0), env, valueType, module, allModules) + ")"
+    else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
+    then
+        let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+        let valueCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
+        "capy.lang.Effect.delay(() -> { var __capy_console_value = " + valueCode + "; "
+            + console_stream(call.name) + "." + console_method(call.name) + "(__capy_console_value); return __capy_console_value; })"
     else if call.name == "assert_all"
     then "capy.test.Assert.assertAll(" + expression_code(argument(call.arguments, 0), env, list_type(assert_type()), module, allModules) + ")"
     else if call.name == "assert_that"
@@ -469,10 +514,13 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
         + expression_code(argument(call.arguments, 1), env, supplier_type(assert_type()), module, allModules)
         + ")"
     else if call.name == "test_file"
-    then "capy.lang.Effect.pure(new capy.test.CapyTest.TestFile("
+    then
+        let testsExpression = argument(call.arguments, 1)
+        let testsCode = test_file_tests_code(testsExpression, env, module, allModules)
+        "capy.lang.Effect.delay(() -> new capy.test.CapyTest.TestFile("
         + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
         + ", "
-        + expression_code(argument(call.arguments, 1), env, list_type(test_case_type()), module, allModules)
+        + testsCode
         + ", java.lang.System.currentTimeMillis()))"
     else if stdlib_math_digits_call(call, module)
     then "java.lang.Integer.toString("
@@ -481,10 +529,21 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     else ordinary_function_call_code(call, env, module, allModules)
 
 private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match find_function_in_scope(call.name, module, allModules) with
-    case Some { function } ->
-        java_function_name(function) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
-    case None -> java_function_call_name(call.name, module, allModules) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+    if qualified_call_name(call.name)
+    then
+        let qualifier = call.name[0, last_dot_index(call.name)]
+        let member = call.name[last_dot_index(call.name) + 1, call.name.size().value]
+        let className =
+            if java_generator_string_has_prefix(qualifier, "/")
+            then path_to_class(qualifier[1, qualifier.size()])
+            else if qualifier ? "/"
+            then path_to_class(qualifier)
+            else imported_module_class(module, qualifier)
+        className + "." + java_identifier(member) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+    else match find_function_in_scope(call.name, module, allModules) with
+        case Some { function } ->
+            java_function_name(function) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
+        case None -> java_function_call_name(call.name, module, allModules) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
 
 private fun parameter_expression_list_code(parameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expressions[0] with
@@ -523,6 +582,16 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then collection_predicate_call_code(call, env, module, allModules)
     else if seq_as_list_call(call, env, module, allModules)
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
+    else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
+    then
+        let receiverType = expression_type(call.receiver, env, module, allModules)
+        let valueType = first_type_argument(receiverType)
+        let bodyExpectedType = if expectedType.name == "Effect" then first_type_argument(expectedType) else object_type()
+        match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda ->
+            expression_code(call.receiver, env, receiverType, module, allModules)
+                + ".map(" + lambda_code_for_value(lambda, valueType, bodyExpectedType, env, module, allModules) + ")"
+        case _ -> "unsupported(\"effect map\")"
     else if primitive_conversion_method(call.name)
     then primitive_conversion_code(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -755,9 +824,16 @@ private fun dict_entries_tail(entries: List[CompiledDictEntry], env: List[JavaBi
     case Some _ -> ", " + dict_entries_code(entries, env, module, allModules)
 
 private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let dataType = find_data_type(literal.typeName, module, allModules)
-    let bindings = data_type_bindings(dataType, expectedType, module, allModules)
-    "__capy_data(\"" + escape_java_string(literal.typeName) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
+    if program_success_literal(literal.typeName, module.imports)
+    then "capy.lang.Program.Success.INSTANCE"
+    else if program_failed_literal(literal.typeName, module.imports)
+    then match literal.fields[0] with
+        case Some { field } -> "new capy.lang.Program.Failed(" + expression_code(field.value, env, int_type(), module, allModules) + ")"
+        case None -> "new capy.lang.Program.Failed(0)"
+    else
+        let dataType = find_data_type(literal.typeName, module, allModules)
+        let bindings = data_type_bindings(dataType, expectedType, module, allModules)
+        "__capy_data(\"" + escape_java_string(literal.typeName) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
 
 private fun data_fields_code(fields: List[CompiledDataField], env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if fields.is_empty()
@@ -824,15 +900,18 @@ private fun generic_data_field_type(field: String, bindings: List[JavaBinding]):
     case None -> CompiledTypeReference { name: typeName, arguments: [] }
 
 private fun field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let sourceType = field_access_type(access, env, module, allModules)
-    let castType = field_access_cast_type(sourceType, expectedType)
-    numeric_widening_code(
-        "((" + boxed_java_type(castType) + ") __capy_data_field("
-        + expression_code(access.receiver, env, expression_type(access.receiver, env, module, allModules), module, allModules)
-        + ", \"" + escape_java_string(access.name) + "\"))",
-        castType,
-        expectedType
-    )
+    if access.name == "value" & numeric_type(expression_type(access.receiver, env, module, allModules))
+    then expression_code(access.receiver, env, expectedType, module, allModules)
+    else
+        let sourceType = field_access_type(access, env, module, allModules)
+        let castType = field_access_cast_type(sourceType, expectedType)
+        numeric_widening_code(
+            "((" + boxed_java_type(castType) + ") __capy_data_field("
+            + expression_code(access.receiver, env, expression_type(access.receiver, env, module, allModules), module, allModules)
+            + ", \"" + escape_java_string(access.name) + "\"))",
+            castType,
+            expectedType
+        )
 
 private fun field_access_cast_type(sourceType: CompiledTypeReference, expectedType: CompiledTypeReference): CompiledTypeReference =
     if sourceType.name == "any"
@@ -904,7 +983,12 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledDoubleLiteral _ -> double_type()
     case CompiledBoolLiteral _ -> bool_type()
     case CompiledStringLiteral _ -> string_type()
-    case CompiledVariableExpression variable -> lookup_binding(variable.name, env)
+    case CompiledVariableExpression variable ->
+        if binding_exists(variable.name, env)
+        then lookup_binding(variable.name, env)
+        else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
+        then int_type()
+        else object_type()
     case CompiledIfExpression ifExpression -> expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBinaryExpression binary ->
         let leftType = expression_type(binary.left, env, module, allModules)
@@ -924,7 +1008,10 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledDictLiteral literal -> dict_type(first_dict_value_type(literal.entries, env, module, allModules))
     case CompiledTupleLiteral literal -> tuple_type(expression_types(literal.values, env, module, allModules))
     case CompiledIndexExpression index -> indexed_type(expression_type(index.receiver, env, module, allModules), index.index)
-    case CompiledDataLiteral literal -> CompiledTypeReference { name: literal.typeName, arguments: [] }
+    case CompiledDataLiteral literal ->
+        if program_success_literal(literal.typeName, module.imports) | program_failed_literal(literal.typeName, module.imports)
+        then CompiledTypeReference { name: "/capy/lang/Program", arguments: [] }
+        else CompiledTypeReference { name: literal.typeName, arguments: [] }
     case CompiledFieldAccessExpression access -> field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
@@ -954,15 +1041,21 @@ private fun flat_map_result_type(bodyType: CompiledTypeReference): CompiledTypeR
 
 private fun field_access_type(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let receiverType = expression_type(access.receiver, env, module, allModules)
-    match find_data_type(receiverType.name, module, allModules) with
-    case Some { dataType } ->
-        let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
-        declared_named_field_type(access.name, data_type_fields(dataType, module, allModules), bindings, object_type())
-    case None -> object_type()
+    if access.name == "value" & numeric_type(receiverType)
+    then receiverType
+    else match find_data_type(receiverType.name, module, allModules) with
+        case Some { dataType } ->
+            let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
+            declared_named_field_type(access.name, data_type_fields(dataType, module, allModules), bindings, object_type())
+        case None -> object_type()
 
 private fun function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "delay"
     then delay_call_type(call.arguments, env, module, allModules)
+    else if call.name == "pure" & effect_member_imported("pure", module.imports)
+    then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
+    else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
+    then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if call.name == "assert_all" | call.name == "assert_that"
     then assert_type()
     else if call.name == "test"
@@ -971,6 +1064,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then effect_type(test_file_type())
     else if stdlib_math_digits_call(call, module)
     then int_type()
+    else if qualified_call_name(call.name) & call.name[last_dot_index(call.name) + 1, call.name.size().value] == "main"
+    then effect_type(CompiledTypeReference { name: "/capy/lang/Program", arguments: [] })
     else lookup_function_type_in_scope(call.name, module, allModules)
 
 private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -988,6 +1083,12 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then bool_type()
     else if seq_as_list_call(call, env, module, allModules)
     then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
+    else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
+    then
+        let valueType = first_type_argument(expression_type(call.receiver, env, module, allModules))
+        match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
+        case _ -> effect_type(object_type())
     else if call.name == "to_int"
     then int_type()
     else if call.name == "to_long"
@@ -1316,7 +1417,7 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledDoubleLiteral _ -> true
     case CompiledBoolLiteral _ -> true
     case CompiledStringLiteral _ -> true
-    case CompiledVariableExpression variable -> binding_exists(variable.name, env)
+    case CompiledVariableExpression variable -> binding_exists(variable.name, env) | program_member_imported(variable.name, module.imports)
     case CompiledIfExpression e -> truthy_expression_emittable(e.condition, env, module, allModules) & expression_emittable(e.thenBranch, env, module, allModules) & expression_emittable(e.elseBranch, env, module, allModules)
     case CompiledBinaryExpression e ->
         if collection_pipe_expression(e, expression_type(e.left, env, module, allModules))
@@ -1486,6 +1587,12 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then collection_predicate_call_emittable(call, receiverType, env, module, allModules)
     else if call.name == "as_list" & receiverType.name == "Seq"
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
+    else if call.name == "map" & receiverType.name == "Effect"
+    then match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda ->
+            expression_emittable(call.receiver, env, module, allModules)
+                & collection_lambda_emittable(lambda, first_type_argument(receiverType), env, module, allModules)
+        case _ -> false
     else if primitive_conversion_method(call.name)
     then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -1543,6 +1650,14 @@ private fun uppercase_constant_name(name: String): bool =
 private fun function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "delay"
     then delay_call_emittable(call.arguments, env, module, allModules)
+    else if call.name == "pure" & effect_member_imported("pure", module.imports)
+    then match call.arguments[0] with
+        case None -> false
+        case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
+    else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
+    then match call.arguments[0] with
+        case None -> false
+        case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
     else if call.name == "assert_all"
     then expressions_emittable(call.arguments, env, module, allModules)
     else if call.name == "assert_that"
@@ -1553,6 +1668,12 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then test_file_call_emittable(call.arguments, env, module, allModules)
     else if stdlib_math_digits_call(call, module)
     then stdlib_math_digits_call_emittable(call.arguments, env, module, allModules)
+    else if qualified_call_name(call.name)
+    then
+        let member = call.name[last_dot_index(call.name) + 1, call.name.size().value]
+        !binding_exists(call.name, env)
+            & member == "main"
+            & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
     else java_callable_name(call.name) & !binding_exists(call.name, env) & function_call_target_emittable(call.name, call.arguments, env, module, allModules) & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
 
 private fun stdlib_math_digits_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
@@ -1638,7 +1759,7 @@ private fun test_file_call_emittable(arguments: List[CompiledExpression], env: L
             expression_emittable(nameExpression, env, module, allModules)
                 & expression_emittable(testsExpression, env, module, allModules)
                 & testsType.name == "List"
-                & first_type_argument(testsType).name == "TestCase"
+                & test_file_test_case_list_type(first_type_argument(testsType))
 
 private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(index.receiver, env, module, allModules)
@@ -1768,6 +1889,7 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "TestFile" then "capy.test.CapyTest.TestFile"
     else if type.name == "TestCase" then "capy.test.CapyTest.TestCase"
     else if type.name == "Supplier" then "java.util.function.Supplier<" + boxed_java_type(first_type_argument(type)) + ">"
+    else if type.name == "/capy/lang/Program" then "capy.lang.Program"
     else "java.lang.Object"
 
 private fun java_seq_type(type: CompiledTypeReference): String =
@@ -1788,6 +1910,123 @@ private fun single_uppercase_name(name: String): bool =
     match name[0] with
     case None -> false
     case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
+
+private fun program_success_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
+    typeName == "/capy/lang/Program.Success"
+        | typeName == "Program.Success"
+        | (typeName == "Success" & program_member_imported("Success", imports))
+
+private fun program_failed_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
+    typeName == "/capy/lang/Program.Failed"
+        | typeName == "Program.Failed"
+        | (typeName == "Failed" & program_member_imported("Failed", imports))
+
+private fun program_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if program_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, member))
+        then true
+        else program_member_imported(member, imports[1:])
+
+private fun program_import(modulePath: String): bool =
+    modulePath == "/capy/lang/Program" | modulePath == "capy/lang/Program"
+
+private fun effect_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if effect_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, member))
+        then true
+        else effect_member_imported(member, imports[1:])
+
+private fun effect_import(modulePath: String): bool =
+    modulePath == "/capy/lang/Effect" | modulePath == "capy/lang/Effect"
+
+private fun console_print_name(name: String): bool =
+    name == "print" | name == "println" | name == "print_error" | name == "println_error"
+
+private fun console_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if console_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, member))
+        then true
+        else console_member_imported(member, imports[1:])
+
+private fun console_import(modulePath: String): bool =
+    modulePath == "/capy/io/Console" | modulePath == "capy/io/Console"
+
+private fun console_stream(name: String): String =
+    if name == "print_error" | name == "println_error" then "java.lang.System.err" else "java.lang.System.out"
+
+private fun console_method(name: String): String =
+    if name == "println" | name == "println_error" then "println" else "print"
+
+private fun test_file_test_case_list_type(type: CompiledTypeReference): bool =
+    type.name == "TestCase" | (type.name == "Effect" & first_type_argument(type).name == "TestCase")
+
+private fun test_file_tests_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledListLiteral literal -> "java.util.List.of(" + test_file_test_elements_code(literal.values, env, module, allModules) + ")"
+    case _ ->
+        let testsType = expression_type(expression, env, module, allModules)
+        if testsType.name == "List" & first_type_argument(testsType).name == "Effect" & first_type_argument(first_type_argument(testsType)).name == "TestCase"
+        then expression_code(expression, env, list_type(effect_type(test_case_type())), module, allModules)
+            + ".stream().map((capy.lang.Effect<capy.test.CapyTest.TestCase> __capy_effect_test_case) -> __capy_effect_test_case.unsafeRun()).toList()"
+        else expression_code(expression, env, list_type(test_case_type()), module, allModules)
+
+private fun test_file_test_elements_code(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        test_file_test_element_code(expression, env, module, allModules)
+        + test_file_test_elements_tail_code(expressions[1:], env, module, allModules)
+
+private fun test_file_test_elements_tail_code(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        ", " + test_file_test_element_code(expression, env, module, allModules)
+        + test_file_test_elements_tail_code(expressions[1:], env, module, allModules)
+
+private fun test_file_test_element_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let type = expression_type(expression, env, module, allModules)
+    if type.name == "Effect" & first_type_argument(type).name == "TestCase"
+    then lazy_effect_test_case_code(expression, env, module, allModules)
+    else expression_code(expression, env, test_case_type(), module, allModules)
+
+private fun lazy_effect_test_case_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledMethodCallExpression call ->
+        if call.name == "map"
+        then lazy_effect_map_test_case_code(expression, call, env, module, allModules)
+        else eager_effect_test_case_code(expression, env, module, allModules)
+    case _ -> eager_effect_test_case_code(expression, env, module, allModules)
+
+private fun lazy_effect_map_test_case_code(expression: CompiledExpression, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match argument(call.arguments, 0) with
+    case CompiledLambdaExpression lambda -> lazy_effect_test_case_lambda_code(expression, lambda, env, module, allModules)
+    case _ -> eager_effect_test_case_code(expression, env, module, allModules)
+
+private fun lazy_effect_test_case_lambda_code(expression: CompiledExpression, lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match lambda.body with
+    case CompiledFunctionCallExpression testCall ->
+        if testCall.name == "test"
+        then "new capy.test.CapyTest.TestCase("
+            + expression_code(argument(testCall.arguments, 0), env, string_type(), module, allModules)
+            + ", capy.test.CapyTest.Passed.INSTANCE, 0, 0.0, () -> "
+            + expression_code(expression, env, effect_type(test_case_type()), module, allModules)
+            + ".unsafeRun().assert_supplier().get())"
+        else eager_effect_test_case_code(expression, env, module, allModules)
+    case _ -> eager_effect_test_case_code(expression, env, module, allModules)
+
+private fun eager_effect_test_case_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    expression_code(expression, env, effect_type(test_case_type()), module, allModules) + ".unsafeRun()"
+
+private fun qualified_call_name(name: String): bool =
+    let idx = last_dot_index(name)
+    idx > 0 & idx < name.size().value - 1
 
 private fun int_type(): CompiledTypeReference = CompiledTypeReference { name: "int", arguments: [] }
 private fun byte_type(): CompiledTypeReference = CompiledTypeReference { name: "byte", arguments: [] }
