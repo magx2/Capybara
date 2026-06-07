@@ -107,11 +107,6 @@ private fun java_generator_string_has_prefix_at(value: String, prefix: String, i
             then java_generator_string_has_prefix_at(value, prefix, idx + 1)
             else false
 
-private fun module_class_exists(className: String, modules: List[CompiledModule]): bool =
-    match modules[0] with
-    case None -> false
-    case Some { module } -> module_fqcn(module) == className | module_class_exists(className, modules[1:])
-
 private fun java_constants(constants: List[CompiledFunction], previous: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     match constants[0] with
     case None -> if previous.is_empty() then "" else newline()
@@ -876,7 +871,6 @@ private fun assert_is_empty_code(call: CompiledMethodCallExpression, env: List[J
     match call.receiver with
     case CompiledFunctionCallExpression receiver ->
         let actual = argument(receiver.arguments, 0)
-        let actualType = expression_type(actual, env, module, allModules)
         assert_that_code(actual, env, module, allModules) + ".isEmpty()"
     case _ -> "unsupported(\"assert is_empty\")"
 
@@ -2154,7 +2148,7 @@ private fun numeric_type(type: CompiledTypeReference): bool =
     type.name == "byte" | type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
 
 private fun remainder_type(type: CompiledTypeReference): bool =
-    type.name == "byte" | numeric_type(type)
+    numeric_type(type)
 
 private fun byte_literal_source(source: String): bool =
     java_generator_string_has_prefix(source, "0x") | java_generator_string_has_prefix(source, "0X")
@@ -2222,9 +2216,10 @@ private fun assert_is_empty_arguments_emittable(arguments: List[CompiledExpressi
     match arguments[0] with
     case None -> false
     case Some { actual } ->
-        let actualType = expression_type(actual, env, module, allModules);
-        (actualType.name == "List" | actualType.name == "Set" | actualType.name == "Dict" | actualType.name == "Option")
-            & expression_emittable(actual, env, module, allModules)
+        let actualType = expression_type(actual, env, module, allModules)
+        if actualType.name == "List" | actualType.name == "Set" | actualType.name == "Dict" | actualType.name == "Option"
+        then expression_emittable(actual, env, module, allModules)
+        else false
 
 private fun primitive_conversion_method(name: String): bool =
     name == "to_int" | name == "to_long"
@@ -2524,40 +2519,25 @@ private fun program_failed_literal(typeName: String, imports: List[CompiledImpor
         | (typeName == "Failed" & program_member_imported("Failed", imports))
 
 private fun program_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
-    match imports[0] with
-    case None -> false
-    case Some { declaration } ->
-        if program_import(declaration.modulePath) & import_includes_name(member, declaration)
-        then true
-        else program_member_imported(member, imports[1:])
-
-private fun program_import(modulePath: String): bool =
-    modulePath == "/capy/lang/Program" | modulePath == "capy/lang/Program"
+    module_member_imported(member, imports, "/capy/lang/Program", "capy/lang/Program")
 
 private fun effect_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
-    match imports[0] with
-    case None -> false
-    case Some { declaration } ->
-        if effect_import(declaration.modulePath) & import_includes_name(member, declaration)
-        then true
-        else effect_member_imported(member, imports[1:])
-
-private fun effect_import(modulePath: String): bool =
-    modulePath == "/capy/lang/Effect" | modulePath == "capy/lang/Effect"
+    module_member_imported(member, imports, "/capy/lang/Effect", "capy/lang/Effect")
 
 private fun console_print_name(name: String): bool =
     name == "print" | name == "println" | name == "print_error" | name == "println_error"
 
 private fun console_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/io/Console", "capy/io/Console")
+
+private fun module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if console_import(declaration.modulePath) & import_includes_name(member, declaration)
+        if (declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath)
+            & import_includes_name(member, declaration)
         then true
-        else console_member_imported(member, imports[1:])
-
-private fun console_import(modulePath: String): bool =
-    modulePath == "/capy/io/Console" | modulePath == "capy/io/Console"
+        else module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
 private fun console_stream(name: String): String =
     if name == "print_error" | name == "println_error" then "java.lang.System.err" else "java.lang.System.out"
