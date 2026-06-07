@@ -706,15 +706,13 @@ private fun function_reference_code(reference: CompiledFunctionReferenceExpressi
 private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if qualified_call_name(call.name)
     then
-        let qualifier = call.name[0, last_dot_index(call.name)]
-        let member = call.name[last_dot_index(call.name) + 1, call.name.size().value]
-        let className =
-            if java_generator_string_has_prefix(qualifier, "/")
-            then path_to_class(qualifier[1, qualifier.size()])
-            else if qualifier ? "/"
-            then path_to_class(qualifier)
-            else imported_module_class(module, qualifier)
-        className + "." + java_identifier(member) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+        match find_qualified_function(call.name, module, allModules) with
+        case Some { function } ->
+            qualified_call_class_name(call.name, module) + "." + java_function_name(function)
+                + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
+        case None ->
+            qualified_call_class_name(call.name, module) + "." + java_identifier(qualified_call_member(call.name))
+                + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
     else match find_function_in_scope(call.name, module, allModules) with
         case Some { function } ->
             java_function_name(function) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
@@ -1491,9 +1489,17 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then effect_type(test_file_type())
     else if stdlib_math_digits_call(call, module)
     then int_type()
-    else if qualified_call_name(call.name) & call.name[last_dot_index(call.name) + 1, call.name.size().value] == "main"
-    then effect_type(CompiledTypeReference { name: "/capy/lang/Program", arguments: [] })
+    else if qualified_call_name(call.name)
+    then qualified_function_call_type(call.name, module, allModules)
     else lookup_function_type_in_scope(call.name, module, allModules)
+
+private fun qualified_function_call_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_qualified_function(name, module, allModules) with
+    case Some { function } -> function.returnType
+    case None ->
+        if qualified_call_member(name) == "main"
+        then effect_type(CompiledTypeReference { name: "/capy/lang/Program", arguments: [] })
+        else object_type()
 
 private fun function_reference_type(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     lookup_function_type_in_scope(reference.name, module, allModules)
@@ -2192,12 +2198,15 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     else if stdlib_math_digits_call(call, module)
     then stdlib_math_digits_call_emittable(call.arguments, env, module, allModules)
     else if qualified_call_name(call.name)
-    then
-        let member = call.name[last_dot_index(call.name) + 1, call.name.size().value]
-        !binding_exists(call.name, env)
-            & member == "main"
-            & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
+    then qualified_function_call_emittable(call, env, module, allModules)
     else java_callable_name(call.name) & !binding_exists(call.name, env) & function_call_target_emittable(call.name, call.arguments, env, module, allModules) & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
+
+private fun qualified_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    !binding_exists(call.name, env)
+        & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
+        & match find_qualified_function(call.name, module, allModules) with
+            case Some { function } -> concrete_return_type(function.returnType) & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
+            case None -> qualified_call_member(call.name) == "main"
 
 private fun function_reference_emittable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
     false
@@ -2558,6 +2567,44 @@ private fun eager_effect_test_case_code(expression: CompiledExpression, env: Lis
 private fun qualified_call_name(name: String): bool =
     let idx = last_dot_index(name)
     idx > 0 & idx < name.size().value - 1
+
+private fun qualified_call_member(name: String): String =
+    name[last_dot_index(name) + 1, name.size().value]
+
+private fun qualified_call_class_name(name: String, module: CompiledModule): String =
+    let qualifier = name[0, last_dot_index(name)]
+    if java_generator_string_has_prefix(qualifier, "/")
+    then path_to_class(qualifier[1, qualifier.size()])
+    else if qualifier ? "/"
+    then path_to_class(qualifier)
+    else imported_module_class(module, qualifier)
+
+private fun find_qualified_function(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    find_qualified_function_in_imports(
+        qualified_call_class_name(name, module),
+        qualified_call_member(name),
+        module.imports,
+        module,
+        allModules
+    )
+
+private fun find_qualified_function_in_imports(className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !stdlib_import(declaration.modulePath) & imported_module_class(module, declaration.modulePath) == className
+        then find_qualified_function_in_import(className, member, imports[1:], module, allModules)
+        else find_qualified_function_in_imports(className, member, imports[1:], module, allModules)
+
+private fun find_qualified_function_in_import(className: String, member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_qualified_function_in_module(member, rest, module, allModules, importedModule)
+    case _ -> find_qualified_function_in_imports(className, member, rest, module, allModules)
+
+private fun find_qualified_function_in_module(member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunction] =
+    match find_function(member, importedModule.functions) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_qualified_function_in_imports(module_fqcn(importedModule), member, rest, module, allModules)
 
 private fun int_type(): CompiledTypeReference = CompiledTypeReference { name: "int", arguments: [] }
 private fun byte_type(): CompiledTypeReference = CompiledTypeReference { name: "byte", arguments: [] }
