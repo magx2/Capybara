@@ -893,7 +893,25 @@ private fun find_module_by_class(className: String, modules: List[CompiledModule
 private fun find_data_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     if schema_type_exists(name, module.functions)
     then /capy/lang/Option.Some { name }
-    else find_data_type_in_modules(name, allModules)
+    else match find_data_type_in_imports(name, module.imports, module, allModules) with
+        case Some { value } -> /capy/lang/Option.Some { value }
+        case None -> find_data_type_in_modules(name, allModules)
+
+private fun find_data_type_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(name, declaration)
+        then find_data_type_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else find_data_type_in_imports(name, imports[1:], module, allModules)
+
+private fun find_data_type_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[String] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if schema_type_exists(name, importedModule.functions)
+        then /capy/lang/Option.Some { name }
+        else find_data_type_in_imports(name, rest, module, allModules)
+    case _ -> find_data_type_in_imports(name, rest, module, allModules)
 
 private fun find_data_type_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[String] =
     match modules[0] with
@@ -953,7 +971,25 @@ private fun data_type_bindings(dataType: /capy/lang/Option[String], concreteType
 private fun data_type_parameters(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if schema_type_exists(name, module.functions)
     then schema_values("__capy_schema_param|" + name + "|", module.functions)
-    else data_type_parameters_in_modules(name, allModules)
+    else match data_type_parameters_in_imports(name, module.imports, module, allModules) with
+        case Some { value } -> value
+        case None -> data_type_parameters_in_modules(name, allModules)
+
+private fun data_type_parameters_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(name, declaration)
+        then data_type_parameters_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else data_type_parameters_in_imports(name, imports[1:], module, allModules)
+
+private fun data_type_parameters_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if schema_type_exists(name, importedModule.functions)
+        then /capy/lang/Option.Some { schema_values("__capy_schema_param|" + name + "|", importedModule.functions) }
+        else data_type_parameters_in_imports(name, rest, module, allModules)
+    case _ -> data_type_parameters_in_imports(name, rest, module, allModules)
 
 private fun data_type_parameters_in_modules(name: String, modules: List[CompiledModule]): List[String] =
     match modules[0] with
@@ -966,7 +1002,33 @@ private fun data_type_parameters_in_modules(name: String, modules: List[Compiled
 private fun data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if schema_type_exists(name, module.functions)
     then schema_values("__capy_schema_field|" + name + "|", module.functions)
-    else data_type_fields_in_modules(name, allModules)
+    else match data_type_fields_in_imports(name, module.imports, module, allModules) with
+        case Some { value } -> value
+        case None -> data_type_fields_in_modules(name, allModules)
+
+private fun data_type_fields_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(name, declaration)
+        then data_type_fields_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else data_type_fields_in_imports(name, imports[1:], module, allModules)
+
+private fun data_type_fields_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if schema_type_exists(name, importedModule.functions)
+        then /capy/lang/Option.Some { schema_values("__capy_schema_field|" + name + "|", importedModule.functions) }
+        else data_type_fields_in_imports(name, rest, module, allModules)
+    case _ -> data_type_fields_in_imports(name, rest, module, allModules)
+
+private fun data_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !stdlib_import(declaration.modulePath) & (declaration.wildcard | string_list_contains(declaration.importedNames, name))
+
+private fun string_list_contains(values: List[String], expected: String): bool =
+    match values[0] with
+    case None -> false
+    case Some { value } -> value == expected | string_list_contains(values[1:], expected)
 
 private fun data_type_fields_in_modules(name: String, modules: List[CompiledModule]): List[String] =
     match modules[0] with
