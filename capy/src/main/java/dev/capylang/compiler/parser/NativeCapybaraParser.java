@@ -782,6 +782,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     location(ctx)
             );
         }
+        if (isInvocationExpression(ctx)) {
+            return invocationExpression(expressionNoLet(ctx.expressionNoLet(0)), ctx.argumentList(), location(ctx));
+        }
         if (isSliceExpression(ctx)) {
             return sliceExpression(expressionNoLet(ctx.expressionNoLet(0)), location(ctx), ctx);
         }
@@ -879,6 +882,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     ctx.methodArgumentList(),
                     location(ctx)
             );
+        }
+        if (isInvocationExpressionNoPipe(ctx)) {
+            return invocationExpression(expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)), ctx.argumentList(), location(ctx));
         }
         if (isSliceExpressionNoPipe(ctx)) {
             return sliceExpression(expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)), location(ctx), ctx);
@@ -1034,6 +1040,14 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return reduce;
         }
         return new Expression.MethodCallExpression(receiver, name, methodArguments(arguments), location);
+    }
+
+    private static Expression invocationExpression(
+            Expression receiver,
+            dev.capylang.parser.antlr.FunctionalParser.ArgumentListContext arguments,
+            SourceLocation location
+    ) {
+        return new Expression.MethodCallExpression(receiver, "__capy_call", arguments(arguments), location);
     }
 
     private static Expression methodReduceExpression(
@@ -1406,7 +1420,60 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (literal.STRING_LITERAL() != null) {
             return stringLiteralExpression(source, location(ctx));
         }
+        if (literal.REGEX_LITERAL() != null) {
+            return regexLiteralExpression(source, location(ctx));
+        }
         return unsupported(ctx);
+    }
+
+    private static Expression regexLiteralExpression(String source, SourceLocation location) {
+        var closingSlash = regexLiteralClosingSlash(source);
+        if (closingSlash < "regex/".length()) {
+            return new Expression.UnsupportedExpression(source, location);
+        }
+        var pattern = unescapeRegexContent(source.substring("regex/".length(), closingSlash));
+        var flags = source.substring(closingSlash + 1);
+        return new Expression.DataLiteral(
+                "Regex",
+                List.of(
+                        new Expression.DataField(
+                                "pattern",
+                                new Expression.StringLiteral(pattern, quote(pattern), location),
+                                location
+                        ),
+                        new Expression.DataField(
+                                "flags",
+                                new Expression.StringLiteral(flags, quote(flags), location),
+                                location
+                        )
+                ),
+                location
+        );
+    }
+
+    private static int regexLiteralClosingSlash(String source) {
+        var idx = source.length() - 1;
+        while (idx >= 0 && "ims".indexOf(source.charAt(idx)) >= 0) {
+            idx--;
+        }
+        return idx;
+    }
+
+    private static String unescapeRegexContent(String value) {
+        var result = new StringBuilder();
+        for (var idx = 0; idx < value.length(); idx++) {
+            var current = value.charAt(idx);
+            if (current == '\\' && idx + 1 < value.length()) {
+                var next = value.charAt(idx + 1);
+                if (next == '/' || next == '\\') {
+                    result.append(next);
+                    idx++;
+                    continue;
+                }
+            }
+            result.append(current);
+        }
+        return result.toString();
     }
 
     private static Expression stringLiteralExpression(String source, SourceLocation location) {
@@ -1835,12 +1902,20 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return ctx.argumentList() != null && ctx.expressionNoLet().size() == 1 && hasChild(ctx, "[");
     }
 
+    private static boolean isInvocationExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
+        return ctx.argumentList() != null && ctx.expressionNoLet().size() == 1 && hasChild(ctx, "(");
+    }
+
     private static boolean isSliceExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
         return ctx.expressionNoLet().size() == 1 && hasChild(ctx, "[") && hasChild(ctx, ":");
     }
 
     private static boolean isSliceExpressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetNoPipeContext ctx) {
         return ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "[") && hasChild(ctx, ":");
+    }
+
+    private static boolean isInvocationExpressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetNoPipeContext ctx) {
+        return ctx.argumentList() != null && ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "(");
     }
 
     private static boolean isUnary(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
