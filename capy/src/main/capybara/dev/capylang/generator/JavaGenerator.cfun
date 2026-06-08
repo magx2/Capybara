@@ -199,7 +199,7 @@ private fun java_function_call_name(name: String, module: CompiledModule, allMod
         case None -> java_identifier(name)
 
 private fun extension_method_function(function: CompiledFunction): bool =
-    function.name ? "."
+    last_dot_index(function.name) >= 0
 
 private fun method_receiver_type(function: CompiledFunction): CompiledTypeReference =
     CompiledTypeReference { name: method_owner_name(function.name), arguments: [] }
@@ -379,6 +379,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then collection_minus_code(binary, leftType, rightType, env, module, allModules)
     else if set_binary_expression(binary.operator, leftType, rightType)
     then set_binary_code(binary, leftType, rightType, env, module, allModules)
+    else if regex_binary_expression(binary.operator, leftType)
+    then regex_binary_code(binary, env, module, allModules)
     else if boolean_binary_operator(binary.operator)
     then "(" + truthy_expression_code(binary.left, env, module, allModules)
         + " " + java_boolean_operator(binary.operator) + " "
@@ -954,6 +956,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then native_stdlib_method_code(call, env, expectedType, module, allModules)
     else if seq_as_list_call(call, env, module, allModules)
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
+    else if function_value_method_call(call, env, module, allModules)
+    then function_value_method_code(call, env, module, allModules)
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
     then
         let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -966,6 +970,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
         case _ -> "unsupported(\"effect map\")"
     else if string_parse_method_call(call, env, module, allModules)
     then string_parse_method_code(call, env, module, allModules)
+    else if regex_method_call(call, env, module, allModules)
+    then regex_method_code(call, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_code(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -973,6 +979,60 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
         case None -> expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
             + "." + java_method_name(call.name)
             + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun function_value_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "__capy_call"
+    then function_type(expression_type(call.receiver, env, module, allModules))
+    else false
+
+private fun function_value_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let parameters = function_type_parameters(receiverType)
+    let target = expression_code(call.receiver, env, receiverType, module, allModules)
+    if parameters.is_empty()
+    then target + ".get()"
+    else target + ".apply(" + function_value_call_arguments(parameters, call.arguments, env, module, allModules) + ")"
+
+private fun regex_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if regex_method_name(call.name)
+    then
+        if one_method_argument(call.arguments)
+        then
+            let receiverType = expression_type(call.receiver, env, module, allModules)
+            regex_type_name(receiverType.name)
+        else false
+    else false
+
+private fun regex_method_name(name: String): bool =
+    name == "matches" | name == "find" | name == "find_all" | name == "replace" | name == "split"
+
+private fun regex_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
+    let argumentCode = expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+    if call.name == "matches"
+    then "__capy_regex_matches(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "find"
+    then "__capy_regex_find(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "find_all"
+    then "__capy_regex_find_all_seq(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "replace"
+    then "__capy_regex_replacer(" + receiverCode + ", " + argumentCode + ")"
+    else "__capy_regex_split(" + receiverCode + ", " + argumentCode + ")"
+
+private fun regex_binary_code(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftType = expression_type(binary.left, env, module, allModules)
+    let leftCode = expression_code(binary.left, env, leftType, module, allModules)
+    let rightCode = expression_code(binary.right, env, string_type(), module, allModules)
+    if binary.operator == "?"
+    then "__capy_regex_matches(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~"
+    then "__capy_regex_find(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~~"
+    then "__capy_regex_find_all_seq(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~>"
+    then "__capy_regex_replacer(" + leftCode + ", " + rightCode + ")"
+    else "__capy_regex_split(" + leftCode + ", " + rightCode + ")"
 
 private fun collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -2205,6 +2265,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then set_method_call_type(call, env, module, allModules)
     else if seq_as_list_call(call, env, module, allModules)
     then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
+    else if function_value_method_call(call, env, module, allModules)
+    then function_type_return_type(expression_type(call.receiver, env, module, allModules))
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
     then
         let valueType = first_type_argument(expression_type(call.receiver, env, module, allModules))
@@ -2215,6 +2277,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then string_parse_result_type(call.name)
     else if native_stdlib_method_call(call, env, module, allModules)
     then native_stdlib_method_type(call, env, module, allModules)
+    else if regex_method_call(call, env, module, allModules)
+    then regex_method_type(call.name)
     else if string_java_method_call(call, env, module, allModules)
     then string_java_method_type(call.name)
     else if call.name == "to_int"
@@ -2224,6 +2288,17 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     else match find_extension_method(call, env, module, allModules) with
         case Some { function } -> function.returnType
         case None -> assert_type()
+
+private fun regex_method_type(name: String): CompiledTypeReference =
+    if name == "matches"
+    then bool_type()
+    else if name == "find"
+    then option_type(regex_match_type())
+    else if name == "find_all"
+    then seq_type(regex_match_type())
+    else if name == "replace"
+    then string_to_string_function_type()
+    else list_type(string_type())
 
 private fun string_parse_result_type(name: String): CompiledTypeReference =
     if name == "to_int"
@@ -2410,12 +2485,19 @@ private fun find_method_function(ownerName: String, methodName: String, function
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if extension_method_function(function)
-            & method_owner_name(function.name) == ownerName
-            & method_member_name(function.name) == methodName
-            & !compiled_constant(function)
+        if method_function_matches(ownerName, methodName, function)
         then /capy/lang/Option.Some { function }
         else find_method_function(ownerName, methodName, functions[1:])
+
+private fun method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
+    if compiled_constant(function)
+    then false
+    else
+        let idx = last_dot_index(function.name)
+        if idx < 0
+        then false
+        else function.name[0, idx] == ownerName
+            & function.name[idx + 1, function.name.size().value] == methodName
 
 private fun find_extension_method_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match imports[0] with
@@ -2682,6 +2764,8 @@ private fun binary_result_type(operator: String, leftType: CompiledTypeReference
     then set_type(tuple_type([first_type_argument(leftType), first_type_argument(rightType)]))
     else if set_binary_expression(operator, leftType, rightType)
     then leftType
+    else if regex_binary_expression(operator, leftType)
+    then regex_binary_result_type(operator)
     else if comparison_operator(operator)
     then bool_type()
     else if operator == "+" & (leftType.name == "String" | rightType.name == "String")
@@ -2711,6 +2795,23 @@ private fun promoted_numeric_type(leftType: CompiledTypeReference, rightType: Co
 
 private fun comparison_operator(operator: String): bool =
     operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
+
+private fun regex_binary_expression(operator: String, leftType: CompiledTypeReference): bool =
+    regex_type_name(leftType.name) & regex_binary_operator(operator)
+
+private fun regex_binary_operator(operator: String): bool =
+    operator == "?" | operator == "~" | operator == "~~" | operator == "~>" | operator == "/>"
+
+private fun regex_binary_result_type(operator: String): CompiledTypeReference =
+    if operator == "?"
+    then bool_type()
+    else if operator == "~"
+    then option_type(regex_match_type())
+    else if operator == "~~"
+    then seq_type(regex_match_type())
+    else if operator == "~>"
+    then string_to_string_function_type()
+    else list_type(string_type())
 
 private fun expression_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
@@ -2879,6 +2980,8 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     then collection_minus_expression(binary.operator, leftType, rightType) | (numeric_type(leftType) & numeric_type(rightType)) | string_left_numeric_operator(binary.operator, leftType, rightType)
     else if set_binary_expression(binary.operator, leftType, rightType)
     then true
+    else if regex_binary_expression(binary.operator, leftType)
+    then regex_binary_emittable(binary, env, module, allModules)
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == "?"
@@ -2887,6 +2990,11 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
         then type_assignable(string_type(), rightType)
         else (leftType.name == "List" | leftType.name == "Set" | leftType.name == "String") & !rightType.name.is_empty()
     else binary.operator == "==" | binary.operator == "!="
+
+private fun regex_binary_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(binary.left, env, module, allModules)
+        & expression_emittable(binary.right, env, module, allModules)
+        & type_assignable(string_type(), expression_type(binary.right, env, module, allModules))
 
 private fun java_unary_operator_emittable(unary: CompiledUnaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let type = expression_type(unary.expression, env, module, allModules)
@@ -2945,6 +3053,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then native_stdlib_method_emittable(call, receiverType, env, module, allModules)
     else if call.name == "as_list" & receiverType.name == "Seq"
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
+    else if function_value_method_call(call, env, module, allModules)
+    then function_value_method_emittable(call, env, module, allModules)
     else if call.name == "map" & receiverType.name == "Effect"
     then match argument(call.arguments, 0) with
         case CompiledLambdaExpression lambda ->
@@ -2953,6 +3063,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
         case _ -> false
     else if string_parse_method_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
+    else if regex_method_call(call, env, module, allModules)
+    then regex_method_emittable(call, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -2960,6 +3072,17 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
         case None -> java_method_supported(call.name)
             & expression_emittable(call.receiver, env, module, allModules)
             & expressions_emittable(call.arguments, env, module, allModules)
+
+private fun function_value_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    expression_emittable(call.receiver, env, module, allModules)
+        & function_type_call_arguments_emittable(function_type_parameters(receiverType), call.arguments, env, module, allModules)
+
+private fun regex_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let argumentExpression = argument(call.arguments, 0)
+    expression_emittable(call.receiver, env, module, allModules)
+        & expression_emittable(argumentExpression, env, module, allModules)
+        & type_assignable(string_type(), expression_type(argumentExpression, env, module, allModules))
 
 private fun extension_method_call_emittable(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     concrete_return_type(function.returnType)
@@ -3680,6 +3803,11 @@ private fun tuple_type(args: List[CompiledTypeReference]): CompiledTypeReference
 private fun seq_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Seq", arguments: [arg] }
 private fun effect_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Effect", arguments: [arg] }
 private fun supplier_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Supplier", arguments: [arg] }
+private fun regex_match_type(): CompiledTypeReference = CompiledTypeReference { name: "Match", arguments: [] }
+private fun string_to_string_function_type(): CompiledTypeReference = CompiledTypeReference { name: "String=>String", arguments: [] }
+
+private fun regex_type_name(name: String): bool =
+    name == "Regex" | name == "/capy/lang/Regex" | name == "capy/lang/Regex" | name == "capy.lang.Regex"
 
 private fun test_runtime_modules(modules: List[CompiledModule]): List[GeneratedModule] =
     let gather = test_gather_calls(modules, modules)
@@ -3841,6 +3969,59 @@ private fun java_base_helpers(): String =
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", value)));" + newline()
         + "        }" + newline()
         + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"char must contain exactly one character\")));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_regex_pattern(java.lang.Object regex) {" + newline()
+        + "        return (java.lang.String) __capy_data_field(regex, \"pattern\");" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_regex_flags_value(java.lang.Object regex) {" + newline()
+        + "        java.lang.Object flags = __capy_data_field(regex, \"flags\");" + newline()
+        + "        return flags == null ? \"\" : (java.lang.String) flags;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static int __capy_regex_flag_mask(java.lang.String flags) {" + newline()
+        + "        int mask = 0;" + newline()
+        + "        if (flags.indexOf('i') >= 0) {" + newline()
+        + "            mask |= java.util.regex.Pattern.CASE_INSENSITIVE;" + newline()
+        + "        }" + newline()
+        + "        if (flags.indexOf('m') >= 0) {" + newline()
+        + "            mask |= java.util.regex.Pattern.MULTILINE;" + newline()
+        + "        }" + newline()
+        + "        if (flags.indexOf('s') >= 0) {" + newline()
+        + "            mask |= java.util.regex.Pattern.DOTALL;" + newline()
+        + "        }" + newline()
+        + "        return mask;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.regex.Pattern __capy_regex_compile(java.lang.Object regex) {" + newline()
+        + "        return java.util.regex.Pattern.compile(__capy_regex_pattern(regex), __capy_regex_flag_mask(__capy_regex_flags_value(regex)));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_regex_matches(java.lang.Object regex, java.lang.String input) {" + newline()
+        + "        return __capy_regex_compile(regex).matcher(input).find();" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.Optional<java.lang.Object> __capy_regex_find(java.lang.Object regex, java.lang.String input) {" + newline()
+        + "        java.util.regex.Matcher matcher = __capy_regex_compile(regex).matcher(input);" + newline()
+        + "        if (!matcher.find()) {" + newline()
+        + "            return java.util.Optional.empty();" + newline()
+        + "        }" + newline()
+        + "        return java.util.Optional.of(__capy_data(\"Match\", java.util.Map.ofEntries(java.util.Map.entry(\"group_value\", matcher.group()))));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.List<java.lang.Object> __capy_regex_find_all(java.lang.Object regex, java.lang.String input) {" + newline()
+        + "        java.util.ArrayList<java.lang.Object> result = new java.util.ArrayList<>();" + newline()
+        + "        java.util.regex.Matcher matcher = __capy_regex_compile(regex).matcher(input);" + newline()
+        + "        while (matcher.find()) {" + newline()
+        + "            result.add(__capy_data(\"Match\", java.util.Map.ofEntries(java.util.Map.entry(\"group_value\", matcher.group()))));" + newline()
+        + "        }" + newline()
+        + "        return java.util.List.copyOf(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static capy.lang.Seq<java.lang.Object> __capy_regex_find_all_seq(java.lang.Object regex, java.lang.String input) {" + newline()
+        + "        return capy.lang.Seq.toSeq(__capy_regex_find_all(regex, input));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_regex_replace(java.lang.Object regex, java.lang.String replacement, java.lang.String input) {" + newline()
+        + "        return __capy_regex_compile(regex).matcher(input).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.function.Function<java.lang.String, java.lang.String> __capy_regex_replacer(java.lang.Object regex, java.lang.String replacement) {" + newline()
+        + "        return value -> __capy_regex_replace(regex, replacement, value);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.List<java.lang.String> __capy_regex_split(java.lang.Object regex, java.lang.String input) {" + newline()
+        + "        return java.util.List.copyOf(java.util.Arrays.asList(__capy_regex_compile(regex).split(input, -1)));" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_parse_int(java.lang.String value) {" + newline()
         + "        try {" + newline()
