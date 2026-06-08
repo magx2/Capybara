@@ -1826,6 +1826,11 @@ private fun assert_is_empty_call(call: CompiledMethodCallExpression): bool =
             case CompiledFunctionCallExpression receiver -> receiver.name == "assert_that"
             case _ -> false
 
+private fun assert_status_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    (call.name == "succeeded" | call.name == "failed")
+        & call.arguments.is_empty()
+        & expression_type(call.receiver, env, module, allModules).name == "Assert"
+
 private fun assert_is_empty_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match call.receiver with
     case CompiledFunctionCallExpression receiver ->
@@ -2781,18 +2786,61 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledDictLiteral literal -> dict_type(first_dict_value_type(literal.entries, env, module, allModules))
     case CompiledTupleLiteral literal -> tuple_type(expression_types(literal.values, env, module, allModules))
     case CompiledIndexExpression index -> indexed_type(index, expression_type(index.receiver, env, module, allModules))
-    case CompiledDataLiteral literal ->
-        if program_success_literal(literal.typeName, module.imports) | program_failed_literal(literal.typeName, module.imports)
-        then CompiledTypeReference { name: "/capy/lang/Program", arguments: [] }
-        else if result_success_literal(literal.typeName, module.imports)
-        then result_type(result_literal_value_type(literal, env, module, allModules))
-        else if result_error_literal(literal.typeName, module.imports)
-        then result_type(object_type())
-        else CompiledTypeReference { name: literal.typeName, arguments: [] }
+    case CompiledDataLiteral literal -> data_literal_expression_type(literal, env, module, allModules)
     case CompiledFieldAccessExpression access -> field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
     case CompiledBlockExpression block -> expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
+
+private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if program_success_literal(literal.typeName, module.imports) | program_failed_literal(literal.typeName, module.imports)
+    then CompiledTypeReference { name: "/capy/lang/Program", arguments: [] }
+    else if result_success_literal(literal.typeName, module.imports)
+    then result_type(result_literal_value_type(literal, env, module, allModules))
+    else if result_error_literal(literal.typeName, module.imports)
+    then result_type(object_type())
+    else if raw_data_literal(literal.typeName)
+    then data_type_reference(raw_data_literal_type_name(literal.typeName))
+    else match data_constructor_function(literal.typeName, module) with
+        case Some { function } -> data_constructor_literal_type(literal.typeName, function, module, allModules)
+        case None -> data_type_reference(literal.typeName)
+
+private fun data_constructor_literal_type(typeName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if result_type_name(function.returnType.name)
+    then function.returnType
+    else if concrete_return_type(function.returnType)
+    then function.returnType
+    else
+        let inferred = data_constructor_inferred_return_type(function, module, allModules)
+        if result_type_name(inferred.name)
+        then inferred
+        else data_type_reference(typeName)
+
+private fun data_constructor_inferred_return_type(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let constructorEnv = java_function_bindings(function) + constant_bindings(constant_functions(module.functions))
+    data_constructor_inferred_expression_type(function.body, constructorEnv, module, allModules)
+
+private fun data_constructor_inferred_expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match expression with
+    case CompiledIfExpression ifExpression -> preferred_result_type(
+        data_constructor_inferred_expression_type(ifExpression.thenBranch, env, module, allModules),
+        data_constructor_inferred_expression_type(ifExpression.elseBranch, env, module, allModules)
+    )
+    case CompiledBlockExpression block ->
+        data_constructor_inferred_expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
+    case _ -> result_expression_type(expression, expression_type(expression, env, module, allModules), env, module, allModules)
+
+private fun preferred_result_type(first: CompiledTypeReference, second: CompiledTypeReference): CompiledTypeReference =
+    if result_type_name(first.name) & result_type_name(second.name)
+    then if result_value_type_needs_context(first_type_argument(first)) then second else first
+    else if result_type_name(first.name)
+    then first
+    else if result_type_name(second.name)
+    then second
+    else first
+
+private fun data_type_reference(typeName: String): CompiledTypeReference =
+    CompiledTypeReference { name: typeName, arguments: [] }
 
 private fun variable_expression_type(variable: CompiledVariableExpression, env: List[JavaBinding], module: CompiledModule): CompiledTypeReference =
     if binding_exists(variable.name, env)
@@ -2899,6 +2947,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then int_type()
     else if char_to_string_call(call, env, module, allModules)
     then string_type()
+    else if assert_status_call(call, env, module, allModules)
+    then bool_type()
     else if assert_is_empty_call(call) | negated_collection_is_empty_call(call, env, module, allModules) | collection_is_empty_call(call, env, module, allModules)
     then bool_type()
     else if collection_predicate_call(call, env, module, allModules)
@@ -3753,6 +3803,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
         & expression_emittable(call.receiver, env, module, allModules)
     else if char_to_string_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
+    else if assert_status_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
     else if assert_is_empty_call(call)
     then assert_is_empty_emittable(call, env, module, allModules)
     else if result_assert_succeeds_lambda_call(call, env, module, allModules)
@@ -4317,6 +4369,7 @@ private fun java_method_supported(name: String): bool =
         | name == "is_zero" | name == "is_one"
         | name == "starts_with" | name == "does_not_start_with" | name == "end_with" | name == "contains"
         | name == "has_size" | name == "succeeds" | name == "fails"
+        | name == "succeeded" | name == "failed"
         | name == "replace" | name == "trim" | name == "size"
 
 private fun java_type(type: CompiledTypeReference): String =
