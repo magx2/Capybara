@@ -81,6 +81,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
         for (var definition : program.definition()) {
             if (definition.dataDeclaration() != null) {
                 definitions.addAll(dataDeclarationDefinitions(definition.dataDeclaration()));
+            } else if (definition.typeDeclaration() != null) {
+                definitions.addAll(typeDeclarationDefinitions(definition.typeDeclaration()));
             } else if (definition.functionDeclaration() != null) {
                 definitions.addAll(functionDefinitions(definition.functionDeclaration()));
             } else {
@@ -243,6 +245,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
             for (var definition : ctx.functionBody().localDefinition()) {
                 if (definition.localDataDeclaration() != null) {
                     definitions.addAll(localDataDeclarationDefinitions(definition.localDataDeclaration()));
+                } else if (definition.localTypeDeclaration() != null) {
+                    definitions.addAll(localTypeDeclarationDefinitions(definition.localTypeDeclaration()));
                 }
             }
             for (var definition : ctx.functionBody().localDefinition()) {
@@ -342,6 +346,72 @@ public final class NativeCapybaraParser implements CapybaraParser {
     ) {
         var declaration = ctx.genericTypeDeclaration();
         return dataDeclarationDefinitions(declaration, ctx.dataBody(), ctx.constructorClause(), location(ctx));
+    }
+
+    private static List<Definition> typeDeclarationDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.TypeDeclarationContext ctx
+    ) {
+        return typeDeclarationDefinitions(
+                ctx.genericTypeDeclaration(),
+                ctx.fieldDeclarationList(),
+                location(ctx)
+        );
+    }
+
+    private static List<Definition> localTypeDeclarationDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.LocalTypeDeclarationContext ctx
+    ) {
+        return typeDeclarationDefinitions(
+                ctx.genericTypeDeclaration(),
+                ctx.fieldDeclarationList(),
+                location(ctx)
+        );
+    }
+
+    private static List<Definition> typeDeclarationDefinitions(
+            List<dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext> declarations,
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationListContext parentFields,
+            SourceLocation location
+    ) {
+        if (declarations.isEmpty()) {
+            return List.of();
+        }
+
+        var unionDeclaration = declarations.getFirst();
+        var name = dataTypeName(unionDeclaration);
+        var definitions = new ArrayList<Definition>();
+        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
+
+        var typeParameters = dataTypeParameters(unionDeclaration);
+        for (var i = 0; i < typeParameters.size(); i++) {
+            definitions.add(schemaConstantDefinition(
+                    "__capy_schema_param|" + name + "|" + i,
+                    typeParameters.get(i),
+                    location
+            ));
+        }
+
+        var fields = fieldDeclarationFields(parentFields);
+        for (var i = 0; i < fields.size(); i++) {
+            definitions.add(schemaConstantDefinition(
+                    "__capy_schema_field|" + name + "|" + i,
+                    fields.get(i),
+                    location
+            ));
+        }
+
+        for (var declarationIndex = 1; declarationIndex < declarations.size(); declarationIndex++) {
+            var variantName = dataTypeName(declarations.get(declarationIndex));
+            for (var fieldIndex = 0; fieldIndex < fields.size(); fieldIndex++) {
+                definitions.add(schemaConstantDefinition(
+                        "__capy_schema_field|" + variantName + "|parent|" + fieldIndex,
+                        fields.get(fieldIndex),
+                        location
+                ));
+            }
+        }
+
+        return List.copyOf(definitions);
     }
 
     private static List<Definition> dataDeclarationDefinitions(
@@ -454,8 +524,17 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx == null || ctx.fieldDeclarationList() == null) {
             return List.of();
         }
+        return fieldDeclarationFields(ctx.fieldDeclarationList());
+    }
+
+    private static List<String> fieldDeclarationFields(
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
         var fields = new ArrayList<String>();
-        for (var field : ctx.fieldDeclarationList().fieldDeclaration()) {
+        for (var field : ctx.fieldDeclaration()) {
             fields.add(dataFieldDeclaration(field));
         }
         return List.copyOf(fields);
