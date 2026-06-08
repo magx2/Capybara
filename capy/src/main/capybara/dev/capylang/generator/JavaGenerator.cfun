@@ -829,16 +829,6 @@ private fun function_lambda_parameter_tail(parameters: List[CompiledTypeReferenc
     case None -> ""
     case Some _ -> ", __capy_arg" + idx + function_lambda_parameter_tail(parameters[1:], idx + 1)
 
-private fun function_lambda_argument_list(parameters: List[CompiledTypeReference], idx: int): String =
-    match parameters[0] with
-    case None -> ""
-    case Some _ -> "__capy_arg" + idx + function_lambda_argument_tail(parameters[1:], idx + 1)
-
-private fun function_lambda_argument_tail(parameters: List[CompiledTypeReference], idx: int): String =
-    match parameters[0] with
-    case None -> ""
-    case Some _ -> ", __capy_arg" + idx + function_lambda_argument_tail(parameters[1:], idx + 1)
-
 private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if qualified_call_name(call.name)
     then
@@ -1297,10 +1287,12 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
     let indexCode = string_index_argument_code(index.index, env, module, allModules)
     let resultType = expression_type(index, env, module, allModules)
     if receiverType.name == "String" & index.hasEndIndex
-    then receiverCode + ".substring("
-        + normalized_string_index(receiverCode, indexCode)
+    then "__capy_string_slice("
+        + receiverCode
         + ", "
-        + normalized_string_index(receiverCode, string_index_argument_code(index.endIndex, env, module, allModules))
+        + indexCode
+        + ", "
+        + string_index_argument_code(index.endIndex, env, module, allModules)
         + ")"
     else if receiverType.name == "String"
     then string_optional_index_code(receiverCode, indexCode)
@@ -1314,7 +1306,7 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
         + ", "
         + list_slice_end_index_code(receiverCode, index.endIndex, env, module, allModules)
         + ")"
-    else list_optional_index_code(receiverCode, indexCode, first_type_argument(receiverType))
+    else list_optional_index_code(receiverCode, indexCode)
 
 private fun list_slice_start_index_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
@@ -1346,30 +1338,10 @@ private fun string_index_argument_code(expression: CompiledExpression, env: List
     else "((java.lang.Number) " + code + ").intValue()"
 
 private fun string_optional_index_code(receiverCode: String, indexCode: String): String =
-    "(((" + normalized_string_index(receiverCode, indexCode) + ") >= 0 && ("
-        + normalized_string_index(receiverCode, indexCode) + ") < " + receiverCode + ".length()) ? "
-        + "java.util.Optional.of(java.lang.String.valueOf(" + receiverCode + ".charAt("
-        + normalized_string_index(receiverCode, indexCode) + "))) : java.util.Optional.empty())"
+    "__capy_string_get_optional(" + receiverCode + ", " + indexCode + ")"
 
-private fun normalized_string_index(receiverCode: String, indexCode: String): String =
-    "((" + indexCode + ") < 0 ? (" + receiverCode + ".length() + (" + indexCode + ")) : (" + indexCode + "))"
-
-private fun list_optional_index_code(receiverCode: String, indexCode: String, valueType: CompiledTypeReference): String =
-    "((__capy_normalized_index(" + receiverCode + ", " + indexCode + ") >= 0 && __capy_normalized_index("
-        + receiverCode
-        + ", "
-        + indexCode
-        + ") < "
-        + receiverCode
-        + ".size()) ? java.util.Optional.of(("
-        + boxed_java_type(valueType)
-        + ") "
-        + receiverCode
-        + ".get(__capy_normalized_index("
-        + receiverCode
-        + ", "
-        + indexCode
-        + "))) : java.util.Optional.empty())"
+private fun list_optional_index_code(receiverCode: String, indexCode: String): String =
+    "__capy_list_get_optional(" + receiverCode + ", " + indexCode + ")"
 
 private fun block_expression_code(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let resultType = expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
@@ -3419,7 +3391,10 @@ private fun module_source_file(module: CompiledModule): String =
 private fun java_helpers(module: CompiledModule): String =
     if module.functions.is_empty()
     then ""
-    else "    private static int __capy_pow_int(int base, int exponent) {" + newline()
+    else java_base_helpers() + java_collection_helpers() + java_truthy_helper()
+
+private fun java_base_helpers(): String =
+    "    private static int __capy_pow_int(int base, int exponent) {" + newline()
         + "        if (exponent <= 0) {" + newline()
         + "            return 1;" + newline()
         + "        }" + newline()
@@ -3562,7 +3537,9 @@ private fun java_helpers(module: CompiledModule): String =
         + "        }" + newline()
         + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to bool: \" + value)));" + newline()
         + "    }" + newline() + newline()
-        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+
+private fun java_collection_helpers(): String =
+    "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.List __capy_list_append(java.util.List values, java.lang.Object value) {" + newline()
         + "        java.util.ArrayList result = new java.util.ArrayList(values);" + newline()
         + "        result.add(value);" + newline()
@@ -3576,6 +3553,27 @@ private fun java_helpers(module: CompiledModule): String =
         + "    }" + newline() + newline()
         + "    private static int __capy_normalized_index(java.util.List values, int index) {" + newline()
         + "        return index < 0 ? values.size() + index : index;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static int __capy_normalized_string_index(java.lang.String value, int index) {" + newline()
+        + "        return index < 0 ? value.length() + index : index;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_string_slice(java.lang.String value, int start, int end) {" + newline()
+        + "        return value.substring(__capy_normalized_string_index(value, start), __capy_normalized_string_index(value, end));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.Optional<java.lang.String> __capy_string_get_optional(java.lang.String value, int index) {" + newline()
+        + "        int normalizedIndex = __capy_normalized_string_index(value, index);" + newline()
+        + "        if (normalizedIndex < 0 || normalizedIndex >= value.length()) {" + newline()
+        + "            return java.util.Optional.empty();" + newline()
+        + "        }" + newline()
+        + "        return java.util.Optional.of(java.lang.String.valueOf(value.charAt(normalizedIndex)));" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Optional __capy_list_get_optional(java.util.List values, int index) {" + newline()
+        + "        int normalizedIndex = __capy_normalized_index(values, index);" + newline()
+        + "        if (normalizedIndex < 0 || normalizedIndex >= values.size()) {" + newline()
+        + "            return java.util.Optional.empty();" + newline()
+        + "        }" + newline()
+        + "        return java.util.Optional.of(values.get(normalizedIndex));" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.List __capy_list_slice(java.util.List values, int start, int end) {" + newline()
@@ -3619,7 +3617,9 @@ private fun java_helpers(module: CompiledModule): String =
         + "        result.putAll(right);" + newline()
         + "        return java.util.Collections.unmodifiableMap(result);" + newline()
         + "    }" + newline() + newline()
-        + "    private static boolean __capy_truthy(java.lang.Object value) {" + newline()
+
+private fun java_truthy_helper(): String =
+    "    private static boolean __capy_truthy(java.lang.Object value) {" + newline()
         + "        if (value == null) {" + newline()
         + "            return false;" + newline()
         + "        }" + newline()
