@@ -35,10 +35,21 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     + java_imports(module, allModules)
     + "public final class " + module.name + " {" + newline()
     + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
+    + java_function_type_interfaces()
     + java_constants(constant_functions(module.functions), [], module, allModules)
     + java_functions(module.functions, module, allModules)
     + java_helpers(module)
     + "}" + newline()
+
+private fun java_function_type_interfaces(): String =
+    "    @FunctionalInterface" + newline()
+    + "    private interface __CapyFunction3<A, B, C, R> {" + newline()
+    + "        R apply(A a, B b, C c);" + newline()
+    + "    }" + newline() + newline()
+    + "    @FunctionalInterface" + newline()
+    + "    private interface __CapyFunction4<A, B, C, D, R> {" + newline()
+    + "        R apply(A a, B b, C c, D d);" + newline()
+    + "    }" + newline() + newline()
 
 private fun java_imports(module: CompiledModule, allModules: List[CompiledModule]): String =
     "import java.util.*;" + newline()
@@ -322,13 +333,13 @@ private fun expression_code(
     case CompiledBinaryExpression binary -> binary_expression_code(binary, env, expectedType, module, allModules)
     case CompiledUnaryExpression unary -> unary_expression_code(unary, env, expectedType, module, allModules)
     case CompiledFunctionCallExpression call -> numeric_widening_code(function_call_code(call, env, expectedType, module, allModules), function_call_type(call, env, module, allModules), expectedType)
-    case CompiledFunctionReferenceExpression reference -> function_reference_code(reference, module, allModules)
+    case CompiledFunctionReferenceExpression reference -> function_reference_code(reference, expectedType, module, allModules)
     case CompiledMethodCallExpression call -> numeric_widening_code(method_call_code(call, env, expectedType, module, allModules), method_call_type(call, env, module, allModules), expectedType)
     case CompiledLambdaExpression lambda -> lambda_expression_code(lambda, env, expectedType, module, allModules)
-    case CompiledListLiteral literal -> "java.util.List.of(" + expression_list_code(literal.values, env, module, allModules) + ")"
+    case CompiledListLiteral literal -> list_literal_code(literal, env, expectedType, module, allModules)
     case CompiledSetLiteral literal -> "java.util.Set.of(" + expression_list_code(literal.values, env, module, allModules) + ")"
     case CompiledDictLiteral literal -> dict_code(literal.entries, env, module, allModules)
-    case CompiledTupleLiteral literal -> "java.util.List.of(" + expression_list_code(literal.values, env, module, allModules) + ")"
+    case CompiledTupleLiteral literal -> tuple_literal_code(literal, env, expectedType, module, allModules)
     case CompiledIndexExpression index -> index_code(index, env, expectedType, module, allModules)
     case CompiledDataLiteral literal -> data_literal_code(literal, env, expectedType, module, allModules)
     case CompiledFieldAccessExpression access -> field_access_code(access, env, expectedType, module, allModules)
@@ -701,6 +712,8 @@ private fun value_conversion_code(code: String, sourceType: CompiledTypeReferenc
 private fun function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "delay"
     then "capy.lang.Effect.delay(" + expression_code(argument(call.arguments, 0), env, supplier_type(first_type_argument(delay_call_type(call.arguments, env, module, allModules))), module, allModules) + ")"
+    else if binding_exists(call.name, env) & function_type(lookup_binding(call.name, env))
+    then function_value_call_code(call, env, module, allModules)
     else if call.name == "pure" & effect_member_imported("pure", module.imports)
     then
         let valueType = if expectedType.name == "Effect" then first_type_argument(expectedType) else expression_type(argument(call.arguments, 0), env, module, allModules)
@@ -736,8 +749,66 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
         + ").replace(\"-\", \"\").length()"
     else ordinary_function_call_code(call, env, module, allModules)
 
-private fun function_reference_code(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
-    function_reference_lambda_code(reference, function_reference_parameter_type(reference, module, allModules), function_reference_type(reference, module, allModules), module, allModules)
+private fun function_value_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let type = lookup_binding(call.name, env)
+    let parameters = function_type_parameters(type)
+    let target = lookup_binding_java_name(call.name, env)
+    if parameters.is_empty()
+    then target + ".get()"
+    else target + ".apply(" + function_value_call_arguments(parameters, call.arguments, env, module, allModules) + ")"
+
+private fun function_value_call_arguments(parameters: List[CompiledTypeReference], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { expression } ->
+        expression_code(expression, env, function_type_parameter_at(parameters, 0), module, allModules)
+        + function_value_call_argument_tail(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun function_value_call_argument_tail(parameters: List[CompiledTypeReference], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { expression } ->
+        ", " + expression_code(expression, env, function_type_parameter_at(parameters, 0), module, allModules)
+        + function_value_call_argument_tail(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun function_reference_code(reference: CompiledFunctionReferenceExpression, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if function_type(expectedType)
+    then "((" + boxed_java_type(expectedType) + ") (" + typed_function_reference_lambda_code(reference, expectedType, module, allModules) + "))"
+    else function_reference_lambda_code(reference, function_reference_parameter_type(reference, module, allModules), function_reference_type(reference, module, allModules), module, allModules)
+
+private fun typed_function_reference_lambda_code(reference: CompiledFunctionReferenceExpression, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let parameters = function_type_parameters(expectedType)
+    function_lambda_parameters(parameters, 0)
+        + " -> " + java_function_call_name(reference.name, module, allModules)
+        + "(" + function_lambda_argument_list(parameters, 0) + ")"
+
+private fun function_lambda_parameters(parameters: List[CompiledTypeReference], idx: int): String =
+    match parameters[0] with
+    case None -> "()"
+    case Some _ ->
+        if parameters[1:].is_empty()
+        then "__capy_arg" + idx
+        else "(" + function_lambda_parameter_list(parameters, idx) + ")"
+
+private fun function_lambda_parameter_list(parameters: List[CompiledTypeReference], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> "__capy_arg" + idx + function_lambda_parameter_tail(parameters[1:], idx + 1)
+
+private fun function_lambda_parameter_tail(parameters: List[CompiledTypeReference], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", __capy_arg" + idx + function_lambda_parameter_tail(parameters[1:], idx + 1)
+
+private fun function_lambda_argument_list(parameters: List[CompiledTypeReference], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> "__capy_arg" + idx + function_lambda_argument_tail(parameters[1:], idx + 1)
+
+private fun function_lambda_argument_tail(parameters: List[CompiledTypeReference], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", __capy_arg" + idx + function_lambda_argument_tail(parameters[1:], idx + 1)
 
 private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if qualified_call_name(call.name)
@@ -934,10 +1005,29 @@ private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding]
     params + " -> " + expression_code(lambda.body, lambda_env(lambda.parameters, env), expression_type(lambda.body, lambda_env(lambda.parameters, env), module, allModules), module, allModules)
 
 private fun lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let code = lambda_code(lambda, env, module, allModules)
-    if lambda.parameters.is_empty() & expectedType.name != "Supplier"
-    then "((java.util.function.Supplier<java.lang.Object>) (" + code + "))"
-    else code
+    if function_type(expectedType)
+    then typed_lambda_expression_code(lambda, env, expectedType, module, allModules)
+    else
+        let code = lambda_code(lambda, env, module, allModules)
+        if lambda.parameters.is_empty() & expectedType.name != "Supplier"
+        then "((java.util.function.Supplier<java.lang.Object>) (" + code + "))"
+        else code
+
+private fun typed_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let parameters = function_type_parameters(expectedType)
+    let lambdaEnv = typed_lambda_env(lambda.parameters, parameters, env)
+    "((" + boxed_java_type(expectedType) + ") ("
+        + lambda_parameters(lambda.parameters)
+        + " -> "
+        + expression_code(lambda.body, lambdaEnv, function_type_return_type(expectedType), module, allModules)
+        + "))"
+
+private fun typed_lambda_env(parameters: List[String], types: List[CompiledTypeReference], env: List[JavaBinding]): List[JavaBinding] =
+    match parameters[0] with
+    case None -> env
+    case Some { parameter } ->
+        [java_binding(parameter, function_type_parameter_at(types, 0))]
+            + typed_lambda_env(parameters[1:], type_reference_tail(types), env)
 
 private fun lambda_code_for_value(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
@@ -1029,7 +1119,37 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
         + ")"
     else if receiverType.name == "String"
     then string_optional_index_code(receiverCode, indexCode)
-    else "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(" + indexCode + "))"
+    else if index.hasEndIndex
+    then "__capy_list_slice("
+        + receiverCode
+        + ", "
+        + list_slice_start_index_code(index.index, env, module, allModules)
+        + ", "
+        + list_slice_end_index_code(receiverCode, index.endIndex, env, module, allModules)
+        + ")"
+    else "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(__capy_normalized_index(" + receiverCode + ", " + indexCode + ")))"
+
+private fun list_slice_start_index_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledIntLiteral literal ->
+        if omitted_slice_start(literal)
+        then "0"
+        else string_index_argument_code(expression, env, module, allModules)
+    case _ -> string_index_argument_code(expression, env, module, allModules)
+
+private fun list_slice_end_index_code(receiverCode: String, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledIntLiteral literal ->
+        if omitted_slice_end(literal)
+        then receiverCode + ".size()"
+        else string_index_argument_code(expression, env, module, allModules)
+    case _ -> string_index_argument_code(expression, env, module, allModules)
+
+private fun omitted_slice_end(literal: CompiledIntLiteral): bool =
+    literal.source == "__capy_slice_end__"
+
+private fun omitted_slice_start(literal: CompiledIntLiteral): bool =
+    literal.source == "__capy_slice_start__"
 
 private fun string_index_argument_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let type = expression_type(expression, env, module, allModules)
@@ -1140,6 +1260,54 @@ private fun expression_list_tail(expressions: List[CompiledExpression], env: Lis
     match expressions[0] with
     case None -> ""
     case Some { expression } -> ", " + expression_code(expression, env, expression_type(expression, env, module, allModules), module, allModules) + expression_list_tail(expressions[1:], env, module, allModules)
+
+private fun list_literal_code(literal: CompiledListLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let elementType = if expectedType.name == "List" then first_type_argument(expectedType) else object_type()
+    "java.util.List.of(" + list_expression_list_code(literal.values, elementType, env, module, allModules) + ")"
+
+private fun list_expression_list_code(expressions: List[CompiledExpression], elementType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        expression_code(expression, env, list_element_expected_type(elementType, expression, env, module, allModules), module, allModules)
+        + list_expression_list_tail(expressions[1:], elementType, env, module, allModules)
+
+private fun list_expression_list_tail(expressions: List[CompiledExpression], elementType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        ", " + expression_code(expression, env, list_element_expected_type(elementType, expression, env, module, allModules), module, allModules)
+        + list_expression_list_tail(expressions[1:], elementType, env, module, allModules)
+
+private fun list_element_expected_type(elementType: CompiledTypeReference, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if elementType.name.is_empty() | elementType.name == "any" | elementType.name == "Object"
+    then expression_type(expression, env, module, allModules)
+    else elementType
+
+private fun tuple_literal_code(literal: CompiledTupleLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "java.util.List.of(" + tuple_expression_list_code(literal.values, expectedType.arguments, env, module, allModules) + ")"
+
+private fun tuple_expression_list_code(expressions: List[CompiledExpression], expectedTypes: List[CompiledTypeReference], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        expression_code(expression, env, tuple_expression_expected_type(expectedTypes, 0, expression, env, module, allModules), module, allModules)
+        + tuple_expression_list_tail(expressions[1:], type_reference_tail(expectedTypes), env, module, allModules)
+
+private fun tuple_expression_list_tail(expressions: List[CompiledExpression], expectedTypes: List[CompiledTypeReference], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        ", " + expression_code(expression, env, tuple_expression_expected_type(expectedTypes, 0, expression, env, module, allModules), module, allModules)
+        + tuple_expression_list_tail(expressions[1:], type_reference_tail(expectedTypes), env, module, allModules)
+
+private fun tuple_expression_expected_type(expectedTypes: List[CompiledTypeReference], idx: int, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match expectedTypes[idx] with
+    case Some { type } -> type
+    case None -> expression_type(expression, env, module, allModules)
+
+private fun type_reference_tail(types: List[CompiledTypeReference]): List[CompiledTypeReference] =
+    if types.is_empty() then [] else types[1:]
 
 private fun dict_code(entries: List[CompiledDictEntry], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if entries.is_empty()
@@ -1517,6 +1685,8 @@ private fun field_access_type(access: CompiledFieldAccessExpression, env: List[J
 private fun function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "delay"
     then delay_call_type(call.arguments, env, module, allModules)
+    else if binding_exists(call.name, env) & function_type(lookup_binding(call.name, env))
+    then function_type_return_type(lookup_binding(call.name, env))
     else if call.name == "pure" & effect_member_imported("pure", module.imports)
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
@@ -1601,13 +1771,57 @@ private fun expression_types(expressions: List[CompiledExpression], env: List[Ja
     case Some { expression } -> [expression_type(expression, env, module, allModules)] + expression_types(expressions[1:], env, module, allModules)
 
 private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType: CompiledTypeReference): CompiledTypeReference =
-    if receiverType.name == "Tuple" | receiverType.name == "List"
-    then match indexExpression.index with
-        case CompiledIntLiteral literal -> tuple_argument(receiverType.arguments, literal.value)
-        case _ -> object_type()
+    if receiverType.name == "Tuple"
+    then
+        if indexExpression.hasEndIndex
+        then tuple_type(tuple_slice_arguments(
+            receiverType.arguments,
+            normalized_tuple_type_index(receiverType.arguments, indexExpression.index, 0),
+            normalized_tuple_slice_end_index(receiverType.arguments, indexExpression.endIndex)
+        ))
+        else tuple_argument(receiverType.arguments, normalized_tuple_type_index(receiverType.arguments, indexExpression.index, 0))
+    else if receiverType.name == "List"
+    then
+        if indexExpression.hasEndIndex
+        then receiverType
+        else first_type_argument(receiverType)
     else if receiverType.name == "String"
     then if indexExpression.hasEndIndex then string_type() else option_type(string_type())
     else object_type()
+
+private fun normalized_tuple_slice_end_index(arguments: List[CompiledTypeReference], expression: CompiledExpression): int =
+    match expression with
+    case CompiledIntLiteral literal ->
+        if omitted_slice_end(literal)
+        then arguments.size().value
+        else normalized_tuple_type_index(arguments, expression, arguments.size().value)
+    case _ -> arguments.size().value
+
+private fun normalized_tuple_type_index(arguments: List[CompiledTypeReference], expression: CompiledExpression, fallback: int): int =
+    match expression with
+    case CompiledIntLiteral literal -> normalize_tuple_index(arguments, literal.value)
+    case CompiledUnaryExpression unary ->
+        if unary.operator == "-"
+        then match unary.expression with
+            case CompiledIntLiteral literal -> normalize_tuple_index(arguments, 0 - literal.value)
+            case _ -> fallback
+        else fallback
+    case _ -> fallback
+
+private fun normalize_tuple_index(arguments: List[CompiledTypeReference], index: int): int =
+    if index < 0 then arguments.size().value + index else index
+
+private fun tuple_slice_arguments(arguments: List[CompiledTypeReference], start: int, end: int): List[CompiledTypeReference] =
+    tuple_slice_arguments_from(arguments, start, end, 0)
+
+private fun tuple_slice_arguments_from(arguments: List[CompiledTypeReference], start: int, end: int, idx: int): List[CompiledTypeReference] =
+    match arguments[0] with
+    case None -> []
+    case Some { argument } ->
+        let rest = tuple_slice_arguments_from(arguments[1:], start, end, idx + 1)
+        if idx >= start & idx < end
+        then [argument] + rest
+        else rest
 
 private fun tuple_argument(arguments: List[CompiledTypeReference], index: int): CompiledTypeReference =
     match arguments[index] with
@@ -2252,6 +2466,8 @@ private fun primitive_conversion_receiver(name: String, receiverType: CompiledTy
 private fun function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "delay"
     then delay_call_emittable(call.arguments, env, module, allModules)
+    else if binding_exists(call.name, env) & function_type(lookup_binding(call.name, env))
+    then function_value_call_emittable(call, env, module, allModules)
     else if call.name == "pure" & effect_member_imported("pure", module.imports)
     then match call.arguments[0] with
         case None -> false
@@ -2281,8 +2497,25 @@ private fun qualified_function_call_emittable(call: CompiledFunctionCallExpressi
             case Some { function } -> concrete_return_type(function.returnType) & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
             case None -> qualified_call_member(call.name) == "main"
 
+private fun function_value_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let type = lookup_binding(call.name, env)
+    function_type_call_arguments_emittable(function_type_parameters(type), call.arguments, env, module, allModules)
+
+private fun function_type_call_arguments_emittable(parameters: List[CompiledTypeReference], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match parameters[0] with
+    case None -> arguments.is_empty()
+    case Some { parameter } ->
+        match arguments[0] with
+        case None -> false
+        case Some { argument } ->
+            expression_emittable(argument, env, module, allModules)
+                & type_assignable(parameter, expression_type(argument, env, module, allModules))
+                & function_type_call_arguments_emittable(parameters[1:], arguments[1:], env, module, allModules)
+
 private fun function_reference_emittable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    false
+    match find_function_in_scope(reference.name, module, allModules) with
+    case Some { function } -> concrete_return_type(function.returnType)
+    case None -> false
 
 private fun stdlib_math_digits_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     call.name == "digits" & !function_defined(call.name, module.functions) & stdlib_math_wildcard_import(module.imports)
@@ -2374,7 +2607,11 @@ private fun test_file_call_emittable(arguments: List[CompiledExpression], env: L
 private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(index.receiver, env, module, allModules)
     if receiverType.name == "List" | receiverType.name == "Tuple"
-    then !index.hasEndIndex & index_literal_emittable(index.index) & expression_emittable(index.receiver, env, module, allModules) & expression_emittable(index.index, env, module, allModules)
+    then index_literal_emittable(index.index)
+        & (!index.hasEndIndex | index_literal_emittable(index.endIndex))
+        & expression_emittable(index.receiver, env, module, allModules)
+        & expression_emittable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
     else if receiverType.name == "String"
     then expression_emittable(index.receiver, env, module, allModules)
         & expression_emittable(index.index, env, module, allModules)
@@ -2383,7 +2620,8 @@ private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBindin
 
 private fun index_literal_emittable(index: CompiledExpression): bool =
     match index with
-    case CompiledIntLiteral literal -> literal.value >= 0
+    case CompiledIntLiteral _ -> true
+    case CompiledUnaryExpression unary -> unary.operator == "-" & index_literal_emittable(unary.expression)
     case _ -> false
 
 private fun function_call_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -2425,7 +2663,33 @@ private fun parameters_assignable(parameters: List[CompiledFunctionParameter], a
 private fun parameter_argument_assignable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if empty_collection_literal_assignable(target, argument)
     then true
+    else if function_reference_assignable(target, argument, module, allModules)
+    then true
     else type_assignable(target, expression_type(argument, env, module, allModules))
+
+private fun function_reference_assignable(target: CompiledTypeReference, argument: CompiledExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if !function_type(target)
+    then false
+    else match argument with
+        case CompiledFunctionReferenceExpression reference -> function_reference_type_assignable(target, reference, module, allModules)
+        case _ -> false
+
+private fun function_reference_type_assignable(target: CompiledTypeReference, reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_function_in_scope(reference.name, module, allModules) with
+    case Some { function } ->
+        type_assignable(function_type_return_type(target), function.returnType)
+            & function_parameters_assignable(function_type_parameters(target), function.parameters)
+    case None -> false
+
+private fun function_parameters_assignable(targetParameters: List[CompiledTypeReference], sourceParameters: List[CompiledFunctionParameter]): bool =
+    match targetParameters[0] with
+    case None -> sourceParameters.is_empty()
+    case Some { targetParameter } ->
+        match sourceParameters[0] with
+        case None -> false
+        case Some { sourceParameter } ->
+            type_assignable(targetParameter, sourceParameter.typeReference)
+                & function_parameters_assignable(targetParameters[1:], sourceParameters[1:])
 
 private fun empty_collection_literal_assignable(target: CompiledTypeReference, argument: CompiledExpression): bool =
     match argument with
@@ -2489,7 +2753,8 @@ private fun java_type(type: CompiledTypeReference): String =
     else boxed_java_type(type)
 
 private fun boxed_java_type(type: CompiledTypeReference): String =
-    if type.name == "byte" then "java.lang.Byte"
+    if function_type(type) then java_functional_type(type)
+    else if type.name == "byte" then "java.lang.Byte"
     else if type.name == "int" then "java.lang.Integer"
     else if type.name == "long" then "java.lang.Long"
     else if type.name == "float" then "java.lang.Float"
@@ -2507,6 +2772,55 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "Supplier" then "java.util.function.Supplier<" + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "/capy/lang/Program" then "capy.lang.Program"
     else "java.lang.Object"
+
+private fun function_type(type: CompiledTypeReference): bool =
+    type.name ? "=>"
+
+private fun java_functional_type(type: CompiledTypeReference): String =
+    let parameters = function_type_parameters(type)
+    let returnType = function_type_return_type(type)
+    if parameters.is_empty()
+    then "java.util.function.Supplier<" + boxed_java_type(returnType) + ">"
+    else if parameters.size().value == 1
+    then "java.util.function.Function<" + boxed_java_type(function_type_parameter_at(parameters, 0)) + ", " + boxed_java_type(returnType) + ">"
+    else if parameters.size().value == 2
+    then "java.util.function.BiFunction<" + boxed_java_type(function_type_parameter_at(parameters, 0)) + ", " + boxed_java_type(function_type_parameter_at(parameters, 1)) + ", " + boxed_java_type(returnType) + ">"
+    else if parameters.size().value == 3
+    then "__CapyFunction3<" + boxed_java_type(function_type_parameter_at(parameters, 0)) + ", " + boxed_java_type(function_type_parameter_at(parameters, 1)) + ", " + boxed_java_type(function_type_parameter_at(parameters, 2)) + ", " + boxed_java_type(returnType) + ">"
+    else if parameters.size().value == 4
+    then "__CapyFunction4<" + boxed_java_type(function_type_parameter_at(parameters, 0)) + ", " + boxed_java_type(function_type_parameter_at(parameters, 1)) + ", " + boxed_java_type(function_type_parameter_at(parameters, 2)) + ", " + boxed_java_type(function_type_parameter_at(parameters, 3)) + ", " + boxed_java_type(returnType) + ">"
+    else "java.lang.Object"
+
+private fun function_type_parameters(type: CompiledTypeReference): List[CompiledTypeReference] =
+    let text = function_type_parameter_text(type)
+    if text == "()"
+    then []
+    else function_type_parameter_list(function_type_parameter_inner_text(text))
+
+private fun function_type_parameter_text(type: CompiledTypeReference): String =
+    let arrow = first_index_of(type.name, "=", 0)
+    if arrow < 0 then "" else type.name[0, arrow]
+
+private fun function_type_parameter_inner_text(text: String): String =
+    if java_generator_string_has_prefix(text, "(")
+    then text[1, text.size().value - 1]
+    else text
+
+private fun function_type_parameter_list(text: String): List[CompiledTypeReference] =
+    if text.trim().is_empty()
+    then []
+    else schema_type_arguments(text)
+
+private fun function_type_return_type(type: CompiledTypeReference): CompiledTypeReference =
+    let arrow = first_index_of(type.name, "=", 0)
+    if arrow < 0
+    then object_type()
+    else schema_type_reference(type.name[arrow + 2, type.name.size().value])
+
+private fun function_type_parameter_at(parameters: List[CompiledTypeReference], idx: int): CompiledTypeReference =
+    match parameters[idx] with
+    case Some { parameter } -> parameter
+    case None -> object_type()
 
 private fun java_seq_type(type: CompiledTypeReference): String =
     "capy.lang.Seq<" + boxed_java_type(first_type_argument(type)) + ">"
@@ -2840,6 +3154,15 @@ private fun java_helpers(module: CompiledModule): String =
         + "        java.util.ArrayList result = new java.util.ArrayList(left);" + newline()
         + "        result.addAll(right);" + newline()
         + "        return java.util.List.copyOf(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static int __capy_normalized_index(java.util.List values, int index) {" + newline()
+        + "        return index < 0 ? values.size() + index : index;" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.List __capy_list_slice(java.util.List values, int start, int end) {" + newline()
+        + "        int normalizedStart = __capy_normalized_index(values, start);" + newline()
+        + "        int normalizedEnd = __capy_normalized_index(values, end);" + newline()
+        + "        return java.util.List.copyOf(values.subList(normalizedStart, normalizedEnd));" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.List __capy_list_remove(java.util.List values, java.lang.Object value) {" + newline()
