@@ -334,19 +334,20 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.DataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
-        return dataDeclarationDefinitions(declaration, ctx.dataBody(), location(ctx));
+        return dataDeclarationDefinitions(declaration, ctx.dataBody(), ctx.constructorClause(), location(ctx));
     }
 
     private static List<Definition> localDataDeclarationDefinitions(
             dev.capylang.parser.antlr.FunctionalParser.LocalDataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
-        return dataDeclarationDefinitions(declaration, ctx.dataBody(), location(ctx));
+        return dataDeclarationDefinitions(declaration, ctx.dataBody(), ctx.constructorClause(), location(ctx));
     }
 
     private static List<Definition> dataDeclarationDefinitions(
             dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext declaration,
             dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
+            dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause,
             SourceLocation location
     ) {
         var name = dataTypeName(declaration);
@@ -370,7 +371,47 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     location
             ));
         }
+        if (constructorClause != null) {
+            definitions.add(constructorFunctionDefinition(name, dataBody, constructorClause));
+        }
         return List.copyOf(definitions);
+    }
+
+    private static Definition constructorFunctionDefinition(
+            String name,
+            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
+            dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause
+    ) {
+        return new Definition.FunctionDefinition(new FunctionDeclaration(
+                "__capy_constructor|" + name,
+                "private",
+                constructorParameters(dataBody),
+                new TypeReference("any", List.of()),
+                rewriteConstructorData(expression(constructorClause.expression()), name),
+                location(constructorClause)
+        ));
+    }
+
+    private static List<FunctionParameter> constructorParameters(
+            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody
+    ) {
+        if (dataBody == null || dataBody.fieldDeclarationList() == null) {
+            return List.of();
+        }
+        var parameters = new ArrayList<FunctionParameter>();
+        for (var field : dataBody.fieldDeclarationList().fieldDeclaration()) {
+            parameters.add(constructorParameter(field));
+        }
+        return List.copyOf(parameters);
+    }
+
+    private static FunctionParameter constructorParameter(
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationContext field
+    ) {
+        var name = field.identifier() == null
+                ? unquote(field.STRING_LITERAL().getText())
+                : field.identifier().getText();
+        return new FunctionParameter(name, typeReference(field.type()), location(field));
     }
 
     private static Definition schemaConstantDefinition(String name, String value, SourceLocation location) {
@@ -677,6 +718,183 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .toList();
     }
 
+    private static Expression rewriteConstructorData(Expression expression, String dataTypeName) {
+        if (expression instanceof Expression.IfExpression value) {
+            return new Expression.IfExpression(
+                    rewriteConstructorData(value.condition(), dataTypeName),
+                    rewriteConstructorData(value.thenBranch(), dataTypeName),
+                    rewriteConstructorData(value.elseBranch(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.BinaryExpression value) {
+            return new Expression.BinaryExpression(
+                    value.operator(),
+                    rewriteConstructorData(value.left(), dataTypeName),
+                    rewriteConstructorData(value.right(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.UnaryExpression value) {
+            return new Expression.UnaryExpression(
+                    value.operator(),
+                    rewriteConstructorData(value.expression(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.FunctionCallExpression value) {
+            return new Expression.FunctionCallExpression(
+                    value.name(),
+                    rewriteConstructorData(value.arguments(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.MethodCallExpression value) {
+            return new Expression.MethodCallExpression(
+                    rewriteConstructorData(value.receiver(), dataTypeName),
+                    value.name(),
+                    rewriteConstructorData(value.arguments(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.LambdaExpression value) {
+            return new Expression.LambdaExpression(
+                    value.parameters(),
+                    rewriteConstructorData(value.body(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.ListLiteral value) {
+            return new Expression.ListLiteral(rewriteConstructorData(value.values(), dataTypeName), value.location());
+        }
+        if (expression instanceof Expression.SetLiteral value) {
+            return new Expression.SetLiteral(rewriteConstructorData(value.values(), dataTypeName), value.location());
+        }
+        if (expression instanceof Expression.DictLiteral value) {
+            return new Expression.DictLiteral(rewriteConstructorDataDictEntries(value.entries(), dataTypeName), value.location());
+        }
+        if (expression instanceof Expression.TupleLiteral value) {
+            return new Expression.TupleLiteral(rewriteConstructorData(value.values(), dataTypeName), value.location());
+        }
+        if (expression instanceof Expression.IndexExpression value) {
+            return new Expression.IndexExpression(
+                    rewriteConstructorData(value.receiver(), dataTypeName),
+                    rewriteConstructorData(value.index(), dataTypeName),
+                    rewriteConstructorData(value.endIndex(), dataTypeName),
+                    value.hasEndIndex(),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.DataLiteral value) {
+            var typeName = value.typeName().equals("*") ? "__capy_raw|" + dataTypeName : value.typeName();
+            return new Expression.DataLiteral(
+                    typeName,
+                    rewriteConstructorDataFields(value.fields(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.FieldAccessExpression value) {
+            return new Expression.FieldAccessExpression(
+                    rewriteConstructorData(value.receiver(), dataTypeName),
+                    value.name(),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.ReduceExpression value) {
+            return new Expression.ReduceExpression(
+                    rewriteConstructorData(value.receiver(), dataTypeName),
+                    rewriteConstructorData(value.initial(), dataTypeName),
+                    value.accumulatorName(),
+                    value.keyName(),
+                    value.valueName(),
+                    rewriteConstructorData(value.body(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.MatchExpression value) {
+            return new Expression.MatchExpression(
+                    rewriteConstructorData(value.value(), dataTypeName),
+                    rewriteConstructorDataMatchCases(value.cases(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.BlockExpression value) {
+            return new Expression.BlockExpression(
+                    rewriteConstructorDataLetBindings(value.bindings(), dataTypeName),
+                    rewriteConstructorData(value.result(), dataTypeName),
+                    value.location()
+            );
+        }
+        return expression;
+    }
+
+    private static List<Expression> rewriteConstructorData(List<Expression> expressions, String dataTypeName) {
+        return expressions.stream()
+                .map(expression -> rewriteConstructorData(expression, dataTypeName))
+                .toList();
+    }
+
+    private static List<Expression.DictEntry> rewriteConstructorDataDictEntries(
+            List<Expression.DictEntry> entries,
+            String dataTypeName
+    ) {
+        return entries.stream()
+                .map(entry -> new Expression.DictEntry(
+                        rewriteConstructorData(entry.key(), dataTypeName),
+                        rewriteConstructorData(entry.value(), dataTypeName),
+                        entry.location()
+                ))
+                .toList();
+    }
+
+    private static List<Expression.DataField> rewriteConstructorDataFields(
+            List<Expression.DataField> fields,
+            String dataTypeName
+    ) {
+        return fields.stream()
+                .map(field -> new Expression.DataField(
+                        field.name(),
+                        rewriteConstructorData(field.value(), dataTypeName),
+                        field.location()
+                ))
+                .toList();
+    }
+
+    private static List<Expression.MatchCase> rewriteConstructorDataMatchCases(
+            List<Expression.MatchCase> cases,
+            String dataTypeName
+    ) {
+        return cases.stream()
+                .map(matchCase -> new Expression.MatchCase(
+                        matchCase.typeName(),
+                        matchCase.bindings(),
+                        matchCase.bindsWholeValue(),
+                        rewriteConstructorData(matchCase.literal(), dataTypeName),
+                        matchCase.hasLiteral(),
+                        matchCase.wildcard(),
+                        rewriteConstructorData(matchCase.guard(), dataTypeName),
+                        matchCase.hasGuard(),
+                        rewriteConstructorData(matchCase.body(), dataTypeName),
+                        matchCase.location()
+                ))
+                .toList();
+    }
+
+    private static List<Expression.LetBinding> rewriteConstructorDataLetBindings(
+            List<Expression.LetBinding> bindings,
+            String dataTypeName
+    ) {
+        return bindings.stream()
+                .map(binding -> new Expression.LetBinding(
+                        binding.name(),
+                        binding.typeReference(),
+                        binding.operator(),
+                        rewriteConstructorData(binding.value(), dataTypeName),
+                        binding.location()
+                ))
+                .toList();
+    }
+
     private static Expression expression(dev.capylang.parser.antlr.FunctionalParser.ExpressionContext ctx) {
         var bindings = new ArrayList<Expression.LetBinding>();
         for (var let : ctx.letExpression()) {
@@ -736,6 +954,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.newData() != null) {
             return dataLiteral(ctx.newData());
+        }
+        if (ctx.constructorData() != null) {
+            return constructorDataLiteral(ctx.constructorData());
         }
         if (ctx.matchExpression() != null) {
             return matchExpression(ctx.matchExpression());
@@ -844,6 +1065,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.newData() != null) {
             return dataLiteral(ctx.newData());
+        }
+        if (ctx.constructorData() != null) {
+            return constructorDataLiteral(ctx.constructorData());
         }
         if (ctx.matchExpressionNoPipe() != null) {
             return matchExpressionNoPipe(ctx.matchExpressionNoPipe());
@@ -1192,6 +1416,16 @@ public final class NativeCapybaraParser implements CapybaraParser {
     private static Expression dataLiteral(dev.capylang.parser.antlr.FunctionalParser.NewDataContext ctx) {
         return new Expression.DataLiteral(
                 ctx.type().getText(),
+                dataFields(ctx.fieldAssignmentList()),
+                location(ctx)
+        );
+    }
+
+    private static Expression constructorDataLiteral(
+            dev.capylang.parser.antlr.FunctionalParser.ConstructorDataContext ctx
+    ) {
+        return new Expression.DataLiteral(
+                "*",
                 dataFields(ctx.fieldAssignmentList()),
                 location(ctx)
         );
