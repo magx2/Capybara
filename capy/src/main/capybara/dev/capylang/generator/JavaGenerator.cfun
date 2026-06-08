@@ -1317,6 +1317,10 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then result_reduce_method_code(call, env, expectedType, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_code(call, env, expectedType, module, allModules)
+    else if result_or_else_method_call(call, env, module, allModules)
+    then result_or_else_method_code(call, env, module, allModules)
+    else if result_or_method_call(call, env, module, allModules)
+    then result_or_method_code(call, env, module, allModules)
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
     then
         let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -1361,6 +1365,22 @@ private fun result_reduce_method_call(call: CompiledMethodCallExpression, env: L
     (call.name == "reduce" | call.name == "reduce_left")
         & result_type_name(expression_type(call.receiver, env, module, allModules).name)
         & result_reduce_method_arguments(call.arguments)
+
+private fun result_or_else_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "or_else"
+    then
+        if one_method_argument(call.arguments)
+        then result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        else false
+    else false
+
+private fun result_or_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "or"
+    then
+        if one_method_argument(call.arguments)
+        then result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        else false
+    else false
 
 private fun result_reduce_method_arguments(arguments: List[CompiledExpression]): bool =
     result_reduce_method_argument_at(arguments, 0)
@@ -1410,6 +1430,30 @@ private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: L
     + "            }" + newline()
     + result_reduce_error_binding_statement(errorLambda.parameters, resultName, "            ")
     + "            return " + expression_code(errorLambda.body, lambda_value_env(errorLambda.parameters, string_type(), env), resultType, module, allModules) + ";" + newline()
+    + "        }).get()"
+
+private fun result_or_else_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultType = result_or_else_method_type(call, env, module, allModules)
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let resultName = "__capy_result_or_else_" + call.location.line + "_" + call.location.column
+    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+    + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
+    + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
+    + "                return ((" + boxed_java_type(resultType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+    + "            }" + newline()
+    + "            return " + expression_code(argument(call.arguments, 0), env, resultType, module, allModules) + ";" + newline()
+    + "        }).get()"
+
+private fun result_or_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultType = result_or_method_type(call, env, module, allModules)
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let resultName = "__capy_result_or_" + call.location.line + "_" + call.location.column
+    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+    + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
+    + "            if (__capy_result_is_error(" + resultName + ")) {" + newline()
+    + "                return " + expression_code(argument(call.arguments, 0), env, resultType, module, allModules) + ";" + newline()
+    + "            }" + newline()
+    + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
     + "        }).get()"
 
 private fun result_reduce_lambda_argument(expression: CompiledExpression): CompiledLambdaExpression =
@@ -2740,6 +2784,10 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledDataLiteral literal ->
         if program_success_literal(literal.typeName, module.imports) | program_failed_literal(literal.typeName, module.imports)
         then CompiledTypeReference { name: "/capy/lang/Program", arguments: [] }
+        else if result_success_literal(literal.typeName, module.imports)
+        then result_type(result_literal_value_type(literal, env, module, allModules))
+        else if result_error_literal(literal.typeName, module.imports)
+        then result_type(object_type())
         else CompiledTypeReference { name: literal.typeName, arguments: [] }
     case CompiledFieldAccessExpression access -> field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
@@ -2865,6 +2913,10 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then result_reduce_method_type(call, env, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_type(call, env, module, allModules)
+    else if result_or_else_method_call(call, env, module, allModules)
+    then result_or_else_method_type(call, env, module, allModules)
+    else if result_or_method_call(call, env, module, allModules)
+    then result_or_method_type(call, env, module, allModules)
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
     then
         let valueType = first_type_argument(expression_type(call.receiver, env, module, allModules))
@@ -2904,6 +2956,21 @@ private fun result_reduce_method_type(call: CompiledMethodCallExpression, env: L
     match argument(call.arguments, 0) with
     case CompiledLambdaExpression lambda -> expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
     case _ -> object_type()
+
+private fun result_or_else_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+    if result_value_type_needs_context(valueType) then argumentType else valueType
+
+private fun result_or_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+    if result_value_type_needs_context(valueType) & result_type_name(argumentType.name) then argumentType else receiverType
+
+private fun result_value_type_needs_context(type: CompiledTypeReference): bool =
+    type.name == "any" | type.name.is_empty() | type_parameter(type)
 
 private fun regex_method_type(name: String): CompiledTypeReference =
     if name == "matches"
@@ -3708,6 +3775,10 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then result_reduce_method_emittable(call, env, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_emittable(call, env, module, allModules)
+    else if result_or_else_method_call(call, env, module, allModules)
+    then result_or_else_method_emittable(call, env, module, allModules)
+    else if result_or_method_call(call, env, module, allModules)
+    then result_or_method_emittable(call, env, module, allModules)
     else if call.name == "map" & receiverType.name == "Effect"
     then match argument(call.arguments, 0) with
         case CompiledLambdaExpression lambda ->
@@ -3742,6 +3813,25 @@ private fun result_reduce_method_emittable(call: CompiledMethodCallExpression, e
     expression_emittable(call.receiver, env, module, allModules)
         & result_reduce_argument_emittable(argument(call.arguments, 0), valueType, env, module, allModules)
         & result_reduce_argument_emittable(argument(call.arguments, 1), string_type(), env, module, allModules)
+
+private fun result_or_else_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    let argumentExpression = argument(call.arguments, 0)
+    let argumentType = expression_type(argumentExpression, env, module, allModules)
+    expression_emittable(call.receiver, env, module, allModules)
+        & expression_emittable(argumentExpression, env, module, allModules)
+        & (result_value_type_needs_context(valueType) | type_assignable(valueType, argumentType))
+
+private fun result_or_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    let argumentExpression = argument(call.arguments, 0)
+    let argumentType = expression_type(argumentExpression, env, module, allModules)
+    expression_emittable(call.receiver, env, module, allModules)
+        & expression_emittable(argumentExpression, env, module, allModules)
+        & result_type_name(argumentType.name)
+        & (result_value_type_needs_context(valueType) | type_assignable(receiverType, argumentType))
 
 private fun result_reduce_argument_emittable(expression: CompiledExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
@@ -4328,6 +4418,16 @@ private fun single_uppercase_name(name: String): bool =
     case None -> false
     case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
 
+private fun result_success_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
+    typeName == "/capy/lang/Result.Success"
+        | typeName == "Result.Success"
+        | (typeName == "Success" & result_member_imported("Success", imports))
+
+private fun result_error_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
+    typeName == "/capy/lang/Result.Error"
+        | typeName == "Result.Error"
+        | (typeName == "Error" & result_member_imported("Error", imports))
+
 private fun program_success_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
     typeName == "/capy/lang/Program.Success"
         | typeName == "Program.Success"
@@ -4343,6 +4443,9 @@ private fun program_member_imported(member: String, imports: List[CompiledImport
 
 private fun effect_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/lang/Effect", "capy/lang/Effect")
+
+private fun result_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/lang/Result", "capy/lang/Result")
 
 private fun console_print_name(name: String): bool =
     name == "print" | name == "println" | name == "print_error" | name == "println_error"
