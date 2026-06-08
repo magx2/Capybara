@@ -203,7 +203,7 @@ private fun extension_method_function(function: CompiledFunction): bool =
     last_dot_index(function.name) >= 0
 
 private fun method_receiver_type(function: CompiledFunction): CompiledTypeReference =
-    CompiledTypeReference { name: method_owner_name(function.name), arguments: [] }
+    schema_type_reference(method_owner_name(function.name))
 
 private fun method_owner_name(name: String): String =
     let idx = last_dot_index(name)
@@ -380,6 +380,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then option_pipe_code(binary, leftType, env, module, allModules)
     else if collection_pipe_expression(binary, leftType)
     then collection_pipe_code(binary, leftType, env, module, allModules)
+    else if binary_extension_operator_expression(binary, env, module, allModules)
+    then binary_extension_operator_code(binary, env, module, allModules)
     else if collection_plus_expression(binary.operator, leftType, rightType)
     then collection_plus_code(binary, leftType, rightType, env, module, allModules)
     else if collection_minus_expression(binary.operator, leftType, rightType)
@@ -633,6 +635,37 @@ private fun boolean_binary_operator(operator: String): bool =
 
 private fun java_boolean_operator(operator: String): String =
     if operator == "&" then "&&" else "||"
+
+private fun binary_extension_operator_expression(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_binary_extension_operator(binary, env, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+private fun binary_extension_operator_code(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_binary_extension_operator(binary, env, module, allModules) with
+    case Some { function } -> extension_method_call_code(function, binary_extension_method_call(binary), env, module, allModules)
+    case None -> "unsupported(\"extension operator\")"
+
+private fun binary_extension_operator_type(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_binary_extension_operator(binary, env, module, allModules) with
+    case Some { function } -> function.returnType
+    case None -> object_type()
+
+private fun binary_extension_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_binary_extension_operator(binary, env, module, allModules) with
+    case Some { function } ->
+        concrete_return_type(function.returnType)
+            & expression_emittable(binary.left, env, module, allModules)
+            & parameters_assignable(function.parameters, [binary.right], env, module, allModules)
+    case None -> false
+
+private fun binary_extension_method_call(binary: CompiledBinaryExpression): CompiledMethodCallExpression =
+    CompiledMethodCallExpression {
+        receiver: binary.left,
+        name: binary.operator,
+        arguments: [binary.right],
+        location: binary.location
+    }
 
 private fun result_pipe_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
     (binary.operator == "|" | binary.operator == "|*")
@@ -1844,13 +1877,13 @@ private fun extension_method_call_code(function: CompiledFunction, call: Compile
     java_function_name(function)
         + "("
         + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
-        + method_call_argument_tail(call.arguments, env, module, allModules)
+        + extension_method_call_argument_tail(function.parameters, call.arguments, env, module, allModules)
         + ")"
 
-private fun method_call_argument_tail(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun extension_method_call_argument_tail(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if arguments.is_empty()
     then ""
-    else ", " + expression_list_code(arguments, env, module, allModules)
+    else ", " + parameter_expression_list_code(parameters, arguments, env, module, allModules)
 
 private fun primitive_conversion_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "((" + java_type(method_call_type(call, env, module, allModules)) + ") "
@@ -2672,6 +2705,8 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
         then option_pipe_result_type(binary, leftType, env, module, allModules)
         else if collection_pipe_expression(binary, leftType)
         then collection_pipe_result_type(binary, leftType, env, module, allModules)
+        else if binary_extension_operator_expression(binary, env, module, allModules)
+        then binary_extension_operator_type(binary, env, module, allModules)
         else binary_result_type(
             binary.operator,
             leftType,
@@ -3042,6 +3077,10 @@ private fun find_extension_method(call: CompiledMethodCallExpression, env: List[
     let receiverType = expression_type(call.receiver, env, module, allModules)
     find_extension_method_in_scope(receiverType.name, call.name, module, allModules)
 
+private fun find_binary_extension_operator(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    let receiverType = expression_type(binary.left, env, module, allModules)
+    find_extension_method_in_scope(receiverType.name, binary.operator, module, allModules)
+
 private fun find_extension_method_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match find_method_function(ownerName, methodName, module.functions) with
     case Some { function } -> /capy/lang/Option.Some { function }
@@ -3062,8 +3101,23 @@ private fun method_function_matches(ownerName: String, methodName: String, funct
         let idx = last_dot_index(function.name)
         if idx < 0
         then false
-        else function.name[0, idx] == ownerName
-            & function.name[idx + 1, function.name.size().value] == methodName
+        else method_owner_matches(function.name[0, idx], ownerName)
+            & method_member_matches(function.name[idx + 1, function.name.size().value], methodName)
+
+private fun method_owner_matches(declaredOwner: String, actualOwner: String): bool =
+    method_owner_base_name(declaredOwner) == method_owner_base_name(actualOwner)
+
+private fun method_owner_base_name(name: String): String =
+    let bracket = first_index_of(name, "[", 0)
+    if bracket < 0 then name else name[0, bracket]
+
+private fun method_member_matches(declaredMember: String, actualMember: String): bool =
+    method_member_name_normalized(declaredMember) == method_member_name_normalized(actualMember)
+
+private fun method_member_name_normalized(name: String): String =
+    if name.size().value >= 2 & java_generator_string_has_prefix(name, "`")
+    then name[1, name.size().value - 1]
+    else name
 
 private fun find_extension_method_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match imports[0] with
@@ -3397,6 +3451,8 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
         then option_pipe_emittable(e, env, module, allModules)
         else if collection_pipe_expression(e, expression_type(e.left, env, module, allModules))
         then collection_pipe_emittable(e, env, module, allModules)
+        else if binary_extension_operator_expression(e, env, module, allModules)
+        then binary_extension_operator_emittable(e, env, module, allModules)
         else java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
     case CompiledUnaryExpression e -> java_unary_operator_emittable(e, env, module, allModules) & expression_emittable(e.expression, env, module, allModules)
     case CompiledFunctionCallExpression e -> function_call_emittable(e, env, module, allModules)
@@ -4025,7 +4081,29 @@ private fun parameter_argument_assignable(target: CompiledTypeReference, argumen
     then true
     else if function_reference_assignable(target, argument, module, allModules)
     then true
+    else if function_lambda_assignable(target, argument, env, module, allModules)
+    then true
     else type_assignable(target, expression_type(argument, env, module, allModules))
+
+private fun function_lambda_assignable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if !function_type(target)
+    then false
+    else match argument with
+        case CompiledLambdaExpression lambda ->
+            let parameters = function_type_parameters(target)
+            let lambdaEnv = typed_lambda_env(lambda.parameters, parameters, env)
+            lambda_function_parameters_assignable(parameters, lambda.parameters)
+                & expression_emittable(lambda.body, lambdaEnv, module, allModules)
+                & type_assignable(function_type_return_type(target), expression_type(lambda.body, lambdaEnv, module, allModules))
+        case _ -> false
+
+private fun lambda_function_parameters_assignable(parameters: List[CompiledTypeReference], names: List[String]): bool =
+    match parameters[0] with
+    case None -> names.is_empty()
+    case Some _ ->
+        match names[0] with
+        case None -> false
+        case Some _ -> lambda_function_parameters_assignable(parameters[1:], names[1:])
 
 private fun function_reference_assignable(target: CompiledTypeReference, argument: CompiledExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
     if !function_type(target)
