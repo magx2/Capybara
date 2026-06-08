@@ -773,6 +773,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     location(ctx)
             );
         }
+        if (isSliceExpression(ctx)) {
+            return sliceExpression(expressionNoLet(ctx.expressionNoLet(0)), location(ctx), ctx);
+        }
         if (isIndexExpression(ctx)) {
             return indexExpression(expressionNoLet(ctx.expressionNoLet(0)), ctx.argumentList(), location(ctx), ctx);
         }
@@ -858,6 +861,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     methodArguments(ctx.methodArgumentList()),
                     location(ctx)
             );
+        }
+        if (isSliceExpressionNoPipe(ctx)) {
+            return sliceExpression(expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)), location(ctx), ctx);
         }
         if (ctx.argumentList() != null && ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "[")) {
             return indexExpression(expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)), ctx.argumentList(), location(ctx), ctx);
@@ -1081,6 +1087,44 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return new Expression.IndexExpression(receiver, index, expression(arguments.expression(1)), true, location);
         }
         return new Expression.IndexExpression(receiver, index, unsupported(fallback), false, location);
+    }
+
+    private static Expression sliceExpression(Expression receiver, SourceLocation location, ParserRuleContext ctx) {
+        Expression start = omittedSliceStart(location);
+        Expression end = omittedSliceEnd(location);
+        var beforeColon = true;
+        for (var idx = 0; idx < ctx.getChildCount(); idx++) {
+            var child = ctx.getChild(idx);
+            var text = child.getText();
+            if (text.equals(":")) {
+                beforeColon = false;
+            } else if (isSliceIndexLiteral(child)) {
+                if (beforeColon) {
+                    start = sliceIndexLiteral(child, location((ParserRuleContext) child));
+                } else {
+                    end = sliceIndexLiteral(child, location((ParserRuleContext) child));
+                }
+            }
+        }
+        return new Expression.IndexExpression(receiver, start, end, true, location);
+    }
+
+    private static boolean isSliceIndexLiteral(ParseTree tree) {
+        return tree instanceof dev.capylang.parser.antlr.FunctionalParser.SliceIndexLiteralContext
+                || tree instanceof dev.capylang.parser.antlr.FunctionalParser.SliceIndexNoPipeLiteralContext;
+    }
+
+    private static Expression sliceIndexLiteral(ParseTree tree, SourceLocation location) {
+        var source = tree.getText();
+        return new Expression.IntLiteral(Integer.parseInt(cleanNumber(source)), source, location);
+    }
+
+    private static Expression omittedSliceStart(SourceLocation location) {
+        return new Expression.IntLiteral(0, "__capy_slice_start__", location);
+    }
+
+    private static Expression omittedSliceEnd(SourceLocation location) {
+        return new Expression.IntLiteral(0, "__capy_slice_end__", location);
     }
 
     private static Expression dataLiteral(dev.capylang.parser.antlr.FunctionalParser.NewDataContext ctx) {
@@ -1742,6 +1786,14 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
     private static boolean isIndexExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
         return ctx.argumentList() != null && ctx.expressionNoLet().size() == 1 && hasChild(ctx, "[");
+    }
+
+    private static boolean isSliceExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
+        return ctx.expressionNoLet().size() == 1 && hasChild(ctx, "[") && hasChild(ctx, ":");
+    }
+
+    private static boolean isSliceExpressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetNoPipeContext ctx) {
+        return ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "[") && hasChild(ctx, ":");
     }
 
     private static boolean isUnary(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
