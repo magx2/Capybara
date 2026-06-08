@@ -348,6 +348,14 @@ private fun expression_code(
 private fun variable_expression_code(variable: CompiledVariableExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding_exists(variable.name, env)
     then value_conversion_code(lookup_binding_java_name(variable.name, env), lookup_binding(variable.name, env), expectedType, module, allModules)
+    else if qualified_enum_value_name(variable.name, module, allModules)
+    then value_conversion_code(
+        enum_qualified_value_code(variable.name, module, allModules),
+        data_type_reference(enum_qualified_type_name(variable.name)),
+        expectedType,
+        module,
+        allModules
+    )
     else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
     then numeric_widening_code("capy.lang.Program.DEFAULT_FAILED_EXIT_CODE", int_type(), expectedType)
     else match imported_stdlib_constant(variable.name, module.imports) with
@@ -1228,6 +1236,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then "java.lang.Integer.toString("
         + expression_code(argument(call.arguments, 0), env, int_type(), module, allModules)
         + ").replace(\"-\", \"\").length()"
+    else if enum_parse_call(call, module, allModules)
+    then enum_parse_call_code(call, env, module, allModules)
     else ordinary_function_call_code(call, env, module, allModules)
 
 private fun function_value_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1318,6 +1328,43 @@ private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, en
         case Some { function } ->
             java_function_name(function) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
         case None -> java_function_call_name(call.name, module, allModules) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun enum_parse_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = enum_qualified_type_name(call.name)
+    let argumentExpression = argument(call.arguments, 0)
+    let argumentType = expression_type(argumentExpression, env, module, allModules)
+    let parseByName = type_assignable(string_type(), argumentType)
+    let inputName = "__capy_enum_parse_value_" + call.location.line + "_" + call.location.column
+    "((java.util.function.Supplier<java.lang.Object>) () -> {" + newline()
+        + "            java.lang.Object " + inputName + " = " + expression_code(argumentExpression, env, enum_parse_argument_type(argumentType), module, allModules) + ";" + newline()
+        + enum_parse_cases_code(typeName, enum_values(typeName, module, allModules), 0, inputName, parseByName, module, allModules)
+        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse "
+        + escape_java_string(typeName)
+        + " from \" + "
+        + inputName
+        + ")));" + newline()
+        + "        }).get()"
+
+private fun enum_parse_argument_type(argumentType: CompiledTypeReference): CompiledTypeReference =
+    if type_assignable(string_type(), argumentType)
+    then string_type()
+    else int_type()
+
+private fun enum_parse_cases_code(typeName: String, values: List[String], idx: int, inputName: String, parseByName: bool, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } ->
+        "            if (java.util.Objects.equals(" + inputName + ", " + enum_parse_expected_value_code(value, idx, parseByName) + ")) {" + newline()
+            + "                return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", "
+            + enum_value_reference_code(typeName, value, module, allModules)
+            + ")));" + newline()
+            + "            }" + newline()
+            + enum_parse_cases_code(typeName, values[1:], idx + 1, inputName, parseByName, module, allModules)
+
+private fun enum_parse_expected_value_code(value: String, idx: int, parseByName: bool): String =
+    if parseByName
+    then "\"" + escape_java_string(value) + "\""
+    else "" + idx
 
 private fun parameter_expression_list_code(parameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expressions[0] with
@@ -2930,7 +2977,9 @@ private fun bound_schema_types(types: List[CompiledTypeReference], bindings: Lis
     case Some { type } -> [bound_schema_type(type, bindings)] + bound_schema_types(types[1:], bindings)
 
 private fun field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if access.name == "value" & numeric_type(expression_type(access.receiver, env, module, allModules))
+    if enum_static_field_access(access, env, module, allModules)
+    then enum_static_field_access_code(access, module, allModules)
+    else if access.name == "value" & numeric_type(expression_type(access.receiver, env, module, allModules))
     then expression_code(access.receiver, env, expectedType, module, allModules)
     else
         let sourceType = field_access_type(access, env, module, allModules)
@@ -2947,6 +2996,31 @@ private fun field_access_cast_type(sourceType: CompiledTypeReference, expectedTy
     if sourceType.name == "any"
     then expectedType
     else sourceType
+
+private fun enum_static_field_access(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match access.receiver with
+    case CompiledVariableExpression variable ->
+        !binding_exists(variable.name, env)
+            & enum_type_exists(variable.name, module, allModules)
+            & (access.name == "values" | enum_value_exists(variable.name, access.name, module, allModules))
+    case _ -> false
+
+private fun enum_static_field_access_code(access: CompiledFieldAccessExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = enum_static_field_access_type_name(access)
+    if access.name == "values"
+    then "java.util.Set.of(" + enum_value_references_code(typeName, enum_values(typeName, module, allModules), module, allModules) + ")"
+    else enum_value_reference_code(typeName, access.name, module, allModules)
+
+private fun enum_static_field_access_type(access: CompiledFieldAccessExpression): CompiledTypeReference =
+    let typeName = enum_static_field_access_type_name(access)
+    if access.name == "values"
+    then set_type(data_type_reference(typeName))
+    else data_type_reference(typeName)
+
+private fun enum_static_field_access_type_name(access: CompiledFieldAccessExpression): String =
+    match access.receiver with
+    case CompiledVariableExpression variable -> variable.name
+    case _ -> ""
 
 private fun reduce_expression_code(reduce: CompiledReduceExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let resultType = reduce_result_type(reduce.initial, env, expectedType, module, allModules)
@@ -3016,6 +3090,18 @@ private fun seq_type_name(name: String): bool =
 
 private fun stdlib_type_name(name: String, member: String): bool =
     name == member | name == "/capy/lang/" + member | name == "capy/lang/" + member
+
+private fun stdlib_type_reference_assignable(target: CompiledTypeReference, source: CompiledTypeReference): bool =
+    stdlib_type_reference_assignable_as(target, source, "Option")
+        | stdlib_type_reference_assignable_as(target, source, "Result")
+        | stdlib_type_reference_assignable_as(target, source, "Seq")
+
+private fun stdlib_type_reference_assignable_as(target: CompiledTypeReference, source: CompiledTypeReference, member: String): bool =
+    stdlib_type_name_equivalent(target.name, source.name, member)
+        & type_arguments_assignable(target.arguments, source.arguments)
+
+private fun stdlib_type_name_equivalent(target: String, source: String, member: String): bool =
+    stdlib_type_name(target, member) & stdlib_type_name(source, member)
 
 private fun stdlib_data_constructor_name(typeName: String, owner: String, member: String): bool =
     typeName == member
@@ -3326,6 +3412,8 @@ private fun inferred_type_argument_bindings(expected: List[CompiledTypeReference
 private fun variable_expression_type(variable: CompiledVariableExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if binding_exists(variable.name, env)
     then lookup_binding(variable.name, env)
+    else if qualified_enum_value_name(variable.name, module, allModules)
+    then data_type_reference(enum_qualified_type_name(variable.name))
     else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
     then int_type()
     else match imported_stdlib_constant(variable.name, module.imports) with
@@ -3367,14 +3455,17 @@ private fun option_type(argument: CompiledTypeReference): CompiledTypeReference 
     CompiledTypeReference { name: "Option", arguments: [argument] }
 
 private fun field_access_type(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiverType = expression_type(access.receiver, env, module, allModules)
-    if access.name == "value" & numeric_type(receiverType)
-    then receiverType
-    else match find_data_type(receiverType.name, module, allModules) with
-        case Some { dataType } ->
-            let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
-            declared_named_field_type(access.name, data_type_fields(dataType, module, allModules), bindings, object_type())
-        case None -> object_type()
+    if enum_static_field_access(access, env, module, allModules)
+    then enum_static_field_access_type(access)
+    else
+        let receiverType = expression_type(access.receiver, env, module, allModules)
+        if access.name == "value" & numeric_type(receiverType)
+        then receiverType
+        else match find_data_type(receiverType.name, module, allModules) with
+            case Some { dataType } ->
+                let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
+                declared_named_field_type(access.name, data_type_fields(dataType, module, allModules), bindings, object_type())
+            case None -> object_type()
 
 private fun function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "delay"
@@ -3395,6 +3486,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then sqrt_call_type(call, env, module, allModules)
     else if stdlib_math_digits_call(call, module)
     then int_type()
+    else if enum_parse_call(call, module, allModules)
+    then result_type(data_type_reference(enum_qualified_type_name(call.name)))
     else if qualified_call_name(call.name)
     then qualified_function_call_type(call.name, module, allModules)
     else function_call_type_in_scope(call, env, module, allModules)
@@ -3789,7 +3882,12 @@ private fun type_match_score(target: CompiledTypeReference, source: CompiledType
     then data_type_match_score(target.name, source.name, module, allModules)
     else if type_assignable(target, source)
     then 100
-    else 1000000
+    else primitive_backed_type_match_score(target, source, module, allModules)
+
+private fun primitive_backed_type_match_score(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): int =
+    match primitive_backed_backing_type(source.name, module, allModules) with
+    case Some { backingType } -> if type_assignable(target, backingType) then 100 else 1000000
+    case None -> 1000000
 
 private fun data_type_match_score(targetName: String, sourceName: String, module: CompiledModule, allModules: List[CompiledModule]): int =
     let distance = data_type_distance(targetName, sourceName, module, allModules)
@@ -3979,6 +4077,89 @@ private fun schema_value_named(name: String, functions: List[CompiledFunction]):
         if schema_function(function, name)
         then /capy/lang/Option.Some { schema_value(function) }
         else schema_value_named(name, functions[1:])
+
+private fun enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    !enum_values(name, module, allModules).is_empty()
+
+private fun enum_value_exists(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    string_list_contains(enum_values(typeName, module, allModules), valueName)
+
+private fun enum_values(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    if enum_type_exists_in_functions(name, module.functions)
+    then enum_values_in_functions(name, module.functions)
+    else match enum_values_in_imports(name, module.imports, module, allModules) with
+        case Some { values } -> values
+        case None -> []
+
+private fun enum_type_exists_in_functions(name: String, functions: List[CompiledFunction]): bool =
+    !enum_values_in_functions(name, functions).is_empty()
+
+private fun enum_values_in_functions(name: String, functions: List[CompiledFunction]): List[String] =
+    schema_values("__capy_schema_enum|" + name + "|", functions)
+
+private fun enum_values_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(name, declaration)
+        then enum_values_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else enum_values_in_imports(name, imports[1:], module, allModules)
+
+private fun enum_values_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if enum_type_exists_in_functions(name, importedModule.functions)
+        then /capy/lang/Option.Some { enum_values_in_functions(name, importedModule.functions) }
+        else enum_values_in_imports(name, rest, module, allModules)
+    case _ -> enum_values_in_imports(name, rest, module, allModules)
+
+private fun qualified_enum_value_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    qualified_call_name(name)
+        & enum_value_exists(enum_qualified_type_name(name), enum_qualified_member_name(name), module, allModules)
+
+private fun enum_qualified_type_name(name: String): String =
+    name[0, last_dot_index(name)]
+
+private fun enum_qualified_member_name(name: String): String =
+    name[last_dot_index(name) + 1, name.size().value]
+
+private fun enum_qualified_value_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    enum_value_reference_code(enum_qualified_type_name(name), enum_qualified_member_name(name), module, allModules)
+
+private fun enum_value_references_code(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } ->
+        enum_value_reference_code(typeName, value, module, allModules)
+            + enum_value_reference_tail(typeName, values[1:], module, allModules)
+
+private fun enum_value_reference_tail(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match values[0] with
+    case None -> ""
+    case Some _ -> ", " + enum_value_references_code(typeName, values, module, allModules)
+
+private fun enum_value_reference_code(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if enum_type_exists_in_functions(typeName, module.functions)
+    then java_identifier(valueName)
+    else match enum_type_imported_class(typeName, module.imports, module, allModules) with
+        case Some { className } -> className + "." + java_identifier(valueName)
+        case None -> java_identifier(valueName)
+
+private fun enum_type_imported_class(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(name, declaration)
+        then enum_type_imported_class_from(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else enum_type_imported_class(name, imports[1:], module, allModules)
+
+private fun enum_type_imported_class_from(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[String] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if enum_type_exists_in_functions(name, importedModule.functions)
+        then /capy/lang/Option.Some { className }
+        else enum_type_imported_class(name, rest, module, allModules)
+    case _ -> enum_type_imported_class(name, rest, module, allModules)
 
 private fun schema_field_name(value: String): String =
     let separator = first_index_of(value, "|", 0)
@@ -4323,6 +4504,7 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
             | program_member_imported(variable.name, module.imports)
             | imported_stdlib_constant_exists(variable.name, module.imports)
             | constant_exists_in_scope(variable.name, module, allModules)
+            | qualified_enum_value_name(variable.name, module, allModules)
     case CompiledIfExpression e -> truthy_expression_emittable(e.condition, env, module, allModules) & expression_emittable(e.thenBranch, env, module, allModules) & expression_emittable(e.elseBranch, env, module, allModules)
     case CompiledBinaryExpression e ->
         let leftType = expression_type(e.left, env, module, allModules)
@@ -4349,7 +4531,7 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledTupleLiteral e -> expressions_emittable(e.values, env, module, allModules)
     case CompiledIndexExpression e -> index_emittable(e, env, module, allModules)
     case CompiledDataLiteral e -> data_fields_emittable(e.fields, env, module, allModules)
-    case CompiledFieldAccessExpression e -> expression_emittable(e.receiver, env, module, allModules)
+    case CompiledFieldAccessExpression e -> enum_static_field_access(e, env, module, allModules) | expression_emittable(e.receiver, env, module, allModules)
     case CompiledReduceExpression e -> reduce_expression_emittable(e, env, module, allModules)
     case CompiledMatchExpression e -> expression_emittable(e.value, env, module, allModules) & match_cases_emittable(e.cases, expression_type(e.value, env, module, allModules), env, module, allModules)
     case CompiledBlockExpression e -> let_bindings_emittable(e.bindings, env, module, allModules) & expression_emittable(e.result, block_env(e.bindings, env, module, allModules), module, allModules)
@@ -4812,6 +4994,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then stdlib_math_sqrt_call_emittable(call.arguments, env, module, allModules)
     else if stdlib_math_digits_call(call, module)
     then stdlib_math_digits_call_emittable(call.arguments, env, module, allModules)
+    else if enum_parse_call(call, module, allModules)
+    then enum_parse_call_emittable(call, env, module, allModules)
     else if qualified_call_name(call.name)
     then qualified_function_call_emittable(call, env, module, allModules)
     else java_callable_name(call.name) & !binding_exists(call.name, env) & function_call_target_emittable(call.name, call.arguments, env, module, allModules) & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
@@ -4888,6 +5072,22 @@ private fun stdlib_math_digits_call_emittable(arguments: List[CompiledExpression
         arguments[1:].is_empty()
         & type_assignable(int_type(), expression_type(argument, env, module, allModules))
         & expression_emittable(argument, env, module, allModules)
+
+private fun enum_parse_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    qualified_call_name(call.name)
+        & enum_qualified_member_name(call.name) == "parse"
+        & enum_type_exists(enum_qualified_type_name(call.name), module, allModules)
+
+private fun enum_parse_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.arguments[0] with
+    case None -> false
+    case Some { argument } ->
+        call.arguments[1:].is_empty()
+            & expression_emittable(argument, env, module, allModules)
+            & enum_parse_argument_supported(expression_type(argument, env, module, allModules))
+
+private fun enum_parse_argument_supported(argumentType: CompiledTypeReference): bool =
+    type_assignable(string_type(), argumentType) | type_assignable(int_type(), argumentType)
 
 private fun assert_that_call_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
@@ -5092,12 +5292,16 @@ private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeR
     then false
     else if primitive_numeric_widening_assignable(target, source)
     then true
+    else if stdlib_type_reference_assignable(target, source)
+    then true
     else if generated_data_object_type(target) & generated_data_object_type(source)
     then true
     else target.name == source.name & type_arguments_assignable(target.arguments, source.arguments)
 
 private fun value_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if generated_data_object_type(target) & generated_data_object_type(source)
+    if stdlib_type_reference_assignable(target, source)
+    then true
+    else if generated_data_object_type(target) & generated_data_object_type(source)
     then data_type_distance(target.name, source.name, module, allModules) >= 0
     else if type_assignable(target, source)
     then true
@@ -5653,20 +5857,26 @@ private fun java_option_result_helpers(): String =
         + "        }" + newline()
         + "        return java.util.Optional.empty();" + newline()
         + "    }" + newline() + newline()
+        + "    private static boolean __capy_data_is_result_success(java.lang.Object value) {" + newline()
+        + "        return __capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\");" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_data_is_result_error(java.lang.Object value) {" + newline()
+        + "        return __capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\");" + newline()
+        + "    }" + newline() + newline()
         + "    private static boolean __capy_result_is_success(java.lang.Object value) {" + newline()
-        + "        return value instanceof capy.lang.Result.Success<?> || __capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\");" + newline()
+        + "        return value instanceof capy.lang.Result.Success<?> || __capy_data_is_result_success(value);" + newline()
         + "    }" + newline() + newline()
         + "    private static boolean __capy_result_is_error(java.lang.Object value) {" + newline()
-        + "        return value instanceof capy.lang.Result.Error<?> || __capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\");" + newline()
+        + "        return value instanceof capy.lang.Result.Error<?> || __capy_data_is_result_error(value);" + newline()
         + "    }" + newline() + newline()
         + "    private static capy.lang.Result __capy_result_value(java.lang.Object value) {" + newline()
         + "        if (value instanceof capy.lang.Result result) {" + newline()
         + "            return result;" + newline()
         + "        }" + newline()
-        + "        if (__capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\")) {" + newline()
+        + "        if (__capy_data_is_result_success(value)) {" + newline()
         + "            return new capy.lang.Result.Success(__capy_data_value_field(value));" + newline()
         + "        }" + newline()
-        + "        if (__capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\")) {" + newline()
+        + "        if (__capy_data_is_result_error(value)) {" + newline()
         + "            return new capy.lang.Result.Error(new dev.capylang.CapybaraException(__capy_data_message_field(value)));" + newline()
         + "        }" + newline()
         + "        return new capy.lang.Result.Error(new dev.capylang.CapybaraException(\"Expected Result value\"));" + newline()
@@ -5675,7 +5885,7 @@ private fun java_option_result_helpers(): String =
         + "        if (value instanceof capy.lang.Result.Success<?> success) {" + newline()
         + "            return success.value();" + newline()
         + "        }" + newline()
-        + "        if (__capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\")) {" + newline()
+        + "        if (__capy_data_is_result_success(value)) {" + newline()
         + "            return __capy_data_value_field(value);" + newline()
         + "        }" + newline()
         + "        return null;" + newline()
@@ -5684,7 +5894,7 @@ private fun java_option_result_helpers(): String =
         + "        if (value instanceof capy.lang.Result.Error<?> error) {" + newline()
         + "            return error.ex() == null ? null : error.ex().getMessage();" + newline()
         + "        }" + newline()
-        + "        if (__capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\")) {" + newline()
+        + "        if (__capy_data_is_result_error(value)) {" + newline()
         + "            java.lang.Object nested = __capy_data_field(value, \"message\");" + newline()
         + "            if (nested == null) {" + newline()
         + "                nested = __capy_data_field(value, \"value\");" + newline()

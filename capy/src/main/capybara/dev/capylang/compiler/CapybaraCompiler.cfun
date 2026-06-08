@@ -113,9 +113,9 @@ private fun compile_functions(definitions: List[Definition]): List[CompiledFunct
 
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
     [compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location)]
-        + compile_data_parameters(declaration.name, declaration.parameters, 0, declaration.location)
-        + compile_data_fields(declaration.name, declaration.fields, 0)
-        + compile_data_parents(declaration.name, declaration.parents, 0)
+        + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
+        + compile_data_schema_fields(declaration.name, declaration.fields, 0)
+        + compile_data_schema_parents(declaration.name, declaration.parents, 0)
 
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
     [
@@ -167,28 +167,28 @@ private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclar
         location: compile_location(value.location)
     }
 
-private fun compile_data_parameters(dataName: String, parameters: List[String], idx: int, location: SourceLocation): List[CompiledFunction] =
+private fun compile_data_schema_parameters(dataName: String, parameters: List[String], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
         [compile_schema_constant("__capy_schema_param|" + dataName + "|" + idx, parameter, location)]
-            + compile_data_parameters(dataName, parameters[1:], idx + 1, location)
+            + compile_data_schema_parameters(dataName, parameters[1:], idx + 1, location)
 
-private fun compile_data_fields(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
+private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        [compile_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_field_schema(field), field.location)]
-            + compile_data_fields(dataName, fields[1:], idx + 1)
+        [compile_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.location)]
+            + compile_data_schema_fields(dataName, fields[1:], idx + 1)
 
-private fun compile_data_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
+private fun compile_data_schema_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
     match parents[0] with
     case None -> []
     case Some { parent } ->
         [compile_schema_constant("__capy_schema_parent|" + dataName + "|" + idx, type_reference_schema(parent.typeReference), parent.location)]
-            + compile_data_parents(dataName, parents[1:], idx + 1)
+            + compile_data_schema_parents(dataName, parents[1:], idx + 1)
 
-private fun data_field_schema(field: DataFieldDeclaration): String =
+private fun data_declaration_field_schema(field: DataFieldDeclaration): String =
     field.name + "|" + type_reference_schema(field.typeReference)
 
 private fun type_reference_schema(type: TypeReference): String =
@@ -594,7 +594,7 @@ private fun compile_expression_in_function(expression: Expression, functionName:
     case MethodCallExpression call -> compile_method_call(call, functionName)
     case WithExpression { receiver, fields, location } -> CompiledWithExpression {
         receiver: compile_expression_in_function(receiver, functionName),
-        fields: compile_data_fields(fields, functionName),
+        fields: compile_expression_data_fields(fields, functionName),
         location: compile_location(location)
     }
     case LambdaExpression { parameters, body, location } -> CompiledLambdaExpression {
@@ -627,7 +627,7 @@ private fun compile_expression_in_function(expression: Expression, functionName:
     }
     case DataLiteral { typeName, fields, location } -> CompiledDataLiteral {
         typeName: typeName,
-        fields: compile_data_fields(fields, functionName),
+        fields: compile_expression_data_fields(fields, functionName),
         location: compile_location(location)
     }
     case FieldAccessExpression access -> compile_field_access(access, functionName)
@@ -735,7 +735,7 @@ private fun compile_dict_entries(entries: List[DictEntry], functionName: String)
         location: compile_location(entry.location)
     }] + compile_dict_entries(entries[1:], functionName)
 
-private fun compile_data_fields(fields: List[DataField], functionName: String): List[CompiledDataField] =
+private fun compile_expression_data_fields(fields: List[DataField], functionName: String): List[CompiledDataField] =
     match fields[0] with
     case None -> []
     case Some { field } -> [CompiledDataField {
@@ -743,7 +743,7 @@ private fun compile_data_fields(fields: List[DataField], functionName: String): 
         value: compile_expression_in_function(field.value, functionName),
         spread: field.spread,
         location: compile_location(field.location)
-    }] + compile_data_fields(fields[1:], functionName)
+    }] + compile_expression_data_fields(fields[1:], functionName)
 
 private fun compile_match_cases(cases: List[MatchCase], functionName: String): List[CompiledMatchCase] =
     match cases[0] with
