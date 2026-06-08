@@ -1404,6 +1404,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then size_method_code(call, env, module, allModules)
     else if char_to_string_call(call, env, module, allModules)
     then char_to_string_code(call, env, module, allModules)
+    else if enum_name_method_call(call, env, module, allModules)
+    then "__capy_enum_name(" + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules) + ")"
     else if assert_is_empty_call(call)
     then assert_is_empty_code(call, env, module, allModules)
     else if option_assert_is_equal_to_call(call, env, module, allModules)
@@ -2227,6 +2229,12 @@ private fun char_to_string_call(call: CompiledMethodCallExpression, env: List[Ja
 
 private fun char_to_string_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "((java.lang.String) " + expression_code(call.receiver, env, object_type(), module, allModules) + ")"
+
+private fun enum_name_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    call.name == "name"
+        & call.arguments.is_empty()
+        & (receiverType.name == "enum" | enum_type_exists(receiverType.name, module, allModules))
 
 private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let params = lambda_parameters(lambda.parameters)
@@ -3168,6 +3176,12 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then option_match_condition_code(matchCase, valueCode)
     else if result_match_case(matchCase, valueType)
     then result_match_condition_code(matchCase, valueCode)
+    else if matchCase.typeName == "data"
+    then "__capy_data_is_any(" + valueCode + ")"
+    else if matchCase.typeName == "enum"
+    then "__capy_enum_is(" + valueCode + ")"
+    else if collection_match_type(matchCase.typeName)
+    then collection_match_condition_code(matchCase.typeName, valueCode)
     else if primitive_match_type(matchCase.typeName)
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
     else "__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\")"
@@ -3204,6 +3218,18 @@ private fun primitive_match_condition_code(typeName: String, valueCode: String, 
     if valueType.name == typeName
     then "true"
     else valueCode + " instanceof " + boxed_java_type(CompiledTypeReference { name: typeName, arguments: [] })
+
+private fun collection_match_type(typeName: String): bool =
+    typeName == "List" | typeName == "Set" | typeName == "Dict" | option_type_name(typeName)
+
+private fun collection_match_condition_code(typeName: String, valueCode: String): String =
+    if typeName == "List"
+    then valueCode + " instanceof java.util.List<?>"
+    else if typeName == "Set"
+    then valueCode + " instanceof java.util.Set<?>"
+    else if typeName == "Dict"
+    then valueCode + " instanceof java.util.Map<?, ?> __capy_match_map && !__capy_match_map.containsKey(\"__type\")"
+    else valueCode + " instanceof java.util.Optional<?>"
 
 private fun match_binding_statements(bindings: List[String], matchCase: CompiledMatchCase, valueCode: String, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match bindings[0] with
@@ -3573,6 +3599,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then int_type()
     else if char_to_string_call(call, env, module, allModules)
     then string_type()
+    else if enum_name_method_call(call, env, module, allModules)
+    then string_type()
     else if assert_status_call(call, env, module, allModules)
     then bool_type()
     else if assert_method_call(call, env, module, allModules)
@@ -3920,6 +3948,8 @@ private fun type_match_score(target: CompiledTypeReference, source: CompiledType
     then 1000
     else if primitive_numeric_widening_assignable(target, source)
     then 10
+    else if runtime_supertype_assignable(target, source, module, allModules)
+    then 100
     else if generated_data_object_type(target) & generated_data_object_type(source)
     then data_type_match_score(target.name, source.name, module, allModules)
     else if type_assignable(target, source)
@@ -4779,6 +4809,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
         & expression_emittable(call.receiver, env, module, allModules)
     else if char_to_string_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
+    else if enum_name_method_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
     else if assert_status_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
     else if assert_is_empty_call(call)
@@ -5338,10 +5370,14 @@ private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeR
     then true
     else if generated_data_object_type(target) & generated_data_object_type(source)
     then true
+    else if target.name == "data" & generated_data_object_type(source)
+    then true
     else target.name == source.name & type_arguments_assignable(target.arguments, source.arguments)
 
 private fun value_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     if stdlib_type_reference_assignable(target, source)
+    then true
+    else if runtime_supertype_assignable(target, source, module, allModules)
     then true
     else if generated_data_object_type(target) & generated_data_object_type(source)
     then data_type_distance(target.name, source.name, module, allModules) >= 0
@@ -5350,6 +5386,13 @@ private fun value_assignable(target: CompiledTypeReference, source: CompiledType
     else match primitive_backed_backing_type(source.name, module, allModules) with
         case Some { backingType } -> type_assignable(target, backingType)
         case None -> false
+
+private fun runtime_supertype_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if target.name == "enum"
+    then source.name == "any" | enum_type_exists(source.name, module, allModules)
+    else if target.name == "data"
+    then source.name == "any" | generated_data_object_type(source)
+    else false
 
 private fun generated_data_object_type(type: CompiledTypeReference): bool =
     !type.name.is_empty()
@@ -5438,6 +5481,7 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "List" then "java.util.List<" + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "Set" then "java.util.Set<" + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "Dict" then "java.util.Map<java.lang.String, " + boxed_java_type(first_type_argument(type)) + ">"
+    else if option_type_name(type.name) then "java.util.Optional<" + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + generic_argument_java_type(first_type_argument(type)) + ">"
     else if type.name == "Assert" then "capy.test.Assert"
@@ -5830,6 +5874,18 @@ private fun java_data_helpers(): String =
         + "    }" + newline() + newline()
         + "    private static boolean __capy_data_is(java.lang.Object value, java.lang.String type) {" + newline()
         + "        return value instanceof java.util.Map<?, ?> map && type.equals(map.get(\"__type\"));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_data_is_any(java.lang.Object value) {" + newline()
+        + "        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\");" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_enum_is(java.lang.Object value) {" + newline()
+        + "        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\") && map.get(\"name\") instanceof java.lang.String && map.get(\"order\") instanceof java.lang.Integer;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_enum_name(java.lang.Object value) {" + newline()
+        + "        if (__capy_enum_is(value)) {" + newline()
+        + "            return java.lang.String.valueOf(((java.util.Map<?, ?>) value).get(\"name\"));" + newline()
+        + "        }" + newline()
+        + "        return java.lang.String.valueOf(value);" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings(\"unchecked\")" + newline()
         + "    private static <T> T __capy_data_field(java.lang.Object value, java.lang.String field) {" + newline()
