@@ -2523,14 +2523,15 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
         case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
 
 private fun raw_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let typeName = raw_data_literal_type_name(literal.typeName)
+    let declaredType = data_literal_declared_type(literal.typeName)
+    let typeName = declaredType.name
     let rawLiteral = CompiledDataLiteral {
         typeName: typeName,
         fields: literal.fields,
         location: literal.location
     }
     let dataType = find_data_type(typeName, module, allModules)
-    let bindings = data_type_bindings(dataType, expectedType, module, allModules)
+    let bindings = data_type_bindings(dataType, data_literal_context_type(declaredType, expectedType), module, allModules)
     "__capy_data(\"" + escape_java_string(data_literal_type_name(typeName, dataType)) + "\", " + data_fields_code(rawLiteral.fields, env, dataType, bindings, module, allModules) + ")"
 
 private fun raw_data_literal(typeName: String): bool =
@@ -2541,10 +2542,18 @@ private fun raw_data_literal_type_name(typeName: String): String =
     then typeName["__capy_raw|".size().value, typeName.size().value]
     else typeName
 
+private fun data_literal_declared_type(typeName: String): CompiledTypeReference =
+    schema_type_reference(raw_data_literal_type_name(typeName))
+
+private fun data_literal_context_type(declaredType: CompiledTypeReference, expectedType: CompiledTypeReference): CompiledTypeReference =
+    if declaredType.arguments.is_empty()
+    then expectedType
+    else declaredType
+
 private fun data_constructor_function(typeName: String, module: CompiledModule): /capy/lang/Option[CompiledFunction] =
     if raw_data_literal(typeName)
     then /capy/lang/Option.None {}
-    else find_function(data_constructor_function_name(typeName), module.functions)
+    else find_function(data_constructor_function_name(data_literal_declared_type(typeName).name), module.functions)
 
 private fun data_constructor_function_name(typeName: String): String =
     "__capy_constructor|" + typeName
@@ -2962,10 +2971,15 @@ private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List
     else if result_error_literal(literal.typeName, module.imports)
     then result_type(object_type())
     else if raw_data_literal(literal.typeName)
-    then data_type_reference(raw_data_literal_type_name(literal.typeName))
-    else match data_constructor_function(literal.typeName, module) with
-        case Some { function } -> data_constructor_literal_type(literal.typeName, function, module, allModules)
-        case None -> data_type_reference(literal.typeName)
+    then data_literal_declared_type(literal.typeName)
+    else
+        let declaredType = data_literal_declared_type(literal.typeName)
+        match data_constructor_function(literal.typeName, module) with
+        case Some { function } -> data_constructor_literal_type(declaredType.name, function, module, allModules)
+        case None ->
+            if declaredType.arguments.is_empty()
+            then inferred_data_literal_reference(declaredType.name, literal, env, module, allModules)
+            else declaredType
 
 private fun data_constructor_literal_type(typeName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if result_type_name(function.returnType.name)
