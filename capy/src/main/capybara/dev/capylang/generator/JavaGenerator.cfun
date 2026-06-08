@@ -264,8 +264,8 @@ private fun java_function_body(function: CompiledFunction, env: List[JavaBinding
         then effectBody
         else if !expression_emittable(function.body, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
-        else block_statements(block.bindings, env, module, allModules, "        ")
-            + "        return " + expression_code(block.result, block_env(block.bindings, env, module, allModules), function.returnType, module, allModules) + ";" + newline()
+        else block_statements(block.bindings, env, function.returnType, module, allModules, "        ")
+            + "        return " + block_result_code(block, env, function.returnType, module, allModules) + ";" + newline()
     case _ ->
         if !expression_emittable(function.body, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
@@ -1280,6 +1280,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
     else if function_value_method_call(call, env, module, allModules)
     then function_value_method_code(call, env, module, allModules)
+    else if result_reduce_method_call(call, env, module, allModules)
+    then result_reduce_method_code(call, env, expectedType, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_code(call, env, expectedType, module, allModules)
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
@@ -1322,6 +1324,29 @@ private fun result_map_method_call(call: CompiledMethodCallExpression, env: List
         & result_type_name(expression_type(call.receiver, env, module, allModules).name)
         & result_map_method_argument(call.arguments)
 
+private fun result_reduce_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    (call.name == "reduce" | call.name == "reduce_left")
+        & result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        & result_reduce_method_arguments(call.arguments)
+
+private fun result_reduce_method_arguments(arguments: List[CompiledExpression]): bool =
+    result_reduce_method_argument_at(arguments, 0)
+        & result_reduce_method_argument_at(arguments, 1)
+        & no_third_expression(arguments)
+
+private fun result_reduce_method_argument_at(arguments: List[CompiledExpression], idx: int): bool =
+    match arguments[0] with
+    case Some { expression } ->
+        if idx == 0
+        then result_reduce_method_lambda_argument(expression)
+        else result_reduce_method_argument_at(arguments[1:], idx - 1)
+    case None -> false
+
+private fun result_reduce_method_lambda_argument(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression _ -> true
+    case _ -> false
+
 private fun result_map_method_argument(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case Some { expression } -> result_map_method_lambda_argument(expression) & no_second_expression(arguments)
@@ -1335,6 +1360,49 @@ private fun result_map_method_lambda_argument(expression: CompiledExpression): b
 private fun result_map_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     result_pipe_code(result_map_method_binary(call), receiverType, expectedType, env, module, allModules)
+
+private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    let resultType = if expectedType.name.is_empty() | expectedType.name == "any" then result_reduce_method_type(call, env, module, allModules) else expectedType
+    let resultName = "__capy_result_reduce_" + call.location.line + "_" + call.location.column
+    let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
+    let successLambda = result_reduce_lambda_argument(argument(call.arguments, 0))
+    let errorLambda = result_reduce_lambda_argument(argument(call.arguments, 1))
+    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+    + "            java.lang.Object " + resultName + " = " + receiverCode + ";" + newline()
+    + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
+    + result_reduce_success_binding_statement(successLambda.parameters, valueType, resultName, "                ")
+    + "                return " + expression_code(successLambda.body, lambda_value_env(successLambda.parameters, valueType, env), resultType, module, allModules) + ";" + newline()
+    + "            }" + newline()
+    + result_reduce_error_binding_statement(errorLambda.parameters, resultName, "            ")
+    + "            return " + expression_code(errorLambda.body, lambda_value_env(errorLambda.parameters, string_type(), env), resultType, module, allModules) + ";" + newline()
+    + "        }).get()"
+
+private fun result_reduce_lambda_argument(expression: CompiledExpression): CompiledLambdaExpression =
+    match expression with
+    case CompiledLambdaExpression lambda -> lambda
+    case _ -> CompiledLambdaExpression {
+        parameters: [],
+        body: missing_argument(),
+        location: CompiledSourceLocation { line: 0, column: 0 }
+    }
+
+private fun result_reduce_success_binding_statement(parameters: List[String], valueType: CompiledTypeReference, resultName: String, indent: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        if parameter == "_"
+        then ""
+        else indent + java_type(valueType) + " " + java_identifier(parameter) + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+
+private fun result_reduce_error_binding_statement(parameters: List[String], resultName: String, indent: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        if parameter == "_"
+        then ""
+        else indent + "java.lang.String " + java_identifier(parameter) + " = java.lang.String.valueOf(__capy_result_error_value(" + resultName + "));" + newline()
 
 private fun result_map_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
     CompiledBinaryExpression {
@@ -1747,6 +1815,11 @@ private fun no_second_expression(arguments: List[CompiledExpression]): bool =
     case None -> true
     case Some _ -> false
 
+private fun no_third_expression(arguments: List[CompiledExpression]): bool =
+    match arguments[2] with
+    case None -> true
+    case Some _ -> false
+
 private fun result_assert_succeeds_lambda_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression _ -> true
@@ -1989,33 +2062,73 @@ private fun dict_optional_index_code(receiverCode: String, keyCode: String): Str
     "__capy_dict_get_optional(" + receiverCode + ", " + keyCode + ")"
 
 private fun block_expression_code(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let resultType = expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
+    let resultType = block_expression_result_type(block, env, expectedType, module, allModules)
     "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
-    + block_statements(block.bindings, env, module, allModules, "            ")
-    + "            return " + expression_code(block.result, block_env(block.bindings, env, module, allModules), expectedType, module, allModules) + ";" + newline()
+    + block_statements(block.bindings, env, resultType, module, allModules, "            ")
+    + "            return " + block_result_code(block, env, expectedType, module, allModules) + ";" + newline()
     + "        }).get()"
 
-private fun block_statements(bindings: List[CompiledLetBinding], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+private fun block_expression_result_type(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let resultEnv = block_env(block.bindings, env, module, allModules)
+    let rawResultType = expression_type(block.result, resultEnv, module, allModules)
+    if result_block_wraps_success(block, env, expectedType, rawResultType, module, allModules)
+    then expectedType
+    else rawResultType
+
+private fun block_result_code(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultEnv = block_env(block.bindings, env, module, allModules)
+    let rawResultType = expression_type(block.result, resultEnv, module, allModules)
+    let resultExpectedType = if result_block_wraps_success(block, env, expectedType, rawResultType, module, allModules) then first_type_argument(expectedType) else expectedType
+    let resultCode = expression_code(block.result, resultEnv, resultExpectedType, module, allModules)
+    if result_block_wraps_success(block, env, expectedType, rawResultType, module, allModules)
+    then "__capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", " + resultCode + ")))"
+    else resultCode
+
+private fun result_block_wraps_success(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, rawResultType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    result_type_name(expectedType.name)
+        & !result_type_name(rawResultType.name)
+        & result_bindings(block.bindings, env, module, allModules)
+
+private fun result_bindings(bindings: List[CompiledLetBinding], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match bindings[0] with
+    case None -> false
+    case Some { binding } ->
+        let valueType = binding_value_type(binding, env, module, allModules)
+        let localType =
+            if binding.typeReference.name.is_empty()
+            then if binding.operator == "<-" then first_type_argument(valueType) else valueType
+            else binding.typeReference
+        if binding.operator == "<-" & result_type_name(valueType.name)
+        then true
+        else result_bindings(bindings[1:], [local_java_binding(binding.name, localType, binding.location, env)] + env, module, allModules)
+
+private fun block_statements(bindings: List[CompiledLetBinding], env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
         let valueType = binding_type(binding, env, module, allModules)
         let localBinding = local_java_binding(binding.name, valueType, binding.location, env)
-        binding_statement(binding, localBinding, env, valueType, module, allModules, indent)
-        + block_statements(bindings[1:], [localBinding] + env, module, allModules, indent)
+        binding_statement(binding, localBinding, env, valueType, expectedType, module, allModules, indent)
+        + block_statements(bindings[1:], [localBinding] + env, expectedType, module, allModules, indent)
 
-private fun binding_statement(binding: CompiledLetBinding, localBinding: JavaBinding, env: List[JavaBinding], valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+private fun binding_statement(binding: CompiledLetBinding, localBinding: JavaBinding, env: List[JavaBinding], valueType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     if binding.operator == "<-"
-    then monadic_binding_statement(binding, localBinding, env, valueType, module, allModules, indent)
+    then monadic_binding_statement(binding, localBinding, env, valueType, expectedType, module, allModules, indent)
     else indent + java_type(valueType) + " " + localBinding.javaName + " = "
         + expression_code(binding.value, env, valueType, module, allModules) + ";" + newline()
 
-private fun monadic_binding_statement(binding: CompiledLetBinding, localBinding: JavaBinding, env: List[JavaBinding], valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+private fun monadic_binding_statement(binding: CompiledLetBinding, localBinding: JavaBinding, env: List[JavaBinding], valueType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     let wrapperType = binding_value_type(binding, env, module, allModules)
     let bindName = "__capy_bind_" + localBinding.javaName
     if wrapperType.name == "Effect"
     then indent + java_type(valueType) + " " + localBinding.javaName + " = "
         + expression_code(binding.value, env, wrapperType, module, allModules) + ".unsafeRun();" + newline()
+    else if result_type_name(wrapperType.name)
+    then indent + "java.lang.Object " + bindName + " = " + expression_code(binding.value, env, wrapperType, module, allModules) + ";" + newline()
+        + indent + "if (!__capy_result_is_success(" + bindName + ")) {" + newline()
+        + indent + "    return ((" + boxed_java_type(expectedType) + ") " + bindName + ");" + newline()
+        + indent + "}" + newline()
+        + indent + java_type(valueType) + " " + localBinding.javaName + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + bindName + "));" + newline()
     else indent + "java.lang.Object " + bindName + " = " + expression_code(binding.value, env, wrapperType, module, allModules) + ";" + newline()
         + indent + java_type(valueType) + " " + localBinding.javaName + " = ((" + boxed_java_type(valueType) + ") __capy_data_value_field(" + bindName + "));" + newline()
 
@@ -2158,10 +2271,62 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
     then match literal.fields[0] with
         case Some { field } -> "new capy.lang.Program.Failed(" + expression_code(field.value, env, int_type(), module, allModules) + ")"
         case None -> "new capy.lang.Program.Failed(0)"
+    else if raw_data_literal(literal.typeName)
+    then raw_data_literal_code(literal, env, expectedType, module, allModules)
     else
-        let dataType = find_data_type(literal.typeName, module, allModules)
-        let bindings = data_type_bindings(dataType, expectedType, module, allModules)
-        "__capy_data(\"" + escape_java_string(data_literal_type_name(literal.typeName, dataType)) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
+        match data_constructor_function(literal.typeName, module) with
+        case Some { function } -> data_constructor_call_code(function, literal, env, module, allModules)
+        case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+
+private fun raw_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = raw_data_literal_type_name(literal.typeName)
+    let rawLiteral = CompiledDataLiteral {
+        typeName: typeName,
+        fields: literal.fields,
+        location: literal.location
+    }
+    let dataType = find_data_type(typeName, module, allModules)
+    let bindings = data_type_bindings(dataType, expectedType, module, allModules)
+    "__capy_data(\"" + escape_java_string(data_literal_type_name(typeName, dataType)) + "\", " + data_fields_code(rawLiteral.fields, env, dataType, bindings, module, allModules) + ")"
+
+private fun raw_data_literal(typeName: String): bool =
+    java_generator_string_has_prefix(typeName, "__capy_raw|")
+
+private fun raw_data_literal_type_name(typeName: String): String =
+    if raw_data_literal(typeName)
+    then typeName["__capy_raw|".size().value, typeName.size().value]
+    else typeName
+
+private fun data_constructor_function(typeName: String, module: CompiledModule): /capy/lang/Option[CompiledFunction] =
+    if raw_data_literal(typeName)
+    then /capy/lang/Option.None {}
+    else find_function(data_constructor_function_name(typeName), module.functions)
+
+private fun data_constructor_function_name(typeName: String): String =
+    "__capy_constructor|" + typeName
+
+private fun data_constructor_call_code(function: CompiledFunction, literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_function_name(function) + "(" + data_constructor_call_arguments(function.parameters, literal.fields, 0, env, module, allModules) + ")"
+
+private fun data_constructor_call_arguments(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        expression_code(data_constructor_argument_value(fields, parameter.name, "$" + idx), env, parameter.typeReference, module, allModules)
+            + data_constructor_call_argument_tail(parameters[1:], fields, idx + 1, env, module, allModules)
+
+private fun data_constructor_call_argument_tail(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", " + data_constructor_call_arguments(parameters, fields, idx, env, module, allModules)
+
+private fun data_constructor_argument_value(fields: List[CompiledDataField], name: String, positionalName: String): CompiledExpression =
+    match fields[0] with
+    case None -> missing_argument()
+    case Some { field } ->
+        if field.name == name | field.name == positionalName
+        then field.value
+        else data_constructor_argument_value(fields[1:], name, positionalName)
 
 private fun stdlib_date_time_data_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
     type_unqualified_name(typeName) == "DateTime" & stdlib_date_time_type_imported("DateTime", imports)
@@ -2646,6 +2811,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
     else if function_value_method_call(call, env, module, allModules)
     then function_type_return_type(expression_type(call.receiver, env, module, allModules))
+    else if result_reduce_method_call(call, env, module, allModules)
+    then result_reduce_method_type(call, env, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_type(call, env, module, allModules)
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
@@ -2680,6 +2847,13 @@ private fun result_map_method_type(call: CompiledMethodCallExpression, env: List
         module,
         allModules
     )
+
+private fun result_reduce_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    match argument(call.arguments, 0) with
+    case CompiledLambdaExpression lambda -> expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+    case _ -> object_type()
 
 private fun regex_method_type(name: String): CompiledTypeReference =
     if name == "matches"
@@ -3459,6 +3633,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
     else if function_value_method_call(call, env, module, allModules)
     then function_value_method_emittable(call, env, module, allModules)
+    else if result_reduce_method_call(call, env, module, allModules)
+    then result_reduce_method_emittable(call, env, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_emittable(call, env, module, allModules)
     else if call.name == "map" & receiverType.name == "Effect"
@@ -3488,6 +3664,23 @@ private fun function_value_method_emittable(call: CompiledMethodCallExpression, 
 
 private fun result_map_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     result_pipe_emittable(result_map_method_binary(call), env, module, allModules)
+
+private fun result_reduce_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = first_type_argument(receiverType)
+    expression_emittable(call.receiver, env, module, allModules)
+        & result_reduce_argument_emittable(argument(call.arguments, 0), valueType, env, module, allModules)
+        & result_reduce_argument_emittable(argument(call.arguments, 1), string_type(), env, module, allModules)
+
+private fun result_reduce_argument_emittable(expression: CompiledExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledLambdaExpression lambda -> result_reduce_lambda_emittable(lambda, valueType, env, module, allModules)
+    case _ -> false
+
+private fun result_reduce_lambda_emittable(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if lambda_parameter_shape_supported(lambda.parameters, valueType)
+    then expression_emittable(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+    else false
 
 private fun regex_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let argumentExpression = argument(call.arguments, 0)
@@ -4374,7 +4567,10 @@ private fun java_base_helpers(): String =
         + "            return error.ex() == null ? null : error.ex().getMessage();" + newline()
         + "        }" + newline()
         + "        if (__capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\")) {" + newline()
-        + "            java.lang.Object nested = __capy_data_field(value, \"value\");" + newline()
+        + "            java.lang.Object nested = __capy_data_field(value, \"message\");" + newline()
+        + "            if (nested == null) {" + newline()
+        + "                nested = __capy_data_field(value, \"value\");" + newline()
+        + "            }" + newline()
         + "            return nested == null ? value : nested;" + newline()
         + "        }" + newline()
         + "        return value;" + newline()
