@@ -14,7 +14,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
-from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, Definition, FunctionDefinition }
+from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, Definition, FunctionDefinition }
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
@@ -106,8 +106,71 @@ private fun compile_functions(definitions: List[Definition]): List[CompiledFunct
     case Some { definition } ->
         match definition with
         case ConstantDefinition { constant } -> [compile_constant(constant)] + compile_functions(definitions[1:])
+        case DataDeclaration declaration -> compile_data_declaration(declaration) + compile_functions(definitions[1:])
         case FunctionDefinition { function } -> [compile_function(function)] + compile_functions(definitions[1:])
         case _ -> compile_functions(definitions[1:])
+
+private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
+    [compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location)]
+        + compile_data_parameters(declaration.name, declaration.parameters, 0, declaration.location)
+        + compile_data_fields(declaration.name, declaration.fields, 0)
+        + compile_data_parents(declaration.name, declaration.parents, 0)
+
+private fun compile_data_parameters(dataName: String, parameters: List[String], idx: int, location: SourceLocation): List[CompiledFunction] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [compile_schema_constant("__capy_schema_param|" + dataName + "|" + idx, parameter, location)]
+            + compile_data_parameters(dataName, parameters[1:], idx + 1, location)
+
+private fun compile_data_fields(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [compile_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_field_schema(field), field.location)]
+            + compile_data_fields(dataName, fields[1:], idx + 1)
+
+private fun compile_data_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [compile_schema_constant("__capy_schema_parent|" + dataName + "|" + idx, type_reference_schema(parent.typeReference), parent.location)]
+            + compile_data_parents(dataName, parents[1:], idx + 1)
+
+private fun data_field_schema(field: DataFieldDeclaration): String =
+    field.name + "|" + type_reference_schema(field.typeReference)
+
+private fun type_reference_schema(type: TypeReference): String =
+    type.name + type_reference_arguments_schema(type.arguments)
+
+private fun type_reference_arguments_schema(arguments: List[TypeReference]): String =
+    if arguments.is_empty()
+    then ""
+    else "[" + type_reference_list_schema(arguments) + "]"
+
+private fun type_reference_list_schema(arguments: List[TypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> type_reference_schema(argument) + type_reference_list_tail_schema(arguments[1:])
+
+private fun type_reference_list_tail_schema(arguments: List[TypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> ", " + type_reference_schema(argument) + type_reference_list_tail_schema(arguments[1:])
+
+private fun compile_schema_constant(name: String, value: String, location: SourceLocation): CompiledFunction =
+    CompiledFunction {
+        name: name,
+        visibility: "const:schema",
+        parameters: [],
+        returnType: compile_type(compiler_string_type()),
+        body: CompiledStringLiteral {
+            value: value,
+            source: "\"" + value + "\"",
+            location: compile_location(location)
+        },
+        location: compile_location(location)
+    }
 
 private fun compile_function(function: FunctionDeclaration): CompiledFunction =
     CompiledFunction {
@@ -627,6 +690,7 @@ private fun compile_data_fields(fields: List[DataField], functionName: String): 
     case Some { field } -> [CompiledDataField {
         name: field.name,
         value: compile_expression_in_function(field.value, functionName),
+        spread: field.spread,
         location: compile_location(field.location)
     }] + compile_data_fields(fields[1:], functionName)
 

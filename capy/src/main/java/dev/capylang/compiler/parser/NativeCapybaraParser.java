@@ -204,7 +204,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return Definition.AnnotationDeclaration.INSTANCE;
         }
         if (definition.dataDeclaration() != null) {
-            return Definition.DataDeclaration.INSTANCE;
+            return Definition.UnsupportedDefinition.INSTANCE;
         }
         if (definition.deriverDeclaration() != null) {
             return Definition.DeriverDeclaration.INSTANCE;
@@ -340,14 +340,15 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.DataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
-        return dataDeclarationDefinitions(declaration, ctx.dataBody(), ctx.constructorClause(), location(ctx));
+        var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
+        return dataDeclarationDefinitions(declaration, visibility, ctx.dataBody(), ctx.constructorClause(), location(ctx));
     }
 
     private static List<Definition> localDataDeclarationDefinitions(
             dev.capylang.parser.antlr.FunctionalParser.LocalDataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
-        return dataDeclarationDefinitions(declaration, ctx.dataBody(), ctx.constructorClause(), location(ctx));
+        return dataDeclarationDefinitions(declaration, "private", ctx.dataBody(), ctx.constructorClause(), location(ctx));
     }
 
     private static List<Definition> typeDeclarationDefinitions(
@@ -430,31 +431,21 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
     private static List<Definition> dataDeclarationDefinitions(
             dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext declaration,
+            String visibility,
             dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
             dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause,
             SourceLocation location
     ) {
         var name = dataTypeName(declaration);
         var definitions = new ArrayList<Definition>();
-        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
-
-        var typeParameters = dataTypeParameters(declaration);
-        for (var i = 0; i < typeParameters.size(); i++) {
-            definitions.add(schemaConstantDefinition(
-                    "__capy_schema_param|" + name + "|" + i,
-                    typeParameters.get(i),
-                    location
-            ));
-        }
-
-        var fields = dataDeclarationFields(dataBody);
-        for (var i = 0; i < fields.size(); i++) {
-            definitions.add(schemaConstantDefinition(
-                    "__capy_schema_field|" + name + "|" + i,
-                    fields.get(i),
-                    location
-            ));
-        }
+        definitions.add(new Definition.DataDeclaration(
+                name,
+                visibility,
+                dataTypeParameters(declaration),
+                dataDeclarationOwnFields(dataBody),
+                dataDeclarationParents(dataBody),
+                location
+        ));
         if (constructorClause != null) {
             definitions.add(constructorFunctionDefinition(name, constructorParameters(dataBody), constructorClause));
         }
@@ -508,7 +499,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         var parameters = new ArrayList<FunctionParameter>();
         for (var field : dataBody.fieldDeclarationList().fieldDeclaration()) {
-            parameters.add(constructorParameter(field));
+            if (!dataParentDeclaration(field)) {
+                parameters.add(constructorParameter(field));
+            }
         }
         return List.copyOf(parameters);
     }
@@ -521,7 +514,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         var parameters = new ArrayList<FunctionParameter>();
         for (var field : fields.fieldDeclaration()) {
-            parameters.add(constructorParameter(field));
+            if (!dataParentDeclaration(field)) {
+                parameters.add(constructorParameter(field));
+            }
         }
         return List.copyOf(parameters);
     }
@@ -582,6 +577,54 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return List.of();
         }
         return fieldDeclarationFields(ctx.fieldDeclarationList());
+    }
+
+    private static List<Definition.DataFieldDeclaration> dataDeclarationOwnFields(
+            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext ctx
+    ) {
+        if (ctx == null || ctx.fieldDeclarationList() == null) {
+            return List.of();
+        }
+        var fields = new ArrayList<Definition.DataFieldDeclaration>();
+        for (var field : ctx.fieldDeclarationList().fieldDeclaration()) {
+            if (!dataParentDeclaration(field)) {
+                fields.add(dataFieldDeclarationDto(field));
+            }
+        }
+        return List.copyOf(fields);
+    }
+
+    private static Definition.DataFieldDeclaration dataFieldDeclarationDto(
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationContext ctx
+    ) {
+        var name = ctx.identifier() != null
+                ? ctx.identifier().getText()
+                : unquote(ctx.STRING_LITERAL().getText());
+        return new Definition.DataFieldDeclaration(name, typeReference(ctx.type()), location(ctx));
+    }
+
+    private static List<Definition.DataParentDeclaration> dataDeclarationParents(
+            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext ctx
+    ) {
+        if (ctx == null || ctx.fieldDeclarationList() == null) {
+            return List.of();
+        }
+        var parents = new ArrayList<Definition.DataParentDeclaration>();
+        for (var field : ctx.fieldDeclarationList().fieldDeclaration()) {
+            if (dataParentDeclaration(field)) {
+                parents.add(new Definition.DataParentDeclaration(
+                        new TypeReference(field.TYPE().getText(), List.of()),
+                        location(field)
+                ));
+            }
+        }
+        return List.copyOf(parents);
+    }
+
+    private static boolean dataParentDeclaration(
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationContext ctx
+    ) {
+        return ctx.SPREAD() != null && ctx.TYPE() != null;
     }
 
     private static List<String> fieldDeclarationFields(
@@ -821,6 +864,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(field -> new Expression.DataField(
                         field.name(),
                         rewriteLocalFunctionCalls(field.value(), localNames),
+                        field.spread(),
                         field.location()
                 ))
                 .toList();
@@ -1005,6 +1049,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(field -> new Expression.DataField(
                         field.name(),
                         rewriteConstructorData(field.value(), dataTypeName),
+                        field.spread(),
                         field.location()
                 ))
                 .toList();
@@ -1497,12 +1542,14 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 fields.add(new Expression.DataField(
                         named.identifier().getText(),
                         expression(named.expression()),
+                        false,
                         location(named)
                 ));
             } else {
                 fields.add(new Expression.DataField(
                         "$unsupported",
                         unsupported(argument),
+                        false,
                         location(argument)
                 ));
             }
@@ -1633,10 +1680,18 @@ public final class NativeCapybaraParser implements CapybaraParser {
             if (assignment.namedFieldAssignment() != null) {
                 fields.add(namedDataField(assignment.namedFieldAssignment()));
                 positionalIndex++;
+            } else if (assignment.spreadFieldAssignment() != null) {
+                fields.add(new Expression.DataField(
+                        "",
+                        expression(assignment.spreadFieldAssignment().expression()),
+                        true,
+                        location(assignment)
+                ));
             } else if (assignment.positionalFieldAssignment() != null) {
                 fields.add(new Expression.DataField(
                         "$" + positionalIndex,
                         expression(assignment.positionalFieldAssignment().expression()),
+                        false,
                         location(assignment)
                 ));
                 positionalIndex++;
@@ -1644,6 +1699,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 fields.add(new Expression.DataField(
                         "$unsupported",
                         unsupported(assignment),
+                        false,
                         location(assignment)
                 ));
                 positionalIndex++;
@@ -1658,7 +1714,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var name = ctx.identifier() == null
                 ? unquote(ctx.STRING_LITERAL().getText())
                 : ctx.identifier().getText();
-        return new Expression.DataField(name, expression(ctx.expression()), location(ctx));
+        return new Expression.DataField(name, expression(ctx.expression()), false, location(ctx));
     }
 
     private static Expression matchExpression(dev.capylang.parser.antlr.FunctionalParser.MatchExpressionContext ctx) {
@@ -1870,11 +1926,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         new Expression.DataField(
                                 "pattern",
                                 new Expression.StringLiteral(pattern, quote(pattern), location),
+                                false,
                                 location
                         ),
                         new Expression.DataField(
                                 "flags",
                                 new Expression.StringLiteral(flags, quote(flags), location),
+                                false,
                                 location
                         )
                 ),
@@ -2234,6 +2292,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(field -> new Expression.DataField(
                         field.name(),
                         offsetExpression(field.value(), lineOffset, columnOffset),
+                        field.spread(),
                         offsetLocation(field.location(), lineOffset, columnOffset)
                 ))
                 .toList();

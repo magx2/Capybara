@@ -546,10 +546,9 @@ private fun object_equality_operator(operator: String, leftType: CompiledTypeRef
         & object_equality_type(rightType)
 
 private fun object_equality_type(type: CompiledTypeReference): bool =
-    !type.name.is_empty()
-        & type.name != "any"
-        & type.name != "bool"
-        & !numeric_type(type)
+    type.name.is_empty()
+        | type.name == "any"
+        | (type.name != "bool" & !numeric_type(type))
 
 private fun object_equality_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = "java.util.Objects.equals("
@@ -1181,7 +1180,7 @@ private fun value_conversion_code(code: String, sourceType: CompiledTypeReferenc
     case None -> ordinary_value_conversion_code(code, sourceType, expectedType)
 
 private fun ordinary_value_conversion_code(code: String, sourceType: CompiledTypeReference, expectedType: CompiledTypeReference): String =
-    if sourceType.name == "any" & !expectedType.name.is_empty() & expectedType.name != "any"
+    if (sourceType.name.is_empty() | sourceType.name == "any") & !expectedType.name.is_empty() & expectedType.name != "any"
     then "((" + boxed_java_type(expectedType) + ") " + code + ")"
     else numeric_widening_code(code, sourceType, expectedType)
 
@@ -1219,6 +1218,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
         + ", "
         + testsCode
         + ", java.lang.System.currentTimeMillis()))"
+    else if stdlib_math_sqrt_call(call, module)
+    then sqrt_call_code(call, env, expectedType, module, allModules)
     else if stdlib_math_digits_call(call, module)
     then "java.lang.Integer.toString("
         + expression_code(argument(call.arguments, 0), env, int_type(), module, allModules)
@@ -1309,7 +1310,7 @@ private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, en
         case None ->
             qualified_call_class_name(call.name, module) + "." + java_identifier(qualified_call_member(call.name))
                 + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
-    else match find_function_in_scope(call.name, module, allModules) with
+    else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
         case Some { function } ->
             java_function_name(function) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
         case None -> java_function_call_name(call.name, module, allModules) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
@@ -2779,16 +2780,29 @@ private fun data_literal_type_name(typeName: String, dataType: /capy/lang/Option
 private fun data_fields_code(fields: List[CompiledDataField], env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if fields.is_empty()
     then "java.util.Map.of()"
+    else if data_fields_have_spread(fields)
+    then "__capy_data_fields(" + data_field_entries_code(fields, env, dataType, bindings, module, allModules) + ")"
     else "java.util.Map.ofEntries(" + data_field_entries_code(fields, env, dataType, bindings, module, allModules) + ")"
+
+private fun data_fields_have_spread(fields: List[CompiledDataField]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } -> field.spread | data_fields_have_spread(fields[1:])
 
 private fun data_field_entries_code(fields: List[CompiledDataField], env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> ""
     case Some { field } ->
+        data_field_entry_code(field, env, dataType, bindings, module, allModules)
+        + data_field_entries_tail(fields[1:], env, dataType, bindings, module, allModules)
+
+private fun data_field_entry_code(field: CompiledDataField, env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if field.spread
+    then expression_code(field.value, env, expression_type(field.value, env, module, allModules), module, allModules)
+    else
         let fieldName = data_constructor_field_name(field.name, dataType, module, allModules)
         let fieldType = data_constructor_field_type(field.name, dataType, bindings, expression_type(field.value, env, module, allModules), module, allModules)
         "java.util.Map.entry(\"" + escape_java_string(fieldName) + "\", " + expression_code(field.value, env, fieldType, module, allModules) + ")"
-        + data_field_entries_tail(fields[1:], env, dataType, bindings, module, allModules)
 
 private fun data_field_entries_tail(fields: List[CompiledDataField], env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
@@ -3370,11 +3384,18 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then test_case_type()
     else if call.name == "test_file"
     then effect_type(test_file_type())
+    else if stdlib_math_sqrt_call(call, module)
+    then sqrt_call_type(call, env, module, allModules)
     else if stdlib_math_digits_call(call, module)
     then int_type()
     else if qualified_call_name(call.name)
     then qualified_function_call_type(call.name, module, allModules)
-    else lookup_function_type_in_scope(call.name, module, allModules)
+    else function_call_type_in_scope(call, env, module, allModules)
+
+private fun function_call_type_in_scope(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
+    case Some { function } -> function.returnType
+    case None -> lookup_function_type_in_scope(call.name, module, allModules)
 
 private fun qualified_function_call_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_qualified_function(name, module, allModules) with
@@ -3648,6 +3669,83 @@ private fun find_function_in_scope(name: String, module: CompiledModule, allModu
     match find_function(name, module.functions) with
     case Some { function } -> /capy/lang/Option.Some { function }
     case None -> find_function_in_imports(name, module.imports, module, allModules)
+
+private fun find_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match find_function_for_arguments_in_functions(name, arguments, env, module.functions, module, allModules) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_function_in_imports_for_arguments(name, arguments, env, module.imports, module, allModules)
+
+private fun find_function_for_arguments_in_functions(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    best_function_for_arguments(name, arguments, env, functions, module, allModules, /capy/lang/Option.None {}, 1000000)
+
+private fun best_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> best
+    case Some { function } ->
+        if function.name == name
+        then best_matching_function_for_arguments(name, arguments, env, functions, module, allModules, best, bestScore, function)
+        else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
+
+private fun best_matching_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int, function: CompiledFunction): /capy/lang/Option[CompiledFunction] =
+    if compiled_constant(function)
+    then best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
+    else if parameters_assignable(function.parameters, arguments, env, module, allModules)
+    then
+        let score = function_argument_score(function.parameters, arguments, env, module, allModules)
+        if score < bestScore
+        then best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, /capy/lang/Option.Some { function }, score)
+        else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
+    else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
+
+private fun find_function_in_imports_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if function_import_matches(name, declaration)
+        then find_function_in_import_for_arguments(name, arguments, env, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else find_function_in_imports_for_arguments(name, arguments, env, imports[1:], module, allModules)
+
+private fun find_function_in_import_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledFunction] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_function_in_imported_module_for_arguments(name, arguments, env, rest, module, allModules, importedModule)
+    case None -> find_function_in_imports_for_arguments(name, arguments, env, rest, module, allModules)
+
+private fun find_function_in_imported_module_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunction] =
+    match find_function_for_arguments_in_functions(name, arguments, env, importedModule.functions, module, allModules) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_function_in_imports_for_arguments(name, arguments, env, rest, module, allModules)
+
+private fun function_argument_score(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): int =
+    match parameters[0] with
+    case None -> 0
+    case Some { parameter } ->
+        match arguments[0] with
+        case None -> 1000000
+        case Some { argument } ->
+            parameter_argument_score(parameter.typeReference, argument, env, module, allModules)
+                + function_argument_score(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun parameter_argument_score(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): int =
+    if empty_collection_literal_assignable(target, argument) | function_reference_assignable(target, argument, module, allModules) | function_lambda_assignable(target, argument, env, module, allModules)
+    then 0
+    else type_match_score(target, expression_type(argument, env, module, allModules), module, allModules)
+
+private fun type_match_score(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): int =
+    if target.name == source.name & type_arguments_assignable(target.arguments, source.arguments)
+    then 0
+    else if target.name == "any"
+    then 1000
+    else if primitive_numeric_widening_assignable(target, source)
+    then 10
+    else if generated_data_object_type(target) & generated_data_object_type(source)
+    then data_type_match_score(target.name, source.name, module, allModules)
+    else if type_assignable(target, source)
+    then 100
+    else 1000000
+
+private fun data_type_match_score(targetName: String, sourceName: String, module: CompiledModule, allModules: List[CompiledModule]): int =
+    let distance = data_type_distance(targetName, sourceName, module, allModules)
+    if distance >= 0 then distance else 500
 
 private fun find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
@@ -3997,12 +4095,58 @@ private fun data_type_parent_types_in_modules(name: String, modules: List[Compil
         then schema_values("__capy_schema_parent|" + name + "|", module.functions)
         else data_type_parent_types_in_modules(name, modules[1:])
 
+private fun data_type_distance(targetName: String, sourceName: String, module: CompiledModule, allModules: List[CompiledModule]): int =
+    if targetName == sourceName
+    then 0
+    else data_type_parent_distance(targetName, data_type_parent_types(sourceName, module, allModules), 1, -1, module, allModules)
+
+private fun data_type_parent_distance(targetName: String, parents: List[String], distance: int, best: int, module: CompiledModule, allModules: List[CompiledModule]): int =
+    match parents[0] with
+    case None -> best
+    case Some { parent } ->
+        let parentName = schema_type_reference(parent).name
+        let direct = if parentName == targetName then distance else data_type_parent_distance(targetName, data_type_parent_types(parentName, module, allModules), distance + 1, -1, module, allModules)
+        let nextBest = if direct >= 0 & (best < 0 | direct < best) then direct else best
+        data_type_parent_distance(targetName, parents[1:], distance, nextBest, module, allModules)
+
 private fun data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    merge_schema_fields(
+        data_type_direct_fields(name, module, allModules),
+        data_type_parent_fields(data_type_parent_types(name, module, allModules), module, allModules)
+    )
+
+private fun data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if schema_type_exists(name, module.functions)
     then schema_values("__capy_schema_field|" + name + "|", module.functions)
     else match data_type_fields_in_imports(name, module.imports, module, allModules) with
         case Some { value } -> value
         case None -> data_type_fields_in_modules(name, allModules)
+
+private fun data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentName = schema_type_reference(parent).name
+        merge_schema_fields(
+            data_type_fields(parentName, module, allModules),
+            data_type_parent_fields(parents[1:], module, allModules)
+        )
+
+private fun merge_schema_fields(first: List[String], second: List[String]): List[String] =
+    first + schema_fields_not_named(second, first)
+
+private fun schema_fields_not_named(fields: List[String], existing: List[String]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        if schema_field_name_exists(schema_field_name(field), existing)
+        then schema_fields_not_named(fields[1:], existing)
+        else [field] + schema_fields_not_named(fields[1:], existing + [field])
+
+private fun schema_field_name_exists(name: String, fields: List[String]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } -> schema_field_name(field) == name | schema_field_name_exists(name, fields[1:])
 
 private fun data_type_fields_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
     match imports[0] with
@@ -4612,6 +4756,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then test_call_emittable(call.arguments, env, module, allModules)
     else if call.name == "test_file"
     then test_file_call_emittable(call.arguments, env, module, allModules)
+    else if stdlib_math_sqrt_call(call, module)
+    then stdlib_math_sqrt_call_emittable(call.arguments, env, module, allModules)
     else if stdlib_math_digits_call(call, module)
     then stdlib_math_digits_call_emittable(call.arguments, env, module, allModules)
     else if qualified_call_name(call.name)
@@ -4622,7 +4768,7 @@ private fun qualified_function_call_emittable(call: CompiledFunctionCallExpressi
     !binding_exists(call.name, env)
         & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
         & match find_qualified_function(call.name, module, allModules) with
-            case Some { function } -> concrete_return_type(function.returnType) & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
+            case Some { function } -> callable_return_type(function.returnType) & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
             case None -> qualified_call_member(call.name) == "main"
 
 private fun function_value_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -4644,6 +4790,26 @@ private fun function_reference_emittable(reference: CompiledFunctionReferenceExp
     match find_function_in_scope(reference.name, module, allModules) with
     case Some { function } -> concrete_return_type(function.returnType)
     case None -> false
+
+private fun stdlib_math_sqrt_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.name == "sqrt" & !function_defined(call.name, module.functions)
+
+private fun sqrt_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+    if argumentType.name == "double" then double_type() else float_type()
+
+private fun sqrt_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultType = if expectedType.name == "double" then double_type() else sqrt_call_type(call, env, module, allModules)
+    let code = "java.lang.Math.sqrt(" + expression_code(argument(call.arguments, 0), env, double_type(), module, allModules) + ")"
+    if resultType.name == "double" then code else "((float) " + code + ")"
+
+private fun stdlib_math_sqrt_call_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } ->
+        arguments[1:].is_empty()
+            & numeric_type(expression_type(argument, env, module, allModules))
+            & expression_emittable(argument, env, module, allModules)
 
 private fun stdlib_math_digits_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     call.name == "digits" & !function_defined(call.name, module.functions) & stdlib_math_wildcard_import(module.imports)
@@ -4767,8 +4933,8 @@ private fun index_literal_emittable(index: CompiledExpression): bool =
     case _ -> false
 
 private fun function_call_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match find_function(name, module.functions) with
-    case Some { function } -> concrete_return_type(function.returnType) & parameters_assignable(function.parameters, arguments, env, module, allModules)
+    match find_function_for_arguments_in_functions(name, arguments, env, module.functions, module, allModules) with
+    case Some { function } -> callable_return_type(function.returnType) & parameters_assignable(function.parameters, arguments, env, module, allModules)
     case None -> imported_function_target_emittable(name, arguments, env, module.imports, module, allModules)
 
 private fun imported_function_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -4785,12 +4951,15 @@ private fun imported_module_function_emittable(name: String, arguments: List[Com
     case _ -> imported_function_target_emittable(name, arguments, env, rest, module, allModules)
 
 private fun imported_module_function_body_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): bool =
-    match find_function(name, importedModule.functions) with
-    case Some { function } -> concrete_return_type(function.returnType) & parameters_assignable(function.parameters, arguments, env, module, allModules)
+    match find_function_for_arguments_in_functions(name, arguments, env, importedModule.functions, module, allModules) with
+    case Some { function } -> callable_return_type(function.returnType) & parameters_assignable(function.parameters, arguments, env, module, allModules)
     case _ -> imported_function_target_emittable(name, arguments, env, rest, module, allModules)
 
 private fun concrete_return_type(type: CompiledTypeReference): bool =
     !type.name.is_empty() & type.name != "any"
+
+private fun callable_return_type(type: CompiledTypeReference): bool =
+    concrete_return_type(type) | type.name.is_empty() | type.name == "any"
 
 private fun parameters_assignable(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match parameters[0] with
@@ -4876,7 +5045,9 @@ private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeR
     else target.name == source.name & type_arguments_assignable(target.arguments, source.arguments)
 
 private fun value_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if type_assignable(target, source)
+    if generated_data_object_type(target) & generated_data_object_type(source)
+    then data_type_distance(target.name, source.name, module, allModules) >= 0
+    else if type_assignable(target, source)
     then true
     else match primitive_backed_backing_type(source.name, module, allModules) with
         case Some { backingType } -> type_assignable(target, backingType)
@@ -5365,6 +5536,22 @@ private fun java_data_helpers(): String =
         + "    @SuppressWarnings(\"unchecked\")" + newline()
         + "    private static <T> T __capy_data_field(java.lang.Object value, java.lang.String field) {" + newline()
         + "        return (T) ((java.util.Map<java.lang.String, java.lang.Object>) value).get(field);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings(\"unchecked\")" + newline()
+        + "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data_fields(java.lang.Object... parts) {" + newline()
+        + "        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>();" + newline()
+        + "        for (java.lang.Object part : parts) {" + newline()
+        + "            if (part instanceof java.util.Map.Entry<?, ?> entry) {" + newline()
+        + "                result.put(java.lang.String.valueOf(entry.getKey()), entry.getValue());" + newline()
+        + "            } else if (part instanceof java.util.Map<?, ?> map) {" + newline()
+        + "                for (java.util.Map.Entry<?, ?> entry : map.entrySet()) {" + newline()
+        + "                    if (!\"__type\".equals(entry.getKey())) {" + newline()
+        + "                        result.put(java.lang.String.valueOf(entry.getKey()), entry.getValue());" + newline()
+        + "                    }" + newline()
+        + "                }" + newline()
+        + "            }" + newline()
+        + "        }" + newline()
+        + "        return java.util.Collections.unmodifiableMap(result);" + newline()
         + "    }" + newline() + newline()
         + java_constructor_helpers()
         + "    @SuppressWarnings(\"unchecked\")" + newline()

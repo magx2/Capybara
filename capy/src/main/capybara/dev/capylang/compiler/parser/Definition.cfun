@@ -1,8 +1,20 @@
+from /capy/collection/List import { List }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
 data AnnotationDeclaration {}
-data DataDeclaration {}
+data DataFieldDeclaration { name: String, typeReference: TypeReference, location: SourceLocation }
+data DataParentDeclaration { typeReference: TypeReference, location: SourceLocation }
+data DataDeclaration {
+    name: String,
+    visibility: String,
+    parameters: List[String],
+    fields: List[DataFieldDeclaration],
+    parents: List[DataParentDeclaration],
+    location: SourceLocation
+}
 data DeriverDeclaration {}
 data EnumDeclaration {}
 data PrimitiveBackedTypeDeclaration {}
