@@ -83,6 +83,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 definitions.addAll(dataDeclarationDefinitions(definition.dataDeclaration()));
             } else if (definition.typeDeclaration() != null) {
                 definitions.addAll(typeDeclarationDefinitions(definition.typeDeclaration()));
+            } else if (definition.primitiveBackedTypeDeclaration() != null) {
+                definitions.addAll(primitiveBackedTypeDeclarationDefinitions(definition.primitiveBackedTypeDeclaration()));
             } else if (definition.functionDeclaration() != null) {
                 definitions.addAll(functionDefinitions(definition.functionDeclaration()));
             } else {
@@ -354,6 +356,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return typeDeclarationDefinitions(
                 ctx.genericTypeDeclaration(),
                 ctx.fieldDeclarationList(),
+                ctx.constructorClause(),
                 location(ctx)
         );
     }
@@ -364,6 +367,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return typeDeclarationDefinitions(
                 ctx.genericTypeDeclaration(),
                 ctx.fieldDeclarationList(),
+                ctx.constructorClause(),
                 location(ctx)
         );
     }
@@ -371,6 +375,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
     private static List<Definition> typeDeclarationDefinitions(
             List<dev.capylang.parser.antlr.FunctionalParser.GenericTypeDeclarationContext> declarations,
             dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationListContext parentFields,
+            dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause,
             SourceLocation location
     ) {
         if (declarations.isEmpty()) {
@@ -402,6 +407,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
         for (var declarationIndex = 1; declarationIndex < declarations.size(); declarationIndex++) {
             var variantName = dataTypeName(declarations.get(declarationIndex));
+            definitions.add(schemaConstantDefinition(
+                    "__capy_schema_parent|" + variantName + "|" + (declarationIndex - 1),
+                    name,
+                    location
+            ));
             for (var fieldIndex = 0; fieldIndex < fields.size(); fieldIndex++) {
                 definitions.add(schemaConstantDefinition(
                         "__capy_schema_field|" + variantName + "|parent|" + fieldIndex,
@@ -409,6 +419,10 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         location
                 ));
             }
+        }
+
+        if (constructorClause != null) {
+            definitions.add(constructorFunctionDefinition(name, constructorParameters(parentFields), constructorClause));
         }
 
         return List.copyOf(definitions);
@@ -442,20 +456,44 @@ public final class NativeCapybaraParser implements CapybaraParser {
             ));
         }
         if (constructorClause != null) {
-            definitions.add(constructorFunctionDefinition(name, dataBody, constructorClause));
+            definitions.add(constructorFunctionDefinition(name, constructorParameters(dataBody), constructorClause));
+        }
+        return List.copyOf(definitions);
+    }
+
+    private static List<Definition> primitiveBackedTypeDeclarationDefinitions(
+            dev.capylang.parser.antlr.FunctionalParser.PrimitiveBackedTypeDeclarationContext ctx
+    ) {
+        var name = ctx.primitiveBackedTypeName().getText();
+        var backingType = primitiveBackingTypeReference(ctx.primitiveBackingType());
+        var location = location(ctx);
+        var definitions = new ArrayList<Definition>();
+        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
+        definitions.add(schemaConstantDefinition("__capy_schema_primitive|" + name, backingType.name(), location));
+        definitions.add(schemaConstantDefinition(
+                "__capy_schema_field|" + name + "|0",
+                "value|" + backingType.name(),
+                location
+        ));
+        if (ctx.constructorClause() != null) {
+            definitions.add(constructorFunctionDefinition(
+                    name,
+                    List.of(new FunctionParameter("value", backingType, location(ctx.primitiveBackingType()))),
+                    ctx.constructorClause()
+            ));
         }
         return List.copyOf(definitions);
     }
 
     private static Definition constructorFunctionDefinition(
             String name,
-            dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
+            List<FunctionParameter> parameters,
             dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause
     ) {
         return new Definition.FunctionDefinition(new FunctionDeclaration(
                 "__capy_constructor|" + name,
                 "private",
-                constructorParameters(dataBody),
+                parameters,
                 new TypeReference("any", List.of()),
                 rewriteConstructorData(expression(constructorClause.expression()), name),
                 location(constructorClause)
@@ -470,6 +508,19 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         var parameters = new ArrayList<FunctionParameter>();
         for (var field : dataBody.fieldDeclarationList().fieldDeclaration()) {
+            parameters.add(constructorParameter(field));
+        }
+        return List.copyOf(parameters);
+    }
+
+    private static List<FunctionParameter> constructorParameters(
+            dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationListContext fields
+    ) {
+        if (fields == null) {
+            return List.of();
+        }
+        var parameters = new ArrayList<FunctionParameter>();
+        for (var field : fields.fieldDeclaration()) {
             parameters.add(constructorParameter(field));
         }
         return List.copyOf(parameters);
@@ -496,6 +547,12 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
     private static TypeReference stringType() {
         return new TypeReference("String", List.of());
+    }
+
+    private static TypeReference primitiveBackingTypeReference(
+            dev.capylang.parser.antlr.FunctionalParser.PrimitiveBackingTypeContext ctx
+    ) {
+        return new TypeReference(ctx.getText(), List.of());
     }
 
     private static String quote(String value) {
@@ -1493,8 +1550,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static Expression dataLiteral(dev.capylang.parser.antlr.FunctionalParser.NewDataContext ctx) {
+        var typeName = ctx.BANG() == null
+                ? ctx.type().getText()
+                : "__capy_raw|" + ctx.type().getText();
         return new Expression.DataLiteral(
-                ctx.type().getText(),
+                typeName,
                 dataFields(ctx.fieldAssignmentList()),
                 location(ctx)
         );
