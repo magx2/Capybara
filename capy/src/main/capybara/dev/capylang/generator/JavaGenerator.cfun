@@ -400,8 +400,12 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
         + expression_code(binary.right, env, rightType, module, allModules)
         + ")", expectedType)
     else if binary.operator == "?"
-    then expression_code(binary.left, env, leftType, module, allModules)
-        + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
+    then
+        if leftType.name == "Dict"
+        then expression_code(binary.left, env, leftType, module, allModules)
+            + ".containsKey(" + expression_code(binary.right, env, string_type(), module, allModules) + ")"
+        else expression_code(binary.left, env, leftType, module, allModules)
+            + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
     else if string_equality_operator(binary.operator, leftType, rightType)
     then string_equality_code(binary, leftType, rightType, env, module, allModules)
     else if binary.operator == "%" & resultType.name == "byte"
@@ -424,7 +428,7 @@ private fun collection_plus_expression(operator: String, leftType: CompiledTypeR
         & (list_plus_expression(leftType, rightType) | set_plus_expression(leftType, rightType) | dict_plus_expression(leftType, rightType))
 
 private fun collection_minus_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    operator == "-" & list_minus_expression(leftType, rightType)
+    operator == "-" & (list_minus_expression(leftType, rightType) | set_minus_expression(leftType, rightType) | dict_minus_expression(leftType, rightType))
 
 private fun list_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     leftType.name == "List" & !rightType.name.is_empty()
@@ -435,8 +439,14 @@ private fun list_minus_expression(leftType: CompiledTypeReference, rightType: Co
 private fun set_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     leftType.name == "Set" & !rightType.name.is_empty()
 
+private fun set_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    leftType.name == "Set" & !rightType.name.is_empty()
+
 private fun dict_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     leftType.name == "Dict" & (rightType.name == "Dict" | rightType.name == "Tuple")
+
+private fun dict_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    leftType.name == "Dict" & (rightType.name == "Dict" | rightType.name == "String")
 
 private fun collection_plus_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftCode = expression_code(binary.left, env, leftType, module, allModules)
@@ -456,7 +466,17 @@ private fun collection_plus_code(binary: CompiledBinaryExpression, leftType: Com
 
 private fun collection_minus_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftCode = expression_code(binary.left, env, leftType, module, allModules)
-    if rightType.name == "List"
+    if leftType.name == "Dict"
+    then
+        if rightType.name == "Dict"
+        then "__capy_dict_remove_all(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
+        else "__capy_dict_remove(" + leftCode + ", " + expression_code(binary.right, env, string_type(), module, allModules) + ")"
+    else if leftType.name == "Set"
+    then
+        if rightType.name == "Set"
+        then "__capy_set_remove_all(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
+        else "__capy_set_remove(" + leftCode + ", " + expression_code(binary.right, env, first_type_argument(leftType), module, allModules) + ")"
+    else if rightType.name == "List"
     then "__capy_list_remove_all(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
     else "__capy_list_remove(" + leftCode + ", " + expression_code(binary.right, env, first_type_argument(leftType), module, allModules) + ")"
 
@@ -895,6 +915,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then collection_is_empty_code(call, env, module, allModules)
     else if collection_predicate_call(call, env, module, allModules)
     then collection_predicate_call_code(call, env, module, allModules)
+    else if native_stdlib_method_call(call, env, module, allModules)
+    then native_stdlib_method_code(call, env, expectedType, module, allModules)
     else if seq_as_list_call(call, env, module, allModules)
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
@@ -919,7 +941,7 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
 
 private fun collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    if collection_predicate_method(call.name) & collection_receiver_type(receiverType)
+    if collection_predicate_method(call.name) & collection_predicate_receiver_type(receiverType)
     then match call.arguments[0] with
         case None -> false
         case Some { predicate } ->
@@ -931,6 +953,9 @@ private fun collection_predicate_call(call: CompiledMethodCallExpression, env: L
 private fun collection_predicate_method(name: String): bool =
     name == "any" | name == "all"
 
+private fun collection_predicate_receiver_type(type: CompiledTypeReference): bool =
+    collection_receiver_type(type) | type.name == "Dict"
+
 private fun collection_predicate_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let valueType = collection_value_type(receiverType)
@@ -941,12 +966,55 @@ private fun collection_predicate_call_code(call: CompiledMethodCallExpression, e
         else rawReceiverCode
     match argument(call.arguments, 0) with
     case CompiledLambdaExpression lambda ->
-        if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
+        if receiverType.name == "Dict"
+        then dict_predicate_call_code(call.name, rawReceiverCode, lambda, valueType, env, module, allModules)
+        else if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
         then string_indexed_predicate_code(call.name, rawReceiverCode, lambda, env, module, allModules)
         else if seq_type_name(receiverType.name) | receiverType.name == "String"
         then collection_seq_predicate_code(call.name, receiverCode, lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules))
         else receiverCode + ".stream()." + java_stream_predicate_method(call.name) + "(" + lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules) + ")"
     case _ -> "unsupported(\"collection predicate\")"
+
+private fun dict_predicate_call_code(name: String, receiverCode: String, lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    receiverCode + ".entrySet().stream()." + java_stream_predicate_method(name) + "(__capy_entry -> {" + newline()
+        + dict_predicate_lambda_bindings(lambda.parameters, valueType, "            ")
+        + "            return " + expression_code(lambda.body, dict_predicate_lambda_env(lambda.parameters, valueType, env), bool_type(), module, allModules) + ";" + newline()
+        + "        })"
+
+private fun dict_predicate_lambda_bindings(parameters: List[String], valueType: CompiledTypeReference, indent: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { keyParameter } ->
+        match parameters[1] with
+        case None -> ""
+        case Some { valueParameter } ->
+            dict_predicate_key_binding(keyParameter, indent)
+                + dict_predicate_value_binding(valueParameter, valueType, indent)
+
+private fun dict_predicate_key_binding(parameter: String, indent: String): String =
+    if parameter == "_"
+    then ""
+    else indent + "java.lang.String " + java_identifier(parameter) + " = (java.lang.String) __capy_entry.getKey();" + newline()
+
+private fun dict_predicate_value_binding(parameter: String, valueType: CompiledTypeReference, indent: String): String =
+    if parameter == "_"
+    then ""
+    else indent + java_type(valueType) + " " + java_identifier(parameter) + " = ((" + boxed_java_type(valueType) + ") __capy_entry.getValue());" + newline()
+
+private fun dict_predicate_lambda_env(parameters: List[String], valueType: CompiledTypeReference, env: List[JavaBinding]): List[JavaBinding] =
+    match parameters[0] with
+    case None -> env
+    case Some { keyParameter } ->
+        match parameters[1] with
+        case None -> env
+        case Some { valueParameter } ->
+            dict_predicate_key_env(keyParameter) + dict_predicate_value_env(valueParameter, valueType) + env
+
+private fun dict_predicate_key_env(parameter: String): List[JavaBinding] =
+    if parameter == "_" then [] else [java_binding(parameter, string_type())]
+
+private fun dict_predicate_value_env(parameter: String, valueType: CompiledTypeReference): List[JavaBinding] =
+    if parameter == "_" then [] else [java_binding(parameter, valueType)]
 
 private fun string_indexed_predicate_code(name: String, receiverCode: String, lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "java.util.stream.IntStream.range(0, " + receiverCode + ".length())."
@@ -989,6 +1057,83 @@ private fun collection_seq_predicate_code(name: String, receiverCode: String, la
 
 private fun java_stream_predicate_method(name: String): String =
     if name == "any" then "anyMatch" else "allMatch"
+
+private fun native_stdlib_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    if receiverType.name == "String"
+    then call.name == "get" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
+    else if receiverType.name == "List"
+    then call.name == "get" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
+    else if receiverType.name == "Dict"
+    then (call.name == "contains_key" | call.name == "get") & one_method_argument(call.arguments)
+    else if receiverType.name == "Tuple"
+    then call.name == "get" & one_method_argument(call.arguments)
+    else false
+
+private fun native_stdlib_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
+    if receiverType.name == "String"
+    then string_get_method_code(call, receiverCode, env, module, allModules)
+    else if receiverType.name == "List"
+    then list_get_method_code(call, receiverCode, env, module, allModules)
+    else if receiverType.name == "Dict"
+    then dict_method_code(call, receiverCode, env, module, allModules)
+    else if receiverType.name == "Tuple"
+    then tuple_get_method_code(call, receiverCode, expectedType, env, module, allModules)
+    else "unsupported(\"native stdlib method\")"
+
+private fun string_get_method_code(call: CompiledMethodCallExpression, receiverCode: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if one_method_argument(call.arguments)
+    then string_optional_index_code(receiverCode, string_index_argument_code(argument(call.arguments, 0), env, module, allModules))
+    else "__capy_string_slice("
+        + receiverCode
+        + ", "
+        + string_index_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + ", "
+        + string_index_argument_code(argument(call.arguments, 1), env, module, allModules)
+        + ")"
+
+private fun list_get_method_code(call: CompiledMethodCallExpression, receiverCode: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if one_method_argument(call.arguments)
+    then list_optional_index_code(receiverCode, string_index_argument_code(argument(call.arguments, 0), env, module, allModules))
+    else "__capy_list_slice("
+        + receiverCode
+        + ", "
+        + string_index_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + ", "
+        + string_index_argument_code(argument(call.arguments, 1), env, module, allModules)
+        + ")"
+
+private fun dict_method_code(call: CompiledMethodCallExpression, receiverCode: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let keyCode = expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+    if call.name == "contains_key"
+    then receiverCode + ".containsKey(" + keyCode + ")"
+    else dict_optional_index_code(receiverCode, keyCode)
+
+private fun tuple_get_method_code(call: CompiledMethodCallExpression, receiverCode: String, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let methodType = method_call_type(call, env, module, allModules)
+    let resultType = if expectedType.name.is_empty() | expectedType.name == "any" then methodType else expectedType
+    "((" + boxed_java_type(resultType) + ") "
+        + receiverCode
+        + ".get(__capy_normalized_index("
+        + receiverCode
+        + ", "
+        + string_index_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + ")))"
+
+private fun one_method_argument(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some _ -> arguments[1:].is_empty()
+
+private fun two_method_arguments(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some _ ->
+        match arguments[1] with
+        case None -> false
+        case Some _ -> arguments[2:].is_empty()
 
 private fun seq_as_list_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -1298,6 +1443,8 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
     then string_optional_index_code(receiverCode, indexCode)
     else if receiverType.name == "Tuple" & !index.hasEndIndex
     then "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(__capy_normalized_index(" + receiverCode + ", " + indexCode + ")))"
+    else if receiverType.name == "Dict" & !index.hasEndIndex
+    then dict_optional_index_code(receiverCode, expression_code(index.index, env, string_type(), module, allModules))
     else if index.hasEndIndex
     then "__capy_list_slice("
         + receiverCode
@@ -1342,6 +1489,9 @@ private fun string_optional_index_code(receiverCode: String, indexCode: String):
 
 private fun list_optional_index_code(receiverCode: String, indexCode: String): String =
     "__capy_list_get_optional(" + receiverCode + ", " + indexCode + ")"
+
+private fun dict_optional_index_code(receiverCode: String, keyCode: String): String =
+    "__capy_dict_get_optional(" + receiverCode + ", " + keyCode + ")"
 
 private fun block_expression_code(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let resultType = expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
@@ -1488,7 +1638,7 @@ private fun type_reference_tail(types: List[CompiledTypeReference]): List[Compil
 private fun dict_code(entries: List[CompiledDictEntry], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if entries.is_empty()
     then "java.util.Map.of()"
-    else "java.util.Map.ofEntries(" + dict_entries_code(entries, env, module, allModules) + ")"
+    else "__capy_dict_literal(" + dict_entries_code(entries, env, module, allModules) + ")"
 
 private fun dict_entries_code(entries: List[CompiledDictEntry], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match entries[0] with
@@ -1977,6 +2127,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
         case _ -> effect_type(object_type())
     else if string_parse_method_call(call, env, module, allModules)
     then string_parse_result_type(call.name)
+    else if native_stdlib_method_call(call, env, module, allModules)
+    then native_stdlib_method_type(call, env, module, allModules)
     else if string_java_method_call(call, env, module, allModules)
     then string_java_method_type(call.name)
     else if call.name == "to_int"
@@ -2010,6 +2162,21 @@ private fun string_java_method_type(name: String): CompiledTypeReference =
     then string_type()
     else bool_type()
 
+private fun native_stdlib_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    if receiverType.name == "String"
+    then if one_method_argument(call.arguments) then option_type(string_type()) else string_type()
+    else if receiverType.name == "List"
+    then if one_method_argument(call.arguments) then option_type(first_type_argument(receiverType)) else receiverType
+    else if receiverType.name == "Dict"
+    then if call.name == "contains_key" then bool_type() else option_type(first_type_argument(receiverType))
+    else if receiverType.name == "Tuple"
+    then tuple_get_method_type(call, receiverType)
+    else object_type()
+
+private fun tuple_get_method_type(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference): CompiledTypeReference =
+    tuple_argument(receiverType.arguments, normalized_tuple_type_index(receiverType.arguments, argument(call.arguments, 0), 0))
+
 private fun first_expression_type(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expressions[0] with
     case None -> object_type()
@@ -2042,6 +2209,8 @@ private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType:
         else option_type(first_type_argument(receiverType))
     else if receiverType.name == "String"
     then if indexExpression.hasEndIndex then string_type() else option_type(string_type())
+    else if receiverType.name == "Dict"
+    then if indexExpression.hasEndIndex then object_type() else option_type(first_type_argument(receiverType))
     else object_type()
 
 private fun normalized_tuple_slice_end_index(arguments: List[CompiledTypeReference], expression: CompiledExpression): int =
@@ -2604,7 +2773,10 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == "?"
-    then (leftType.name == "List" | leftType.name == "Set" | leftType.name == "String") & !rightType.name.is_empty()
+    then
+        if leftType.name == "Dict"
+        then type_assignable(string_type(), rightType)
+        else (leftType.name == "List" | leftType.name == "Set" | leftType.name == "String") & !rightType.name.is_empty()
     else binary.operator == "==" | binary.operator == "!="
 
 private fun java_unary_operator_emittable(unary: CompiledUnaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -2658,6 +2830,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then expression_emittable(call.receiver, env, module, allModules)
     else if collection_predicate_call(call, env, module, allModules)
     then collection_predicate_call_emittable(call, receiverType, env, module, allModules)
+    else if native_stdlib_method_call(call, env, module, allModules)
+    then native_stdlib_method_emittable(call, receiverType, env, module, allModules)
     else if call.name == "as_list" & receiverType.name == "Seq"
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
     else if call.name == "map" & receiverType.name == "Effect"
@@ -2681,6 +2855,24 @@ private fun extension_method_call_emittable(function: CompiledFunction, call: Co
         & expression_emittable(call.receiver, env, module, allModules)
         & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
         & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
+
+private fun native_stdlib_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(call.receiver, env, module, allModules)
+        & if receiverType.name == "Dict"
+            then dict_method_arguments_emittable(call, env, module, allModules)
+            else if receiverType.name == "Tuple"
+            then tuple_get_method_arguments_emittable(call, env, module, allModules)
+            else expressions_emittable(call.arguments, env, module, allModules)
+
+private fun dict_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let key = argument(call.arguments, 0)
+    expression_emittable(key, env, module, allModules)
+        & type_assignable(string_type(), expression_type(key, env, module, allModules))
+
+private fun tuple_get_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let index = argument(call.arguments, 0)
+    index_literal_emittable(index)
+        & expression_emittable(index, env, module, allModules)
 
 private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.arguments.is_empty()
@@ -2717,7 +2909,9 @@ private fun collection_predicate_call_emittable(call: CompiledMethodCallExpressi
             & match predicate with
                 case CompiledLambdaExpression lambda ->
                     let valueType = collection_value_type(receiverType)
-                    if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
+                    if receiverType.name == "Dict"
+                    then dict_predicate_lambda_emittable(lambda, valueType, env, module, allModules)
+                    else if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
                     then
                         let lambdaEnv = string_indexed_lambda_env(lambda.parameters, expression_code(call.receiver, env, receiverType, module, allModules), env)
                         expression_emittable(lambda.body, lambdaEnv, module, allModules)
@@ -2725,6 +2919,22 @@ private fun collection_predicate_call_emittable(call: CompiledMethodCallExpressi
                     else collection_lambda_emittable(lambda, valueType, env, module, allModules)
                             & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
                 case _ -> false
+
+private fun dict_predicate_lambda_emittable(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if dict_predicate_lambda_parameters_supported(lambda.parameters)
+    then
+        let lambdaEnv = dict_predicate_lambda_env(lambda.parameters, valueType, env)
+        expression_emittable(lambda.body, lambdaEnv, module, allModules)
+            & truthy_type(expression_type(lambda.body, lambdaEnv, module, allModules))
+    else false
+
+private fun dict_predicate_lambda_parameters_supported(parameters: List[String]): bool =
+    match parameters[0] with
+    case None -> false
+    case Some _ ->
+        match parameters[1] with
+        case None -> false
+        case Some _ -> parameters[2:].is_empty()
 
 private fun assert_is_empty_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match call.receiver with
@@ -2907,6 +3117,11 @@ private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBindin
     then expression_emittable(index.receiver, env, module, allModules)
         & expression_emittable(index.index, env, module, allModules)
         & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
+    else if receiverType.name == "Dict"
+    then !index.hasEndIndex
+        & expression_emittable(index.receiver, env, module, allModules)
+        & expression_emittable(index.index, env, module, allModules)
+        & type_assignable(string_type(), expression_type(index.index, env, module, allModules))
     else false
 
 private fun index_literal_emittable(index: CompiledExpression): bool =
@@ -3582,6 +3797,13 @@ private fun java_collection_helpers(): String =
         + "        return java.util.List.copyOf(values.subList(normalizedStart, normalizedEnd));" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Optional __capy_dict_get_optional(java.util.Map values, java.lang.String key) {" + newline()
+        + "        if (!values.containsKey(key)) {" + newline()
+        + "            return java.util.Optional.empty();" + newline()
+        + "        }" + newline()
+        + "        return java.util.Optional.ofNullable(values.get(key));" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.List __capy_list_remove(java.util.List values, java.lang.Object value) {" + newline()
         + "        java.util.ArrayList result = new java.util.ArrayList(values);" + newline()
         + "        result.removeIf(item -> java.util.Objects.equals(item, value));" + newline()
@@ -3606,6 +3828,26 @@ private fun java_collection_helpers(): String =
         + "        return java.util.Collections.unmodifiableSet(result);" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Set __capy_set_remove(java.util.Set values, java.lang.Object value) {" + newline()
+        + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet(values);" + newline()
+        + "        result.remove(value);" + newline()
+        + "        return java.util.Collections.unmodifiableSet(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Set __capy_set_remove_all(java.util.Set left, java.util.Set right) {" + newline()
+        + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet(left);" + newline()
+        + "        result.removeAll(right);" + newline()
+        + "        return java.util.Collections.unmodifiableSet(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Map __capy_dict_literal(java.util.Map.Entry... entries) {" + newline()
+        + "        java.util.LinkedHashMap result = new java.util.LinkedHashMap();" + newline()
+        + "        for (java.util.Map.Entry entry : entries) {" + newline()
+        + "            result.put((java.lang.String) entry.getKey(), entry.getValue());" + newline()
+        + "        }" + newline()
+        + "        return java.util.Collections.unmodifiableMap(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.Map __capy_dict_append(java.util.Map values, java.util.List entry) {" + newline()
         + "        java.util.LinkedHashMap result = new java.util.LinkedHashMap(values);" + newline()
         + "        result.put((java.lang.String) entry.get(0), entry.get(1));" + newline()
@@ -3615,6 +3857,18 @@ private fun java_collection_helpers(): String =
         + "    private static java.util.Map __capy_dict_concat(java.util.Map left, java.util.Map right) {" + newline()
         + "        java.util.LinkedHashMap result = new java.util.LinkedHashMap(left);" + newline()
         + "        result.putAll(right);" + newline()
+        + "        return java.util.Collections.unmodifiableMap(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Map __capy_dict_remove(java.util.Map values, java.lang.String key) {" + newline()
+        + "        java.util.LinkedHashMap result = new java.util.LinkedHashMap(values);" + newline()
+        + "        result.remove(key);" + newline()
+        + "        return java.util.Collections.unmodifiableMap(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Map __capy_dict_remove_all(java.util.Map left, java.util.Map right) {" + newline()
+        + "        java.util.LinkedHashMap result = new java.util.LinkedHashMap(left);" + newline()
+        + "        result.keySet().removeAll(right.keySet());" + newline()
         + "        return java.util.Collections.unmodifiableMap(result);" + newline()
         + "    }" + newline() + newline()
 
