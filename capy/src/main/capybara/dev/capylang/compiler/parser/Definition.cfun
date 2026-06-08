@@ -16,7 +16,8 @@ data DataDeclaration {
     location: SourceLocation
 }
 data DeriverDeclaration {}
-data EnumDeclaration {}
+data EnumValueDeclaration { name: String, location: SourceLocation }
+data EnumDeclaration { name: String, values: List[EnumValueDeclaration], location: SourceLocation }
 data PrimitiveBackedTypeDeclaration {}
 data TypeDeclaration {}
 data UnsupportedDefinition {}

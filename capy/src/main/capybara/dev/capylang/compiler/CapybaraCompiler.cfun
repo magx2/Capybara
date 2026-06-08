@@ -14,7 +14,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
-from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, Definition, FunctionDefinition }
+from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition }
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
@@ -107,6 +107,7 @@ private fun compile_functions(definitions: List[Definition]): List[CompiledFunct
         match definition with
         case ConstantDefinition { constant } -> [compile_constant(constant)] + compile_functions(definitions[1:])
         case DataDeclaration declaration -> compile_data_declaration(declaration) + compile_functions(definitions[1:])
+        case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:])
         case FunctionDefinition { function } -> [compile_function(function)] + compile_functions(definitions[1:])
         case _ -> compile_functions(definitions[1:])
 
@@ -115,6 +116,56 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
         + compile_data_parameters(declaration.name, declaration.parameters, 0, declaration.location)
         + compile_data_fields(declaration.name, declaration.fields, 0)
         + compile_data_parents(declaration.name, declaration.parents, 0)
+
+private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
+    [
+        compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location),
+        compile_schema_constant("__capy_schema_field|" + declaration.name + "|0", "name|String", declaration.location),
+        compile_schema_constant("__capy_schema_field|" + declaration.name + "|1", "order|int", declaration.location),
+    ] + compile_enum_values(declaration.name, declaration.values, 0)
+
+private fun compile_enum_values(enumName: String, values: List[EnumValueDeclaration], idx: int): List[CompiledFunction] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [compile_schema_constant("__capy_schema_enum|" + enumName + "|" + idx, value.name, value.location),
+            compile_enum_value_constant(enumName, value, idx)]
+            + compile_enum_values(enumName, values[1:], idx + 1)
+
+private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclaration, idx: int): CompiledFunction =
+    CompiledFunction {
+        name: value.name,
+        visibility: "const:public",
+        parameters: [],
+        returnType: CompiledTypeReference { name: enumName, arguments: [] },
+        body: CompiledDataLiteral {
+            typeName: "__capy_raw|" + value.name,
+            fields: [
+                CompiledDataField {
+                    name: "name",
+                    value: CompiledStringLiteral {
+                        value: value.name,
+                        source: "\"" + value.name + "\"",
+                        location: compile_location(value.location)
+                    },
+                    spread: false,
+                    location: compile_location(value.location)
+                },
+                CompiledDataField {
+                    name: "order",
+                    value: CompiledIntLiteral {
+                        value: idx,
+                        source: "" + idx,
+                        location: compile_location(value.location)
+                    },
+                    spread: false,
+                    location: compile_location(value.location)
+                },
+            ],
+            location: compile_location(value.location)
+        },
+        location: compile_location(value.location)
+    }
 
 private fun compile_data_parameters(dataName: String, parameters: List[String], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parameters[0] with
