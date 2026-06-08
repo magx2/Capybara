@@ -179,10 +179,11 @@ private fun java_functions(functions: List[CompiledFunction], module: CompiledMo
         else java_function(function, module, allModules) + newline() + java_functions(functions[1:], module, allModules)
 
 private fun java_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let returnType = java_type(function.returnType)
+    let returnTypeReference = effective_function_return_type(function, module, allModules)
+    let returnType = java_type(returnTypeReference)
     let env = java_function_bindings(function) + constant_bindings(constant_functions(module.functions))
     "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
-    + java_function_body(function, env, module, allModules)
+    + java_function_body(function, returnTypeReference, env, module, allModules)
     + "    }" + newline()
 
 private fun java_function_name(function: CompiledFunction): String =
@@ -233,7 +234,7 @@ private fun java_visibility_prefix(visibility: String): String =
     then "public "
     else "public "
 
-private fun java_function_body(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_function_body(function: CompiledFunction, returnType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match function.body with
     case CompiledBlockExpression block ->
         let effectBody =
@@ -242,7 +243,7 @@ private fun java_function_body(function: CompiledFunction, env: List[JavaBinding
                 let valueType = binding_value_type(binding, env, module, allModules)
                 let boundBinding = local_java_binding(binding.name, first_type_argument(valueType), binding.location, env)
                 let boundEnv = [boundBinding] + env
-                if function.returnType.name == "Effect"
+                if returnType.name == "Effect"
                     & binding.operator == "<-"
                     & valueType.name == "Effect"
                     & block.bindings[1:].is_empty()
@@ -253,11 +254,11 @@ private fun java_function_body(function: CompiledFunction, env: List[JavaBinding
                     if resultType.name == "Effect"
                     then "        return " + expression_code(binding.value, env, valueType, module, allModules)
                         + ".flatMap(" + boundBinding.javaName + " -> "
-                        + expression_code(block.result, boundEnv, function.returnType, module, allModules)
+                        + expression_code(block.result, boundEnv, returnType, module, allModules)
                         + ");" + newline()
                     else "        return " + expression_code(binding.value, env, valueType, module, allModules)
                         + ".map(" + boundBinding.javaName + " -> "
-                        + expression_code(block.result, boundEnv, first_type_argument(function.returnType), module, allModules)
+                        + expression_code(block.result, boundEnv, first_type_argument(returnType), module, allModules)
                         + ");" + newline()
                 else ""
             case None -> ""
@@ -265,12 +266,12 @@ private fun java_function_body(function: CompiledFunction, env: List[JavaBinding
         then effectBody
         else if !expression_emittable(function.body, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
-        else block_statements(block.bindings, env, function.returnType, module, allModules, "        ")
-            + "        return " + block_result_code(block, env, function.returnType, module, allModules) + ";" + newline()
+        else block_statements(block.bindings, env, returnType, module, allModules, "        ")
+            + "        return " + block_result_code(block, env, returnType, module, allModules) + ";" + newline()
     case _ ->
         if !expression_emittable(function.body, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
-        else "        return " + expression_code(function.body, env, function.returnType, module, allModules) + ";" + newline()
+        else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
 
 private fun java_parameters(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
@@ -2269,7 +2270,9 @@ private fun typed_lambda_env(parameters: List[String], types: List[CompiledTypeR
     match parameters[0] with
     case None -> env
     case Some { parameter } ->
-        [java_binding(parameter, function_type_parameter_at(types, 0))]
+        if parameter == "_"
+        then typed_lambda_env(parameters[1:], type_reference_tail(types), env)
+        else [java_binding(parameter, function_type_parameter_at(types, 0))]
             + typed_lambda_env(parameters[1:], type_reference_tail(types), env)
 
 private fun lambda_code_for_value(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3562,12 +3565,12 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
 
 private fun function_call_type_in_scope(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
-    case Some { function } -> function.returnType
+    case Some { function } -> effective_function_return_type(function, module, allModules)
     case None -> lookup_function_type_in_scope(call.name, module, allModules)
 
 private fun qualified_function_call_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_qualified_function(name, module, allModules) with
-    case Some { function } -> function.returnType
+    case Some { function } -> effective_function_return_type(function, module, allModules)
     case None ->
         if qualified_call_member(name) == "main"
         then effect_type(CompiledTypeReference { name: "/capy/lang/Program", arguments: [] })
@@ -3829,11 +3832,121 @@ private fun lookup_binding_java_name(name: String, env: List[JavaBinding]): Stri
 
 private fun lookup_function_type_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_function(name, module.functions) with
-    case Some { function } -> function.returnType
+    case Some { function } -> effective_function_return_type(function, module, allModules)
     case None ->
         match find_function_in_imports(name, module.imports, module, allModules) with
-        case Some { function } -> function.returnType
+        case Some { function } -> effective_function_return_type(function, module, allModules)
         case None -> object_type()
+
+private fun effective_function_return_type(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if concrete_return_type(function.returnType) | function.returnType.name == "any"
+    then function.returnType
+    else if expression_references_function(function.body, function.name)
+    then function.returnType
+    else
+        let owner = function_owner_module(function, module, allModules)
+        let env = java_function_bindings(function) + constant_bindings(constant_functions(owner.functions))
+        expression_type(function.body, env, owner, allModules)
+
+private fun function_owner_module(function: CompiledFunction, fallback: CompiledModule, modules: List[CompiledModule]): CompiledModule =
+    match modules[0] with
+    case None -> fallback
+    case Some { module } ->
+        if module_contains_function(function, module.functions)
+        then module
+        else function_owner_module(function, fallback, modules[1:])
+
+private fun module_contains_function(expected: CompiledFunction, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        same_function(expected, function) | module_contains_function(expected, functions[1:])
+
+private fun same_function(first: CompiledFunction, second: CompiledFunction): bool =
+    first.name == second.name
+        & first.location.line == second.location.line
+        & first.location.column == second.location.column
+
+private fun expression_references_function(expression: CompiledExpression, name: String): bool =
+    match expression with
+    case CompiledUnsupportedExpression _ -> false
+    case CompiledIntLiteral _ -> false
+    case CompiledLongLiteral _ -> false
+    case CompiledFloatLiteral _ -> false
+    case CompiledDoubleLiteral _ -> false
+    case CompiledBoolLiteral _ -> false
+    case CompiledStringLiteral _ -> false
+    case CompiledVariableExpression _ -> false
+    case CompiledIfExpression ifExpression ->
+        expression_references_function(ifExpression.condition, name)
+            | expression_references_function(ifExpression.thenBranch, name)
+            | expression_references_function(ifExpression.elseBranch, name)
+    case CompiledBinaryExpression binary ->
+        expression_references_function(binary.left, name) | expression_references_function(binary.right, name)
+    case CompiledUnaryExpression unary -> expression_references_function(unary.expression, name)
+    case CompiledFunctionCallExpression call ->
+        call.name == name | expressions_reference_function(call.arguments, name)
+    case CompiledFunctionReferenceExpression reference -> reference.name == name
+    case CompiledMethodCallExpression call ->
+        expression_references_function(call.receiver, name) | expressions_reference_function(call.arguments, name)
+    case CompiledWithExpression withExpression ->
+        expression_references_function(withExpression.receiver, name)
+            | data_fields_reference_function(withExpression.fields, name)
+    case CompiledLambdaExpression lambda -> expression_references_function(lambda.body, name)
+    case CompiledListLiteral literal -> expressions_reference_function(literal.values, name)
+    case CompiledSetLiteral literal -> expressions_reference_function(literal.values, name)
+    case CompiledDictLiteral literal -> dict_entries_reference_function(literal.entries, name)
+    case CompiledTupleLiteral literal -> expressions_reference_function(literal.values, name)
+    case CompiledIndexExpression index ->
+        expression_references_function(index.receiver, name)
+            | expression_references_function(index.index, name)
+            | (index.hasEndIndex & expression_references_function(index.endIndex, name))
+    case CompiledDataLiteral literal -> data_fields_reference_function(literal.fields, name)
+    case CompiledFieldAccessExpression access -> expression_references_function(access.receiver, name)
+    case CompiledReduceExpression reduce ->
+        expression_references_function(reduce.receiver, name)
+            | expression_references_function(reduce.initial, name)
+            | expression_references_function(reduce.body, name)
+    case CompiledMatchExpression matchExpression ->
+        expression_references_function(matchExpression.value, name)
+            | match_cases_reference_function(matchExpression.cases, name)
+    case CompiledBlockExpression block ->
+        let_bindings_reference_function(block.bindings, name)
+            | expression_references_function(block.result, name)
+
+private fun expressions_reference_function(expressions: List[CompiledExpression], name: String): bool =
+    match expressions[0] with
+    case None -> false
+    case Some { expression } -> expression_references_function(expression, name) | expressions_reference_function(expressions[1:], name)
+
+private fun dict_entries_reference_function(entries: List[CompiledDictEntry], name: String): bool =
+    match entries[0] with
+    case None -> false
+    case Some { entry } ->
+        expression_references_function(entry.key, name)
+            | expression_references_function(entry.value, name)
+            | dict_entries_reference_function(entries[1:], name)
+
+private fun data_fields_reference_function(fields: List[CompiledDataField], name: String): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } ->
+        expression_references_function(field.value, name) | data_fields_reference_function(fields[1:], name)
+
+private fun match_cases_reference_function(cases: List[CompiledMatchCase], name: String): bool =
+    match cases[0] with
+    case None -> false
+    case Some { matchCase } ->
+        (matchCase.hasLiteral & expression_references_function(matchCase.literal, name))
+            | (matchCase.hasGuard & expression_references_function(matchCase.guard, name))
+            | expression_references_function(matchCase.body, name)
+            | match_cases_reference_function(cases[1:], name)
+
+private fun let_bindings_reference_function(bindings: List[CompiledLetBinding], name: String): bool =
+    match bindings[0] with
+    case None -> false
+    case Some { binding } ->
+        expression_references_function(binding.value, name) | let_bindings_reference_function(bindings[1:], name)
 
 private fun find_function_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match find_function(name, module.functions) with
@@ -5072,13 +5185,14 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then enum_parse_call_emittable(call, env, module, allModules)
     else if qualified_call_name(call.name)
     then qualified_function_call_emittable(call, env, module, allModules)
-    else java_callable_name(call.name) & !binding_exists(call.name, env) & function_call_target_emittable(call.name, call.arguments, env, module, allModules) & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
+    else java_callable_name(call.name) & !binding_exists(call.name, env) & function_call_target_emittable(call.name, call.arguments, env, module, allModules)
 
 private fun qualified_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     !binding_exists(call.name, env)
-        & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
         & match find_qualified_function(call.name, module, allModules) with
-            case Some { function } -> callable_return_type(function.returnType) & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
+            case Some { function } ->
+                callable_return_type(effective_function_return_type(function, module, allModules))
+                    & parameters_emittable_and_assignable(function.parameters, call.arguments, env, module, allModules)
             case None -> qualified_call_member(call.name) == "main"
 
 private fun function_value_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -5260,7 +5374,9 @@ private fun index_literal_emittable(index: CompiledExpression): bool =
 
 private fun function_call_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_function_for_arguments_in_functions(name, arguments, env, module.functions, module, allModules) with
-    case Some { function } -> callable_return_type(function.returnType) & parameters_assignable(function.parameters, arguments, env, module, allModules)
+    case Some { function } ->
+        callable_return_type(effective_function_return_type(function, module, allModules))
+            & parameters_emittable_and_assignable(function.parameters, arguments, env, module, allModules)
     case None -> imported_function_target_emittable(name, arguments, env, module.imports, module, allModules)
 
 private fun imported_function_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -5278,7 +5394,9 @@ private fun imported_module_function_emittable(name: String, arguments: List[Com
 
 private fun imported_module_function_body_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): bool =
     match find_function_for_arguments_in_functions(name, arguments, env, importedModule.functions, module, allModules) with
-    case Some { function } -> callable_return_type(function.returnType) & parameters_assignable(function.parameters, arguments, env, module, allModules)
+    case Some { function } ->
+        callable_return_type(effective_function_return_type(function, importedModule, allModules))
+            & parameters_emittable_and_assignable(function.parameters, arguments, env, module, allModules)
     case _ -> imported_function_target_emittable(name, arguments, env, rest, module, allModules)
 
 private fun concrete_return_type(type: CompiledTypeReference): bool =
@@ -5296,6 +5414,28 @@ private fun parameters_assignable(parameters: List[CompiledFunctionParameter], a
         case Some { argument } ->
             parameter_argument_assignable(parameter.typeReference, argument, env, module, allModules)
             & parameters_assignable(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun parameters_emittable_and_assignable(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match parameters[0] with
+    case None -> arguments.is_empty()
+    case Some { parameter } ->
+        match arguments[0] with
+        case None -> false
+        case Some { argument } ->
+            parameter_argument_assignable(parameter.typeReference, argument, env, module, allModules)
+                & parameter_argument_emittable(parameter.typeReference, argument, env, module, allModules)
+                & parameters_emittable_and_assignable(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun parameter_argument_emittable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if function_type(target)
+    then function_argument_emittable(target, argument, env, module, allModules)
+    else expression_emittable(argument, env, module, allModules)
+
+private fun function_argument_emittable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match argument with
+    case CompiledLambdaExpression _ -> function_lambda_assignable(target, argument, env, module, allModules)
+    case CompiledFunctionReferenceExpression _ -> function_reference_assignable(target, argument, module, allModules)
+    case _ -> expression_emittable(argument, env, module, allModules)
 
 private fun parameter_argument_assignable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if empty_collection_literal_assignable(target, argument)
@@ -5336,7 +5476,7 @@ private fun function_reference_assignable(target: CompiledTypeReference, argumen
 private fun function_reference_type_assignable(target: CompiledTypeReference, reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_function_in_scope(reference.name, module, allModules) with
     case Some { function } ->
-        type_assignable(function_type_return_type(target), function.returnType)
+        type_assignable(function_type_return_type(target), effective_function_return_type(function, module, allModules))
             & function_parameters_assignable(function_type_parameters(target), function.parameters)
     case None -> false
 
