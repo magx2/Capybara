@@ -210,7 +210,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return Definition.DeriverDeclaration.INSTANCE;
         }
         if (definition.enumDeclaration() != null) {
-            return Definition.EnumDeclaration.INSTANCE;
+            return enumDeclaration(definition.enumDeclaration());
         }
         if (definition.constDeclaration() != null) {
             return new Definition.ConstantDefinition(constantDeclaration(definition.constDeclaration()));
@@ -234,6 +234,22 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 visibility,
                 type,
                 expressionNoLet(ctx.expressionNoLet()),
+                location(ctx)
+        );
+    }
+
+    private static Definition.EnumDeclaration enumDeclaration(
+            dev.capylang.parser.antlr.FunctionalParser.EnumDeclarationContext ctx
+    ) {
+        var types = ctx.TYPE();
+        var values = new ArrayList<Definition.EnumValueDeclaration>();
+        for (var i = 1; i < types.size(); i++) {
+            var token = types.get(i).getSymbol();
+            values.add(new Definition.EnumValueDeclaration(token.getText(), location(token)));
+        }
+        return new Definition.EnumDeclaration(
+                types.getFirst().getText(),
+                List.copyOf(values),
                 location(ctx)
         );
     }
@@ -2446,6 +2462,10 @@ public final class NativeCapybaraParser implements CapybaraParser {
     private static SourceLocation location(ParserRuleContext ctx) {
         var start = ctx.getStart();
         return new SourceLocation(start.getLine(), start.getCharPositionInLine());
+    }
+
+    private static SourceLocation location(Token token) {
+        return new SourceLocation(token.getLine(), token.getCharPositionInLine());
     }
 
     private static int leadingWhitespace(String line) {
