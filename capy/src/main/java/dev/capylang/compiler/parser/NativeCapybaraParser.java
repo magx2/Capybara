@@ -650,6 +650,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(matchCase -> new Expression.MatchCase(
                         matchCase.typeName(),
                         matchCase.bindings(),
+                        matchCase.bindsWholeValue(),
                         rewriteLocalFunctionCalls(matchCase.literal(), localNames),
                         matchCase.hasLiteral(),
                         matchCase.wildcard(),
@@ -1263,6 +1264,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.MatchCase(
                 patternTypeName(pattern),
                 patternBindings(pattern),
+                patternBindsWholeValue(pattern),
                 patternLiteral(pattern),
                 patternHasLiteral(pattern),
                 patternWildcard(pattern),
@@ -1280,6 +1282,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Expression.MatchCase(
                 patternTypeName(pattern),
                 patternBindings(pattern),
+                patternBindsWholeValue(pattern),
                 patternLiteral(pattern),
                 patternHasLiteral(pattern),
                 patternWildcard(pattern),
@@ -1336,6 +1339,10 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
     private static boolean patternWildcard(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
         return ctx != null && ctx.wildcardPattern() != null;
+    }
+
+    private static boolean patternBindsWholeValue(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
+        return ctx != null && (ctx.typedPattern() != null || ctx.wildcardPattern() != null);
     }
 
     private static boolean patternHasLiteral(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
@@ -1810,6 +1817,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 .map(matchCase -> new Expression.MatchCase(
                         matchCase.typeName(),
                         matchCase.bindings(),
+                        matchCase.bindsWholeValue(),
                         offsetExpression(matchCase.literal(), lineOffset, columnOffset),
                         matchCase.hasLiteral(),
                         matchCase.wildcard(),
