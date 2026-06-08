@@ -742,6 +742,15 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx.value() != null) {
             return value(ctx.value());
         }
+        if (ctx.infixMethodLiteral() != null && ctx.expressionNoLet().size() == 2) {
+            return binaryExpression(
+                    ctx.infixMethodLiteral().getText(),
+                    expressionNoLet(ctx.expressionNoLet(0)),
+                    expressionNoLet(ctx.expressionNoLet(1)),
+                    location(ctx),
+                    isGrouped(ctx.expressionNoLet(0))
+            );
+        }
         if (ctx.infixOperator() != null && ctx.expressionNoLet().size() == 2) {
             if (ctx.infixOperator().getText().equals("|>") && ctx.expressionNoLet(1).reduceExpression() != null) {
                 return reduceExpression(
@@ -766,10 +775,10 @@ public final class NativeCapybaraParser implements CapybaraParser {
             );
         }
         if (ctx.methodIdentifier() != null && ctx.expressionNoLet().size() == 1) {
-            return new Expression.MethodCallExpression(
+            return methodCallExpression(
                     expressionNoLet(ctx.expressionNoLet(0)),
                     ctx.methodIdentifier().getText(),
-                    methodArguments(ctx.methodArgumentList()),
+                    ctx.methodArgumentList(),
                     location(ctx)
             );
         }
@@ -838,6 +847,15 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx.value() != null) {
             return value(ctx.value());
         }
+        if (ctx.infixMethodLiteral() != null && ctx.expressionNoLetNoPipe().size() == 2) {
+            return binaryExpression(
+                    ctx.infixMethodLiteral().getText(),
+                    expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)),
+                    expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(1)),
+                    location(ctx),
+                    isGrouped(ctx.expressionNoLetNoPipe(0))
+            );
+        }
         if (ctx.infixOperatorNoPipe() != null && ctx.expressionNoLetNoPipe().size() == 2) {
             return binaryExpression(
                     ctx.infixOperatorNoPipe().getText(),
@@ -855,10 +873,10 @@ public final class NativeCapybaraParser implements CapybaraParser {
             );
         }
         if (ctx.methodIdentifier() != null && ctx.expressionNoLetNoPipe().size() == 1) {
-            return new Expression.MethodCallExpression(
+            return methodCallExpression(
                     expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)),
                     ctx.methodIdentifier().getText(),
-                    methodArguments(ctx.methodArgumentList()),
+                    ctx.methodArgumentList(),
                     location(ctx)
             );
         }
@@ -1003,6 +1021,35 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ? ctx.TYPE().getText() + "." + ctx.identifier().getText()
                 : ctx.getChild(0).getText();
         return new Expression.FunctionCallExpression(name, arguments(ctx.argumentList()), location(ctx));
+    }
+
+    private static Expression methodCallExpression(
+            Expression receiver,
+            String name,
+            dev.capylang.parser.antlr.FunctionalParser.MethodArgumentListContext arguments,
+            SourceLocation location
+    ) {
+        var reduce = methodReduceExpression(receiver, name, arguments, location);
+        if (reduce != null) {
+            return reduce;
+        }
+        return new Expression.MethodCallExpression(receiver, name, methodArguments(arguments), location);
+    }
+
+    private static Expression methodReduceExpression(
+            Expression receiver,
+            String name,
+            dev.capylang.parser.antlr.FunctionalParser.MethodArgumentListContext arguments,
+            SourceLocation location
+    ) {
+        if (!name.equals("reduce") || arguments == null || arguments.methodArgument().size() != 1) {
+            return null;
+        }
+        var argument = arguments.methodArgument().get(0);
+        if (argument.expression() == null || argument.expression().expressionNoLet().reduceExpression() == null) {
+            return null;
+        }
+        return reduceExpression(receiver, argument.expression().expressionNoLet().reduceExpression(), location);
     }
 
     private static Expression placeholder(dev.capylang.parser.antlr.FunctionalParser.PlaceholderContext ctx) {
