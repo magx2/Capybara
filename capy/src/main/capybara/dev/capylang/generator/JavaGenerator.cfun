@@ -557,7 +557,7 @@ private fun result_pipe_expression(binary: CompiledBinaryExpression, leftType: C
         & result_pipe_receiver(binary.left, leftType)
 
 private fun result_pipe_receiver(left: CompiledExpression, leftType: CompiledTypeReference): bool =
-    leftType.name == "Result"
+    result_type_name(leftType.name)
         | result_constructor_type(leftType.name)
         | match left with
             case CompiledDataLiteral literal -> result_constructor_type(literal.typeName)
@@ -565,7 +565,13 @@ private fun result_pipe_receiver(left: CompiledExpression, leftType: CompiledTyp
             case _ -> false
 
 private fun result_constructor_type(typeName: String): bool =
-    typeName == "Success" | typeName == "Error"
+    result_success_constructor(typeName) | result_error_constructor(typeName)
+
+private fun result_success_constructor(typeName: String): bool =
+    typeName == "Success" | typeName == "/capy/lang/Result.Success" | typeName == "Result.Success"
+
+private fun result_error_constructor(typeName: String): bool =
+    typeName == "Error" | typeName == "/capy/lang/Result.Error" | typeName == "Result.Error"
 
 private fun result_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = result_pipe_value_type(binary.left, leftType, env, module, allModules)
@@ -601,17 +607,17 @@ private fun result_pipe_left_depth(expression: CompiledExpression): int =
     case _ -> 0
 
 private fun result_pipe_value_type(left: CompiledExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if leftType.name == "Result"
+    if result_type_name(leftType.name)
     then first_type_argument(leftType)
     else match left with
         case CompiledDataLiteral literal -> result_literal_value_type(literal, env, module, allModules)
         case CompiledBinaryExpression binary ->
             let resultType = result_pipe_result_type(binary, expression_type(binary.left, env, module, allModules), env, module, allModules)
-            if resultType.name == "Result" then first_type_argument(resultType) else object_type()
+            if result_type_name(resultType.name) then first_type_argument(resultType) else object_type()
         case _ -> object_type()
 
 private fun result_literal_value_type(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if literal.typeName == "Success"
+    if result_success_constructor(literal.typeName)
     then match literal.fields[0] with
         case Some { field } -> expression_type(field.value, env, module, allModules)
         case None -> object_type()
@@ -625,16 +631,16 @@ private fun result_pipe_result_type(binary: CompiledBinaryExpression, leftType: 
     case _ -> object_type()
 
 private fun result_expression_type(expression: CompiledExpression, expressionType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if expressionType.name == "Result"
+    if result_type_name(expressionType.name)
     then expressionType
     else non_result_expression_type(expression, expressionType, env, module, allModules)
 
 private fun non_result_expression_type(expression: CompiledExpression, expressionType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expression with
     case CompiledDataLiteral literal ->
-        if literal.typeName == "Success"
+        if result_success_constructor(literal.typeName)
         then result_type(result_literal_value_type(literal, env, module, allModules))
-        else if literal.typeName == "Error"
+        else if result_error_constructor(literal.typeName)
         then result_type(object_type())
         else expressionType
     case CompiledMatchExpression matchExpression -> result_match_expression_type(matchExpression.cases, expressionType, env, module, allModules)
@@ -690,7 +696,7 @@ private fun seq_receiver_code(expression: CompiledExpression, receiverType: Comp
     let receiverCode = expression_code(expression, env, receiverType, module, allModules)
     if receiverType.name == "String"
     then "capy.lang.String.chars(" + receiverCode + ")"
-    else if receiverType.name == "Seq"
+    else if seq_type_name(receiverType.name)
     then "((" + java_seq_type(receiverType) + ") " + receiverCode + ")"
     else "capy.lang.Seq.toSeq(" + receiverCode + ")"
 
@@ -780,7 +786,30 @@ private fun typed_function_reference_lambda_code(reference: CompiledFunctionRefe
     let parameters = function_type_parameters(expectedType)
     function_lambda_parameters(parameters, 0)
         + " -> " + java_function_call_name(reference.name, module, allModules)
-        + "(" + function_lambda_argument_list(parameters, 0) + ")"
+        + "(" + typed_function_reference_argument_list(reference, parameters, 0, module, allModules) + ")"
+
+private fun typed_function_reference_argument_list(reference: CompiledFunctionReferenceExpression, parameters: List[CompiledTypeReference], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ ->
+        typed_function_reference_argument_code(reference, idx, module, allModules)
+            + typed_function_reference_argument_tail(reference, parameters[1:], idx + 1, module, allModules)
+
+private fun typed_function_reference_argument_tail(reference: CompiledFunctionReferenceExpression, parameters: List[CompiledTypeReference], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", " + typed_function_reference_argument_code(reference, idx, module, allModules)
+        + typed_function_reference_argument_tail(reference, parameters[1:], idx + 1, module, allModules)
+
+private fun typed_function_reference_argument_code(reference: CompiledFunctionReferenceExpression, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let argument = "__capy_arg" + idx
+    match find_function_in_scope(reference.name, module, allModules) with
+    case Some { function } ->
+        let parameterType = parameter_type_at(function.parameters, idx, object_type())
+        if parameterType.name == "any" | type_parameter(parameterType)
+        then argument
+        else "((" + boxed_java_type(parameterType) + ") " + argument + ")"
+    case None -> argument
 
 private fun function_lambda_parameters(parameters: List[CompiledTypeReference], idx: int): String =
     match parameters[0] with
@@ -864,6 +893,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then char_to_string_code(call, env, module, allModules)
     else if assert_is_empty_call(call)
     then assert_is_empty_code(call, env, module, allModules)
+    else if option_assert_is_equal_to_call(call, env, module, allModules)
+    then option_assert_is_equal_to_code(call, env, module, allModules)
     else if result_assert_is_equal_to_call(call, env, module, allModules)
     then result_assert_is_equal_to_code(call, env, module, allModules)
     else if result_assert_succeeds_lambda_call(call, env, module, allModules)
@@ -915,14 +946,14 @@ private fun collection_predicate_call_code(call: CompiledMethodCallExpression, e
     let valueType = collection_value_type(receiverType)
     let rawReceiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     let receiverCode =
-        if receiverType.name == "Seq" | receiverType.name == "String"
+        if seq_type_name(receiverType.name) | receiverType.name == "String"
         then seq_receiver_code(call.receiver, receiverType, env, module, allModules)
         else rawReceiverCode
     match argument(call.arguments, 0) with
     case CompiledLambdaExpression lambda ->
         if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
         then string_indexed_predicate_code(call.name, rawReceiverCode, lambda, env, module, allModules)
-        else if receiverType.name == "Seq" | receiverType.name == "String"
+        else if seq_type_name(receiverType.name) | receiverType.name == "String"
         then collection_seq_predicate_code(call.name, receiverCode, lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules))
         else receiverCode + ".stream()." + java_stream_predicate_method(call.name) + "(" + lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules) + ")"
     case _ -> "unsupported(\"collection predicate\")"
@@ -971,18 +1002,18 @@ private fun java_stream_predicate_method(name: String): String =
 
 private fun seq_as_list_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    call.name == "as_list" & receiverType.name == "Seq" & call.arguments.is_empty()
+    call.name == "as_list" & seq_type_name(receiverType.name) & call.arguments.is_empty()
 
 private fun collection_is_empty_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     call.name == "is_empty" & call.arguments.is_empty() & collection_empty_receiver_type(receiverType)
 
 private fun collection_empty_receiver_type(type: CompiledTypeReference): bool =
-    type.name == "List" | type.name == "Set" | type.name == "Dict" | type.name == "String" | type.name == "Seq"
+    type.name == "List" | type.name == "Set" | type.name == "Dict" | type.name == "String" | seq_type_name(type.name)
 
 private fun collection_is_empty_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    if receiverType.name == "Seq"
+    if seq_type_name(receiverType.name)
     then seq_receiver_code(call.receiver, receiverType, env, module, allModules) + ".asList().isEmpty()"
     else expression_code(call.receiver, env, receiverType, module, allModules) + ".isEmpty()"
 
@@ -999,7 +1030,7 @@ private fun negated_collection_is_empty_code(call: CompiledMethodCallExpression,
     match call.receiver with
     case CompiledUnaryExpression unary ->
         let receiverType = expression_type(unary.expression, env, module, allModules)
-        if receiverType.name == "Seq"
+        if seq_type_name(receiverType.name)
         then "!(" + seq_receiver_code(unary.expression, receiverType, env, module, allModules) + ".asList().isEmpty())"
         else "!(" + expression_code(unary.expression, env, receiverType, module, allModules) + ".isEmpty())"
     case _ -> "unsupported(\"negated collection is_empty\")"
@@ -1027,12 +1058,32 @@ private fun assert_is_empty_code(call: CompiledMethodCallExpression, env: List[J
         assert_that_code(actual, env, module, allModules) + ".isEmpty()"
     case _ -> "unsupported(\"assert is_empty\")"
 
+private fun option_assert_is_equal_to_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "is_equal_to"
+        & match call.receiver with
+            case CompiledFunctionCallExpression receiver ->
+                receiver.name == "assert_that"
+                    & option_type_name(expression_type(argument(receiver.arguments, 0), env, module, allModules).name)
+                    & !call.arguments.is_empty()
+            case _ -> false
+
+private fun option_assert_is_equal_to_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.receiver with
+    case CompiledFunctionCallExpression receiver ->
+        let actual = argument(receiver.arguments, 0)
+        let expected = argument(call.arguments, 0)
+        assert_that_code(actual, env, module, allModules)
+            + ".isEqualTo(__capy_optional_value("
+            + expression_code(expected, env, expression_type(expected, env, module, allModules), module, allModules)
+            + "))"
+    case _ -> "unsupported(\"option assert is_equal_to\")"
+
 private fun result_assert_is_equal_to_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.name == "is_equal_to"
         & match call.receiver with
             case CompiledFunctionCallExpression receiver ->
                 receiver.name == "assert_that"
-                    & expression_type(argument(receiver.arguments, 0), env, module, allModules).name == "Result"
+                    & result_type_name(expression_type(argument(receiver.arguments, 0), env, module, allModules).name)
                     & !call.arguments.is_empty()
             case _ -> false
 
@@ -1052,7 +1103,7 @@ private fun result_assert_succeeds_lambda_call(call: CompiledMethodCallExpressio
         & match call.receiver with
             case CompiledFunctionCallExpression receiver ->
                 receiver.name == "assert_that"
-                    & expression_type(argument(receiver.arguments, 0), env, module, allModules).name == "Result"
+                    & result_type_name(expression_type(argument(receiver.arguments, 0), env, module, allModules).name)
                     & result_assert_succeeds_lambda_argument(call.arguments)
             case _ -> false
 
@@ -1396,10 +1447,10 @@ private fun assert_that_code(expression: CompiledExpression, env: List[JavaBindi
     then "new capy.test.Assert.SetAssert(java.util.List.of(), " + actual + ")"
     else if actualType.name == "Dict"
     then "new capy.test.Assert.DictAssert(java.util.List.of(), " + actual + ")"
-    else if actualType.name == "Option"
-    then "new capy.test.Assert.OptionAssert(java.util.List.of(), __capy_optional_value(" + actual + "))"
-    else if actualType.name == "Result"
-    then "new capy.test.Assert.ResultAssert(java.util.List.of(), __capy_result_value(" + actual + "))"
+    else if option_type_name(actualType.name)
+    then "new capy.test.Assert.OptionAssert<" + boxed_java_type(first_type_argument(actualType)) + ">(java.util.List.of(), __capy_optional_value(" + actual + "))"
+    else if result_type_name(actualType.name)
+    then "new capy.test.Assert.ResultAssert<" + boxed_java_type(first_type_argument(actualType)) + ">(java.util.List.of(), __capy_result_value(" + actual + "))"
     else "new capy.test.Assert.DataAssert(java.util.List.of(), " + actual + ")"
 
 private fun expression_list_code(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1494,7 +1545,7 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
         "__capy_data(\"" + escape_java_string(data_literal_type_name(literal.typeName, dataType)) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
 
 private fun primitive_char_constructor(literal: CompiledDataLiteral, expectedType: CompiledTypeReference): bool =
-    literal.typeName == "char" & expectedType.name == "Result"
+    literal.typeName == "char" & result_type_name(expectedType.name)
 
 private fun primitive_char_constructor_code(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_char(" + expression_code(first_data_field_value(literal.fields), env, string_type(), module, allModules) + ")"
@@ -1650,14 +1701,23 @@ private fun reduce_key_statement(keyName: String, indent: String): String =
     else indent + "java.lang.String " + java_identifier(keyName) + " = __capy_entry.getKey();" + newline()
 
 private fun collection_value_type(type: CompiledTypeReference): CompiledTypeReference =
-    if type.name == "List" | type.name == "Set" | type.name == "Seq" | type.name == "Dict"
+    if type.name == "List" | type.name == "Set" | seq_type_name(type.name) | type.name == "Dict"
     then first_type_argument(type)
     else if type.name == "String"
     then string_type()
     else object_type()
 
 private fun collection_receiver_type(type: CompiledTypeReference): bool =
-    type.name == "List" | type.name == "Set" | type.name == "Seq" | type.name == "String"
+    type.name == "List" | type.name == "Set" | seq_type_name(type.name) | type.name == "String"
+
+private fun option_type_name(name: String): bool =
+    name == "Option" | name == "/capy/lang/Option" | name == "capy/lang/Option"
+
+private fun result_type_name(name: String): bool =
+    name == "Result" | name == "/capy/lang/Result" | name == "capy/lang/Result"
+
+private fun seq_type_name(name: String): bool =
+    name == "Seq" | name == "/capy/lang/Seq" | name == "capy/lang/Seq"
 
 private fun match_expression_code(matchExpression: CompiledMatchExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = expression_type(matchExpression.value, env, module, allModules)
@@ -1701,10 +1761,19 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     else "__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\")"
 
 private fun option_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
-    valueType.name == "Option" & (matchCase.typeName == "Some" | matchCase.typeName == "None")
+    option_type_name(valueType.name) & option_constructor_type(matchCase.typeName)
+
+private fun option_constructor_type(typeName: String): bool =
+    option_some_constructor(typeName) | option_none_constructor(typeName)
+
+private fun option_some_constructor(typeName: String): bool =
+    typeName == "Some" | typeName == "/capy/lang/Option.Some" | typeName == "Option.Some"
+
+private fun option_none_constructor(typeName: String): bool =
+    typeName == "None" | typeName == "/capy/lang/Option.None" | typeName == "Option.None"
 
 private fun option_match_condition_code(matchCase: CompiledMatchCase, valueCode: String): String =
-    if matchCase.typeName == "Some"
+    if option_some_constructor(matchCase.typeName)
     then option_value_code(valueCode) + ".isPresent()"
     else option_value_code(valueCode) + ".isEmpty()"
 
@@ -1712,10 +1781,10 @@ private fun option_value_code(valueCode: String): String =
     "((java.util.Optional<?>) " + valueCode + ")"
 
 private fun result_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
-    valueType.name == "Result" & (matchCase.typeName == "Success" | matchCase.typeName == "Error")
+    result_type_name(valueType.name) & result_constructor_type(matchCase.typeName)
 
 private fun result_match_condition_code(matchCase: CompiledMatchCase, valueCode: String): String =
-    if matchCase.typeName == "Success"
+    if result_success_constructor(matchCase.typeName)
     then "__capy_data_is(" + valueCode + ", \"Success\")"
     else "__capy_data_is(" + valueCode + ", \"Error\")"
 
@@ -1754,7 +1823,7 @@ private fun match_binding_type(matchCase: CompiledMatchCase, valueType: Compiled
     else if option_match_case(matchCase, valueType)
     then first_type_argument(valueType)
     else if result_match_case(matchCase, valueType)
-    then if matchCase.typeName == "Success" then first_type_argument(valueType) else object_type()
+    then if result_success_constructor(matchCase.typeName) then first_type_argument(valueType) else object_type()
     else
         let dataType = find_data_type(matchCase.typeName, module, allModules)
         let bindings = data_type_bindings(dataType, valueType, module, allModules)
@@ -1770,7 +1839,7 @@ private fun match_binding_value_code(matchCase: CompiledMatchCase, valueCode: St
     else "__capy_data_field(" + valueCode + ", \"" + escape_java_string(match_binding_field_name(matchCase, idx, module, allModules)) + "\")"
 
 private fun result_match_binding_value_code(matchCase: CompiledMatchCase, valueCode: String): String =
-    if matchCase.typeName == "Success"
+    if result_success_constructor(matchCase.typeName)
     then "__capy_result_success_value(" + valueCode + ")"
     else "__capy_result_error_value(" + valueCode + ")"
 
@@ -2695,7 +2764,7 @@ private fun assert_is_empty_arguments_emittable(arguments: List[CompiledExpressi
     case None -> false
     case Some { actual } ->
         let actualType = expression_type(actual, env, module, allModules)
-        if actualType.name == "List" | actualType.name == "Set" | actualType.name == "Dict" | actualType.name == "Option"
+        if actualType.name == "List" | actualType.name == "Set" | actualType.name == "Dict" | option_type_name(actualType.name)
         then expression_emittable(actual, env, module, allModules)
         else false
 
@@ -2810,7 +2879,7 @@ private fun data_assert_type_supported(type: CompiledTypeReference): bool =
         & (type.name == "data" | type.name == "enum" | java_generator_string_has_prefix(type.name, "/") | uppercase_data_type_name(type.name))
 
 private fun collection_assert_type(name: String): bool =
-    name == "List" | name == "Set" | name == "Dict" | name == "Seq"
+    name == "List" | name == "Set" | name == "Dict" | seq_type_name(name)
 
 private fun uppercase_data_type_name(name: String): bool =
     match name[0] with
@@ -2957,7 +3026,38 @@ private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeR
     then false
     else if primitive_numeric_widening_assignable(target, source)
     then true
+    else if generated_data_object_type(target) & generated_data_object_type(source)
+    then true
     else target.name == source.name & type_arguments_assignable(target.arguments, source.arguments)
+
+private fun generated_data_object_type(type: CompiledTypeReference): bool =
+    !type.name.is_empty()
+        & !numeric_type(type)
+        & type.name != "bool"
+        & type.name != "String"
+        & type.name != "List"
+        & type.name != "Set"
+        & type.name != "Dict"
+        & type.name != "Tuple"
+        & type.name != "Effect"
+        & type.name != "Assert"
+        & type.name != "TestFile"
+        & type.name != "TestCase"
+        & type.name != "Supplier"
+        & uppercase_data_type_name(type_unqualified_name(type.name))
+
+private fun type_unqualified_name(name: String): String =
+    let dot = last_index_of(name, ".", 0, -1)
+    let slash = last_index_of(name, "/", 0, -1)
+    let idx = if dot > slash then dot else slash
+    if idx < 0 then name else name[idx + 1, name.size().value]
+
+private fun last_index_of(value: String, needle: String, idx: int, found: int): int =
+    if idx >= value.size().value
+    then found
+    else match value[idx] with
+        case None -> found
+        case Some { char } -> last_index_of(value, needle, idx + 1, if char == needle then idx else found)
 
 private fun primitive_numeric_widening_assignable(target: CompiledTypeReference, source: CompiledTypeReference): bool =
     source.arguments.is_empty() & target.arguments.is_empty() & (
@@ -3377,28 +3477,43 @@ private fun java_helpers(module: CompiledModule): String =
         + "        if (value instanceof java.util.Optional optional) {" + newline()
         + "            return optional;" + newline()
         + "        }" + newline()
-        + "        if (__capy_data_is(value, \"Some\")) {" + newline()
+        + "        if (value instanceof capy.lang.Option.Some<?> some) {" + newline()
+        + "            return java.util.Optional.ofNullable(some.value());" + newline()
+        + "        }" + newline()
+        + "        if (value instanceof capy.lang.Option.None) {" + newline()
+        + "            return java.util.Optional.empty();" + newline()
+        + "        }" + newline()
+        + "        if (__capy_data_is(value, \"Some\") || __capy_data_is(value, \"/capy/lang/Option.Some\") || __capy_data_is(value, \"Option.Some\")) {" + newline()
         + "            return java.util.Optional.ofNullable(__capy_data_value_field(value));" + newline()
         + "        }" + newline()
         + "        return java.util.Optional.empty();" + newline()
         + "    }" + newline() + newline()
-        + "    private static java.lang.Object __capy_result_value(java.lang.Object value) {" + newline()
-        + "        if (__capy_data_is(value, \"Success\")) {" + newline()
-        + "            return value;" + newline()
+        + "    private static capy.lang.Result __capy_result_value(java.lang.Object value) {" + newline()
+        + "        if (value instanceof capy.lang.Result result) {" + newline()
+        + "            return result;" + newline()
         + "        }" + newline()
-        + "        if (__capy_data_is(value, \"Error\")) {" + newline()
-        + "            return value;" + newline()
+        + "        if (__capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\")) {" + newline()
+        + "            return new capy.lang.Result.Success(__capy_data_value_field(value));" + newline()
         + "        }" + newline()
-        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Expected Result value\")));" + newline()
+        + "        if (__capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\")) {" + newline()
+        + "            return new capy.lang.Result.Error(new dev.capylang.CapybaraException(__capy_data_message_field(value)));" + newline()
+        + "        }" + newline()
+        + "        return new capy.lang.Result.Error(new dev.capylang.CapybaraException(\"Expected Result value\"));" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_result_success_value(java.lang.Object value) {" + newline()
-        + "        if (__capy_data_is(value, \"Success\")) {" + newline()
+        + "        if (value instanceof capy.lang.Result.Success<?> success) {" + newline()
+        + "            return success.value();" + newline()
+        + "        }" + newline()
+        + "        if (__capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\")) {" + newline()
         + "            return __capy_data_value_field(value);" + newline()
         + "        }" + newline()
         + "        return null;" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_result_error_value(java.lang.Object value) {" + newline()
-        + "        if (__capy_data_is(value, \"Error\")) {" + newline()
+        + "        if (value instanceof capy.lang.Result.Error<?> error) {" + newline()
+        + "            return error.ex() == null ? null : error.ex().getMessage();" + newline()
+        + "        }" + newline()
+        + "        if (__capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\")) {" + newline()
         + "            java.lang.Object nested = __capy_data_field(value, \"value\");" + newline()
         + "            return nested == null ? value : nested;" + newline()
         + "        }" + newline()
