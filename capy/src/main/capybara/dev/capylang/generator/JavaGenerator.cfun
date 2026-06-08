@@ -12,6 +12,7 @@ from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data JavaBinding { name: String, typeReference: CompiledTypeReference, javaName: String }
+data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
 
 const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -319,12 +320,7 @@ private fun expression_code(
     case CompiledDoubleLiteral literal -> literal.source
     case CompiledBoolLiteral literal -> if literal.value then "true" else "false"
     case CompiledStringLiteral literal -> "\"" + escape_java_string(literal.value) + "\""
-    case CompiledVariableExpression variable ->
-        if binding_exists(variable.name, env)
-        then value_conversion_code(lookup_binding_java_name(variable.name, env), lookup_binding(variable.name, env), expectedType)
-        else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
-        then numeric_widening_code("capy.lang.Program.DEFAULT_FAILED_EXIT_CODE", int_type(), expectedType)
-        else numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
+    case CompiledVariableExpression variable -> variable_expression_code(variable, env, expectedType, module, allModules)
     case CompiledIfExpression ifExpression -> "("
         + truthy_expression_code(ifExpression.condition, env, module, allModules)
         + " ? " + expression_code(ifExpression.thenBranch, env, expectedType, module, allModules)
@@ -346,6 +342,15 @@ private fun expression_code(
     case CompiledReduceExpression reduce -> reduce_expression_code(reduce, env, expectedType, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_code(matchExpression, env, expectedType, module, allModules)
     case CompiledBlockExpression block -> block_expression_code(block, env, expectedType, module, allModules)
+
+private fun variable_expression_code(variable: CompiledVariableExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if binding_exists(variable.name, env)
+    then value_conversion_code(lookup_binding_java_name(variable.name, env), lookup_binding(variable.name, env), expectedType)
+    else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
+    then numeric_widening_code("capy.lang.Program.DEFAULT_FAILED_EXIT_CODE", int_type(), expectedType)
+    else match imported_stdlib_constant(variable.name, module.imports) with
+        case Some { constant } -> value_conversion_code(constant.javaName, constant.typeReference, expectedType)
+        case None -> numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
 
 private fun placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
     "__capy_not_implemented(\"" + escape_java_string(placeholder_message(placeholder, module)) + "\")"
@@ -412,6 +417,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
             + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
     else if string_equality_operator(binary.operator, leftType, rightType)
     then string_equality_code(binary, leftType, rightType, env, module, allModules)
+    else if object_equality_operator(binary.operator, leftType, rightType)
+    then object_equality_code(binary, leftType, rightType, env, module, allModules)
     else if binary.operator == "%" & resultType.name == "byte"
     then "((byte) (" + expression_code(binary.left, env, leftType, module, allModules)
         + " % "
@@ -519,6 +526,25 @@ private fun string_equality_operator(operator: String, leftType: CompiledTypeRef
     (operator == "==" | operator == "!=") & (leftType.name == "String" | rightType.name == "String")
 
 private fun string_equality_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = "java.util.Objects.equals("
+        + expression_code(binary.left, env, leftType, module, allModules)
+        + ", "
+        + expression_code(binary.right, env, rightType, module, allModules)
+        + ")"
+    if binary.operator == "!=" then "(!" + code + ")" else code
+
+private fun object_equality_operator(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    (operator == "==" | operator == "!=")
+        & object_equality_type(leftType)
+        & object_equality_type(rightType)
+
+private fun object_equality_type(type: CompiledTypeReference): bool =
+    !type.name.is_empty()
+        & type.name != "any"
+        & type.name != "bool"
+        & !numeric_type(type)
+
+private fun object_equality_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = "java.util.Objects.equals("
         + expression_code(binary.left, env, leftType, module, allModules)
         + ", "
@@ -708,6 +734,212 @@ private fun result_match_expression_type(cases: List[CompiledMatchCase], express
 
 private fun result_type(argument: CompiledTypeReference): CompiledTypeReference =
     CompiledTypeReference { name: "Result", arguments: [argument] }
+
+private fun date_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "Date", arguments: [] }
+
+private fun time_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "Time", arguments: [] }
+
+private fun date_time_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "DateTime", arguments: [] }
+
+private fun duration_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "Duration", arguments: [] }
+
+private fun imported_stdlib_constant_exists(name: String, imports: List[CompiledImportDeclaration]): bool =
+    match imported_stdlib_constant(name, imports) with
+    case Some _ -> true
+    case None -> false
+
+private fun imported_stdlib_constant(name: String, imports: List[CompiledImportDeclaration]): /capy/lang/Option[JavaStdlibValue] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & import_includes_name(name, declaration)
+        then match stdlib_constant(name, declaration.modulePath) with
+            case Some { value } -> /capy/lang/Option.Some { value }
+            case None -> imported_stdlib_constant(name, imports[1:])
+        else imported_stdlib_constant(name, imports[1:])
+
+private fun stdlib_constant(name: String, modulePath: String): /capy/lang/Option[JavaStdlibValue] =
+    let path = normalized_stdlib_path(modulePath)
+    if path == "capy/date_time/Date" & name == "UNIX_DATE"
+    then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.dateTime.DateModule.UNIX_DATE", typeReference: date_type() } }
+    else if path == "capy/date_time/Time" & name == "MIDNIGHT"
+    then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.dateTime.TimeModule.MIDNIGHT", typeReference: time_type() } }
+    else if path == "capy/date_time/DateTime" & name == "UNIX_EPOCH"
+    then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.dateTime.DateTimeModule.UNIX_EPOCH", typeReference: date_time_type() } }
+    else if path == "capy/date_time/Duration" & name == "ZERO"
+    then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.dateTime.Duration.ZERO", typeReference: duration_type() } }
+    else /capy/lang/Option.None {}
+
+private fun normalized_stdlib_path(modulePath: String): String =
+    if java_generator_string_has_prefix(modulePath, "/")
+    then modulePath[1, modulePath.size()]
+    else modulePath
+
+private fun stdlib_date_time_type_imported(typeName: String, imports: List[CompiledImportDeclaration]): bool =
+    let modulePath = stdlib_date_time_type_module_path(typeName)
+    if modulePath.is_empty()
+    then false
+    else stdlib_module_imported(modulePath, type_unqualified_name(typeName), imports)
+
+private fun stdlib_module_imported(modulePath: String, memberName: String, imports: List[CompiledImportDeclaration]): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if !declaration.qualified
+            & normalized_stdlib_path(declaration.modulePath) == modulePath
+            & import_includes_name(memberName, declaration)
+        then true
+        else stdlib_module_imported(modulePath, memberName, imports[1:])
+
+private fun stdlib_date_time_type_module_path(typeName: String): String =
+    let name = type_unqualified_name(typeName)
+    if name == "DateTime"
+    then "capy/date_time/DateTime"
+    else if name == "Date"
+    then "capy/date_time/Date"
+    else if name == "Time"
+    then "capy/date_time/Time"
+    else if name == "Duration" | name == "DateDuration" | name == "WeekDuration"
+    then "capy/date_time/Duration"
+    else ""
+
+private fun stdlib_date_time_type_name(typeName: String): bool =
+    let name = type_unqualified_name(typeName)
+    name == "DateTime"
+        | name == "Date"
+        | name == "Time"
+        | name == "Duration"
+        | name == "DateDuration"
+        | name == "WeekDuration"
+
+private fun stdlib_date_time_java_type(typeName: String): String =
+    let name = type_unqualified_name(typeName)
+    if name == "DateTime"
+    then "capy.dateTime.DateTime"
+    else if name == "Date"
+    then "capy.dateTime.Date"
+    else if name == "Time"
+    then "capy.dateTime.Time"
+    else if name == "DateDuration"
+    then "capy.dateTime.Duration.DateDuration"
+    else if name == "WeekDuration"
+    then "capy.dateTime.Duration.WeekDuration"
+    else "capy.dateTime.Duration"
+
+private fun stdlib_date_time_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    stdlib_date_time_method(expression_type(call.receiver, env, module, allModules).name, call.name)
+
+private fun stdlib_date_time_method(receiverTypeName: String, methodName: String): bool =
+    let receiver = type_unqualified_name(receiverTypeName)
+    if receiver == "Date"
+    then methodName == "add_days" | methodName == "add_years_months" | methodName == "to_days_since_unix_epoch" | methodName == "to_iso_8601"
+    else if receiver == "Time"
+    then methodName == "add_seconds" | methodName == "to_seconds" | methodName == "to_iso_8601"
+    else if receiver == "DateTime"
+    then methodName == "plus" | methodName == "minus" | methodName == "to_iso_8601" | methodName == "timestamp"
+    else if receiver == "Duration"
+    then methodName == "to_iso_8601" | methodName == "negate" | methodName == "years" | methodName == "months" | methodName == "days" | methodName == "hours" | methodName == "minutes" | methodName == "seconds"
+    else false
+
+private fun stdlib_date_time_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiver = type_unqualified_name(expression_type(call.receiver, env, module, allModules).name)
+    if receiver == "Date"
+    then if call.name == "to_days_since_unix_epoch" then int_type() else if call.name == "to_iso_8601" then string_type() else date_type()
+    else if receiver == "Time"
+    then if call.name == "to_seconds" then int_type() else if call.name == "to_iso_8601" then string_type() else time_type()
+    else if receiver == "DateTime"
+    then stdlib_date_time_method_date_time_type(call, env, module, allModules)
+    else if receiver == "Duration"
+    then stdlib_date_time_method_duration_type(call.name)
+    else object_type()
+
+private fun stdlib_date_time_method_date_time_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if call.name == "to_iso_8601"
+    then string_type()
+    else if call.name == "timestamp"
+    then long_type()
+    else if call.name == "plus"
+    then date_time_type()
+    else if call.name == "minus"
+    then
+        let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+        if type_unqualified_name(argumentType.name) == "DateTime"
+        then duration_type()
+        else date_time_type()
+    else date_time_type()
+
+private fun stdlib_date_time_method_duration_type(methodName: String): CompiledTypeReference =
+    if methodName == "to_iso_8601"
+    then string_type()
+    else if methodName == "negate"
+    then duration_type()
+    else int_type()
+
+private fun stdlib_date_time_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiver = type_unqualified_name(expression_type(call.receiver, env, module, allModules).name)
+    expression_emittable(call.receiver, env, module, allModules)
+        & if receiver == "Date"
+            then stdlib_date_method_arguments_emittable(call, env, module, allModules)
+            else if receiver == "Time"
+            then stdlib_time_method_arguments_emittable(call, env, module, allModules)
+            else if receiver == "DateTime"
+            then stdlib_date_time_method_arguments_emittable(call, env, module, allModules)
+            else if receiver == "Duration"
+            then call.arguments.is_empty()
+            else false
+
+private fun stdlib_date_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "add_days"
+    then stdlib_one_int_argument_emittable(call, env, module, allModules)
+    else if call.name == "add_years_months"
+    then stdlib_two_int_arguments_emittable(call, env, module, allModules)
+    else call.arguments.is_empty()
+
+private fun stdlib_time_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "add_seconds"
+    then stdlib_one_int_argument_emittable(call, env, module, allModules)
+    else call.arguments.is_empty()
+
+private fun stdlib_date_time_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "plus"
+    then stdlib_one_date_time_argument_emittable(call, "Duration", env, module, allModules)
+    else if call.name == "minus"
+    then stdlib_one_date_time_argument_emittable(call, "Duration", env, module, allModules)
+        | stdlib_one_date_time_argument_emittable(call, "DateTime", env, module, allModules)
+    else call.arguments.is_empty()
+
+private fun stdlib_one_int_argument_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.arguments[0] with
+    case None -> false
+    case Some { actual } ->
+        call.arguments[1:].is_empty()
+            & expression_emittable(actual, env, module, allModules)
+            & type_assignable(int_type(), expression_type(actual, env, module, allModules))
+
+private fun stdlib_two_int_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.arguments[0] with
+    case None -> false
+    case Some { first } ->
+        match call.arguments[1] with
+        case None -> false
+        case Some { second } ->
+            call.arguments[2:].is_empty()
+                & expression_emittable(first, env, module, allModules)
+                & expression_emittable(second, env, module, allModules)
+                & type_assignable(int_type(), expression_type(first, env, module, allModules))
+                & type_assignable(int_type(), expression_type(second, env, module, allModules))
+
+private fun stdlib_one_date_time_argument_emittable(call: CompiledMethodCallExpression, expectedTypeName: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.arguments[0] with
+    case None -> false
+    case Some { actual } ->
+        call.arguments[1:].is_empty()
+            & expression_emittable(actual, env, module, allModules)
+            & type_unqualified_name(expression_type(actual, env, module, allModules).name) == expectedTypeName
 
 private fun collection_pipe_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
     collection_pipe_operator(binary.operator) & collection_receiver_type(leftType) & lambda_expression(binary.right)
@@ -1799,6 +2031,8 @@ private fun dict_entries_tail(entries: List[CompiledDictEntry], env: List[JavaBi
 private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if primitive_char_constructor(literal, expectedType)
     then primitive_char_constructor_code(literal, env, module, allModules)
+    else if stdlib_date_time_data_literal(literal.typeName, module.imports)
+    then stdlib_date_time_data_literal_code(literal, env, module, allModules)
     else if program_success_literal(literal.typeName, module.imports)
     then "capy.lang.Program.Success.INSTANCE"
     else if program_failed_literal(literal.typeName, module.imports)
@@ -1809,6 +2043,21 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
         let dataType = find_data_type(literal.typeName, module, allModules)
         let bindings = data_type_bindings(dataType, expectedType, module, allModules)
         "__capy_data(\"" + escape_java_string(data_literal_type_name(literal.typeName, dataType)) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
+
+private fun stdlib_date_time_data_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
+    type_unqualified_name(typeName) == "DateTime" & stdlib_date_time_type_imported("DateTime", imports)
+
+private fun stdlib_date_time_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "new capy.dateTime.DateTime("
+        + expression_code(data_field_value(literal.fields, "date"), env, date_type(), module, allModules)
+        + ", "
+        + expression_code(data_field_value(literal.fields, "time"), env, time_type(), module, allModules)
+        + ")"
+
+private fun data_field_value(fields: List[CompiledDataField], name: String): CompiledExpression =
+    match fields[0] with
+    case None -> missing_argument()
+    case Some { field } -> if field.name == name then field.value else data_field_value(fields[1:], name)
 
 private fun primitive_char_constructor(literal: CompiledDataLiteral, expectedType: CompiledTypeReference): bool =
     literal.typeName == "char" & result_type_name(expectedType.name)
@@ -2124,12 +2373,7 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledDoubleLiteral _ -> double_type()
     case CompiledBoolLiteral _ -> bool_type()
     case CompiledStringLiteral _ -> string_type()
-    case CompiledVariableExpression variable ->
-        if binding_exists(variable.name, env)
-        then lookup_binding(variable.name, env)
-        else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
-        then int_type()
-        else object_type()
+    case CompiledVariableExpression variable -> variable_expression_type(variable, env, module)
     case CompiledIfExpression ifExpression -> expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBinaryExpression binary ->
         let leftType = expression_type(binary.left, env, module, allModules)
@@ -2160,6 +2404,15 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
     case CompiledBlockExpression block -> expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
+
+private fun variable_expression_type(variable: CompiledVariableExpression, env: List[JavaBinding], module: CompiledModule): CompiledTypeReference =
+    if binding_exists(variable.name, env)
+    then lookup_binding(variable.name, env)
+    else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
+    then int_type()
+    else match imported_stdlib_constant(variable.name, module.imports) with
+        case Some { constant } -> constant.typeReference
+        case None -> object_type()
 
 private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match cases[0] with
@@ -2279,6 +2532,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then native_stdlib_method_type(call, env, module, allModules)
     else if regex_method_call(call, env, module, allModules)
     then regex_method_type(call.name)
+    else if stdlib_date_time_method_call(call, env, module, allModules)
+    then stdlib_date_time_method_type(call, env, module, allModules)
     else if string_java_method_call(call, env, module, allModules)
     then string_java_method_type(call.name)
     else if call.name == "to_int"
@@ -2822,7 +3077,7 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledDoubleLiteral _ -> true
     case CompiledBoolLiteral _ -> true
     case CompiledStringLiteral _ -> true
-    case CompiledVariableExpression variable -> binding_exists(variable.name, env) | program_member_imported(variable.name, module.imports)
+    case CompiledVariableExpression variable -> binding_exists(variable.name, env) | program_member_imported(variable.name, module.imports) | imported_stdlib_constant_exists(variable.name, module.imports)
     case CompiledIfExpression e -> truthy_expression_emittable(e.condition, env, module, allModules) & expression_emittable(e.thenBranch, env, module, allModules) & expression_emittable(e.elseBranch, env, module, allModules)
     case CompiledBinaryExpression e ->
         if result_pipe_expression(e, expression_type(e.left, env, module, allModules))
@@ -3065,6 +3320,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then expression_emittable(call.receiver, env, module, allModules)
     else if regex_method_call(call, env, module, allModules)
     then regex_method_emittable(call, env, module, allModules)
+    else if stdlib_date_time_method_call(call, env, module, allModules)
+    then stdlib_date_time_method_emittable(call, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -3560,6 +3817,7 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "TestCase" then "capy.test.CapyTest.TestCase"
     else if type.name == "Supplier" then "java.util.function.Supplier<" + boxed_java_type(first_type_argument(type)) + ">"
     else if type.name == "/capy/lang/Program" then "capy.lang.Program"
+    else if stdlib_date_time_type_name(type.name) then stdlib_date_time_java_type(type.name)
     else "java.lang.Object"
 
 private fun function_type(type: CompiledTypeReference): bool =
@@ -4310,6 +4568,12 @@ private fun java_method_name(name: String): String =
     else if name == "is_empty" then "isEmpty"
     else if name == "has_size" then "hasSize"
     else if name == "as_list" then "asList"
+    else if name == "add_days" then "addDays"
+    else if name == "add_seconds" then "addSeconds"
+    else if name == "add_years_months" then "addYearsMonths"
+    else if name == "to_days_since_unix_epoch" then "toDaysSinceUnixEpoch"
+    else if name == "to_seconds" then "toSeconds"
+    else if name == "to_iso_8601" then "toIso8601"
     else java_identifier(name)
 
 private fun java_identifier_list(values: List[String]): String =
