@@ -2343,7 +2343,7 @@ private fun option_match_condition_code(matchCase: CompiledMatchCase, valueCode:
     else option_value_code(valueCode) + ".isEmpty()"
 
 private fun option_value_code(valueCode: String): String =
-    "((java.util.Optional<?>) " + valueCode + ")"
+    "((java.util.Optional<?>) __capy_optional_value(" + valueCode + "))"
 
 private fun result_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
     result_type_name(valueType.name) & result_constructor_type(matchCase.typeName)
@@ -2384,7 +2384,7 @@ private fun match_binding_field_name(matchCase: CompiledMatchCase, idx: int, mod
 
 private fun match_binding_type(matchCase: CompiledMatchCase, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if match_binding_whole_value(matchCase)
-    then if primitive_match_type(matchCase.typeName) then CompiledTypeReference { name: matchCase.typeName, arguments: [] } else valueType
+    then match_binding_whole_value_type(matchCase, valueType)
     else if option_match_case(matchCase, valueType)
     then first_type_argument(valueType)
     else if result_match_case(matchCase, valueType)
@@ -2409,7 +2409,12 @@ private fun result_match_binding_value_code(matchCase: CompiledMatchCase, valueC
     else "__capy_result_error_value(" + valueCode + ")"
 
 private fun match_binding_whole_value(matchCase: CompiledMatchCase): bool =
-    matchCase.wildcard | primitive_match_type(matchCase.typeName)
+    matchCase.bindsWholeValue | matchCase.wildcard | primitive_match_type(matchCase.typeName)
+
+private fun match_binding_whole_value_type(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): CompiledTypeReference =
+    if matchCase.typeName.is_empty()
+    then valueType
+    else CompiledTypeReference { name: matchCase.typeName, arguments: [] }
 
 private fun primitive_match_type(typeName: String): bool =
     typeName == "byte" | typeName == "int" | typeName == "long" | typeName == "float" | typeName == "double" | typeName == "bool" | typeName == "String"
