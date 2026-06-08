@@ -648,15 +648,17 @@ private fun binary_extension_operator_code(binary: CompiledBinaryExpression, env
 
 private fun binary_extension_operator_type(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_binary_extension_operator(binary, env, module, allModules) with
-    case Some { function } -> function.returnType
+    case Some { function } -> bound_extension_method_return_type(function, expression_type(binary.left, env, module, allModules))
     case None -> object_type()
 
 private fun binary_extension_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_binary_extension_operator(binary, env, module, allModules) with
     case Some { function } ->
-        concrete_return_type(function.returnType)
+        let receiverType = expression_type(binary.left, env, module, allModules)
+        let parameters = bound_extension_method_parameters(function, receiverType)
+        concrete_return_type(bound_extension_method_return_type(function, receiverType))
             & expression_emittable(binary.left, env, module, allModules)
-            & parameters_assignable(function.parameters, [binary.right], env, module, allModules)
+            & parameters_assignable(parameters, [binary.right], env, module, allModules)
     case None -> false
 
 private fun binary_extension_method_call(binary: CompiledBinaryExpression): CompiledMethodCallExpression =
@@ -1923,16 +1925,129 @@ private fun result_assert_succeeds_lambda_argument_code(actual: CompiledExpressi
     case _ -> "unsupported(\"result assert succeeds\")"
 
 private fun extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let parameters = bound_extension_method_parameters(function, receiverType)
     java_function_name(function)
         + "("
-        + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
-        + extension_method_call_argument_tail(function.parameters, call.arguments, env, module, allModules)
+        + expression_code(call.receiver, env, receiverType, module, allModules)
+        + extension_method_call_argument_tail(function.parameters, parameters, call.arguments, env, module, allModules)
         + ")"
 
-private fun extension_method_call_argument_tail(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun extension_method_call_argument_tail(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if arguments.is_empty()
     then ""
-    else ", " + parameter_expression_list_code(parameters, arguments, env, module, allModules)
+    else ", " + extension_parameter_expression_list_code(declaredParameters, boundParameters, arguments, env, module, allModules)
+
+private fun extension_parameter_expression_list_code(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let fallback = expression_type(expression, env, module, allModules)
+        let declaredType = parameter_type_at(declaredParameters, 0, fallback)
+        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        extension_argument_code(expression, declaredType, boundType, env, module, allModules)
+        + extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], env, module, allModules)
+
+private fun extension_parameter_expression_list_tail(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let fallback = expression_type(expression, env, module, allModules)
+        let declaredType = parameter_type_at(declaredParameters, 0, fallback)
+        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        ", " + extension_argument_code(expression, declaredType, boundType, env, module, allModules)
+        + extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], env, module, allModules)
+
+private fun extension_argument_code(expression: CompiledExpression, declaredType: CompiledTypeReference, boundType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = expression_code(expression, env, boundType, module, allModules)
+    if extension_function_argument_needs_erased_cast(declaredType, boundType)
+    then "((" + java_type(declaredType) + ") (" + raw_java_functional_type(declaredType) + ") " + code + ")"
+    else code
+
+private fun extension_function_argument_needs_erased_cast(declaredType: CompiledTypeReference, boundType: CompiledTypeReference): bool =
+    function_type(declaredType) & function_type(boundType) & java_type(declaredType) != java_type(boundType)
+
+private fun raw_java_functional_type(type: CompiledTypeReference): String =
+    let parameters = function_type_parameters(type)
+    if parameters.is_empty()
+    then "java.util.function.Supplier"
+    else if parameters.size().value == 1
+    then "java.util.function.Function"
+    else if parameters.size().value == 2
+    then "java.util.function.BiFunction"
+    else if parameters.size().value == 3
+    then "__CapyFunction3"
+    else if parameters.size().value == 4
+    then "__CapyFunction4"
+    else "java.lang.Object"
+
+private fun bound_extension_method_parameters(function: CompiledFunction, receiverType: CompiledTypeReference): List[CompiledFunctionParameter] =
+    bound_extension_parameters(function.parameters, extension_method_type_bindings(function, receiverType))
+
+private fun bound_extension_parameters(parameters: List[CompiledFunctionParameter], bindings: List[JavaBinding]): List[CompiledFunctionParameter] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } -> [CompiledFunctionParameter {
+        name: parameter.name,
+        typeReference: bound_extension_type(parameter.typeReference, bindings),
+        location: parameter.location
+    }] + bound_extension_parameters(parameters[1:], bindings)
+
+private fun bound_extension_method_return_type(function: CompiledFunction, receiverType: CompiledTypeReference): CompiledTypeReference =
+    bound_extension_type(function.returnType, extension_method_type_bindings(function, receiverType))
+
+private fun extension_method_type_bindings(function: CompiledFunction, receiverType: CompiledTypeReference): List[JavaBinding] =
+    inferred_type_bindings(schema_type_reference(method_owner_name(function.name)), receiverType)
+
+private fun bound_extension_type(type: CompiledTypeReference, bindings: List[JavaBinding]): CompiledTypeReference =
+    if function_type(type)
+    then bound_function_type(type, bindings)
+    else bound_schema_type(type, bindings)
+
+private fun bound_function_type(type: CompiledTypeReference, bindings: List[JavaBinding]): CompiledTypeReference =
+    let parameters = bound_schema_types(function_type_parameters(type), bindings)
+    let returnType = bound_schema_type(function_type_return_type_with_arguments(type), bindings)
+    CompiledTypeReference {
+        name: function_type_reference_text(parameters, returnType),
+        arguments: []
+    }
+
+private fun function_type_return_type_with_arguments(type: CompiledTypeReference): CompiledTypeReference =
+    let arrow = first_index_of(type.name, "=", 0)
+    if arrow < 0
+    then object_type()
+    else CompiledTypeReference {
+        name: type.name[arrow + 2, type.name.size().value],
+        arguments: type.arguments
+    }
+
+private fun function_type_reference_text(parameters: List[CompiledTypeReference], returnType: CompiledTypeReference): String =
+    function_type_parameter_reference_text(parameters) + "=>" + type_reference_text(returnType)
+
+private fun function_type_parameter_reference_text(parameters: List[CompiledTypeReference]): String =
+    if parameters.is_empty()
+    then "()"
+    else if parameters[1:].is_empty()
+    then type_reference_text(function_type_parameter_at(parameters, 0))
+    else "(" + type_reference_list_text(parameters) + ")"
+
+private fun type_reference_text(type: CompiledTypeReference): String =
+    type.name + type_reference_arguments_text(type.arguments)
+
+private fun type_reference_arguments_text(arguments: List[CompiledTypeReference]): String =
+    if arguments.is_empty()
+    then ""
+    else "[" + type_reference_list_text(arguments) + "]"
+
+private fun type_reference_list_text(types: List[CompiledTypeReference]): String =
+    match types[0] with
+    case None -> ""
+    case Some { type } -> type_reference_text(type) + type_reference_list_tail(types[1:])
+
+private fun type_reference_list_tail(types: List[CompiledTypeReference]): String =
+    match types[0] with
+    case None -> ""
+    case Some { type } -> ", " + type_reference_text(type) + type_reference_list_tail(types[1:])
 
 private fun primitive_conversion_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "((" + java_type(method_call_type(call, env, module, allModules)) + ") "
@@ -2229,7 +2344,7 @@ private fun local_java_binding(name: String, typeReference: CompiledTypeReferenc
 private fun binding_type(binding: CompiledLetBinding, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if binding.typeReference.name.is_empty()
     then
-        let valueType = binding_value_type(binding, env, module, allModules)
+        let valueType = inferred_binding_value_type(binding.value, binding_value_type(binding, env, module, allModules), env, module, allModules)
         if binding.operator == "<-"
         then first_type_argument(valueType)
         else valueType
@@ -2237,6 +2352,14 @@ private fun binding_type(binding: CompiledLetBinding, env: List[JavaBinding], mo
 
 private fun binding_value_type(binding: CompiledLetBinding, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     expression_type(binding.value, env, module, allModules)
+
+private fun inferred_binding_value_type(expression: CompiledExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match expression with
+    case CompiledDataLiteral literal ->
+        if valueType.arguments.is_empty()
+        then inferred_data_literal_reference(valueType.name, literal, env, module, allModules)
+        else valueType
+    case _ -> valueType
 
 private fun assert_that_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let actualType = expression_type(expression, env, module, allModules)
@@ -2842,6 +2965,55 @@ private fun preferred_result_type(first: CompiledTypeReference, second: Compiled
 private fun data_type_reference(typeName: String): CompiledTypeReference =
     CompiledTypeReference { name: typeName, arguments: [] }
 
+private fun inferred_data_literal_reference(typeName: String, literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_data_type(typeName, module, allModules) with
+    case Some { dataType } ->
+        let parameters = data_type_parameters(dataType, module, allModules)
+        if parameters.is_empty()
+        then data_type_reference(typeName)
+        else CompiledTypeReference {
+            name: typeName,
+            arguments: data_literal_type_arguments(parameters, data_literal_type_parameter_bindings(dataType, literal.fields, env, module, allModules))
+        }
+    case None -> data_type_reference(typeName)
+
+private fun data_literal_type_parameter_bindings(dataType: String, fields: List[CompiledDataField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaBinding] =
+    data_literal_schema_bindings(data_type_fields(dataType, module, allModules), fields, 0, env, module, allModules)
+
+private fun data_literal_schema_bindings(schemaFields: List[String], fields: List[CompiledDataField], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaBinding] =
+    match schemaFields[0] with
+    case None -> []
+    case Some { schemaField } ->
+        let fieldValue = data_constructor_argument_value(fields, schema_field_name(schemaField), "$" + idx)
+        let fieldType = schema_type_reference(schema_field_type_name(schemaField))
+        inferred_type_bindings(fieldType, expression_type(fieldValue, env, module, allModules))
+            + data_literal_schema_bindings(schemaFields[1:], fields, idx + 1, env, module, allModules)
+
+private fun data_literal_type_arguments(parameters: List[String], bindings: List[JavaBinding]): List[CompiledTypeReference] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [data_literal_type_argument(parameter, bindings)] + data_literal_type_arguments(parameters[1:], bindings)
+
+private fun data_literal_type_argument(parameter: String, bindings: List[JavaBinding]): CompiledTypeReference =
+    match lookup_type_parameter(parameter, bindings) with
+    case Some { value } -> value
+    case None -> object_type()
+
+private fun inferred_type_bindings(expected: CompiledTypeReference, actual: CompiledTypeReference): List[JavaBinding] =
+    if type_parameter(expected)
+    then [java_binding(expected.name, actual)]
+    else inferred_type_argument_bindings(expected.arguments, actual.arguments)
+
+private fun inferred_type_argument_bindings(expected: List[CompiledTypeReference], actual: List[CompiledTypeReference]): List[JavaBinding] =
+    match expected[0] with
+    case None -> []
+    case Some { expectedType } ->
+        match actual[0] with
+        case Some { actualType } ->
+            inferred_type_bindings(expectedType, actualType) + inferred_type_argument_bindings(expected[1:], actual[1:])
+        case None -> inferred_type_argument_bindings(expected[1:], [])
+
 private fun variable_expression_type(variable: CompiledVariableExpression, env: List[JavaBinding], module: CompiledModule): CompiledTypeReference =
     if binding_exists(variable.name, env)
     then lookup_binding(variable.name, env)
@@ -2988,7 +3160,7 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     else if call.name == "to_long"
     then long_type()
     else match find_extension_method(call, env, module, allModules) with
-        case Some { function } -> function.returnType
+        case Some { function } -> bound_extension_method_return_type(function, expression_type(call.receiver, env, module, allModules))
         case None -> assert_type()
 
 private fun result_map_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -3902,9 +4074,11 @@ private fun regex_method_emittable(call: CompiledMethodCallExpression, env: List
         & type_assignable(string_type(), expression_type(argumentExpression, env, module, allModules))
 
 private fun extension_method_call_emittable(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    concrete_return_type(function.returnType)
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let parameters = bound_extension_method_parameters(function, receiverType)
+    concrete_return_type(bound_extension_method_return_type(function, receiverType))
         & expression_emittable(call.receiver, env, module, allModules)
-        & parameters_assignable(function.parameters, call.arguments, env, module, allModules)
+        & parameters_assignable(parameters, call.arguments, env, module, allModules)
         & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
 
 private fun native_stdlib_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -4745,10 +4919,34 @@ private fun java_base_helpers(): String =
         + "        throw new UnsupportedOperationException(message);" + newline()
         + "    }" + newline() + newline()
         + "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data(java.lang.String type, java.util.Map<java.lang.String, ?> fields) {" + newline()
-        + "        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>();" + newline()
+        + "        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>() {" + newline()
+        + "            @Override" + newline()
+        + "            public java.lang.String toString() {" + newline()
+        + "                return __capy_data_to_string(this);" + newline()
+        + "            }" + newline()
+        + "        };" + newline()
         + "        result.put(\"__type\", type);" + newline()
         + "        result.putAll(fields);" + newline()
         + "        return java.util.Collections.unmodifiableMap(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_data_to_string(java.util.Map<java.lang.String, ?> data) {" + newline()
+        + "        java.lang.String type = java.lang.String.valueOf(data.get(\"__type\"));" + newline()
+        + "        java.lang.StringBuilder builder = new java.lang.StringBuilder(type).append(\" {\");" + newline()
+        + "        java.util.List<java.lang.String> keys = new java.util.ArrayList<>(data.keySet());" + newline()
+        + "        keys.remove(\"__type\");" + newline()
+        + "        java.util.Collections.sort(keys);" + newline()
+        + "        boolean first = true;" + newline()
+        + "        for (java.lang.String key : keys) {" + newline()
+        + "            if (!first) {" + newline()
+        + "                builder.append(\", \");" + newline()
+        + "            }" + newline()
+        + "            builder.append(key).append(\"=\").append(__capy_render_value(data.get(key)));" + newline()
+        + "            first = false;" + newline()
+        + "        }" + newline()
+        + "        return builder.append(\"}\").toString();" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_render_value(java.lang.Object value) {" + newline()
+        + "        return java.lang.String.valueOf(value);" + newline()
         + "    }" + newline() + newline()
         + "    private static boolean __capy_data_is(java.lang.Object value, java.lang.String type) {" + newline()
         + "        return value instanceof java.util.Map<?, ?> map && type.equals(map.get(\"__type\"));" + newline()
