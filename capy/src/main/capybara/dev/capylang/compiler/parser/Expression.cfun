@@ -17,6 +17,7 @@ union Expression =
     | FunctionCallExpression
     | FunctionReferenceExpression
     | MethodCallExpression
+    | WithExpression
     | LambdaExpression
     | ListLiteral
     | SetLiteral
@@ -43,6 +44,7 @@ data UnaryExpression { operator: String, expression: Expression, location: Sourc
 data FunctionCallExpression { name: String, arguments: List[Expression], location: SourceLocation }
 data FunctionReferenceExpression { name: String, location: SourceLocation }
 data MethodCallExpression { receiver: Expression, name: String, arguments: List[Expression], location: SourceLocation }
+data WithExpression { receiver: Expression, fields: List[DataField], location: SourceLocation }
 data LambdaExpression { parameters: List[String], body: Expression, location: SourceLocation }
 data ListLiteral { values: List[Expression], location: SourceLocation }
 data SetLiteral { values: List[Expression], location: SourceLocation }

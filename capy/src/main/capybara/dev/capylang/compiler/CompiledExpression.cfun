@@ -17,6 +17,7 @@ union CompiledExpression =
     | CompiledFunctionCallExpression
     | CompiledFunctionReferenceExpression
     | CompiledMethodCallExpression
+    | CompiledWithExpression
     | CompiledLambdaExpression
     | CompiledListLiteral
     | CompiledSetLiteral
@@ -43,6 +44,7 @@ data CompiledUnaryExpression { operator: String, expression: CompiledExpression,
 data CompiledFunctionCallExpression { name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
 data CompiledFunctionReferenceExpression { name: String, location: CompiledSourceLocation }
 data CompiledMethodCallExpression { receiver: CompiledExpression, name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
+data CompiledWithExpression { receiver: CompiledExpression, fields: List[CompiledDataField], location: CompiledSourceLocation }
 data CompiledLambdaExpression { parameters: List[String], body: CompiledExpression, location: CompiledSourceLocation }
 data CompiledListLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
 data CompiledSetLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }

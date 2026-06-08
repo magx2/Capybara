@@ -1,6 +1,6 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -331,6 +331,7 @@ private fun expression_code(
     case CompiledFunctionCallExpression call -> value_conversion_code(function_call_code(call, env, expectedType, module, allModules), function_call_type(call, env, module, allModules), expectedType, module, allModules)
     case CompiledFunctionReferenceExpression reference -> function_reference_code(reference, expectedType, module, allModules)
     case CompiledMethodCallExpression call -> value_conversion_code(method_call_code(call, env, expectedType, module, allModules), method_call_type(call, env, module, allModules), expectedType, module, allModules)
+    case CompiledWithExpression withExpression -> value_conversion_code(with_expression_code(withExpression, env, module, allModules), with_expression_type(withExpression, env, module, allModules), expectedType, module, allModules)
     case CompiledLambdaExpression lambda -> lambda_expression_code(lambda, env, expectedType, module, allModules)
     case CompiledListLiteral literal -> list_literal_code(literal, env, expectedType, module, allModules)
     case CompiledSetLiteral literal -> "java.util.Set.of(" + expression_list_code(literal.values, env, module, allModules) + ")"
@@ -2745,6 +2746,37 @@ private fun data_field_entries_tail(fields: List[CompiledDataField], env: List[J
     case None -> ""
     case Some _ -> ", " + data_field_entries_code(fields, env, dataType, bindings, module, allModules)
 
+private fun with_expression_code(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = with_expression_type(withExpression, env, module, allModules)
+    "__capy_merge_data("
+        + expression_code(withExpression.receiver, env, receiverType, module, allModules)
+        + ", __capy_data(\"\", " + with_fields_code(withExpression.fields, receiverType, env, module, allModules) + "))"
+
+private fun with_fields_code(fields: List[CompiledDataField], receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if fields.is_empty()
+    then "java.util.Map.of()"
+    else "java.util.Map.ofEntries(" + with_field_entries_code(fields, receiverType, env, module, allModules) + ")"
+
+private fun with_field_entries_code(fields: List[CompiledDataField], receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        let fieldType = with_field_type(field.name, receiverType, expression_type(field.value, env, module, allModules), module, allModules)
+        "java.util.Map.entry(\"" + escape_java_string(field.name) + "\", " + expression_code(field.value, env, fieldType, module, allModules) + ")"
+        + with_field_entries_tail(fields[1:], receiverType, env, module, allModules)
+
+private fun with_field_entries_tail(fields: List[CompiledDataField], receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some _ -> ", " + with_field_entries_code(fields, receiverType, env, module, allModules)
+
+private fun with_field_type(name: String, receiverType: CompiledTypeReference, fallback: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_data_type(receiverType.name, module, allModules) with
+    case Some { dataType } ->
+        let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
+        declared_named_field_type(name, data_type_fields(dataType, module, allModules), bindings, fallback)
+    case None -> fallback
+
 private fun data_constructor_field_name(name: String, dataType: /capy/lang/Option[String], module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_generator_string_has_prefix(name, "$")
     then match dataType with
@@ -3065,6 +3097,7 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledFunctionCallExpression call -> function_call_type(call, env, module, allModules)
     case CompiledFunctionReferenceExpression reference -> function_reference_type(reference, module, allModules)
     case CompiledMethodCallExpression call -> method_call_type(call, env, module, allModules)
+    case CompiledWithExpression withExpression -> with_expression_type(withExpression, env, module, allModules)
     case CompiledLambdaExpression _ -> supplier_type(assert_type())
     case CompiledListLiteral literal -> list_type(first_expression_type(literal.values, env, module, allModules))
     case CompiledSetLiteral literal -> set_type(first_expression_type(literal.values, env, module, allModules))
@@ -3097,6 +3130,9 @@ private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List
                 then inferred_data_literal_reference(declaredType.name, literal, env, module, allModules)
                 else declaredType
         else data_constructor_pipeline_type(declaredType.name, parentConstructors + data_own_constructor_type_names(declaredType.name, module), module, allModules)
+
+private fun with_expression_type(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    expression_type(withExpression.receiver, env, module, allModules)
 
 private fun data_constructor_literal_type(typeName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if result_type_name(function.returnType.name)
@@ -4018,6 +4054,7 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledFunctionCallExpression e -> function_call_emittable(e, env, module, allModules)
     case CompiledFunctionReferenceExpression e -> function_reference_emittable(e, module, allModules)
     case CompiledMethodCallExpression e -> java_method_emittable(e, env, module, allModules)
+    case CompiledWithExpression e -> expression_emittable(e.receiver, env, module, allModules) & data_fields_emittable(e.fields, env, module, allModules)
     case CompiledLambdaExpression lambda -> lambda_parameters_supported(lambda.parameters) & expression_emittable(lambda.body, lambda_env(lambda.parameters, env), module, allModules)
     case CompiledListLiteral e -> expressions_emittable(e.values, env, module, allModules)
     case CompiledSetLiteral e -> expressions_emittable(e.values, env, module, allModules)
