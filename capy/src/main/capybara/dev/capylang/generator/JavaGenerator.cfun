@@ -914,7 +914,8 @@ private fun non_result_expression_type(expression: CompiledExpression, expressio
     case _ -> expressionType
 
 private fun result_match_expression_type(cases: List[CompiledMatchCase], expressionType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    match cases[0] with
+    let orderedCases = ordered_match_cases(cases)
+    match orderedCases[0] with
     case Some { matchCase } -> result_expression_type(matchCase.body, expressionType, env, module, allModules)
     case None -> expressionType
 
@@ -2619,6 +2620,8 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
     then primitive_char_constructor_code(literal, env, module, allModules)
     else if stdlib_date_time_data_literal(literal.typeName, module.imports)
     then stdlib_date_time_data_literal_code(literal, env, module, allModules)
+    else if option_constructor_type(literal.typeName)
+    then option_data_literal_code(literal, env, expectedType, module, allModules)
     else if program_success_literal(literal.typeName, module.imports)
     then "capy.lang.Program.Success.INSTANCE"
     else if program_failed_literal(literal.typeName, module.imports)
@@ -3112,11 +3115,31 @@ private fun match_expression_code(matchExpression: CompiledMatchExpression, env:
     let valueType = expression_type(matchExpression.value, env, module, allModules)
     let valueCode = expression_code(matchExpression.value, env, valueType, module, allModules)
     let matchValueName = "__capy_match_value_" + matchExpression.location.line + "_" + matchExpression.location.column
+    let cases = ordered_match_cases(matchExpression.cases)
     "((java.util.function.Supplier<" + boxed_java_type(expectedType) + ">) () -> {" + newline()
     + "            " + java_type(valueType) + " " + matchValueName + " = " + valueCode + ";" + newline()
-    + match_case_statements(matchExpression.cases, matchValueName, valueType, env, expectedType, module, allModules, "            ")
+    + match_case_statements(cases, matchValueName, valueType, env, expectedType, module, allModules, "            ")
     + "            return unsupported(\"match\");" + newline()
     + "        }).get()"
+
+private fun ordered_match_cases(cases: List[CompiledMatchCase]): List[CompiledMatchCase] =
+    guarded_match_cases(cases) + unguarded_match_cases(cases)
+
+private fun guarded_match_cases(cases: List[CompiledMatchCase]): List[CompiledMatchCase] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } ->
+        if matchCase.hasGuard
+        then [matchCase] + guarded_match_cases(cases[1:])
+        else guarded_match_cases(cases[1:])
+
+private fun unguarded_match_cases(cases: List[CompiledMatchCase]): List[CompiledMatchCase] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } ->
+        if matchCase.hasGuard
+        then unguarded_match_cases(cases[1:])
+        else [matchCase] + unguarded_match_cases(cases[1:])
 
 private fun match_case_statements(cases: List[CompiledMatchCase], valueCode: String, valueType: CompiledTypeReference, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match cases[0] with
@@ -3250,6 +3273,20 @@ private fun match_binding_whole_value_type(matchCase: CompiledMatchCase, valueTy
 private fun primitive_match_type(typeName: String): bool =
     typeName == "byte" | typeName == "int" | typeName == "long" | typeName == "float" | typeName == "double" | typeName == "bool" | typeName == "String"
 
+private fun option_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if option_some_constructor(literal.typeName)
+    then match literal.fields[0] with
+        case Some { field } ->
+            let valueType = option_data_literal_value_expected_type(field.value, expectedType, env, module, allModules)
+            "java.util.Optional.ofNullable(" + expression_code(field.value, env, valueType, module, allModules) + ")"
+        case None -> "java.util.Optional.ofNullable(null)"
+    else "java.util.Optional.empty()"
+
+private fun option_data_literal_value_expected_type(value: CompiledExpression, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if option_type_name(expectedType.name)
+    then first_type_argument(expectedType)
+    else expression_type(value, env, module, allModules)
+
 private fun expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expression with
     case CompiledUnsupportedExpression unsupported -> if compiled_placeholder_source(unsupported.source) then nothing_type() else object_type()
@@ -3298,6 +3335,10 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
 private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if program_success_literal(literal.typeName, module.imports) | program_failed_literal(literal.typeName, module.imports)
     then CompiledTypeReference { name: "/capy/lang/Program", arguments: [] }
+    else if option_some_constructor(literal.typeName)
+    then option_type(option_literal_value_type(literal, env, module, allModules))
+    else if option_none_constructor(literal.typeName)
+    then option_type(nothing_type())
     else if result_success_literal(literal.typeName, module.imports)
     then result_type(result_literal_value_type(literal, env, module, allModules))
     else if result_error_literal(literal.typeName, module.imports)
@@ -3424,7 +3465,8 @@ private fun variable_expression_type(variable: CompiledVariableExpression, env: 
             case None -> object_type()
 
 private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    match cases[0] with
+    let orderedCases = ordered_match_cases(cases)
+    match orderedCases[0] with
     case None -> object_type()
     case Some { matchCase } -> expression_type(matchCase.body, match_env(matchCase.bindings, matchCase, object_type(), 0, env, module, allModules), module, allModules)
 
