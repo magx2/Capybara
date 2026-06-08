@@ -86,8 +86,9 @@ private fun explicit_static_imports(functions: List[CompiledFunction], declarati
         else explicit_static_imports(functions[1:], declaration, className)
 
 private fun static_import_function(function: CompiledFunction, declaration: CompiledImportDeclaration): bool =
-    !compiled_constant(function)
+    !compiled_schema(function)
         & function.visibility != "private"
+        & function.visibility != "const:private"
         & import_includes_name(function.name, declaration)
 
 private fun stdlib_import(modulePath: String): bool =
@@ -351,7 +352,10 @@ private fun variable_expression_code(variable: CompiledVariableExpression, env: 
     then numeric_widening_code("capy.lang.Program.DEFAULT_FAILED_EXIT_CODE", int_type(), expectedType)
     else match imported_stdlib_constant(variable.name, module.imports) with
         case Some { constant } -> value_conversion_code(constant.javaName, constant.typeReference, expectedType, module, allModules)
-        case None -> numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
+        case None ->
+            match find_constant_in_scope(variable.name, module, allModules) with
+            case Some { function } -> value_conversion_code(java_identifier(variable.name), function.returnType, expectedType, module, allModules)
+            case None -> numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
 
 private fun placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
     "__capy_not_implemented(\"" + escape_java_string(placeholder_message(placeholder, module)) + "\")"
@@ -3169,7 +3173,7 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledDoubleLiteral _ -> double_type()
     case CompiledBoolLiteral _ -> bool_type()
     case CompiledStringLiteral _ -> string_type()
-    case CompiledVariableExpression variable -> variable_expression_type(variable, env, module)
+    case CompiledVariableExpression variable -> variable_expression_type(variable, env, module, allModules)
     case CompiledIfExpression ifExpression -> expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBinaryExpression binary ->
         let leftType = expression_type(binary.left, env, module, allModules)
@@ -3319,14 +3323,17 @@ private fun inferred_type_argument_bindings(expected: List[CompiledTypeReference
             inferred_type_bindings(expectedType, actualType) + inferred_type_argument_bindings(expected[1:], actual[1:])
         case None -> inferred_type_argument_bindings(expected[1:], [])
 
-private fun variable_expression_type(variable: CompiledVariableExpression, env: List[JavaBinding], module: CompiledModule): CompiledTypeReference =
+private fun variable_expression_type(variable: CompiledVariableExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if binding_exists(variable.name, env)
     then lookup_binding(variable.name, env)
     else if variable.name == "DEFAULT_FAILED_EXIT_CODE" & program_member_imported(variable.name, module.imports)
     then int_type()
     else match imported_stdlib_constant(variable.name, module.imports) with
         case Some { constant } -> constant.typeReference
-        case None -> object_type()
+        case None ->
+            match find_constant_in_scope(variable.name, module, allModules) with
+            case Some { function } -> function.returnType
+            case None -> object_type()
 
 private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match cases[0] with
@@ -3669,6 +3676,47 @@ private fun find_function_in_scope(name: String, module: CompiledModule, allModu
     match find_function(name, module.functions) with
     case Some { function } -> /capy/lang/Option.Some { function }
     case None -> find_function_in_imports(name, module.imports, module, allModules)
+
+private fun constant_exists_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_constant_in_scope(name, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+private fun find_constant_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match find_constant(name, module.functions) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_constant_in_imports(name, module.imports, module, allModules)
+
+private fun find_constant(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if function.name == name & compiled_constant(function) & !compiled_schema(function)
+        then /capy/lang/Option.Some { function }
+        else find_constant(name, functions[1:])
+
+private fun find_constant_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if constant_import_matches(name, declaration)
+        then find_constant_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else find_constant_in_imports(name, imports[1:], module, allModules)
+
+private fun find_constant_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledFunction] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_constant_in_imported_module(name, rest, module, allModules, importedModule)
+    case None -> find_constant_in_imports(name, rest, module, allModules)
+
+private fun find_constant_in_imported_module(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunction] =
+    match find_constant(name, importedModule.functions) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_constant_in_imports(name, rest, module, allModules)
+
+private fun constant_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & import_includes_name(name, declaration)
 
 private fun find_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match find_function_for_arguments_in_functions(name, arguments, env, module.functions, module, allModules) with
@@ -4270,7 +4318,11 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledDoubleLiteral _ -> true
     case CompiledBoolLiteral _ -> true
     case CompiledStringLiteral _ -> true
-    case CompiledVariableExpression variable -> binding_exists(variable.name, env) | program_member_imported(variable.name, module.imports) | imported_stdlib_constant_exists(variable.name, module.imports)
+    case CompiledVariableExpression variable ->
+        binding_exists(variable.name, env)
+            | program_member_imported(variable.name, module.imports)
+            | imported_stdlib_constant_exists(variable.name, module.imports)
+            | constant_exists_in_scope(variable.name, module, allModules)
     case CompiledIfExpression e -> truthy_expression_emittable(e.condition, env, module, allModules) & expression_emittable(e.thenBranch, env, module, allModules) & expression_emittable(e.elseBranch, env, module, allModules)
     case CompiledBinaryExpression e ->
         let leftType = expression_type(e.left, env, module, allModules)
