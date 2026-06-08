@@ -180,7 +180,47 @@ private fun infer_if_type(ifExpression: IfExpression, env: List[FunctionParamete
     then elseType
     else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
     then thenType
+    else if compiler_data_object_type(thenType) & compiler_data_object_type(elseType)
+    then compiler_preferred_data_object_type(thenType, elseType)
     else missing_type()
+
+private fun compiler_data_object_type(type: TypeReference): bool =
+    !type.name.is_empty()
+        & !compiler_numeric_type(type)
+        & type.name != "bool"
+        & type.name != "String"
+        & type.name != "List"
+        & type.name != "Set"
+        & type.name != "Dict"
+        & type.name != "Tuple"
+        & type.name != "Effect"
+        & type.name != "Assert"
+        & compiler_uppercase_type_name(type.name)
+
+private fun compiler_uppercase_type_name(name: String): bool =
+    let member = compiler_unqualified_type_name(name)
+    match member[0] with
+    case None -> false
+    case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
+
+private fun compiler_unqualified_type_name(name: String): String =
+    let dot = compiler_last_index_of(name, ".", 0, -1)
+    let slash = compiler_last_index_of(name, "/", 0, -1)
+    let idx = if dot > slash then dot else slash
+    if idx < 0 then name else name[idx + 1, name.size().value]
+
+private fun compiler_last_index_of(value: String, needle: String, idx: int, found: int): int =
+    if idx >= value.size().value
+    then found
+    else match value[idx] with
+        case None -> found
+        case Some { char } ->
+            compiler_last_index_of(value, needle, idx + 1, if char == needle then idx else found)
+
+private fun compiler_preferred_data_object_type(first: TypeReference, second: TypeReference): TypeReference =
+    if first.arguments.is_empty() & !second.arguments.is_empty()
+    then second
+    else first
 
 private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
     let leftType = infer_return_type(binary.left, env, depth + 1)
