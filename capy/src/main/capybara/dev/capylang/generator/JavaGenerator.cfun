@@ -377,6 +377,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then collection_plus_code(binary, leftType, rightType, env, module, allModules)
     else if collection_minus_expression(binary.operator, leftType, rightType)
     then collection_minus_code(binary, leftType, rightType, env, module, allModules)
+    else if set_binary_expression(binary.operator, leftType, rightType)
+    then set_binary_code(binary, leftType, rightType, env, module, allModules)
     else if boolean_binary_operator(binary.operator)
     then "(" + truthy_expression_code(binary.left, env, module, allModules)
         + " " + java_boolean_operator(binary.operator) + " "
@@ -479,6 +481,37 @@ private fun collection_minus_code(binary: CompiledBinaryExpression, leftType: Co
     else if rightType.name == "List"
     then "__capy_list_remove_all(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
     else "__capy_list_remove(" + leftCode + ", " + expression_code(binary.right, env, first_type_argument(leftType), module, allModules) + ")"
+
+private fun set_binary_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    leftType.name == "Set" & rightType.name == "Set" & set_binary_operator(operator)
+
+private fun set_binary_operator(operator: String): bool =
+    set_predicate_operator(operator) | set_algebra_operator(operator)
+
+private fun set_predicate_operator(operator: String): bool =
+    operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
+
+private fun set_algebra_operator(operator: String): bool =
+    operator == "∪" | operator == "∩" | operator == "△" | operator == "×"
+
+private fun set_binary_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftCode = expression_code(binary.left, env, leftType, module, allModules)
+    let rightCode = expression_code(binary.right, env, rightType, module, allModules)
+    if binary.operator == "⊆"
+    then "__capy_set_subset(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊂"
+    then "__capy_set_proper_subset(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊇"
+    then "__capy_set_subset(" + rightCode + ", " + leftCode + ")"
+    else if binary.operator == "⊃"
+    then "__capy_set_proper_subset(" + rightCode + ", " + leftCode + ")"
+    else if binary.operator == "∪"
+    then "__capy_set_concat(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "∩"
+    then "__capy_set_intersection(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "△"
+    then "__capy_set_symmetric_difference(" + leftCode + ", " + rightCode + ")"
+    else "__capy_set_cartesian_product(" + leftCode + ", " + rightCode + ")"
 
 private fun string_equality_operator(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     (operator == "==" | operator == "!=") & (leftType.name == "String" | rightType.name == "String")
@@ -915,6 +948,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then collection_is_empty_code(call, env, module, allModules)
     else if collection_predicate_call(call, env, module, allModules)
     then collection_predicate_call_code(call, env, module, allModules)
+    else if set_method_call(call, env, module, allModules)
+    then set_method_call_code(call, env, module, allModules)
     else if native_stdlib_method_call(call, env, module, allModules)
     then native_stdlib_method_code(call, env, expectedType, module, allModules)
     else if seq_as_list_call(call, env, module, allModules)
@@ -1057,6 +1092,55 @@ private fun collection_seq_predicate_code(name: String, receiverCode: String, la
 
 private fun java_stream_predicate_method(name: String): String =
     if name == "any" then "anyMatch" else "allMatch"
+
+private fun set_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    receiverType.name == "Set" & set_method_arity(call)
+
+private fun set_method_arity(call: CompiledMethodCallExpression): bool =
+    if set_no_argument_method(call.name)
+    then call.arguments.is_empty()
+    else if set_one_argument_method(call.name)
+    then one_method_argument(call.arguments)
+    else false
+
+private fun set_no_argument_method(name: String): bool =
+    name == "power_set" | name == "℘"
+
+private fun set_one_argument_method(name: String): bool =
+    name == "contains"
+        | name == "is_subset_of" | name == "is_proper_subset_of"
+        | name == "is_superset_of" | name == "is_proper_superset_of"
+        | name == "union" | name == "intersection" | name == "difference"
+        | name == "symmetric_difference" | name == "cartesian_product"
+
+private fun set_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
+    if call.name == "power_set" | call.name == "℘"
+    then "__capy_set_power_set(" + receiverCode + ")"
+    else
+        let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+        let argumentCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
+        if call.name == "contains"
+        then receiverCode + ".contains(" + argumentCode + ")"
+        else if call.name == "is_subset_of"
+        then "__capy_set_subset(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_proper_subset_of"
+        then "__capy_set_proper_subset(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_superset_of"
+        then "__capy_set_subset(" + argumentCode + ", " + receiverCode + ")"
+        else if call.name == "is_proper_superset_of"
+        then "__capy_set_proper_subset(" + argumentCode + ", " + receiverCode + ")"
+        else if call.name == "union"
+        then "__capy_set_concat(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "intersection"
+        then "__capy_set_intersection(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "difference"
+        then "__capy_set_remove_all(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "symmetric_difference"
+        then "__capy_set_symmetric_difference(" + receiverCode + ", " + argumentCode + ")"
+        else "__capy_set_cartesian_product(" + receiverCode + ", " + argumentCode + ")"
 
 private fun native_stdlib_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -2117,6 +2201,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then bool_type()
     else if collection_predicate_call(call, env, module, allModules)
     then bool_type()
+    else if set_method_call(call, env, module, allModules)
+    then set_method_call_type(call, env, module, allModules)
     else if seq_as_list_call(call, env, module, allModules)
     then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
     else if call.name == "map" & expression_type(call.receiver, env, module, allModules).name == "Effect"
@@ -2173,6 +2259,21 @@ private fun native_stdlib_method_type(call: CompiledMethodCallExpression, env: L
     else if receiverType.name == "Tuple"
     then tuple_get_method_type(call, receiverType)
     else object_type()
+
+private fun set_method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    if set_predicate_method(call.name)
+    then bool_type()
+    else if call.name == "cartesian_product"
+    then set_type(tuple_type([first_type_argument(receiverType), first_type_argument(expression_type(argument(call.arguments, 0), env, module, allModules))]))
+    else if call.name == "power_set" | call.name == "℘"
+    then set_type(receiverType)
+    else receiverType
+
+private fun set_predicate_method(name: String): bool =
+    name == "contains"
+        | name == "is_subset_of" | name == "is_proper_subset_of"
+        | name == "is_superset_of" | name == "is_proper_superset_of"
 
 private fun tuple_get_method_type(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference): CompiledTypeReference =
     tuple_argument(receiverType.arguments, normalized_tuple_type_index(receiverType.arguments, argument(call.arguments, 0), 0))
@@ -2575,6 +2676,12 @@ private fun lookup_type_parameter(name: String, bindings: List[JavaBinding]): /c
 private fun binary_result_type(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): CompiledTypeReference =
     if boolean_binary_operator(operator)
     then bool_type()
+    else if set_binary_expression(operator, leftType, rightType) & set_predicate_operator(operator)
+    then bool_type()
+    else if set_binary_expression(operator, leftType, rightType) & operator == "×"
+    then set_type(tuple_type([first_type_argument(leftType), first_type_argument(rightType)]))
+    else if set_binary_expression(operator, leftType, rightType)
+    then leftType
     else if comparison_operator(operator)
     then bool_type()
     else if operator == "+" & (leftType.name == "String" | rightType.name == "String")
@@ -2770,6 +2877,8 @@ private fun java_binary_operator_emittable(binary: CompiledBinaryExpression, env
     then remainder_type(leftType) & remainder_type(rightType)
     else if binary.operator == "-" | binary.operator == "*" | binary.operator == "/"
     then collection_minus_expression(binary.operator, leftType, rightType) | (numeric_type(leftType) & numeric_type(rightType)) | string_left_numeric_operator(binary.operator, leftType, rightType)
+    else if set_binary_expression(binary.operator, leftType, rightType)
+    then true
     else if binary.operator == ">" | binary.operator == "<" | binary.operator == ">=" | binary.operator == "<="
     then numeric_type(leftType) & numeric_type(rightType)
     else if binary.operator == "?"
@@ -2830,6 +2939,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then expression_emittable(call.receiver, env, module, allModules)
     else if collection_predicate_call(call, env, module, allModules)
     then collection_predicate_call_emittable(call, receiverType, env, module, allModules)
+    else if set_method_call(call, env, module, allModules)
+    then set_method_call_emittable(call, receiverType, env, module, allModules)
     else if native_stdlib_method_call(call, env, module, allModules)
     then native_stdlib_method_emittable(call, receiverType, env, module, allModules)
     else if call.name == "as_list" & receiverType.name == "Seq"
@@ -2863,6 +2974,22 @@ private fun native_stdlib_method_emittable(call: CompiledMethodCallExpression, r
             else if receiverType.name == "Tuple"
             then tuple_get_method_arguments_emittable(call, env, module, allModules)
             else expressions_emittable(call.arguments, env, module, allModules)
+
+private fun set_method_call_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(call.receiver, env, module, allModules)
+        & if set_no_argument_method(call.name)
+            then call.arguments.is_empty()
+            else if call.name == "contains"
+            then set_contains_argument_emittable(call, env, module, allModules)
+            else set_set_argument_emittable(call, env, module, allModules)
+
+private fun set_contains_argument_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    one_method_argument(call.arguments) & expression_emittable(argument(call.arguments, 0), env, module, allModules)
+
+private fun set_set_argument_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    one_method_argument(call.arguments)
+        & expression_type(argument(call.arguments, 0), env, module, allModules).name == "Set"
+        & expression_emittable(argument(call.arguments, 0), env, module, allModules)
 
 private fun dict_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let key = argument(call.arguments, 0)
@@ -3277,7 +3404,7 @@ private fun java_method_supported(name: String): bool =
     name == "is_equal_to" | name == "is_true" | name == "is_false"
         | name == "is_greater_than" | name == "is_less_than"
         | name == "is_greater_or_equals_than" | name == "is_less_or_equals_than"
-        | name == "is_zero"
+        | name == "is_zero" | name == "is_one"
         | name == "starts_with" | name == "does_not_start_with" | name == "end_with" | name == "contains"
         | name == "has_size" | name == "succeeds" | name == "fails"
         | name == "replace" | name == "trim" | name == "size"
@@ -3839,6 +3966,58 @@ private fun java_collection_helpers(): String =
         + "        result.removeAll(right);" + newline()
         + "        return java.util.Collections.unmodifiableSet(result);" + newline()
         + "    }" + newline() + newline()
+        + "    private static boolean __capy_set_subset(java.util.Set left, java.util.Set right) {" + newline()
+        + "        return right.containsAll(left);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_set_proper_subset(java.util.Set left, java.util.Set right) {" + newline()
+        + "        return left.size() < right.size() && right.containsAll(left);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Set __capy_set_intersection(java.util.Set left, java.util.Set right) {" + newline()
+        + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet();" + newline()
+        + "        for (java.lang.Object value : left) {" + newline()
+        + "            if (right.contains(value)) {" + newline()
+        + "                result.add(value);" + newline()
+        + "            }" + newline()
+        + "        }" + newline()
+        + "        return java.util.Collections.unmodifiableSet(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Set __capy_set_symmetric_difference(java.util.Set left, java.util.Set right) {" + newline()
+        + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet(left);" + newline()
+        + "        result.removeAll(right);" + newline()
+        + "        for (java.lang.Object value : right) {" + newline()
+        + "            if (!left.contains(value)) {" + newline()
+        + "                result.add(value);" + newline()
+        + "            }" + newline()
+        + "        }" + newline()
+        + "        return java.util.Collections.unmodifiableSet(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Set __capy_set_cartesian_product(java.util.Set left, java.util.Set right) {" + newline()
+        + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet();" + newline()
+        + "        for (java.lang.Object leftValue : left) {" + newline()
+        + "            for (java.lang.Object rightValue : right) {" + newline()
+        + "                result.add(java.util.List.of(leftValue, rightValue));" + newline()
+        + "            }" + newline()
+        + "        }" + newline()
+        + "        return java.util.Collections.unmodifiableSet(result);" + newline()
+        + "    }" + newline() + newline()
+        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
+        + "    private static java.util.Set __capy_set_power_set(java.util.Set values) {" + newline()
+        + "        java.util.LinkedHashSet result = new java.util.LinkedHashSet();" + newline()
+        + "        result.add(java.util.Set.of());" + newline()
+        + "        for (java.lang.Object value : values) {" + newline()
+        + "            java.util.LinkedHashSet additions = new java.util.LinkedHashSet();" + newline()
+        + "            for (java.lang.Object subsetValue : result) {" + newline()
+        + "                java.util.LinkedHashSet subset = new java.util.LinkedHashSet((java.util.Set) subsetValue);" + newline()
+        + "                subset.add(value);" + newline()
+        + "                additions.add(java.util.Collections.unmodifiableSet(subset));" + newline()
+        + "            }" + newline()
+        + "            result.addAll(additions);" + newline()
+        + "        }" + newline()
+        + "        return java.util.Collections.unmodifiableSet(result);" + newline()
+        + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.Map __capy_dict_literal(java.util.Map.Entry... entries) {" + newline()
         + "        java.util.LinkedHashMap result = new java.util.LinkedHashMap();" + newline()
@@ -3943,6 +4122,7 @@ private fun java_method_name(name: String): String =
     else if name == "is_greater_or_equals_than" then "isGreaterOrEqualsThan"
     else if name == "is_less_or_equals_than" then "isLessOrEqualsThan"
     else if name == "is_zero" then "isZero"
+    else if name == "is_one" then "isOne"
     else if name == "starts_with" then "startsWith"
     else if name == "end_with" then "endsWith"
     else if name == "does_not_start_with" then "doesNotStartWith"
