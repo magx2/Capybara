@@ -860,10 +860,16 @@ private fun missing_argument(): CompiledExpression =
 private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size" & call.arguments.is_empty()
     then size_method_code(call, env, module, allModules)
+    else if char_to_string_call(call, env, module, allModules)
+    then char_to_string_code(call, env, module, allModules)
     else if assert_is_empty_call(call)
     then assert_is_empty_code(call, env, module, allModules)
     else if result_assert_is_equal_to_call(call, env, module, allModules)
     then result_assert_is_equal_to_code(call, env, module, allModules)
+    else if result_assert_succeeds_lambda_call(call, env, module, allModules)
+    then result_assert_succeeds_lambda_code(call, env, module, allModules)
+    else if negated_collection_is_empty_call(call, env, module, allModules)
+    then negated_collection_is_empty_code(call, env, module, allModules)
     else if collection_is_empty_call(call, env, module, allModules)
     then collection_is_empty_code(call, env, module, allModules)
     else if collection_predicate_call(call, env, module, allModules)
@@ -880,6 +886,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
             expression_code(call.receiver, env, receiverType, module, allModules)
                 + ".map(" + lambda_code_for_value(lambda, valueType, bodyExpectedType, env, module, allModules) + ")"
         case _ -> "unsupported(\"effect map\")"
+    else if string_parse_method_call(call, env, module, allModules)
+    then string_parse_method_code(call, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_code(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -905,17 +913,53 @@ private fun collection_predicate_method(name: String): bool =
 private fun collection_predicate_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let valueType = collection_value_type(receiverType)
+    let rawReceiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     let receiverCode =
         if receiverType.name == "Seq" | receiverType.name == "String"
         then seq_receiver_code(call.receiver, receiverType, env, module, allModules)
-        else expression_code(call.receiver, env, receiverType, module, allModules)
+        else rawReceiverCode
     match argument(call.arguments, 0) with
     case CompiledLambdaExpression lambda ->
-        let lambdaCode = lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules)
-        if receiverType.name == "Seq" | receiverType.name == "String"
-        then collection_seq_predicate_code(call.name, receiverCode, lambdaCode)
-        else receiverCode + ".stream()." + java_stream_predicate_method(call.name) + "(" + lambdaCode + ")"
+        if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
+        then string_indexed_predicate_code(call.name, rawReceiverCode, lambda, env, module, allModules)
+        else if receiverType.name == "Seq" | receiverType.name == "String"
+        then collection_seq_predicate_code(call.name, receiverCode, lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules))
+        else receiverCode + ".stream()." + java_stream_predicate_method(call.name) + "(" + lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules) + ")"
     case _ -> "unsupported(\"collection predicate\")"
+
+private fun string_indexed_predicate_code(name: String, receiverCode: String, lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "java.util.stream.IntStream.range(0, " + receiverCode + ".length())."
+        + java_stream_predicate_method(name)
+        + "(__capy_idx -> "
+        + expression_code(lambda.body, string_indexed_lambda_env(lambda.parameters, receiverCode, env), bool_type(), module, allModules)
+        + ")"
+
+private fun string_indexed_lambda_env(parameters: List[String], receiverCode: String, env: List[JavaBinding]): List[JavaBinding] =
+    match parameters[0] with
+    case None -> env
+    case Some { charParameter } ->
+        match parameters[1] with
+        case None -> env
+        case Some { indexParameter } ->
+            string_indexed_lambda_binding(charParameter, string_type(), "java.lang.String.valueOf(" + receiverCode + ".charAt(__capy_idx))")
+                + string_indexed_lambda_binding(indexParameter, int_type(), "__capy_idx")
+                + env
+
+private fun string_indexed_lambda_binding(name: String, type: CompiledTypeReference, javaName: String): List[JavaBinding] =
+    if name == "_"
+    then []
+    else [java_binding_with_java_name(name, type, javaName)]
+
+private fun string_indexed_lambda(parameters: List[String]): bool =
+    match parameters[0] with
+    case None -> false
+    case Some _ ->
+        match parameters[1] with
+        case None -> false
+        case Some _ ->
+            match parameters[2] with
+            case None -> true
+            case Some _ -> false
 
 private fun collection_seq_predicate_code(name: String, receiverCode: String, lambdaCode: String): String =
     if name == "any"
@@ -942,11 +986,31 @@ private fun collection_is_empty_code(call: CompiledMethodCallExpression, env: Li
     then seq_receiver_code(call.receiver, receiverType, env, module, allModules) + ".asList().isEmpty()"
     else expression_code(call.receiver, env, receiverType, module, allModules) + ".isEmpty()"
 
+private fun negated_collection_is_empty_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "is_empty"
+        & call.arguments.is_empty()
+        & match call.receiver with
+            case CompiledUnaryExpression unary ->
+                unary.operator == "!"
+                    & collection_empty_receiver_type(expression_type(unary.expression, env, module, allModules))
+            case _ -> false
+
+private fun negated_collection_is_empty_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.receiver with
+    case CompiledUnaryExpression unary ->
+        let receiverType = expression_type(unary.expression, env, module, allModules)
+        if receiverType.name == "Seq"
+        then "!(" + seq_receiver_code(unary.expression, receiverType, env, module, allModules) + ".asList().isEmpty())"
+        else "!(" + expression_code(unary.expression, env, receiverType, module, allModules) + ".isEmpty())"
+    case _ -> "unsupported(\"negated collection is_empty\")"
+
 private fun size_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     if receiverType.name == "String"
     then receiverCode + ".length()"
+    else if receiverType.name == "char"
+    then "((java.lang.String) " + receiverCode + ").length()"
     else receiverCode + ".size()"
 
 private fun assert_is_empty_call(call: CompiledMethodCallExpression): bool =
@@ -983,6 +1047,45 @@ private fun result_assert_is_equal_to_code(call: CompiledMethodCallExpression, e
             + "))"
     case _ -> "unsupported(\"result assert is_equal_to\")"
 
+private fun result_assert_succeeds_lambda_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "succeeds"
+        & match call.receiver with
+            case CompiledFunctionCallExpression receiver ->
+                receiver.name == "assert_that"
+                    & expression_type(argument(receiver.arguments, 0), env, module, allModules).name == "Result"
+                    & result_assert_succeeds_lambda_argument(call.arguments)
+            case _ -> false
+
+private fun result_assert_succeeds_lambda_argument(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case Some { expression } -> result_assert_succeeds_lambda_expression(expression) & no_second_expression(arguments)
+    case None -> false
+
+private fun no_second_expression(arguments: List[CompiledExpression]): bool =
+    match arguments[1] with
+    case None -> true
+    case Some _ -> false
+
+private fun result_assert_succeeds_lambda_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression _ -> true
+    case _ -> false
+
+private fun result_assert_succeeds_lambda_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.receiver with
+    case CompiledFunctionCallExpression receiver ->
+        let actual = argument(receiver.arguments, 0)
+        let resultType = expression_type(actual, env, module, allModules)
+        result_assert_succeeds_lambda_argument_code(actual, resultType, argument(call.arguments, 0), env, module, allModules)
+    case _ -> "unsupported(\"result assert succeeds\")"
+
+private fun result_assert_succeeds_lambda_argument_code(actual: CompiledExpression, resultType: CompiledTypeReference, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledLambdaExpression lambda ->
+        assert_that_code(actual, env, module, allModules)
+            + ".succeeds(" + lambda_code_for_value(lambda, first_type_argument(resultType), assert_type(), env, module, allModules) + ")"
+    case _ -> "unsupported(\"result assert succeeds\")"
+
 private fun extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_function_name(function)
         + "("
@@ -999,6 +1102,37 @@ private fun primitive_conversion_code(call: CompiledMethodCallExpression, env: L
     "((" + java_type(method_call_type(call, env, module, allModules)) + ") "
     + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
     + ")"
+
+private fun string_parse_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    string_parse_method(call.name)
+        & expression_type(call.receiver, env, module, allModules).name == "String"
+        & call.arguments.is_empty()
+
+private fun string_parse_method(name: String): bool =
+    name == "to_int" | name == "to_long" | name == "to_double" | name == "to_float" | name == "to_bool"
+
+private fun string_parse_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_parse_" + string_parse_method_suffix(call.name)
+        + "(" + expression_code(call.receiver, env, string_type(), module, allModules) + ")"
+
+private fun string_parse_method_suffix(name: String): String =
+    if name == "to_int"
+    then "int"
+    else if name == "to_long"
+    then "long"
+    else if name == "to_double"
+    then "double"
+    else if name == "to_float"
+    then "float"
+    else "bool"
+
+private fun char_to_string_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "to_string"
+        & expression_type(call.receiver, env, module, allModules).name == "char"
+        & call.arguments.is_empty()
+
+private fun char_to_string_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((java.lang.String) " + expression_code(call.receiver, env, object_type(), module, allModules) + ")"
 
 private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let params = lambda_parameters(lambda.parameters)
@@ -1346,7 +1480,9 @@ private fun dict_entries_tail(entries: List[CompiledDictEntry], env: List[JavaBi
     case Some _ -> ", " + dict_entries_code(entries, env, module, allModules)
 
 private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if program_success_literal(literal.typeName, module.imports)
+    if primitive_char_constructor(literal, expectedType)
+    then primitive_char_constructor_code(literal, env, module, allModules)
+    else if program_success_literal(literal.typeName, module.imports)
     then "capy.lang.Program.Success.INSTANCE"
     else if program_failed_literal(literal.typeName, module.imports)
     then match literal.fields[0] with
@@ -1356,6 +1492,17 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
         let dataType = find_data_type(literal.typeName, module, allModules)
         let bindings = data_type_bindings(dataType, expectedType, module, allModules)
         "__capy_data(\"" + escape_java_string(data_literal_type_name(literal.typeName, dataType)) + "\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
+
+private fun primitive_char_constructor(literal: CompiledDataLiteral, expectedType: CompiledTypeReference): bool =
+    literal.typeName == "char" & expectedType.name == "Result"
+
+private fun primitive_char_constructor_code(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_char(" + expression_code(first_data_field_value(literal.fields), env, string_type(), module, allModules) + ")"
+
+private fun first_data_field_value(fields: List[CompiledDataField]): CompiledExpression =
+    match fields[0] with
+    case Some { field } -> field.value
+    case None -> missing_argument()
 
 private fun data_literal_type_name(typeName: String, dataType: /capy/lang/Option[String]): String =
     match dataType with
@@ -1547,6 +1694,8 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then "java.util.Objects.equals(" + valueCode + ", " + expression_code(matchCase.literal, env, valueType, module, allModules) + ")"
     else if option_match_case(matchCase, valueType)
     then option_match_condition_code(matchCase, valueCode)
+    else if result_match_case(matchCase, valueType)
+    then result_match_condition_code(matchCase, valueCode)
     else if primitive_match_type(matchCase.typeName)
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
     else "__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\")"
@@ -1561,6 +1710,14 @@ private fun option_match_condition_code(matchCase: CompiledMatchCase, valueCode:
 
 private fun option_value_code(valueCode: String): String =
     "((java.util.Optional<?>) " + valueCode + ")"
+
+private fun result_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
+    valueType.name == "Result" & (matchCase.typeName == "Success" | matchCase.typeName == "Error")
+
+private fun result_match_condition_code(matchCase: CompiledMatchCase, valueCode: String): String =
+    if matchCase.typeName == "Success"
+    then "__capy_data_is(" + valueCode + ", \"Success\")"
+    else "__capy_data_is(" + valueCode + ", \"Error\")"
 
 private fun primitive_match_condition_code(typeName: String, valueCode: String, valueType: CompiledTypeReference): String =
     if valueType.name == typeName
@@ -1596,6 +1753,8 @@ private fun match_binding_type(matchCase: CompiledMatchCase, valueType: Compiled
     then if primitive_match_type(matchCase.typeName) then CompiledTypeReference { name: matchCase.typeName, arguments: [] } else valueType
     else if option_match_case(matchCase, valueType)
     then first_type_argument(valueType)
+    else if result_match_case(matchCase, valueType)
+    then if matchCase.typeName == "Success" then first_type_argument(valueType) else object_type()
     else
         let dataType = find_data_type(matchCase.typeName, module, allModules)
         let bindings = data_type_bindings(dataType, valueType, module, allModules)
@@ -1606,7 +1765,14 @@ private fun match_binding_value_code(matchCase: CompiledMatchCase, valueCode: St
     then valueCode
     else if option_match_case(matchCase, valueType)
     then option_value_code(valueCode) + ".orElse(null)"
+    else if result_match_case(matchCase, valueType)
+    then result_match_binding_value_code(matchCase, valueCode)
     else "__capy_data_field(" + valueCode + ", \"" + escape_java_string(match_binding_field_name(matchCase, idx, module, allModules)) + "\")"
+
+private fun result_match_binding_value_code(matchCase: CompiledMatchCase, valueCode: String): String =
+    if matchCase.typeName == "Success"
+    then "__capy_result_success_value(" + valueCode + ")"
+    else "__capy_result_error_value(" + valueCode + ")"
 
 private fun match_binding_whole_value(matchCase: CompiledMatchCase): bool =
     matchCase.wildcard | primitive_match_type(matchCase.typeName)
@@ -1754,7 +1920,9 @@ private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaB
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
     then int_type()
-    else if assert_is_empty_call(call) | collection_is_empty_call(call, env, module, allModules)
+    else if char_to_string_call(call, env, module, allModules)
+    then string_type()
+    else if assert_is_empty_call(call) | negated_collection_is_empty_call(call, env, module, allModules) | collection_is_empty_call(call, env, module, allModules)
     then bool_type()
     else if collection_predicate_call(call, env, module, allModules)
     then bool_type()
@@ -1766,6 +1934,10 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
         match argument(call.arguments, 0) with
         case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
         case _ -> effect_type(object_type())
+    else if string_parse_method_call(call, env, module, allModules)
+    then string_parse_result_type(call.name)
+    else if string_java_method_call(call, env, module, allModules)
+    then string_java_method_type(call.name)
     else if call.name == "to_int"
     then int_type()
     else if call.name == "to_long"
@@ -1773,6 +1945,29 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     else match find_extension_method(call, env, module, allModules) with
         case Some { function } -> function.returnType
         case None -> assert_type()
+
+private fun string_parse_result_type(name: String): CompiledTypeReference =
+    if name == "to_int"
+    then result_type(int_type())
+    else if name == "to_long"
+    then result_type(long_type())
+    else if name == "to_double"
+    then result_type(double_type())
+    else if name == "to_float"
+    then result_type(float_type())
+    else result_type(bool_type())
+
+private fun string_java_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_type(call.receiver, env, module, allModules).name == "String"
+        & string_java_method(call.name)
+
+private fun string_java_method(name: String): bool =
+    name == "trim" | name == "replace" | name == "contains" | name == "starts_with" | name == "end_with"
+
+private fun string_java_method_type(name: String): CompiledTypeReference =
+    if name == "trim" | name == "replace"
+    then string_type()
+    else bool_type()
 
 private fun first_expression_type(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expressions[0] with
@@ -2407,11 +2602,17 @@ private fun byte_literal_source(source: String): bool =
 private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     if call.name == "size"
-    then (receiverType.name == "List" | receiverType.name == "Set" | receiverType.name == "Dict" | receiverType.name == "String")
+    then (receiverType.name == "List" | receiverType.name == "Set" | receiverType.name == "Dict" | receiverType.name == "String" | receiverType.name == "char")
         & call.arguments.is_empty()
         & expression_emittable(call.receiver, env, module, allModules)
+    else if char_to_string_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
     else if assert_is_empty_call(call)
     then assert_is_empty_emittable(call, env, module, allModules)
+    else if result_assert_succeeds_lambda_call(call, env, module, allModules)
+    then result_assert_succeeds_lambda_emittable(call, env, module, allModules)
+    else if negated_collection_is_empty_call(call, env, module, allModules)
+    then negated_collection_is_empty_emittable(call, env, module, allModules)
     else if collection_is_empty_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
     else if collection_predicate_call(call, env, module, allModules)
@@ -2424,6 +2625,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
             expression_emittable(call.receiver, env, module, allModules)
                 & collection_lambda_emittable(lambda, first_type_argument(receiverType), env, module, allModules)
         case _ -> false
+    else if string_parse_method_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -2443,6 +2646,25 @@ private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpres
         & primitive_conversion_receiver(call.name, receiverType)
         & expression_emittable(call.receiver, env, module, allModules)
 
+private fun result_assert_succeeds_lambda_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.receiver with
+    case CompiledFunctionCallExpression receiver ->
+        let actual = argument(receiver.arguments, 0)
+        let valueType = first_type_argument(expression_type(actual, env, module, allModules))
+        expression_emittable(actual, env, module, allModules)
+            & result_assert_succeeds_lambda_argument_emittable(argument(call.arguments, 0), valueType, env, module, allModules)
+    case _ -> false
+
+private fun result_assert_succeeds_lambda_argument_emittable(expression: CompiledExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledLambdaExpression lambda -> collection_lambda_emittable(lambda, valueType, env, module, allModules)
+    case _ -> false
+
+private fun negated_collection_is_empty_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.receiver with
+    case CompiledUnaryExpression unary -> expression_emittable(unary.expression, env, module, allModules)
+    case _ -> false
+
 private fun collection_predicate_call_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match call.arguments[0] with
     case None -> false
@@ -2454,8 +2676,13 @@ private fun collection_predicate_call_emittable(call: CompiledMethodCallExpressi
             & match predicate with
                 case CompiledLambdaExpression lambda ->
                     let valueType = collection_value_type(receiverType)
-                    collection_lambda_emittable(lambda, valueType, env, module, allModules)
-                        & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
+                    if receiverType.name == "String" & string_indexed_lambda(lambda.parameters)
+                    then
+                        let lambdaEnv = string_indexed_lambda_env(lambda.parameters, expression_code(call.receiver, env, receiverType, module, allModules), env)
+                        expression_emittable(lambda.body, lambdaEnv, module, allModules)
+                            & truthy_type(expression_type(lambda.body, lambdaEnv, module, allModules))
+                    else collection_lambda_emittable(lambda, valueType, env, module, allModules)
+                            & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
                 case _ -> false
 
 private fun assert_is_empty_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -2724,7 +2951,9 @@ private fun empty_collection_literal_assignable(target: CompiledTypeReference, a
 private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeReference): bool =
     if type_parameter(target) | type_parameter(source) | source.name == "nothing"
     then true
-    else if target.name.is_empty() | source.name.is_empty() | target.name == "any" | source.name == "any"
+    else if target.name == "any"
+    then true
+    else if target.name.is_empty() | source.name.is_empty() | source.name == "any"
     then false
     else if primitive_numeric_widening_assignable(target, source)
     then true
@@ -2762,9 +2991,9 @@ private fun java_method_supported(name: String): bool =
         | name == "is_greater_than" | name == "is_less_than"
         | name == "is_greater_or_equals_than" | name == "is_less_or_equals_than"
         | name == "is_zero"
-        | name == "starts_with" | name == "does_not_start_with" | name == "contains"
+        | name == "starts_with" | name == "does_not_start_with" | name == "end_with" | name == "contains"
         | name == "has_size" | name == "succeeds" | name == "fails"
-        | name == "replace" | name == "size"
+        | name == "replace" | name == "trim" | name == "size"
 
 private fun java_type(type: CompiledTypeReference): String =
     if type.name == "byte" then "byte"
@@ -3153,18 +3382,70 @@ private fun java_helpers(module: CompiledModule): String =
         + "        }" + newline()
         + "        return java.util.Optional.empty();" + newline()
         + "    }" + newline() + newline()
-        + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
-        + "    private static capy.lang.Result __capy_result_value(java.lang.Object value) {" + newline()
-        + "        if (value instanceof capy.lang.Result result) {" + newline()
-        + "            return result;" + newline()
-        + "        }" + newline()
+        + "    private static java.lang.Object __capy_result_value(java.lang.Object value) {" + newline()
         + "        if (__capy_data_is(value, \"Success\")) {" + newline()
-        + "            return new capy.lang.Result.Success(__capy_data_value_field(value));" + newline()
+        + "            return value;" + newline()
         + "        }" + newline()
         + "        if (__capy_data_is(value, \"Error\")) {" + newline()
-        + "            return new capy.lang.Result.Error(new dev.capylang.CapybaraException(__capy_data_message_field(value)));" + newline()
+        + "            return value;" + newline()
         + "        }" + newline()
-        + "        return new capy.lang.Result.Error(new dev.capylang.CapybaraException(\"Expected Result value\"));" + newline()
+        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Expected Result value\")));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_result_success_value(java.lang.Object value) {" + newline()
+        + "        if (__capy_data_is(value, \"Success\")) {" + newline()
+        + "            return __capy_data_value_field(value);" + newline()
+        + "        }" + newline()
+        + "        return null;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_result_error_value(java.lang.Object value) {" + newline()
+        + "        if (__capy_data_is(value, \"Error\")) {" + newline()
+        + "            java.lang.Object nested = __capy_data_field(value, \"value\");" + newline()
+        + "            return nested == null ? value : nested;" + newline()
+        + "        }" + newline()
+        + "        return value;" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_char(java.lang.String value) {" + newline()
+        + "        if (value.length() == 1) {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", value)));" + newline()
+        + "        }" + newline()
+        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"char must contain exactly one character\")));" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_parse_int(java.lang.String value) {" + newline()
+        + "        try {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Integer.parseInt(value))));" + newline()
+        + "        } catch (java.lang.NumberFormatException e) {" + newline()
+        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to int: \" + value)));" + newline()
+        + "        }" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_parse_long(java.lang.String value) {" + newline()
+        + "        try {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Long.parseLong(value))));" + newline()
+        + "        } catch (java.lang.NumberFormatException e) {" + newline()
+        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to long: \" + value)));" + newline()
+        + "        }" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_parse_double(java.lang.String value) {" + newline()
+        + "        try {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Double.parseDouble(value))));" + newline()
+        + "        } catch (java.lang.NumberFormatException e) {" + newline()
+        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to double: \" + value)));" + newline()
+        + "        }" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_parse_float(java.lang.String value) {" + newline()
+        + "        try {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Float.parseFloat(value))));" + newline()
+        + "        } catch (java.lang.NumberFormatException e) {" + newline()
+        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to float: \" + value)));" + newline()
+        + "        }" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_parse_bool(java.lang.String value) {" + newline()
+        + "        if (java.util.Objects.equals(value, \"true\")) {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", true)));" + newline()
+        + "        }" + newline()
+        + "        if (java.util.Objects.equals(value, \"false\")) {" + newline()
+        + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", false)));" + newline()
+        + "        }" + newline()
+        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to bool: \" + value)));" + newline()
         + "    }" + newline() + newline()
         + "    @SuppressWarnings({\"unchecked\", \"rawtypes\"})" + newline()
         + "    private static java.util.List __capy_list_append(java.util.List values, java.lang.Object value) {" + newline()
@@ -3294,6 +3575,7 @@ private fun java_method_name(name: String): String =
     else if name == "is_less_or_equals_than" then "isLessOrEqualsThan"
     else if name == "is_zero" then "isZero"
     else if name == "starts_with" then "startsWith"
+    else if name == "end_with" then "endsWith"
     else if name == "does_not_start_with" then "doesNotStartWith"
     else if name == "is_empty" then "isEmpty"
     else if name == "has_size" then "hasSize"
