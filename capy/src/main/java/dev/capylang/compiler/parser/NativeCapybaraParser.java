@@ -717,6 +717,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     value.location()
             );
         }
+        if (expression instanceof Expression.WithExpression value) {
+            return new Expression.WithExpression(
+                    rewriteLocalFunctionCalls(value.receiver(), localNames),
+                    rewriteDataFields(value.fields(), localNames),
+                    value.location()
+            );
+        }
         if (expression instanceof Expression.LambdaExpression value) {
             return new Expression.LambdaExpression(
                     value.parameters(),
@@ -890,6 +897,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     rewriteConstructorData(value.receiver(), dataTypeName),
                     value.name(),
                     rewriteConstructorData(value.arguments(), dataTypeName),
+                    value.location()
+            );
+        }
+        if (expression instanceof Expression.WithExpression value) {
+            return new Expression.WithExpression(
+                    rewriteConstructorData(value.receiver(), dataTypeName),
+                    rewriteConstructorDataFields(value.fields(), dataTypeName),
                     value.location()
             );
         }
@@ -1396,6 +1410,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.MethodArgumentListContext arguments,
             SourceLocation location
     ) {
+        if (name.equals("with")) {
+            return withExpression(receiver, arguments, location);
+        }
         var reduce = methodReduceExpression(receiver, name, arguments, location);
         if (reduce != null) {
             return reduce;
@@ -1409,6 +1426,14 @@ public final class NativeCapybaraParser implements CapybaraParser {
             SourceLocation location
     ) {
         return new Expression.MethodCallExpression(receiver, "__capy_call", arguments(arguments), location);
+    }
+
+    private static Expression withExpression(
+            Expression receiver,
+            dev.capylang.parser.antlr.FunctionalParser.MethodArgumentListContext arguments,
+            SourceLocation location
+    ) {
+        return new Expression.WithExpression(receiver, withFields(arguments), location);
     }
 
     private static Expression methodReduceExpression(
@@ -1457,6 +1482,32 @@ public final class NativeCapybaraParser implements CapybaraParser {
             }
         }
         return List.copyOf(arguments);
+    }
+
+    private static List<Expression.DataField> withFields(
+            dev.capylang.parser.antlr.FunctionalParser.MethodArgumentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var fields = new ArrayList<Expression.DataField>();
+        for (var argument : ctx.methodArgument()) {
+            if (argument.namedMethodArgument() != null) {
+                var named = argument.namedMethodArgument();
+                fields.add(new Expression.DataField(
+                        named.identifier().getText(),
+                        expression(named.expression()),
+                        location(named)
+                ));
+            } else {
+                fields.add(new Expression.DataField(
+                        "$unsupported",
+                        unsupported(argument),
+                        location(argument)
+                ));
+            }
+        }
+        return List.copyOf(fields);
     }
 
     private static Expression listLiteral(dev.capylang.parser.antlr.FunctionalParser.New_listContext ctx) {
@@ -2062,6 +2113,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     offsetExpression(value.receiver(), lineOffset, columnOffset),
                     value.name(),
                     offsetExpressions(value.arguments(), lineOffset, columnOffset),
+                    offsetLocation(value.location(), lineOffset, columnOffset)
+            );
+        }
+        if (expression instanceof Expression.WithExpression value) {
+            return new Expression.WithExpression(
+                    offsetExpression(value.receiver(), lineOffset, columnOffset),
+                    offsetDataFields(value.fields(), lineOffset, columnOffset),
                     offsetLocation(value.location(), lineOffset, columnOffset)
             );
         }

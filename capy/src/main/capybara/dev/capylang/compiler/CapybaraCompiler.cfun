@@ -3,7 +3,7 @@ from /capy/collection/Set import { Set }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -15,7 +15,7 @@ from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
 from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, Definition, FunctionDefinition }
-from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression }
+from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
 from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
@@ -142,6 +142,7 @@ private fun infer_return_type(expression: Expression, env: List[FunctionParamete
     case FunctionCallExpression _ -> missing_type()
     case FunctionReferenceExpression _ -> missing_type()
     case MethodCallExpression call -> infer_method_call_type(call, env, depth + 1)
+    case WithExpression withExpression -> infer_return_type(withExpression.receiver, env, depth + 1)
     case LambdaExpression _ -> missing_type()
     case ListLiteral literal -> compiler_list_type(compiler_first_expression_type(literal.values, env, depth + 1))
     case SetLiteral literal -> compiler_set_type(compiler_first_expression_type(literal.values, env, depth + 1))
@@ -477,6 +478,11 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         location: compile_location(location)
     }
     case MethodCallExpression call -> compile_method_call(call, functionName)
+    case WithExpression { receiver, fields, location } -> CompiledWithExpression {
+        receiver: compile_expression_in_function(receiver, functionName),
+        fields: compile_data_fields(fields, functionName),
+        location: compile_location(location)
+    }
     case LambdaExpression { parameters, body, location } -> CompiledLambdaExpression {
         parameters: parameters,
         body: compile_expression_in_function(body, functionName),
