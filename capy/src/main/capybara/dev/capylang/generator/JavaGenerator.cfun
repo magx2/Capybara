@@ -1119,6 +1119,8 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
         + ")"
     else if receiverType.name == "String"
     then string_optional_index_code(receiverCode, indexCode)
+    else if receiverType.name == "Tuple" & !index.hasEndIndex
+    then "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(__capy_normalized_index(" + receiverCode + ", " + indexCode + ")))"
     else if index.hasEndIndex
     then "__capy_list_slice("
         + receiverCode
@@ -1127,7 +1129,7 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
         + ", "
         + list_slice_end_index_code(receiverCode, index.endIndex, env, module, allModules)
         + ")"
-    else "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(__capy_normalized_index(" + receiverCode + ", " + indexCode + ")))"
+    else list_optional_index_code(receiverCode, indexCode, first_type_argument(receiverType))
 
 private fun list_slice_start_index_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
@@ -1166,6 +1168,23 @@ private fun string_optional_index_code(receiverCode: String, indexCode: String):
 
 private fun normalized_string_index(receiverCode: String, indexCode: String): String =
     "((" + indexCode + ") < 0 ? (" + receiverCode + ".length() + (" + indexCode + ")) : (" + indexCode + "))"
+
+private fun list_optional_index_code(receiverCode: String, indexCode: String, valueType: CompiledTypeReference): String =
+    "((__capy_normalized_index(" + receiverCode + ", " + indexCode + ") >= 0 && __capy_normalized_index("
+        + receiverCode
+        + ", "
+        + indexCode
+        + ") < "
+        + receiverCode
+        + ".size()) ? java.util.Optional.of(("
+        + boxed_java_type(valueType)
+        + ") "
+        + receiverCode
+        + ".get(__capy_normalized_index("
+        + receiverCode
+        + ", "
+        + indexCode
+        + "))) : java.util.Optional.empty())"
 
 private fun block_expression_code(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let resultType = expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
@@ -1784,7 +1803,7 @@ private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType:
     then
         if indexExpression.hasEndIndex
         then receiverType
-        else first_type_argument(receiverType)
+        else option_type(first_type_argument(receiverType))
     else if receiverType.name == "String"
     then if indexExpression.hasEndIndex then string_type() else option_type(string_type())
     else object_type()
@@ -2606,7 +2625,11 @@ private fun test_file_call_emittable(arguments: List[CompiledExpression], env: L
 
 private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(index.receiver, env, module, allModules)
-    if receiverType.name == "List" | receiverType.name == "Tuple"
+    if receiverType.name == "List"
+    then expression_emittable(index.receiver, env, module, allModules)
+        & expression_emittable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
+    else if receiverType.name == "Tuple"
     then index_literal_emittable(index.index)
         & (!index.hasEndIndex | index_literal_emittable(index.endIndex))
         & expression_emittable(index.receiver, env, module, allModules)
