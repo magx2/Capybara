@@ -52,7 +52,7 @@ data CompiledDictEntry { key: CompiledExpression, value: CompiledExpression, loc
 data CompiledDictLiteral { entries: List[CompiledDictEntry], location: CompiledSourceLocation }
 data CompiledTupleLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
 data CompiledIndexExpression { receiver: CompiledExpression, index: CompiledExpression, endIndex: CompiledExpression, hasEndIndex: bool, location: CompiledSourceLocation }
-data CompiledDataField { name: String, value: CompiledExpression, location: CompiledSourceLocation }
+data CompiledDataField { name: String, value: CompiledExpression, spread: bool, location: CompiledSourceLocation }
 data CompiledDataLiteral { typeName: String, fields: List[CompiledDataField], location: CompiledSourceLocation }
 data CompiledFieldAccessExpression { receiver: CompiledExpression, name: String, location: CompiledSourceLocation }
 data CompiledReduceExpression { receiver: CompiledExpression, initial: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, body: CompiledExpression, location: CompiledSourceLocation }

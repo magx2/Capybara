@@ -52,7 +52,7 @@ data DictEntry { key: Expression, value: Expression, location: SourceLocation }
 data DictLiteral { entries: List[DictEntry], location: SourceLocation }
 data TupleLiteral { values: List[Expression], location: SourceLocation }
 data IndexExpression { receiver: Expression, index: Expression, endIndex: Expression, hasEndIndex: bool, location: SourceLocation }
-data DataField { name: String, value: Expression, location: SourceLocation }
+data DataField { name: String, value: Expression, spread: bool, location: SourceLocation }
 data DataLiteral { typeName: String, fields: List[DataField], location: SourceLocation }
 data FieldAccessExpression { receiver: Expression, name: String, location: SourceLocation }
 data ReduceExpression { receiver: Expression, initial: Expression, accumulatorName: String, keyName: String, valueName: String, body: Expression, location: SourceLocation }
