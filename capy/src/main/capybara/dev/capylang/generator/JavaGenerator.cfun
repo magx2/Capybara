@@ -376,6 +376,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     let resultType = contextual_binary_result_type(naturalResultType, expectedType)
     if result_pipe_expression(binary, leftType)
     then result_pipe_code(binary, leftType, expectedType, env, module, allModules)
+    else if option_pipe_expression(binary, leftType)
+    then option_pipe_code(binary, leftType, env, module, allModules)
     else if collection_pipe_expression(binary, leftType)
     then collection_pipe_code(binary, leftType, env, module, allModules)
     else if collection_plus_expression(binary.operator, leftType, rightType)
@@ -653,6 +655,54 @@ private fun result_success_constructor(typeName: String): bool =
 
 private fun result_error_constructor(typeName: String): bool =
     typeName == "Error" | typeName == "/capy/lang/Result.Error" | typeName == "Result.Error"
+
+private fun option_pipe_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
+    binary.operator == "|-"
+        & lambda_expression(binary.right)
+        & option_pipe_receiver(binary.left, leftType)
+
+private fun option_pipe_receiver(left: CompiledExpression, leftType: CompiledTypeReference): bool =
+    option_type_name(leftType.name)
+        | option_constructor_type(leftType.name)
+        | match left with
+            case CompiledDataLiteral literal -> option_constructor_type(literal.typeName)
+            case CompiledBinaryExpression binary -> option_pipe_expression(binary, leftType)
+            case _ -> false
+
+private fun option_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let valueType = option_pipe_value_type(binary.left, leftType, env, module, allModules)
+    let receiverCode = "((java.util.Optional<" + boxed_java_type(valueType) + ">) __capy_optional_value("
+        + expression_code(binary.left, env, leftType, module, allModules)
+        + "))"
+    match binary.right with
+    case CompiledLambdaExpression lambda ->
+        receiverCode + ".filter(" + option_reject_lambda_code(lambda, valueType, env, module, allModules) + ")"
+    case _ -> "unsupported(\"option pipe\")"
+
+private fun option_reject_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+    let bodyCode = "!(" + truthy_expression_code(lambda.body, lambdaEnv, module, allModules) + ")"
+    lambda_code_with_result(lambda.parameters, valueType, bodyCode)
+
+private fun option_pipe_value_type(left: CompiledExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if option_type_name(leftType.name)
+    then first_type_argument(leftType)
+    else match left with
+        case CompiledDataLiteral literal -> option_literal_value_type(literal, env, module, allModules)
+        case CompiledBinaryExpression binary ->
+            let resultType = option_pipe_result_type(binary, expression_type(binary.left, env, module, allModules), env, module, allModules)
+            if option_type_name(resultType.name) then first_type_argument(resultType) else object_type()
+        case _ -> object_type()
+
+private fun option_literal_value_type(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if option_some_constructor(literal.typeName)
+    then match literal.fields[0] with
+        case Some { field } -> expression_type(field.value, env, module, allModules)
+        case None -> object_type()
+    else object_type()
+
+private fun option_pipe_result_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    option_type(option_pipe_value_type(binary.left, leftType, env, module, allModules))
 
 private fun result_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = result_pipe_value_type(binary.left, leftType, env, module, allModules)
@@ -2379,6 +2429,8 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
         let leftType = expression_type(binary.left, env, module, allModules)
         if result_pipe_expression(binary, leftType)
         then result_pipe_result_type(binary, leftType, env, module, allModules)
+        else if option_pipe_expression(binary, leftType)
+        then option_pipe_result_type(binary, leftType, env, module, allModules)
         else if collection_pipe_expression(binary, leftType)
         then collection_pipe_result_type(binary, leftType, env, module, allModules)
         else binary_result_type(
@@ -3082,6 +3134,8 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledBinaryExpression e ->
         if result_pipe_expression(e, expression_type(e.left, env, module, allModules))
         then result_pipe_emittable(e, env, module, allModules)
+        else if option_pipe_expression(e, expression_type(e.left, env, module, allModules))
+        then option_pipe_emittable(e, env, module, allModules)
         else if collection_pipe_expression(e, expression_type(e.left, env, module, allModules))
         then collection_pipe_emittable(e, env, module, allModules)
         else java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
@@ -3166,6 +3220,16 @@ private fun result_pipe_emittable(binary: CompiledBinaryExpression, env: List[Ja
             case CompiledLambdaExpression lambda ->
                 lambda_parameter_shape_supported(lambda.parameters, valueType)
                     & expression_emittable(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+            case _ -> false
+
+private fun option_pipe_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let leftType = expression_type(binary.left, env, module, allModules)
+    let valueType = option_pipe_value_type(binary.left, leftType, env, module, allModules)
+    expression_emittable(binary.left, env, module, allModules)
+        & match binary.right with
+            case CompiledLambdaExpression lambda ->
+                collection_lambda_emittable(lambda, valueType, env, module, allModules)
+                    & truthy_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
             case _ -> false
 
 private fun collection_pipe_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
