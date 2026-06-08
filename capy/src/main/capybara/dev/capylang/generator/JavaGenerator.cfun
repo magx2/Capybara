@@ -1301,6 +1301,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then result_assert_is_equal_to_code(call, env, module, allModules)
     else if result_assert_succeeds_lambda_call(call, env, module, allModules)
     then result_assert_succeeds_lambda_code(call, env, module, allModules)
+    else if assert_method_call(call, env, module, allModules)
+    then assert_method_call_code(call, env, module, allModules)
     else if negated_collection_is_empty_call(call, env, module, allModules)
     then negated_collection_is_empty_code(call, env, module, allModules)
     else if collection_is_empty_call(call, env, module, allModules)
@@ -1831,7 +1833,7 @@ private fun assert_is_empty_call(call: CompiledMethodCallExpression): bool =
 private fun assert_status_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     (call.name == "succeeded" | call.name == "failed")
         & call.arguments.is_empty()
-        & expression_type(call.receiver, env, module, allModules).name == "Assert"
+        & assert_expression(call.receiver, env, module, allModules)
 
 private fun assert_is_empty_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match call.receiver with
@@ -1923,6 +1925,36 @@ private fun result_assert_succeeds_lambda_argument_code(actual: CompiledExpressi
         assert_that_code(actual, env, module, allModules)
             + ".succeeds(" + lambda_code_for_value(lambda, first_type_argument(resultType), assert_type(), env, module, allModules) + ")"
     case _ -> "unsupported(\"result assert succeeds\")"
+
+private fun assert_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    assert_method_supported(call.name) & assert_expression(call.receiver, env, module, allModules)
+
+private fun assert_expression(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledFunctionCallExpression call -> call.name == "assert_that" | call.name == "assert_all"
+    case CompiledMethodCallExpression call -> assert_method_call(call, env, module, allModules) | assert_status_call(call, env, module, allModules)
+    case CompiledVariableExpression variable -> lookup_binding(variable.name, env).name == "Assert"
+    case _ -> expression_type(expression, env, module, allModules).name == "Assert"
+
+private fun assert_method_supported(name: String): bool =
+    name == "is_equal_to" | name == "is_true" | name == "is_false"
+        | name == "is_greater_than" | name == "is_less_than"
+        | name == "is_greater_or_equals_than" | name == "is_less_or_equals_than"
+        | name == "is_zero" | name == "is_one" | name == "is_between"
+        | name == "starts_with" | name == "does_not_start_with" | name == "contains"
+        | name == "has_size" | name == "is_empty" | name == "succeeds" | name == "fails"
+        | name == "has_day" | name == "has_month" | name == "has_year"
+        | name == "has_hour" | name == "has_minute" | name == "has_second" | name == "has_offset_minutes"
+        | name == "has_date" | name == "has_time"
+        | name == "has_years" | name == "has_months" | name == "has_days" | name == "has_hours"
+        | name == "has_minutes" | name == "has_seconds" | name == "has_weeks"
+        | name == "has_start" | name == "has_end" | name == "has_duration"
+        | name == "does_not_contain" | name == "contains_key" | name == "does_not_contain_key" | name == "contains_value"
+
+private fun assert_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    expression_code(call.receiver, env, assert_type(), module, allModules)
+        + "." + java_method_name(call.name)
+        + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
 
 private fun extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
@@ -2092,11 +2124,18 @@ private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding]
 private fun lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if function_type(expectedType)
     then typed_lambda_expression_code(lambda, env, expectedType, module, allModules)
+    else if expectedType.name == "Supplier"
+    then supplier_lambda_expression_code(lambda, env, first_type_argument(expectedType), module, allModules)
     else
         let code = lambda_code(lambda, env, module, allModules)
         if lambda.parameters.is_empty() & expectedType.name != "Supplier"
         then "((java.util.function.Supplier<java.lang.Object>) (" + code + "))"
         else code
+
+private fun supplier_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    lambda_parameters(lambda.parameters)
+        + " -> "
+        + expression_code(lambda.body, lambda_env(lambda.parameters, env), expectedType, module, allModules)
 
 private fun typed_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let parameters = function_type_parameters(expectedType)
@@ -3121,6 +3160,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then string_type()
     else if assert_status_call(call, env, module, allModules)
     then bool_type()
+    else if assert_method_call(call, env, module, allModules)
+    then assert_type()
     else if assert_is_empty_call(call) | negated_collection_is_empty_call(call, env, module, allModules) | collection_is_empty_call(call, env, module, allModules)
     then bool_type()
     else if collection_predicate_call(call, env, module, allModules)
@@ -3981,6 +4022,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then assert_is_empty_emittable(call, env, module, allModules)
     else if result_assert_succeeds_lambda_call(call, env, module, allModules)
     then result_assert_succeeds_lambda_emittable(call, env, module, allModules)
+    else if assert_method_call(call, env, module, allModules)
+    then assert_method_call_emittable(call, env, module, allModules)
     else if negated_collection_is_empty_call(call, env, module, allModules)
     then negated_collection_is_empty_emittable(call, env, module, allModules)
     else if collection_is_empty_call(call, env, module, allModules)
@@ -4133,6 +4176,10 @@ private fun result_assert_succeeds_lambda_argument_emittable(expression: Compile
     match expression with
     case CompiledLambdaExpression lambda -> collection_lambda_emittable(lambda, valueType, env, module, allModules)
     case _ -> false
+
+private fun assert_method_call_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(call.receiver, env, module, allModules)
+        & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
 
 private fun negated_collection_is_empty_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match call.receiver with
@@ -4322,7 +4369,12 @@ private fun test_call_emittable(arguments: List[CompiledExpression], env: List[J
         match arguments[1] with
         case None -> false
         case Some { assertionExpression } ->
-            expression_emittable(nameExpression, env, module, allModules) & lambda_argument_emittable(assertionExpression, env, module, allModules)
+            expression_emittable(nameExpression, env, module, allModules) & test_supplier_emittable(assertionExpression)
+
+private fun test_supplier_emittable(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression lambda -> lambda.parameters.is_empty()
+    case _ -> false
 
 private fun lambda_argument_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
@@ -5365,11 +5417,35 @@ private fun java_method_name(name: String): String =
     else if name == "is_less_or_equals_than" then "isLessOrEqualsThan"
     else if name == "is_zero" then "isZero"
     else if name == "is_one" then "isOne"
+    else if name == "is_between" then "isBetween"
     else if name == "starts_with" then "startsWith"
     else if name == "end_with" then "endsWith"
     else if name == "does_not_start_with" then "doesNotStartWith"
     else if name == "is_empty" then "isEmpty"
     else if name == "has_size" then "hasSize"
+    else if name == "has_day" then "hasDay"
+    else if name == "has_month" then "hasMonth"
+    else if name == "has_year" then "hasYear"
+    else if name == "has_hour" then "hasHour"
+    else if name == "has_minute" then "hasMinute"
+    else if name == "has_second" then "hasSecond"
+    else if name == "has_offset_minutes" then "hasOffsetMinutes"
+    else if name == "has_date" then "hasDate"
+    else if name == "has_time" then "hasTime"
+    else if name == "has_years" then "hasYears"
+    else if name == "has_months" then "hasMonths"
+    else if name == "has_days" then "hasDays"
+    else if name == "has_hours" then "hasHours"
+    else if name == "has_minutes" then "hasMinutes"
+    else if name == "has_seconds" then "hasSeconds"
+    else if name == "has_weeks" then "hasWeeks"
+    else if name == "has_start" then "hasStart"
+    else if name == "has_end" then "hasEnd"
+    else if name == "has_duration" then "hasDuration"
+    else if name == "does_not_contain" then "doesNotContain"
+    else if name == "contains_key" then "containsKey"
+    else if name == "does_not_contain_key" then "doesNotContainKey"
+    else if name == "contains_value" then "containsValue"
     else if name == "as_list" then "asList"
     else if name == "add_days" then "addDays"
     else if name == "add_seconds" then "addSeconds"
