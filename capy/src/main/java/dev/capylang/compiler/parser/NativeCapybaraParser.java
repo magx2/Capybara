@@ -1737,7 +1737,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var cases = new ArrayList<Expression.MatchCase>();
         for (var caseList : ctx.matchCaseList()) {
             for (var matchCase : caseList.matchCase()) {
-                cases.add(matchCase(matchCase));
+                cases.addAll(matchCases(matchCase));
             }
         }
         return new Expression.MatchExpression(expression(ctx.expression()), List.copyOf(cases), location(ctx));
@@ -1749,14 +1749,27 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var cases = new ArrayList<Expression.MatchCase>();
         for (var caseList : ctx.matchCaseNoPipeList()) {
             for (var matchCase : caseList.matchCaseNoPipe()) {
-                cases.add(matchCaseNoPipe(matchCase));
+                cases.addAll(matchCasesNoPipe(matchCase));
             }
         }
         return new Expression.MatchExpression(expressionNoPipe(ctx.expressionNoPipe()), List.copyOf(cases), location(ctx));
     }
 
-    private static Expression.MatchCase matchCase(dev.capylang.parser.antlr.FunctionalParser.MatchCaseContext ctx) {
-        var pattern = ctx.pattern().isEmpty() ? null : ctx.pattern(0);
+    private static List<Expression.MatchCase> matchCases(dev.capylang.parser.antlr.FunctionalParser.MatchCaseContext ctx) {
+        if (ctx.pattern().isEmpty()) {
+            return List.of(matchCase(ctx, null));
+        }
+        var cases = new ArrayList<Expression.MatchCase>();
+        for (var pattern : ctx.pattern()) {
+            cases.add(matchCase(ctx, pattern));
+        }
+        return List.copyOf(cases);
+    }
+
+    private static Expression.MatchCase matchCase(
+            dev.capylang.parser.antlr.FunctionalParser.MatchCaseContext ctx,
+            dev.capylang.parser.antlr.FunctionalParser.PatternContext pattern
+    ) {
         return new Expression.MatchCase(
                 patternTypeName(pattern),
                 patternBindings(pattern),
@@ -1771,10 +1784,23 @@ public final class NativeCapybaraParser implements CapybaraParser {
         );
     }
 
-    private static Expression.MatchCase matchCaseNoPipe(
+    private static List<Expression.MatchCase> matchCasesNoPipe(
             dev.capylang.parser.antlr.FunctionalParser.MatchCaseNoPipeContext ctx
     ) {
-        var pattern = ctx.pattern().isEmpty() ? null : ctx.pattern(0);
+        if (ctx.pattern().isEmpty()) {
+            return List.of(matchCaseNoPipe(ctx, null));
+        }
+        var cases = new ArrayList<Expression.MatchCase>();
+        for (var pattern : ctx.pattern()) {
+            cases.add(matchCaseNoPipe(ctx, pattern));
+        }
+        return List.copyOf(cases);
+    }
+
+    private static Expression.MatchCase matchCaseNoPipe(
+            dev.capylang.parser.antlr.FunctionalParser.MatchCaseNoPipeContext ctx,
+            dev.capylang.parser.antlr.FunctionalParser.PatternContext pattern
+    ) {
         return new Expression.MatchCase(
                 patternTypeName(pattern),
                 patternBindings(pattern),
