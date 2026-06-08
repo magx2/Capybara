@@ -375,14 +375,16 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     let rightType = expression_type(binary.right, env, module, allModules)
     let naturalResultType = binary_result_type(binary.operator, leftType, rightType)
     let resultType = contextual_binary_result_type(naturalResultType, expectedType)
-    if result_pipe_expression(binary, leftType)
+    if result_reduce_operator_expression(binary, leftType)
+    then result_reduce_method_code(result_reduce_operator_call(binary), env, expectedType, module, allModules)
+    else if result_pipe_expression(binary, leftType)
     then result_pipe_code(binary, leftType, expectedType, env, module, allModules)
     else if option_pipe_expression(binary, leftType)
     then option_pipe_code(binary, leftType, env, module, allModules)
     else if collection_pipe_expression(binary, leftType)
     then collection_pipe_code(binary, leftType, env, module, allModules)
-    else if binary_extension_operator_expression(binary, env, module, allModules)
-    then binary_extension_operator_code(binary, env, module, allModules)
+    else if binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
+    then binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
     else if collection_plus_expression(binary.operator, leftType, rightType)
     then collection_plus_code(binary, leftType, rightType, env, module, allModules)
     else if collection_minus_expression(binary.operator, leftType, rightType)
@@ -642,8 +644,18 @@ private fun binary_extension_operator_expression(binary: CompiledBinaryExpressio
     case Some _ -> true
     case None -> false
 
+private fun binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
 private fun binary_extension_operator_code(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_binary_extension_operator(binary, env, module, allModules) with
+    case Some { function } -> extension_method_call_code(function, binary_extension_method_call(binary), env, module, allModules)
+    case None -> "unsupported(\"extension operator\")"
+
+private fun binary_extension_operator_code_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> extension_method_call_code(function, binary_extension_method_call(binary), env, module, allModules)
     case None -> "unsupported(\"extension operator\")"
 
@@ -652,12 +664,26 @@ private fun binary_extension_operator_type(binary: CompiledBinaryExpression, env
     case Some { function } -> bound_extension_method_return_type(function, expression_type(binary.left, env, module, allModules))
     case None -> object_type()
 
+private fun binary_extension_operator_type_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some { function } -> bound_extension_method_return_type(function, leftType)
+    case None -> object_type()
+
 private fun binary_extension_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_binary_extension_operator(binary, env, module, allModules) with
     case Some { function } ->
         let receiverType = expression_type(binary.left, env, module, allModules)
         let parameters = bound_extension_method_parameters(function, receiverType)
         concrete_return_type(bound_extension_method_return_type(function, receiverType))
+            & expression_emittable(binary.left, env, module, allModules)
+            & parameters_assignable(parameters, [binary.right], env, module, allModules)
+    case None -> false
+
+private fun binary_extension_operator_emittable_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some { function } ->
+        let parameters = bound_extension_method_parameters(function, leftType)
+        concrete_return_type(bound_extension_method_return_type(function, leftType))
             & expression_emittable(binary.left, env, module, allModules)
             & parameters_assignable(parameters, [binary.right], env, module, allModules)
     case None -> false
@@ -682,6 +708,29 @@ private fun result_pipe_receiver(left: CompiledExpression, leftType: CompiledTyp
             case CompiledDataLiteral literal -> result_constructor_type(literal.typeName)
             case CompiledBinaryExpression binary -> result_pipe_expression(binary, leftType)
             case _ -> false
+
+private fun result_reduce_operator_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
+    binary.operator == "|>"
+        & result_type_name(leftType.name)
+        & result_reduce_operator_arguments_shape(binary.right)
+
+private fun result_reduce_operator_arguments_shape(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledTupleLiteral literal -> result_reduce_method_arguments(literal.values)
+    case _ -> false
+
+private fun result_reduce_operator_call(binary: CompiledBinaryExpression): CompiledMethodCallExpression =
+    CompiledMethodCallExpression {
+        receiver: binary.left,
+        name: "reduce",
+        arguments: result_reduce_operator_arguments(binary.right),
+        location: binary.location
+    }
+
+private fun result_reduce_operator_arguments(expression: CompiledExpression): List[CompiledExpression] =
+    match expression with
+    case CompiledTupleLiteral literal -> literal.values
+    case _ -> []
 
 private fun result_constructor_type(typeName: String): bool =
     result_success_constructor(typeName) | result_error_constructor(typeName)
@@ -2747,10 +2796,40 @@ private fun data_field_entries_tail(fields: List[CompiledDataField], env: List[J
     case Some _ -> ", " + data_field_entries_code(fields, env, dataType, bindings, module, allModules)
 
 private fun with_expression_code(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = with_expression_type(withExpression, env, module, allModules)
+    let rawReceiverType = with_expression_receiver_type(withExpression, env, module, allModules)
+    let constructorTypes = with_constructor_type_names(rawReceiverType.name, module, allModules)
+    let rawWithCode = raw_with_expression_code(withExpression, rawReceiverType, env, module, allModules)
+    if constructorTypes.is_empty()
+    then rawWithCode
+    else
+        let resultType = with_constructor_result_type(rawReceiverType, constructorTypes, module, allModules)
+        let dataName = "__capy_constructor_data_" + withExpression.location.line + "_" + withExpression.location.column + "_" + with_expression_receiver_depth(withExpression.receiver)
+        "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+        + "            java.lang.Object " + dataName + " = " + rawWithCode + ";" + newline()
+        + data_constructor_pipeline_steps(constructorTypes, rawReceiverType.name, dataName, 0, module, allModules)
+        + data_constructor_pipeline_return(dataName, resultType)
+        + "        }).get()"
+
+private fun raw_with_expression_code(withExpression: CompiledWithExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_merge_data("
         + expression_code(withExpression.receiver, env, receiverType, module, allModules)
         + ", __capy_data(\"\", " + with_fields_code(withExpression.fields, receiverType, env, module, allModules) + "))"
+
+private fun with_expression_receiver_type(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    expression_type(withExpression.receiver, env, module, allModules)
+
+private fun with_expression_receiver_depth(expression: CompiledExpression): int =
+    match expression with
+    case CompiledWithExpression withExpression -> 1 + with_expression_receiver_depth(withExpression.receiver)
+    case _ -> 0
+
+private fun with_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    data_parent_constructor_type_names(typeName, module, allModules) + data_own_constructor_type_names(typeName, module)
+
+private fun with_constructor_result_type(receiverType: CompiledTypeReference, constructorTypes: List[String], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+    then result_type(receiverType)
+    else receiverType
 
 private fun with_fields_code(fields: List[CompiledDataField], receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if fields.is_empty()
@@ -3080,14 +3159,16 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledIfExpression ifExpression -> expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBinaryExpression binary ->
         let leftType = expression_type(binary.left, env, module, allModules)
-        if result_pipe_expression(binary, leftType)
+        if result_reduce_operator_expression(binary, leftType)
+        then result_reduce_method_type(result_reduce_operator_call(binary), env, module, allModules)
+        else if result_pipe_expression(binary, leftType)
         then result_pipe_result_type(binary, leftType, env, module, allModules)
         else if option_pipe_expression(binary, leftType)
         then option_pipe_result_type(binary, leftType, env, module, allModules)
         else if collection_pipe_expression(binary, leftType)
         then collection_pipe_result_type(binary, leftType, env, module, allModules)
-        else if binary_extension_operator_expression(binary, env, module, allModules)
-        then binary_extension_operator_type(binary, env, module, allModules)
+        else if binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
+        then binary_extension_operator_type_with_left_type(binary, leftType, module, allModules)
         else binary_result_type(
             binary.operator,
             leftType,
@@ -3132,7 +3213,11 @@ private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List
         else data_constructor_pipeline_type(declaredType.name, parentConstructors + data_own_constructor_type_names(declaredType.name, module), module, allModules)
 
 private fun with_expression_type(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    expression_type(withExpression.receiver, env, module, allModules)
+    let receiverType = with_expression_receiver_type(withExpression, env, module, allModules)
+    let constructorTypes = with_constructor_type_names(receiverType.name, module, allModules)
+    if constructorTypes.is_empty()
+    then receiverType
+    else with_constructor_result_type(receiverType, constructorTypes, module, allModules)
 
 private fun data_constructor_literal_type(typeName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if result_type_name(function.returnType.name)
@@ -3591,6 +3676,9 @@ private fun find_extension_method(call: CompiledMethodCallExpression, env: List[
 
 private fun find_binary_extension_operator(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = expression_type(binary.left, env, module, allModules)
+    find_binary_extension_operator_with_left_type(binary, receiverType, module, allModules)
+
+private fun find_binary_extension_operator_with_left_type(binary: CompiledBinaryExpression, receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     find_extension_method_in_scope(receiverType.name, binary.operator, module, allModules)
 
 private fun find_extension_method_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -4041,14 +4129,17 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledVariableExpression variable -> binding_exists(variable.name, env) | program_member_imported(variable.name, module.imports) | imported_stdlib_constant_exists(variable.name, module.imports)
     case CompiledIfExpression e -> truthy_expression_emittable(e.condition, env, module, allModules) & expression_emittable(e.thenBranch, env, module, allModules) & expression_emittable(e.elseBranch, env, module, allModules)
     case CompiledBinaryExpression e ->
-        if result_pipe_expression(e, expression_type(e.left, env, module, allModules))
+        let leftType = expression_type(e.left, env, module, allModules)
+        if result_reduce_operator_expression(e, leftType)
+        then result_reduce_method_emittable(result_reduce_operator_call(e), env, module, allModules)
+        else if result_pipe_expression(e, leftType)
         then result_pipe_emittable(e, env, module, allModules)
-        else if option_pipe_expression(e, expression_type(e.left, env, module, allModules))
+        else if option_pipe_expression(e, leftType)
         then option_pipe_emittable(e, env, module, allModules)
-        else if collection_pipe_expression(e, expression_type(e.left, env, module, allModules))
+        else if collection_pipe_expression(e, leftType)
         then collection_pipe_emittable(e, env, module, allModules)
-        else if binary_extension_operator_expression(e, env, module, allModules)
-        then binary_extension_operator_emittable(e, env, module, allModules)
+        else if binary_extension_operator_expression_with_left_type(e, leftType, module, allModules)
+        then binary_extension_operator_emittable_with_left_type(e, leftType, env, module, allModules)
         else java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
     case CompiledUnaryExpression e -> java_unary_operator_emittable(e, env, module, allModules) & expression_emittable(e.expression, env, module, allModules)
     case CompiledFunctionCallExpression e -> function_call_emittable(e, env, module, allModules)
@@ -5203,6 +5294,13 @@ private fun java_helpers(module: CompiledModule): String =
     else java_base_helpers() + java_collection_helpers() + java_truthy_helper()
 
 private fun java_base_helpers(): String =
+    java_pow_helpers()
+        + java_data_helpers()
+        + java_option_result_helpers()
+        + java_regex_helpers()
+        + java_parse_helpers()
+
+private fun java_pow_helpers(): String =
     "    private static int __capy_pow_int(int base, int exponent) {" + newline()
         + "        if (exponent <= 0) {" + newline()
         + "            return 1;" + newline()
@@ -5229,7 +5327,9 @@ private fun java_base_helpers(): String =
         + "    private static <T> T __capy_not_implemented(String message) {" + newline()
         + "        throw new UnsupportedOperationException(message);" + newline()
         + "    }" + newline() + newline()
-        + "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data(java.lang.String type, java.util.Map<java.lang.String, ?> fields) {" + newline()
+
+private fun java_data_helpers(): String =
+    "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data(java.lang.String type, java.util.Map<java.lang.String, ?> fields) {" + newline()
         + "        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>() {" + newline()
         + "            @Override" + newline()
         + "            public java.lang.String toString() {" + newline()
@@ -5297,7 +5397,9 @@ private fun java_base_helpers(): String =
         + "        }" + newline()
         + "        return java.lang.String.valueOf(message);" + newline()
         + "    }" + newline() + newline()
-        + "    private static java.util.Optional __capy_optional_value(java.lang.Object value) {" + newline()
+
+private fun java_option_result_helpers(): String =
+    "    private static java.util.Optional __capy_optional_value(java.lang.Object value) {" + newline()
         + "        if (value instanceof java.util.Optional optional) {" + newline()
         + "            return optional;" + newline()
         + "        }" + newline()
@@ -5355,7 +5457,9 @@ private fun java_base_helpers(): String =
         + "        }" + newline()
         + "        return value;" + newline()
         + "    }" + newline() + newline()
-        + "    private static java.lang.Object __capy_char(java.lang.String value) {" + newline()
+
+private fun java_regex_helpers(): String =
+    "    private static java.lang.Object __capy_char(java.lang.String value) {" + newline()
         + "        if (value.length() == 1) {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", value)));" + newline()
         + "        }" + newline()
@@ -5414,7 +5518,9 @@ private fun java_base_helpers(): String =
         + "    private static java.util.List<java.lang.String> __capy_regex_split(java.lang.Object regex, java.lang.String input) {" + newline()
         + "        return java.util.List.copyOf(java.util.Arrays.asList(__capy_regex_compile(regex).split(input, -1)));" + newline()
         + "    }" + newline() + newline()
-        + "    private static java.lang.Object __capy_parse_int(java.lang.String value) {" + newline()
+
+private fun java_parse_helpers(): String =
+    "    private static java.lang.Object __capy_parse_int(java.lang.String value) {" + newline()
         + "        try {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Integer.parseInt(value))));" + newline()
         + "        } catch (java.lang.NumberFormatException e) {" + newline()
