@@ -684,10 +684,10 @@ private fun result_constructor_type(typeName: String): bool =
     result_success_constructor(typeName) | result_error_constructor(typeName)
 
 private fun result_success_constructor(typeName: String): bool =
-    typeName == "Success" | typeName == "/capy/lang/Result.Success" | typeName == "Result.Success"
+    stdlib_data_constructor_name(typeName, "Result", "Success")
 
 private fun result_error_constructor(typeName: String): bool =
-    typeName == "Error" | typeName == "/capy/lang/Result.Error" | typeName == "Result.Error"
+    stdlib_data_constructor_name(typeName, "Result", "Error")
 
 private fun option_pipe_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
     binary.operator == "|-"
@@ -2543,13 +2543,21 @@ private fun collection_receiver_type(type: CompiledTypeReference): bool =
     type.name == "List" | type.name == "Set" | seq_type_name(type.name) | type.name == "String"
 
 private fun option_type_name(name: String): bool =
-    name == "Option" | name == "/capy/lang/Option" | name == "capy/lang/Option"
+    stdlib_type_name(name, "Option")
 
 private fun result_type_name(name: String): bool =
-    name == "Result" | name == "/capy/lang/Result" | name == "capy/lang/Result"
+    stdlib_type_name(name, "Result")
 
 private fun seq_type_name(name: String): bool =
-    name == "Seq" | name == "/capy/lang/Seq" | name == "capy/lang/Seq"
+    stdlib_type_name(name, "Seq")
+
+private fun stdlib_type_name(name: String, member: String): bool =
+    name == member | name == "/capy/lang/" + member | name == "capy/lang/" + member
+
+private fun stdlib_data_constructor_name(typeName: String, owner: String, member: String): bool =
+    typeName == member
+        | typeName == "/capy/lang/" + owner + "." + member
+        | typeName == owner + "." + member
 
 private fun match_expression_code(matchExpression: CompiledMatchExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = expression_type(matchExpression.value, env, module, allModules)
@@ -2599,10 +2607,10 @@ private fun option_constructor_type(typeName: String): bool =
     option_some_constructor(typeName) | option_none_constructor(typeName)
 
 private fun option_some_constructor(typeName: String): bool =
-    typeName == "Some" | typeName == "/capy/lang/Option.Some" | typeName == "Option.Some"
+    stdlib_data_constructor_name(typeName, "Option", "Some")
 
 private fun option_none_constructor(typeName: String): bool =
-    typeName == "None" | typeName == "/capy/lang/Option.None" | typeName == "Option.None"
+    stdlib_data_constructor_name(typeName, "Option", "None")
 
 private fun option_match_condition_code(matchCase: CompiledMatchCase, valueCode: String): String =
     if option_some_constructor(matchCase.typeName)
@@ -2617,8 +2625,8 @@ private fun result_match_case(matchCase: CompiledMatchCase, valueType: CompiledT
 
 private fun result_match_condition_code(matchCase: CompiledMatchCase, valueCode: String): String =
     if result_success_constructor(matchCase.typeName)
-    then "__capy_data_is(" + valueCode + ", \"Success\")"
-    else "__capy_data_is(" + valueCode + ", \"Error\")"
+    then "__capy_result_is_success(" + valueCode + ")"
+    else "__capy_result_is_error(" + valueCode + ")"
 
 private fun primitive_match_condition_code(typeName: String, valueCode: String, valueType: CompiledTypeReference): String =
     if valueType.name == typeName
@@ -2662,13 +2670,20 @@ private fun match_binding_type(matchCase: CompiledMatchCase, valueType: Compiled
         declared_positional_field_type("$" + idx, data_type_fields(matchCase.typeName, module, allModules), bindings, 0, object_type())
 
 private fun match_binding_value_code(matchCase: CompiledMatchCase, valueCode: String, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if match_binding_whole_value(matchCase)
+    if result_match_case(matchCase, valueType) & match_binding_whole_value(matchCase)
+    then result_match_whole_value_code(matchCase, valueCode)
+    else if match_binding_whole_value(matchCase)
     then valueCode
     else if option_match_case(matchCase, valueType)
     then option_value_code(valueCode) + ".orElse(null)"
     else if result_match_case(matchCase, valueType)
     then result_match_binding_value_code(matchCase, valueCode)
     else "__capy_data_field(" + valueCode + ", \"" + escape_java_string(match_binding_field_name(matchCase, idx, module, allModules)) + "\")"
+
+private fun result_match_whole_value_code(matchCase: CompiledMatchCase, valueCode: String): String =
+    if result_success_constructor(matchCase.typeName)
+    then "__capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", __capy_result_success_value(" + valueCode + "))))"
+    else "__capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", __capy_result_error_value(" + valueCode + "))))"
 
 private fun result_match_binding_value_code(matchCase: CompiledMatchCase, valueCode: String): String =
     if result_success_constructor(matchCase.typeName)
@@ -4618,6 +4633,9 @@ private fun java_base_helpers(): String =
         + "    }" + newline() + newline()
         + "    private static boolean __capy_result_is_success(java.lang.Object value) {" + newline()
         + "        return value instanceof capy.lang.Result.Success<?> || __capy_data_is(value, \"Success\") || __capy_data_is(value, \"/capy/lang/Result.Success\") || __capy_data_is(value, \"Result.Success\");" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_result_is_error(java.lang.Object value) {" + newline()
+        + "        return value instanceof capy.lang.Result.Error<?> || __capy_data_is(value, \"Error\") || __capy_data_is(value, \"/capy/lang/Result.Error\") || __capy_data_is(value, \"Result.Error\");" + newline()
         + "    }" + newline() + newline()
         + "    private static capy.lang.Result __capy_result_value(java.lang.Object value) {" + newline()
         + "        if (value instanceof capy.lang.Result result) {" + newline()
