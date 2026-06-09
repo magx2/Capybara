@@ -251,6 +251,7 @@ sourceSets {
     }
     e2eCoo {
         java.srcDir e2eCooGeneratedJavaDir
+        java.srcDir file('src/e2e-coo/native/java')
         resources.srcDir file('src/e2e-coo/resources')
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
@@ -397,6 +398,13 @@ def prepareE2eCooTask089Sources = tasks.register('prepareE2eCooTask089Sources', 
         include 'dev/capylang/test/ConstructedObjectsCapyTest.cfun'
         include 'dev/capylang/test/ObjectConstructionInterop.cfun'
         include 'dev/capylang/test/ObjectConstructionInteropCapyTest.cfun'
+        include 'dev/capylang/test/NativeWiring.coo'
+        include 'dev/capylang/test/NativeWiringProvider.cfun'
+        include 'dev/capylang/test/NativeWiringCapyTest.cfun'
+    }
+    from(layout.projectDirectory.dir('src/e2e-coo/native')) {
+        include 'java/**'
+        into 'native'
     }
     into e2eCooSelectedCapybaraSourceDir
 }

@@ -26,6 +26,8 @@ from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
@@ -576,14 +578,178 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
                     line: 0,
                     column: 0
                 }] })
-                case Success { raw_modules } -> compile(
-                    raw_modules,
-                    configuration.libraries,
-                    configuration.native_providers,
-                    empty_native_provider_manifest()
-                )
+                case Success { raw_modules } ->
+                    read_native_implementation_manifest(inputPath).flat_map(nativeImplementationProviders =>
+                        compile(
+                            raw_modules,
+                            configuration.libraries,
+                            configuration.native_providers,
+                            nativeImplementationProviders
+                        )
+                    )
             )
     )
+
+private fun read_native_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
+    let nativeJavaPath = inputPath / "native" / "java"
+    exists(nativeJavaPath).flat_map(present =>
+        if !present
+        then pure(empty_native_provider_manifest())
+        else is_directory(nativeJavaPath).flat_map(directory =>
+            if !directory
+            then pure(empty_native_provider_manifest())
+            else list_regular_files(nativeJavaPath).flat_map(filesResult =>
+                match filesResult with
+                case Error _ -> pure(empty_native_provider_manifest())
+                case Success { files } -> read_native_java_provider_bindings(java_source_files(files))
+            )
+        )
+    )
+
+private fun java_source_files(files: List[Path]): List[Path] =
+    match files[0] with
+    case None -> []
+    case Some { file } ->
+        if path_to_string(file).end_with(".java")
+        then [file] + java_source_files(files[1:])
+        else java_source_files(files[1:])
+
+private fun read_native_java_provider_bindings(files: List[Path]): Effect[NativeProviderManifest] =
+    match files[0] with
+    case None -> pure(empty_native_provider_manifest())
+    case Some { file } ->
+        read_text(file).flat_map(readResult =>
+            match readResult with
+            case Error _ -> read_native_java_provider_bindings(files[1:])
+            case Success { content } ->
+                read_native_java_provider_bindings(files[1:]).map(rest =>
+                    NativeProviderManifest {
+                        providers: native_java_provider_bindings(content) + rest.providers
+                    }
+                )
+        )
+
+private fun native_java_provider_bindings(source: String): List[NativeProviderBinding] =
+    if !(source ? "@NativeImplementation")
+    then []
+    else
+        let className = native_java_class_name(source)
+        let interfaceId = native_java_interface_id(source)
+        if className.is_empty() | interfaceId.is_empty()
+        then []
+        else [NativeProviderBinding {
+            interfaceId: interfaceId,
+            qualifier: native_java_qualifier(source),
+            javaBinding: Some { NativeProviderBackendBinding {
+                className: Some { className },
+                moduleName: None {},
+                exportName: None {},
+                factory: None {}
+            }},
+            javascriptBinding: None {},
+            pythonBinding: None {}
+        }]
+
+private fun native_java_class_name(source: String): String =
+    let packageName = native_java_package_name(source)
+    let className = native_java_token_after(source, " class ")
+    if className.is_empty()
+    then ""
+    else if packageName.is_empty()
+    then className
+    else packageName + "." + className
+
+private fun native_java_interface_id(source: String): String =
+    let implemented = native_java_token_after(source, " implements ")
+    if implemented.is_empty()
+    then ""
+    else if implemented ? "."
+    then implemented
+    else native_java_imported_name(source, implemented, native_java_package_name(source))
+
+private fun native_java_package_name(source: String): String =
+    native_java_between(source, "package ", ";").trim()
+
+private fun native_java_qualifier(source: String): String =
+    if source ? "qualifier = \""
+    then native_java_between(source, "qualifier = \"", "\"")
+    else if source ? "qualifier=\""
+    then native_java_between(source, "qualifier=\"", "\"")
+    else if source ? "@NativeImplementation(\""
+    then native_java_between(source, "@NativeImplementation(\"", "\"")
+    else ""
+
+private fun native_java_imported_name(source: String, simpleName: String, packageName: String): String =
+    let importSuffix = "." + simpleName + ";"
+    let suffixIndex = native_java_index_of(source, importSuffix, 0)
+    if suffixIndex >= 0
+    then
+        let importStart = native_java_last_index_of(source, "import ", 0, -1, suffixIndex)
+        let semicolon = native_java_index_of(source, ";", suffixIndex)
+        if importStart >= 0 & semicolon >= 0
+        then source[importStart + "import ".size().value, semicolon].trim()
+        else native_java_package_relative_name(packageName, simpleName)
+    else native_java_package_relative_name(packageName, simpleName)
+
+private fun native_java_package_relative_name(packageName: String, simpleName: String): String =
+    if packageName.is_empty()
+    then simpleName
+    else packageName + "." + simpleName
+
+private fun native_java_token_after(source: String, marker: String): String =
+    let start = native_java_index_of(source, marker, 0)
+    if start < 0
+    then ""
+    else native_java_token_from(source, start + marker.size().value, "")
+
+private fun native_java_token_from(source: String, idx: int, acc: String): String =
+    if idx >= source.size().value
+    then acc
+    else match source[idx] with
+        case None -> acc
+        case Some { char } ->
+            if native_java_token_char(char)
+            then native_java_token_from(source, idx + 1, acc + char)
+            else acc
+
+private fun native_java_token_char(char: String): bool =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.$" ? char
+
+private fun native_java_between(source: String, prefix: String, suffix: String): String =
+    let start = native_java_index_of(source, prefix, 0)
+    if start < 0
+    then ""
+    else
+        let bodyStart = start + prefix.size().value
+        let end = native_java_index_of(source, suffix, bodyStart)
+        if end < 0
+        then ""
+        else source[bodyStart, end]
+
+private fun native_java_index_of(source: String, needle: String, idx: int): int =
+    if idx > source.size().value - needle.size().value
+    then -1
+    else if native_java_has_prefix_at(source, needle, idx, 0)
+    then idx
+    else native_java_index_of(source, needle, idx + 1)
+
+private fun native_java_last_index_of(source: String, needle: String, idx: int, found: int, before: int): int =
+    if idx >= before
+    then found
+    else if native_java_has_prefix_at(source, needle, idx, 0)
+    then native_java_last_index_of(source, needle, idx + 1, idx, before)
+    else native_java_last_index_of(source, needle, idx + 1, found, before)
+
+private fun native_java_has_prefix_at(source: String, needle: String, sourceIdx: int, needleIdx: int): bool =
+    match needle[needleIdx] with
+    case None -> true
+    case Some { expected } ->
+        match source[sourceIdx + needleIdx] with
+        case None -> false
+        case Some { actual } ->
+            if actual == expected
+            then native_java_has_prefix_at(source, needle, sourceIdx, needleIdx + 1)
+            else false
 
 private fun write_compile_generate_linked_output(linkedOutput: Option[String], program: CompiledProgram): Effect[Result[String]] =
     match linkedOutput with

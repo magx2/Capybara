@@ -762,35 +762,35 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Definition.AnnotationNothingValue(source, location);
     }
 
-    private static List<AnnotationApplication> annotationApplications(
+    private static List<FunctionAnnotationApplication> annotationApplications(
             List<dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext> blocks
     ) {
-        var applications = new ArrayList<AnnotationApplication>();
+        var applications = new ArrayList<FunctionAnnotationApplication>();
         for (var block : blocks) {
             applications.add(annotationApplication(block));
         }
         return List.copyOf(applications);
     }
 
-    private static AnnotationApplication annotationApplication(
+    private static FunctionAnnotationApplication annotationApplication(
             dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext ctx
     ) {
-        return new AnnotationApplication(
+        return new FunctionAnnotationApplication(
                 ctx.annotationName().getText(),
                 annotationArguments(ctx.annotationArgumentList()),
                 location(ctx)
         );
     }
 
-    private static List<AnnotationArgument> annotationArguments(
+    private static List<FunctionAnnotationArgument> annotationArguments(
             dev.capylang.parser.antlr.FunctionalParser.AnnotationArgumentListContext ctx
     ) {
         if (ctx == null) {
             return List.of();
         }
-        var arguments = new ArrayList<AnnotationArgument>();
+        var arguments = new ArrayList<FunctionAnnotationArgument>();
         for (var argument : ctx.annotationArgument()) {
-            arguments.add(new AnnotationArgument(
+            arguments.add(new FunctionAnnotationArgument(
                     argument.identifier().getText(),
                     annotationValue(argument.annotationValue()),
                     location(argument)
@@ -799,36 +799,36 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return List.copyOf(arguments);
     }
 
-    private static AnnotationValue annotationValue(
+    private static FunctionAnnotationValue annotationValue(
             dev.capylang.parser.antlr.FunctionalParser.AnnotationValueContext ctx
     ) {
         var source = ctx.getText();
         var location = location(ctx);
         if (ctx.STRING_LITERAL() != null) {
-            return new AnnotationStringValue(unquote(source), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationStringValue(unquote(source), source, location);
         }
         if (ctx.INT_LITERAL() != null) {
-            return new AnnotationIntValue(Integer.parseInt(cleanNumber(source)), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationIntValue(Integer.parseInt(cleanNumber(source)), source, location);
         }
         if (ctx.LONG_LITERAL() != null) {
-            return new AnnotationLongValue(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationLongValue(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
         }
         if (ctx.DOUBLE_LITERAL() != null) {
-            return new AnnotationDoubleValue(Double.parseDouble(cleanDouble(source)), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationDoubleValue(Double.parseDouble(cleanDouble(source)), source, location);
         }
         if (ctx.FLOAT_LITERAL() != null) {
-            return new AnnotationFloatValue(Float.parseFloat(cleanFloat(source)), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationFloatValue(Float.parseFloat(cleanFloat(source)), source, location);
         }
         if (ctx.BOOL_LITERAL() != null) {
-            return new AnnotationBoolValue(Boolean.parseBoolean(source), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationBoolValue(Boolean.parseBoolean(source), source, location);
         }
         if (ctx.NOTHING_LITERAL() != null) {
-            return new AnnotationNothingValue(source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationNothingValue(source, location);
         }
         if (ctx.annotationTypeReference() != null) {
-            return new AnnotationTypeNameValue(ctx.annotationTypeReference().getText(), source, location);
+            return new FunctionAnnotationValue.FunctionAnnotationTypeNameValue(ctx.annotationTypeReference().getText(), source, location);
         }
-        return new AnnotationNothingValue(source, location);
+        return new FunctionAnnotationValue.FunctionAnnotationNothingValue(source, location);
     }
 
     private static ConstantDeclaration constantDeclaration(
