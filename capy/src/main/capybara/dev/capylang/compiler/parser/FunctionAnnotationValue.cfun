@@ -1,0 +1,19 @@
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+union FunctionAnnotationValue = FunctionAnnotationBoolValue
+                              | FunctionAnnotationDoubleValue
+                              | FunctionAnnotationFloatValue
+                              | FunctionAnnotationIntValue
+                              | FunctionAnnotationLongValue
+                              | FunctionAnnotationNothingValue
+                              | FunctionAnnotationStringValue
+                              | FunctionAnnotationTypeNameValue
+
+data FunctionAnnotationStringValue { value: String, source: String, location: SourceLocation }
+data FunctionAnnotationIntValue { value: int, source: String, location: SourceLocation }
+data FunctionAnnotationLongValue { value: long, source: String, location: SourceLocation }
+data FunctionAnnotationDoubleValue { value: double, source: String, location: SourceLocation }
+data FunctionAnnotationFloatValue { value: float, source: String, location: SourceLocation }
+data FunctionAnnotationBoolValue { value: bool, source: String, location: SourceLocation }
+data FunctionAnnotationTypeNameValue { value: String, source: String, location: SourceLocation }
+data FunctionAnnotationNothingValue { source: String, location: SourceLocation }
