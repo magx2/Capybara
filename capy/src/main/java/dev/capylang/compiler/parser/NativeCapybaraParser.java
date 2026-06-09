@@ -257,6 +257,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new ObjectOrientedClass(
                 ctx.TYPE().getText(),
                 "public",
+                objectClassOpen(ctx.classModifier()),
                 objectConstructorParameters(ctx.constructorParameters()),
                 objectParents(ctx.inheritanceClause()),
                 List.copyOf(fields),
@@ -265,6 +266,18 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
+    }
+
+    private static boolean objectClassOpen(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.ClassModifierContext> modifiers
+    ) {
+        for (var modifier : modifiers) {
+            var text = modifier.getText();
+            if ("open".equals(text) || "abstract".equals(text)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ObjectOrientedInterface objectOrientedInterface(

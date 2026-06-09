@@ -156,6 +156,7 @@ private fun compile_object_class(class: ObjectOrientedClass, module: ParsedModul
     CompiledObjectOrientedClass {
         name: class.name,
         visibility: class.visibility,
+        open: class.open,
         parameters: compile_parameters_in_module(class.parameters, module, allModules),
         parents: compile_types_in_module(class.parents, module, allModules),
         fields: compile_object_fields(class.name, class.fields, module, allModules),
@@ -258,6 +259,7 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
     case None -> []
     case Some { class } ->
         [compile_object_class_schema_function(class)]
+            + [compile_object_class_open_schema_function(class)]
             + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
             + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0)
             + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + class.name + "|", class.annotations, 0)
@@ -272,6 +274,13 @@ private fun compile_object_class_schema_function(class: ObjectOrientedClass): Co
     compile_schema_constant(
         "__capy_oo_class|" + class.name,
         class.visibility,
+        class.location
+    )
+
+private fun compile_object_class_open_schema_function(class: ObjectOrientedClass): CompiledFunction =
+    compile_schema_constant(
+        "__capy_oo_class_open|" + class.name,
+        if class.open then "true" else "false",
         class.location
     )
 
