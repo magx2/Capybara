@@ -2655,24 +2655,24 @@ private fun native_stdlib_method_code(call: CompiledMethodCallExpression, env: L
 
 private fun string_get_method_code(call: CompiledMethodCallExpression, receiverCode: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if one_method_argument(call.arguments)
-    then string_optional_index_code(receiverCode, string_index_argument_code(argument(call.arguments, 0), env, module, allModules))
+    then string_optional_index_code(receiverCode, index_argument_code(argument(call.arguments, 0), env, module, allModules))
     else "__capy_string_slice("
         + receiverCode
         + ", "
-        + string_index_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + index_argument_code(argument(call.arguments, 0), env, module, allModules)
         + ", "
-        + string_index_argument_code(argument(call.arguments, 1), env, module, allModules)
+        + index_argument_code(argument(call.arguments, 1), env, module, allModules)
         + ")"
 
 private fun list_get_method_code(call: CompiledMethodCallExpression, receiverCode: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if one_method_argument(call.arguments)
-    then list_optional_index_code(receiverCode, string_index_argument_code(argument(call.arguments, 0), env, module, allModules))
+    then list_optional_index_code(receiverCode, index_argument_code(argument(call.arguments, 0), env, module, allModules))
     else "__capy_list_slice("
         + receiverCode
         + ", "
-        + string_index_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + index_argument_code(argument(call.arguments, 0), env, module, allModules)
         + ", "
-        + string_index_argument_code(argument(call.arguments, 1), env, module, allModules)
+        + index_argument_code(argument(call.arguments, 1), env, module, allModules)
         + ")"
 
 private fun dict_method_code(call: CompiledMethodCallExpression, receiverCode: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2689,7 +2689,7 @@ private fun tuple_get_method_code(call: CompiledMethodCallExpression, receiverCo
         + ".get(__capy_normalized_index("
         + receiverCode
         + ", "
-        + string_index_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + index_argument_code(argument(call.arguments, 0), env, module, allModules)
         + ")))"
 
 private fun one_method_argument(arguments: List[CompiledExpression]): bool =
@@ -3176,7 +3176,7 @@ private fun tuple_lambda_parameters(parameters: List[String]): bool =
 private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(index.receiver, env, module, allModules)
     let receiverCode = expression_code(index.receiver, env, receiverType, module, allModules)
-    let indexCode = string_index_argument_code(index.index, env, module, allModules)
+    let indexCode = index_argument_code(index.index, env, module, allModules)
     let resultType = expression_type(index, env, module, allModules)
     if !built_in_index_expression(index, receiverType)
     then user_defined_index_code(index, receiverType, env, expectedType, module, allModules)
@@ -3186,7 +3186,7 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
         + ", "
         + indexCode
         + ", "
-        + string_index_argument_code(index.endIndex, env, module, allModules)
+        + index_argument_code(index.endIndex, env, module, allModules)
         + ")"
     else if receiverType.name == "String"
     then string_optional_index_code(receiverCode, indexCode)
@@ -3235,16 +3235,16 @@ private fun list_slice_start_index_code(expression: CompiledExpression, env: Lis
     case CompiledIntLiteral literal ->
         if omitted_slice_start(literal)
         then "0"
-        else string_index_argument_code(expression, env, module, allModules)
-    case _ -> string_index_argument_code(expression, env, module, allModules)
+        else index_argument_code(expression, env, module, allModules)
+    case _ -> index_argument_code(expression, env, module, allModules)
 
 private fun list_slice_end_index_code(receiverCode: String, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
     case CompiledIntLiteral literal ->
         if omitted_slice_end(literal)
         then receiverCode + ".size()"
-        else string_index_argument_code(expression, env, module, allModules)
-    case _ -> string_index_argument_code(expression, env, module, allModules)
+        else index_argument_code(expression, env, module, allModules)
+    case _ -> index_argument_code(expression, env, module, allModules)
 
 private fun omitted_slice_end(literal: CompiledIntLiteral): bool =
     literal.source == "__capy_slice_end__"
@@ -3252,12 +3252,12 @@ private fun omitted_slice_end(literal: CompiledIntLiteral): bool =
 private fun omitted_slice_start(literal: CompiledIntLiteral): bool =
     literal.source == "__capy_slice_start__"
 
-private fun string_index_argument_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let type = expression_type(expression, env, module, allModules)
-    let code = expression_code(expression, env, if numeric_type(type) then type else object_type(), module, allModules)
-    if numeric_type(type)
-    then code
-    else "((java.lang.Number) " + code + ").intValue()"
+private fun index_argument_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    expression_code(expression, env, int_type(), module, allModules)
+
+private fun index_argument_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(expression, env, module, allModules)
+        & value_assignable(int_type(), expression_type(expression, env, module, allModules), module, allModules)
 
 private fun string_optional_index_code(receiverCode: String, indexCode: String): String =
     "__capy_string_get_optional(" + receiverCode + ", " + indexCode + ")"
@@ -6041,7 +6041,9 @@ private fun extension_method_call_emittable_with_receiver_type(function: Compile
 
 private fun native_stdlib_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     expression_emittable(call.receiver, env, module, allModules)
-        & if receiverType.name == "Dict"
+        & if receiverType.name == "String" | receiverType.name == "List"
+            then index_method_arguments_emittable(call.arguments, env, module, allModules)
+            else if receiverType.name == "Dict"
             then dict_method_arguments_emittable(call, env, module, allModules)
             else if receiverType.name == "Tuple"
             then tuple_get_method_arguments_emittable(call, env, module, allModules)
@@ -6071,7 +6073,16 @@ private fun dict_method_arguments_emittable(call: CompiledMethodCallExpression, 
 private fun tuple_get_method_arguments_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let index = argument(call.arguments, 0)
     index_literal_emittable(index)
-        & expression_emittable(index, env, module, allModules)
+        & index_argument_emittable(index, env, module, allModules)
+
+private fun index_method_arguments_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { first } ->
+        index_argument_emittable(first, env, module, allModules)
+            & match arguments[1] with
+                case None -> true
+                case Some { second } -> arguments[2:].is_empty() & index_argument_emittable(second, env, module, allModules)
 
 private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.arguments.is_empty()
@@ -6376,18 +6387,18 @@ private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBindin
     then user_defined_index_emittable(index, receiverType, env, module, allModules)
     else if receiverType.name == "List"
     then expression_emittable(index.receiver, env, module, allModules)
-        & expression_emittable(index.index, env, module, allModules)
-        & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
+        & index_argument_emittable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | index_argument_emittable(index.endIndex, env, module, allModules))
     else if receiverType.name == "Tuple"
     then index_literal_emittable(index.index)
         & (!index.hasEndIndex | index_literal_emittable(index.endIndex))
         & expression_emittable(index.receiver, env, module, allModules)
-        & expression_emittable(index.index, env, module, allModules)
-        & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
+        & index_argument_emittable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | index_argument_emittable(index.endIndex, env, module, allModules))
     else if receiverType.name == "String"
     then expression_emittable(index.receiver, env, module, allModules)
-        & expression_emittable(index.index, env, module, allModules)
-        & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
+        & index_argument_emittable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | index_argument_emittable(index.endIndex, env, module, allModules))
     else if receiverType.name == "Dict"
     then !index.hasEndIndex
         & expression_emittable(index.receiver, env, module, allModules)
