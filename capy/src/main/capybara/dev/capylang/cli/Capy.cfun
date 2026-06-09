@@ -20,13 +20,13 @@ from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDec
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
 from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
-from /dev/capylang/compiler/ObjectOrientedModule import { ObjectOrientedModule }
 from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }

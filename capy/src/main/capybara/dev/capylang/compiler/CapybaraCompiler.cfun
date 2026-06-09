@@ -11,6 +11,9 @@ from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
@@ -22,6 +25,9 @@ from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockEx
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
 from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
+from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
+from /dev/capylang/compiler/parser/ObjectOrientedClass import { ObjectOrientedClass }
+from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
 from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
 from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }
@@ -51,7 +57,7 @@ private fun compiled_program(
 ): Either[CompiledProgram, List[CompilerError]] =
     Left { CompiledProgram {
         modules: compile_modules(program.modules),
-        objectOrientedModules: [],
+        objectOrientedModules: compile_object_oriented_modules(program.modules),
         nativeProviders: nativeProviders,
         nativeProviderCatalog: empty_native_provider_catalog()
     }}
@@ -59,7 +65,31 @@ private fun compiled_program(
 private fun compile_modules(modules: List[ParsedModule]): List[CompiledModule] =
     match modules[0] with
     case None -> []
-    case Some { module } -> [compile_module(module)] + compile_modules(modules[1:])
+    case Some { module } -> merge_compiled_module(compile_module(module), compile_modules(modules[1:]))
+
+private fun merge_compiled_module(module: CompiledModule, modules: List[CompiledModule]): List[CompiledModule] =
+    match modules[0] with
+    case None -> [module]
+    case Some { existing } ->
+        if same_compiled_module(module, existing)
+        then [merge_compiled_modules(module, existing)] + modules[1:]
+        else [existing] + merge_compiled_module(module, modules[1:])
+
+private fun same_compiled_module(first: CompiledModule, second: CompiledModule): bool =
+    first.name == second.name & first.path == second.path
+
+private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule): CompiledModule =
+    CompiledModule {
+        name: first.name,
+        path: first.path,
+        types: first.types + second.types,
+        visiblePrimitiveBackedTypes: first.visiblePrimitiveBackedTypes + second.visiblePrimitiveBackedTypes,
+        functions: first.functions + second.functions,
+        imports: first.imports + second.imports,
+        derivers: first.derivers + second.derivers,
+        annotations: first.annotations + second.annotations,
+        staticImports: first.staticImports + second.staticImports
+    }
 
 private fun compile_module(module: ParsedModule): CompiledModule =
     let derivers = compile_derivers(module.definitions)
@@ -68,11 +98,84 @@ private fun compile_module(module: ParsedModule): CompiledModule =
         path: normalize_module_path(module.path),
         types: {:},
         visiblePrimitiveBackedTypes: {:},
-        functions: compile_functions(module.definitions, module.definitions),
+        functions: compile_functions(module.definitions, module.definitions) + compile_object_class_functions(module.objectOriented.classes),
         imports: compile_imports(module.imports),
         derivers: derivers,
         annotations: compile_annotations(module.definitions),
         staticImports: []
+    }
+
+private fun compile_object_oriented_modules(modules: List[ParsedModule]): List[CompiledObjectOrientedUnit] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        if module.objectOriented.classes.is_empty()
+        then compile_object_oriented_modules(modules[1:])
+        else [CompiledObjectOrientedUnit {
+            name: module.name,
+            path: normalize_module_path(module.path),
+            classes: compile_object_classes(module.objectOriented.classes)
+        }] + compile_object_oriented_modules(modules[1:])
+
+private fun compile_object_classes(classes: List[ObjectOrientedClass]): List[CompiledObjectOrientedClass] =
+    match classes[0] with
+    case None -> []
+    case Some { class } -> [compile_object_class(class)] + compile_object_classes(classes[1:])
+
+private fun compile_object_class(class: ObjectOrientedClass): CompiledObjectOrientedClass =
+    CompiledObjectOrientedClass {
+        name: class.name,
+        visibility: class.visibility,
+        parameters: compile_parameters(class.parameters),
+        methods: compile_object_methods(class.name, class.methods),
+        location: compile_location(class.location)
+    }
+
+private fun compile_object_methods(className: String, methods: List[ObjectOrientedMethod]): List[CompiledObjectOrientedMethod] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_object_method(className, method)] + compile_object_methods(className, methods[1:])
+
+private fun compile_object_method(className: String, method: ObjectOrientedMethod): CompiledObjectOrientedMethod =
+    let functionName = className + "." + method.name
+    CompiledObjectOrientedMethod {
+        name: method.name,
+        visibility: method.visibility,
+        parameters: compile_parameters(method.parameters),
+        returnType: compile_type(method.returnType),
+        body: compile_expression_in_function(method.body, functionName),
+        location: compile_location(method.location)
+    }
+
+private fun compile_object_class_functions(classes: List[ObjectOrientedClass]): List[CompiledFunction] =
+    match classes[0] with
+    case None -> []
+    case Some { class } ->
+        [compile_object_class_schema_function(class)]
+            + compile_object_method_functions(class.name, class.methods)
+            + compile_object_class_functions(classes[1:])
+
+private fun compile_object_class_schema_function(class: ObjectOrientedClass): CompiledFunction =
+    compile_schema_constant(
+        "__capy_oo_class|" + class.name,
+        class.visibility,
+        class.location
+    )
+
+private fun compile_object_method_functions(className: String, methods: List[ObjectOrientedMethod]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_object_method_function(className, method)] + compile_object_method_functions(className, methods[1:])
+
+private fun compile_object_method_function(className: String, method: ObjectOrientedMethod): CompiledFunction =
+    let functionName = className + "." + method.name
+    CompiledFunction {
+        name: "__capy_oo_method|" + className + "|" + method.name,
+        visibility: "oo:" + method.visibility,
+        parameters: compile_parameters(method.parameters),
+        returnType: compile_type(method.returnType),
+        body: compile_expression_in_function(method.body, functionName),
+        location: compile_location(method.location)
     }
 
 private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDeriverDeclaration] =
