@@ -301,7 +301,9 @@ private fun compiled_object_interface_method_function(function: CompiledFunction
     java_generator_string_has_prefix(function.name, "__capy_oo_interface_method|")
 
 private fun compiled_object_interface_method_function_for_interface(function: CompiledFunction, interfaceName: String): bool =
-    compiled_object_interface_method_function(function) & compiled_object_interface_method_owner_name(function.name) == interfaceName
+    if compiled_object_interface_method_function(function)
+    then compiled_object_interface_method_owner_name(function.name) == interfaceName
+    else false
 
 private fun compiled_object_interface_method(function: CompiledFunction): CompiledObjectOrientedMethod =
     CompiledObjectOrientedMethod {
@@ -460,7 +462,9 @@ private fun compiled_object_init_function(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.name, "__capy_oo_init|")
 
 private fun compiled_object_init_function_for_class(function: CompiledFunction, className: String): bool =
-    compiled_object_init_function(function) & compiled_object_init_class_name(function.name) == className
+    if compiled_object_init_function(function)
+    then compiled_object_init_class_name(function.name) == className
+    else false
 
 private fun compiled_object_init_class_name(name: String): String =
     let rest = name["__capy_oo_init|".size().value, name.size().value]
@@ -485,7 +489,9 @@ private fun compiled_object_method_function(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.name, "__capy_oo_method|")
 
 private fun compiled_object_method_function_for_class(function: CompiledFunction, className: String): bool =
-    compiled_object_method_function(function) & compiled_object_method_class_name(function.name) == className
+    if compiled_object_method_function(function)
+    then compiled_object_method_class_name(function.name) == className
+    else false
 
 private fun compiled_object_method(function: CompiledFunction): CompiledObjectOrientedMethod =
     CompiledObjectOrientedMethod {
@@ -664,6 +670,73 @@ private fun java_function_call_name(name: String, module: CompiledModule, allMod
         match find_function_in_imports(name, module.imports, module, allModules) with
         case Some { function } -> java_function_name(function)
         case None -> java_identifier(name)
+
+private fun function_name_matches(requested: String, declared: String): bool =
+    if requested == declared
+    then true
+    else if !(declared ? "_")
+    then false
+    else if !string_has_uppercase(requested)
+    then false
+    else requested == exported_function_name(declared)
+
+private fun string_has_uppercase(value: String): bool =
+    string_has_uppercase_from(value, 0)
+
+private fun string_has_uppercase_from(value: String, idx: int): bool =
+    if idx >= value.size().value
+    then false
+    else match value[idx] with
+        case None -> false
+        case Some { char } ->
+            if "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
+            then true
+            else string_has_uppercase_from(value, idx + 1)
+
+private fun exported_function_name(name: String): String =
+    exported_function_name_chars(name, 0, false, "")
+
+private fun exported_function_name_chars(name: String, idx: int, capitalizeNext: bool, acc: String): String =
+    if idx >= name.size().value
+    then acc
+    else match name[idx] with
+        case None -> acc
+        case Some { char } ->
+            if char == "_"
+            then exported_function_name_chars(name, idx + 1, true, acc)
+            else exported_function_name_chars(name, idx + 1, false, acc + exported_function_char(char, capitalizeNext))
+
+private fun exported_function_char(char: String, capitalize: bool): String =
+    if capitalize then uppercase_ascii_char(char) else char
+
+private fun uppercase_ascii_char(char: String): String =
+    if char == "a" then "A"
+    else if char == "b" then "B"
+    else if char == "c" then "C"
+    else if char == "d" then "D"
+    else if char == "e" then "E"
+    else if char == "f" then "F"
+    else if char == "g" then "G"
+    else if char == "h" then "H"
+    else if char == "i" then "I"
+    else if char == "j" then "J"
+    else if char == "k" then "K"
+    else if char == "l" then "L"
+    else if char == "m" then "M"
+    else if char == "n" then "N"
+    else if char == "o" then "O"
+    else if char == "p" then "P"
+    else if char == "q" then "Q"
+    else if char == "r" then "R"
+    else if char == "s" then "S"
+    else if char == "t" then "T"
+    else if char == "u" then "U"
+    else if char == "v" then "V"
+    else if char == "w" then "W"
+    else if char == "x" then "X"
+    else if char == "y" then "Y"
+    else if char == "z" then "Z"
+    else char
 
 private fun extension_method_function(function: CompiledFunction): bool =
     last_dot_index(function.name) >= 0
@@ -2098,6 +2171,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then stdlib_to_seq_code(call, env, module, allModules)
     else if reflection_function_call(call, module)
     then reflection_call_code(call, env, module, allModules)
+    else if object_type_function_call(call, module, allModules)
+    then object_type_function_call_code(call, module, allModules)
     else if call.name == "assert_all"
     then "capy.test.Assert.assertAll(" + expression_code(argument(call.arguments, 0), env, list_type(assert_type()), module, allModules) + ")"
     else if call.name == "assert_that"
@@ -2561,6 +2636,132 @@ private fun java_object_value_code(code: String, sourceType: CompiledTypeReferen
     then code
     else "((" + boxed_java_type(expectedType) + ") " + code + ")"
 
+private fun object_type_method_call(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name != "type"
+    then false
+    else if !call.arguments.is_empty()
+    then false
+    else object_type_method_receiver(call.receiver, module, allModules)
+
+private fun object_type_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if !qualified_call_name(call.name)
+    then false
+    else if qualified_call_member(call.name) != "type"
+    then false
+    else if !call.arguments.is_empty()
+    then false
+    else object_type_method_receiver_name(object_type_function_receiver_name(call.name), module, allModules)
+
+private fun object_type_function_receiver_name(name: String): String =
+    name[0, last_dot_index(name)]
+
+private fun object_type_method_receiver(receiver: CompiledExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match receiver with
+    case CompiledVariableExpression variable -> object_type_method_receiver_name(variable.name, module, allModules)
+    case _ -> false
+
+private fun object_type_method_receiver_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_object_class_in_scope(name, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+private fun object_type_method_call_type(): CompiledTypeReference =
+    data_type_reference("ObjectInfo")
+
+private fun object_type_method_call_code(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.receiver with
+    case CompiledVariableExpression variable -> object_type_method_call_code_for_name(variable.name, module, allModules)
+    case _ -> "unsupported(\"COO type\")"
+
+private fun object_type_function_call_code(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    object_type_method_call_code_for_name(object_type_function_receiver_name(call.name), module, allModules)
+
+private fun object_type_method_call_code_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_object_class_in_scope(name, module, allModules) with
+    case Some { binding } -> reflection_object_info_code(binding.objectClass.name, object_class_module(binding.moduleClassName, module, allModules), allModules)
+    case None -> "unsupported(\"COO type\")"
+
+private fun object_class_module(moduleClassName: String, fallback: CompiledModule, allModules: List[CompiledModule]): CompiledModule =
+    match find_module_by_class(moduleClassName, allModules) with
+    case Some { module } -> module
+    case None -> fallback
+
+private fun reflection_object_info_code(className: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"ObjectInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(className) + "\"")
+        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("open", "false")
+        + ", " + java_map_entry("fields", reflection_object_field_infos_code(schema_values("__capy_oo_field|" + className + "|", owner.functions), owner, allModules))
+        + ", " + java_map_entry("methods", reflection_object_method_infos_code(className, owner.functions, owner, allModules))
+        + ", " + java_map_entry("parents", reflection_parent_infos_code(schema_values("__capy_oo_parent|" + className + "|", owner.functions), owner, allModules))
+        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + "))"
+
+private fun reflection_object_field_infos_code(fields: List[String], owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_field_info_codes(fields, owner, allModules))
+
+private fun reflection_object_field_info_codes(fields: List[String], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [reflection_object_field_info_code(field, owner, allModules)]
+            + reflection_object_field_info_codes(fields[1:], owner, allModules)
+
+private fun reflection_object_field_info_code(field: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"FieldInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(object_field_schema_name(field)) + "\"")
+        + ", " + java_map_entry("type", reflection_any_info_code(schema_type_reference(object_field_schema_type(field)), owner, allModules))
+        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + "))"
+
+private fun reflection_object_method_infos_code(className: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_method_info_codes(className, functions, owner, allModules))
+
+private fun reflection_object_method_info_codes(className: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_method_function_for_class(function, className)
+        then [reflection_object_method_info_code(function, owner, allModules)]
+            + reflection_object_method_info_codes(className, functions[1:], owner, allModules)
+        else reflection_object_method_info_codes(className, functions[1:], owner, allModules)
+
+private fun reflection_object_method_info_code(function: CompiledFunction, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"MethodInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(compiled_object_method_name(function.name)) + "\"")
+        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("params", reflection_method_param_infos_code(function.parameters, owner, allModules))
+        + ", " + java_map_entry("return_type", reflection_any_info_code(function.returnType, owner, allModules))
+        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + "))"
+
+private fun reflection_method_param_infos_code(parameters: List[CompiledFunctionParameter], owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_method_param_info_codes(parameters, owner, allModules))
+
+private fun reflection_method_param_info_codes(parameters: List[CompiledFunctionParameter], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [reflection_method_param_info_code(parameter, owner, allModules)]
+            + reflection_method_param_info_codes(parameters[1:], owner, allModules)
+
+private fun reflection_method_param_info_code(parameter: CompiledFunctionParameter, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"FieldInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(parameter.name) + "\"")
+        + ", " + java_map_entry("type", reflection_any_info_code(parameter.typeReference, owner, allModules))
+        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + "))"
+
+private fun reflection_parent_infos_code(parents: List[String], owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_set_code(reflection_parent_info_codes(parents, owner, allModules))
+
+private fun reflection_parent_info_codes(parents: List[String], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [reflection_any_info_code(schema_type_reference(parent), owner, allModules)]
+            + reflection_parent_info_codes(parents[1:], owner, allModules)
+
 private fun object_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_object_method(call, env, module, allModules) with
     case Some _ -> true
@@ -2941,6 +3142,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then regex_method_code(call, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_code(call, env, module, allModules)
+    else if object_type_method_call(call, module, allModules)
+    then object_type_method_call_code(call, module, allModules)
     else if object_method_call(call, env, module, allModules)
     then object_method_call_code(call, env, expectedType, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -5362,6 +5565,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then stdlib_to_seq_type(call, env, module, allModules)
     else if reflection_function_call(call, module)
     then data_type_reference("DataValueInfo")
+    else if object_type_function_call(call, module, allModules)
+    then object_type_method_call_type()
     else if call.name == "assert_all" | call.name == "assert_that"
     then assert_type()
     else if call.name == "test"
@@ -5734,6 +5939,9 @@ private fun java_map_entry(name: String, valueCode: String): String =
 private fun java_list_code(values: List[String]): String =
     "java.util.List.of(" + java_code_list(values) + ")"
 
+private fun java_set_code(values: List[String]): String =
+    "java.util.Set.of(" + java_code_list(values) + ")"
+
 private fun java_code_list(values: List[String]): String =
     match values[0] with
     case None -> ""
@@ -5911,14 +6119,16 @@ private fun data_type_owner_module_in_modules(name: String, modules: List[Compil
 private fun qualified_function_call_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_qualified_function_binding(name, module, allModules) with
     case Some { binding } ->
-        qualified_function_return_type(effective_function_return_type(binding.function, binding.module, allModules), binding.module)
+        qualified_function_return_type(effective_function_return_type(binding.function, binding.module, allModules), binding.module, module)
     case None ->
         if qualified_call_member(name) == "main"
         then effect_type(CompiledTypeReference { name: "/capy/lang/Program", arguments: [] })
         else object_type()
 
-private fun qualified_function_return_type(type: CompiledTypeReference, owner: CompiledModule): CompiledTypeReference =
+private fun qualified_function_return_type(type: CompiledTypeReference, owner: CompiledModule, current: CompiledModule): CompiledTypeReference =
     if type.name.is_empty() | type.name == "any" | qualified_call_name(type.name) | type.name ? "/"
+    then type
+    else if module_fqcn(owner) == module_fqcn(current)
     then type
     else if schema_type_exists(type.name, owner.functions)
     then CompiledTypeReference { name: module_absolute_type_name(owner, type.name), arguments: type.arguments }
@@ -6246,6 +6456,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then int_type()
     else if call.name == "to_long"
     then long_type()
+    else if object_type_method_call(call, module, allModules)
+    then object_type_method_call_type()
     else if object_method_call(call, env, module, allModules)
     then object_method_call_type(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -6615,7 +6827,7 @@ private fun best_function_for_arguments(name: String, arguments: List[CompiledEx
     match functions[0] with
     case None -> best
     case Some { function } ->
-        if function.name == name
+        if function_name_matches(name, function.name)
         then best_matching_function_for_arguments(name, arguments, env, functions, module, allModules, best, bestScore, function)
         else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
 
@@ -6691,7 +6903,7 @@ private fun find_function(name: String, functions: List[CompiledFunction]): /cap
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if function.name == name & !compiled_constant(function)
+        if function_name_matches(name, function.name) & !compiled_constant(function)
         then /capy/lang/Option.Some { function }
         else find_function(name, functions[1:])
 
@@ -7105,6 +7317,8 @@ private fun primitive_backed_backing_type_in_modules(name: String, modules: List
 private fun data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if schema_type_exists(name, module.functions)
     then schema_values("__capy_schema_parent|" + name + "|", module.functions)
+    else if stdlib_reflection_type(name)
+    then stdlib_reflection_type_parents(name)
     else match data_type_parent_types_in_imports(name, module.imports, module, allModules) with
         case Some { value } -> value
         case None -> data_type_parent_types_in_modules(name, allModules)
@@ -7171,12 +7385,24 @@ private fun data_type_direct_fields(name: String, module: CompiledModule, allMod
 private fun stdlib_reflection_type(name: String): bool =
     name == "PackageInfo"
         | name == "AnyInfo"
+        | name == "CFunInfo"
+        | name == "CooInfo"
         | name == "AnnotationValue"
         | name == "AnnotationInfo"
         | name == "AnnotationArgumentInfo"
         | name == "DataValueInfo"
         | name == "FieldValueInfo"
         | name == "DataInfo"
+        | name == "FunctionTypeInfo"
+        | name == "FieldInfo"
+        | name == "ListInfo"
+        | name == "SetInfo"
+        | name == "DictInfo"
+        | name == "TupleInfo"
+        | name == "InterfaceInfo"
+        | name == "ObjectInfo"
+        | name == "TraitInfo"
+        | name == "MethodInfo"
         | name == "AnnotationString"
         | name == "AnnotationInt"
         | name == "AnnotationLong"
@@ -7186,9 +7412,22 @@ private fun stdlib_reflection_type(name: String): bool =
         | name == "AnnotationTypeName"
         | name == "AnnotationNothing"
 
+private fun stdlib_reflection_type_parents(name: String): List[String] =
+    if name == "CFunInfo" | name == "CooInfo"
+    then ["AnyInfo"]
+    else if name == "DataInfo" | name == "ListInfo" | name == "SetInfo" | name == "DictInfo" | name == "TupleInfo" | name == "FunctionTypeInfo"
+    then ["CFunInfo"]
+    else if name == "InterfaceInfo" | name == "ObjectInfo" | name == "TraitInfo" | name == "MethodInfo"
+    then ["CooInfo"]
+    else if name == "AnnotationString" | name == "AnnotationInt" | name == "AnnotationLong" | name == "AnnotationDouble" | name == "AnnotationFloat" | name == "AnnotationBool" | name == "AnnotationTypeName" | name == "AnnotationNothing"
+    then ["AnnotationValue"]
+    else []
+
 private fun stdlib_reflection_type_fields(name: String): List[String] =
     if name == "PackageInfo"
     then ["name|String", "path|String"]
+    else if name == "AnyInfo"
+    then ["name|String", "pkg|PackageInfo"]
     else if name == "AnnotationInfo"
     then ["name|String", "pkg|PackageInfo", "arguments|List[AnnotationArgumentInfo]"]
     else if name == "AnnotationArgumentInfo"
@@ -7199,6 +7438,22 @@ private fun stdlib_reflection_type_fields(name: String): List[String] =
     then ["name|String", "type|AnyInfo", "value|any", "annotations|List[AnnotationInfo]"]
     else if name == "DataInfo"
     then ["name|String", "pkg|PackageInfo", "annotations|List[AnnotationInfo]"]
+    else if name == "FunctionTypeInfo"
+    then ["name|String", "pkg|PackageInfo", "params|List[AnyInfo]", "return_type|AnyInfo"]
+    else if name == "FieldInfo"
+    then ["name|String", "type|AnyInfo", "annotations|List[AnnotationInfo]"]
+    else if name == "ListInfo" | name == "SetInfo"
+    then ["name|String", "pkg|PackageInfo", "element_type|AnyInfo"]
+    else if name == "DictInfo"
+    then ["name|String", "pkg|PackageInfo", "value_type|AnyInfo"]
+    else if name == "TupleInfo"
+    then ["name|String", "pkg|PackageInfo", "elements|List[AnyInfo]"]
+    else if name == "InterfaceInfo" | name == "TraitInfo"
+    then ["name|String", "pkg|PackageInfo", "methods|List[MethodInfo]", "parents|Set[AnyInfo]", "annotations|List[AnnotationInfo]"]
+    else if name == "ObjectInfo"
+    then ["name|String", "pkg|PackageInfo", "open|bool", "fields|List[FieldInfo]", "methods|List[MethodInfo]", "parents|Set[AnyInfo]", "annotations|List[AnnotationInfo]"]
+    else if name == "MethodInfo"
+    then ["name|String", "pkg|PackageInfo", "params|List[FieldInfo]", "return_type|AnyInfo", "annotations|List[AnnotationInfo]"]
     else if name == "AnnotationString" | name == "AnnotationTypeName"
     then ["value|String"]
     else if name == "AnnotationInt"
@@ -7703,6 +7958,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then stdlib_date_time_method_emittable(call, env, module, allModules)
     else if primitive_conversion_method(call.name)
     then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
+    else if object_type_method_call(call, module, allModules)
+    then true
     else if object_method_call(call, env, module, allModules)
     then object_method_call_emittable(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with
@@ -7939,6 +8196,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then stdlib_to_seq_call_emittable(call, env, module, allModules)
     else if reflection_function_call(call, module)
     then reflection_call_emittable(call, env, module, allModules)
+    else if object_type_function_call(call, module, allModules)
+    then true
     else if call.name == "assert_all"
     then expressions_emittable(call.arguments, env, module, allModules)
     else if call.name == "assert_that"

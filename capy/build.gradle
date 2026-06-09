@@ -401,6 +401,9 @@ def prepareE2eCooTask089Sources = tasks.register('prepareE2eCooTask089Sources', 
         include 'dev/capylang/test/NativeWiring.coo'
         include 'dev/capylang/test/NativeWiringProvider.cfun'
         include 'dev/capylang/test/NativeWiringCapyTest.cfun'
+        include 'dev/capylang/test/SharedInterop.cfun'
+        include 'dev/capylang/test/SharedInterop.coo'
+        include 'dev/capylang/test/SharedInteropCapyTest.cfun'
     }
     from(layout.projectDirectory.dir('src/e2e-coo/native')) {
         include 'java/**'
