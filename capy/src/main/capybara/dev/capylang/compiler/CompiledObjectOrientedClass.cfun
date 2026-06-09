@@ -9,6 +9,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 data CompiledObjectOrientedClass {
     name: String,
     visibility: String,
+    open: bool,
     parameters: List[CompiledFunctionParameter],
     parents: List[CompiledTypeReference],
     fields: List[CompiledObjectOrientedField],

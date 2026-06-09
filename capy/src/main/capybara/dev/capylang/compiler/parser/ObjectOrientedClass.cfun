@@ -10,6 +10,7 @@ from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 data ObjectOrientedClass {
     name: String,
     visibility: String,
+    open: bool,
     parameters: List[FunctionParameter],
     parents: List[TypeReference],
     fields: List[ObjectOrientedField],

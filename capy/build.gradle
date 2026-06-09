@@ -409,7 +409,7 @@ def prepareE2eCooTask089Sources = tasks.register('prepareE2eCooTask089Sources', 
         include 'dev/capylang/test/ObjectOrientedFpInteropCapyTest.cfun'
         include 'dev/capylang/test/ObjectOrientedReflectionAnnotations.cfun'
         include 'dev/capylang/test/ObjectOrientedReflection.coo'
-        include 'dev/capylang/test/ObjectOrientedReflectionAnnotationsCapyTest.cfun'
+        include 'dev/capylang/test/ObjectOrientedReflectionCapyTest.cfun'
     }
     from(layout.projectDirectory.dir('src/e2e-coo/native')) {
         include 'java/**'
