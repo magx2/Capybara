@@ -1529,11 +1529,9 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_code(call.name)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
-    then
-        let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
-        let valueCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
-        "capy.lang.Effect.delay(() -> { var __capy_console_value = " + valueCode + "; "
-            + console_stream(call.name) + "." + console_method(call.name) + "(__capy_console_value); return __capy_console_value; })"
+    then console_print_call_code(call, env, module, allModules)
+    else if console_read_line_call(call, module)
+    then "capy.lang.Effect.delay(() -> dev.capylang.ConsoleUtil.readLine())"
     else if stdlib_to_seq_call(call, module)
     then stdlib_to_seq_code(call, env, module, allModules)
     else if call.name == "assert_all"
@@ -4459,6 +4457,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then stdlib_effect_function_call_type(call.name)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
+    else if console_read_line_call(call, module)
+    then effect_type(option_type(string_type()))
     else if stdlib_to_seq_call(call, module)
     then stdlib_to_seq_type(call, env, module, allModules)
     else if call.name == "assert_all" | call.name == "assert_that"
@@ -6185,6 +6185,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then match call.arguments[0] with
         case None -> false
         case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
+    else if console_read_line_call(call, module)
+    then true
     else if stdlib_to_seq_call(call, module)
     then stdlib_to_seq_call_emittable(call, env, module, allModules)
     else if call.name == "assert_all"
@@ -6779,6 +6781,15 @@ private fun seq_member_imported(member: String, imports: List[CompiledImportDecl
 private fun console_print_name(name: String): bool =
     name == "print" | name == "println" | name == "print_error" | name == "println_error"
 
+private fun console_print_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
+    let valueCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
+    "capy.lang.Effect.delay(() -> { var __capy_console_value = " + valueCode + "; "
+        + "return dev.capylang.ConsoleUtil." + console_util_method(call.name) + "(__capy_console_value); })"
+
+private fun console_read_line_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.name == "read_line" & call.arguments.is_empty() & console_member_imported("read_line", module.imports)
+
 private fun console_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/io/Console", "capy/io/Console")
 
@@ -6791,11 +6802,12 @@ private fun module_member_imported(member: String, imports: List[CompiledImportD
         then true
         else module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
-private fun console_stream(name: String): String =
-    if name == "print_error" | name == "println_error" then "java.lang.System.err" else "java.lang.System.out"
-
-private fun console_method(name: String): String =
-    if name == "println" | name == "println_error" then "println" else "print"
+private fun console_util_method(name: String): String =
+    if name == "print_error"
+    then "printError"
+    else if name == "println_error"
+    then "printlnError"
+    else name
 
 private fun test_file_test_case_list_type(type: CompiledTypeReference): bool =
     type.name == "TestCase" | (type.name == "Effect" & first_type_argument(type).name == "TestCase")
