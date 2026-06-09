@@ -1,5 +1,6 @@
 from /capy/collection/List import { List }
 from /dev/capylang/compiler/parser/Expression import { Expression }
+from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
@@ -10,5 +11,6 @@ data ObjectOrientedMethod {
     parameters: List[FunctionParameter],
     returnType: TypeReference,
     body: Expression,
+    annotations: List[FunctionAnnotationApplication],
     location: SourceLocation
 }

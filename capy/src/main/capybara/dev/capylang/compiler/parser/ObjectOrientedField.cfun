@@ -1,4 +1,6 @@
+from /capy/collection/List import { List }
 from /dev/capylang/compiler/parser/Expression import { Expression }
+from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
@@ -8,5 +10,6 @@ data ObjectOrientedField {
     typeReference: TypeReference,
     value: Expression,
     hasValue: bool,
+    annotations: List[FunctionAnnotationApplication],
     location: SourceLocation
 }

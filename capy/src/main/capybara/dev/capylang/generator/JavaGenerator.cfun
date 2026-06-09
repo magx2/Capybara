@@ -102,15 +102,15 @@ private fun java_object_interface_relative_path(objectInterface: CompiledObjectO
 private fun java_object_top_level_interface_code(objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
     java_package(module)
     + "public interface " + java_identifier(objectInterface.name) + java_object_interface_parent_clause(objectInterface.parents, module, allModules) + " {" + newline()
-    + java_object_top_level_interface_methods(objectInterface.methods, module, allModules)
+    + java_object_top_level_interface_methods(objectInterface.methods, objectInterface, module, allModules)
     + "}" + newline()
 
-private fun java_object_top_level_interface_methods(methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_object_top_level_interface_methods(methods: List[CompiledObjectOrientedMethod], objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> ""
     case Some { method } ->
-        "    " + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ");" + newline()
-            + java_object_top_level_interface_methods(methods[1:], module, allModules)
+        java_object_interface_method(method, objectInterface, module, allModules, "    ")
+            + java_object_top_level_interface_methods(methods[1:], objectInterface, module, allModules)
 
 private fun java_object_interfaces(interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule, allModules: List[CompiledModule]): String =
     match interfaces[0] with
@@ -121,7 +121,7 @@ private fun java_object_interfaces(interfaces: List[CompiledObjectOrientedInterf
 
 private fun java_object_interface(objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
     "    " + java_visibility_prefix(objectInterface.visibility) + "interface " + java_identifier(objectInterface.name) + java_object_interface_parent_clause(objectInterface.parents, module, allModules) + " {" + newline()
-    + java_object_interface_methods(objectInterface.methods, module, allModules)
+    + java_object_interface_methods(objectInterface.methods, objectInterface, module, allModules)
     + "    }" + newline()
 
 private fun java_object_interface_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -129,12 +129,30 @@ private fun java_object_interface_parent_clause(parents: List[CompiledTypeRefere
     then ""
     else " extends " + java_object_parent_types(parents, module, allModules)
 
-private fun java_object_interface_methods(methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_object_interface_methods(methods: List[CompiledObjectOrientedMethod], objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> ""
     case Some { method } ->
-        "        " + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ");" + newline()
-            + java_object_interface_methods(methods[1:], module, allModules)
+        java_object_interface_method(method, objectInterface, module, allModules, "        ")
+            + java_object_interface_methods(methods[1:], objectInterface, module, allModules)
+
+private fun java_object_interface_method(method: CompiledObjectOrientedMethod, objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    if objectInterface.kind == "trait"
+    then
+        let env = java_object_interface_method_bindings(method.parameters, objectInterface, module)
+        indent + "default " + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ") {" + newline()
+        + java_object_interface_method_body(method, env, module, allModules, indent + "    ")
+        + indent + "}" + newline()
+    else indent + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ");" + newline()
+
+private fun java_object_interface_method_bindings(parameters: List[CompiledFunctionParameter], objectInterface: CompiledObjectOrientedInterface, module: CompiledModule): List[JavaBinding] =
+    [java_binding_with_java_name("this", java_object_interface_type_reference_for_module(module, objectInterface), "this")]
+        + parameter_bindings(parameters)
+
+private fun java_object_interface_method_body(method: CompiledObjectOrientedMethod, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    if !expression_emittable(method.body, env, module, allModules)
+    then indent + "throw new UnsupportedOperationException(\"Unsupported COO trait method body at " + method.location.line + ":" + method.location.column + "\");" + newline()
+    else java_object_return_statements(method.body, method.returnType, env, module, allModules, indent)
 
 private fun java_object_classes(classes: List[CompiledObjectOrientedClass], module: CompiledModule, allModules: List[CompiledModule]): String =
     match classes[0] with
@@ -284,10 +302,16 @@ private fun compiled_object_interface(function: CompiledFunction, functions: Lis
     CompiledObjectOrientedInterface {
         name: interfaceName,
         visibility: schema_value(function),
+        kind: compiled_object_interface_kind(interfaceName, functions),
         parents: schema_type_references(schema_values("__capy_oo_interface_parent|" + interfaceName + "|", functions)),
         methods: compiled_object_interface_methods(interfaceName, functions),
         location: function.location
     }
+
+private fun compiled_object_interface_kind(interfaceName: String, functions: List[CompiledFunction]): String =
+    match schema_value_named("__capy_oo_interface_kind|" + interfaceName, functions) with
+    case Some { value } -> value
+    case None -> "interface"
 
 private fun compiled_object_interface_methods(interfaceName: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedMethod] =
     match functions[0] with
@@ -2663,10 +2687,29 @@ private fun object_type_method_receiver(receiver: CompiledExpression, module: Co
 private fun object_type_method_receiver_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_object_class_in_scope(name, module, allModules) with
     case Some _ -> true
-    case None -> false
+    case None ->
+        match find_object_interface_by_name(name, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
-private fun object_type_method_call_type(): CompiledTypeReference =
-    data_type_reference("ObjectInfo")
+private fun object_type_method_call_type(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match call.receiver with
+    case CompiledVariableExpression variable -> object_info_type_for_name(variable.name, module, allModules)
+    case _ -> data_type_reference("ObjectInfo")
+
+private fun object_type_function_call_type(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    object_info_type_for_name(object_type_function_receiver_name(call.name), module, allModules)
+
+private fun object_info_type_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_object_class_in_scope(name, module, allModules) with
+    case Some _ -> data_type_reference("ObjectInfo")
+    case None ->
+        match find_object_interface_by_name(name, module, allModules) with
+        case Some { binding } ->
+            if binding.objectInterface.kind == "trait"
+            then data_type_reference("TraitInfo")
+            else data_type_reference("InterfaceInfo")
+        case None -> data_type_reference("ObjectInfo")
 
 private fun object_type_method_call_code(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
     match call.receiver with
@@ -2679,7 +2722,10 @@ private fun object_type_function_call_code(call: CompiledFunctionCallExpression,
 private fun object_type_method_call_code_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_object_class_in_scope(name, module, allModules) with
     case Some { binding } -> reflection_object_info_code(binding.objectClass.name, object_class_module(binding.moduleClassName, module, allModules), allModules)
-    case None -> "unsupported(\"COO type\")"
+    case None ->
+        match find_object_interface_by_name(name, module, allModules) with
+        case Some { binding } -> reflection_object_interface_info_code(binding.objectInterface, object_class_module(binding.moduleClassName, module, allModules), allModules)
+        case None -> "unsupported(\"COO type\")"
 
 private fun object_class_module(moduleClassName: String, fallback: CompiledModule, allModules: List[CompiledModule]): CompiledModule =
     match find_module_by_class(moduleClassName, allModules) with
@@ -2691,27 +2737,51 @@ private fun reflection_object_info_code(className: String, owner: CompiledModule
         + java_map_entry("name", "\"" + escape_java_string(className) + "\"")
         + ", " + java_map_entry("pkg", package_info_code(owner))
         + ", " + java_map_entry("open", "false")
-        + ", " + java_map_entry("fields", reflection_object_field_infos_code(schema_values("__capy_oo_field|" + className + "|", owner.functions), owner, allModules))
+        + ", " + java_map_entry("fields", reflection_object_field_infos_code(className, schema_values("__capy_oo_field|" + className + "|", owner.functions), owner, allModules))
         + ", " + java_map_entry("methods", reflection_object_method_infos_code(className, owner.functions, owner, allModules))
         + ", " + java_map_entry("parents", reflection_parent_infos_code(schema_values("__capy_oo_parent|" + className + "|", owner.functions), owner, allModules))
-        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_oo_annotation|type|" + className + "|", owner.functions),
+            owner,
+            allModules
+        ))
         + "))"
 
-private fun reflection_object_field_infos_code(fields: List[String], owner: CompiledModule, allModules: List[CompiledModule]): String =
-    java_list_code(reflection_object_field_info_codes(fields, owner, allModules))
+private fun reflection_object_interface_info_code(objectInterface: CompiledObjectOrientedInterface, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"" + reflection_object_interface_info_type(objectInterface) + "\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(objectInterface.name) + "\"")
+        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("methods", reflection_object_interface_method_infos_code(objectInterface.name, owner.functions, owner, allModules))
+        + ", " + java_map_entry("parents", reflection_parent_infos_code(schema_values("__capy_oo_interface_parent|" + objectInterface.name + "|", owner.functions), owner, allModules))
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_oo_annotation|type|" + objectInterface.name + "|", owner.functions),
+            owner,
+            allModules
+        ))
+        + "))"
 
-private fun reflection_object_field_info_codes(fields: List[String], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+private fun reflection_object_interface_info_type(objectInterface: CompiledObjectOrientedInterface): String =
+    if objectInterface.kind == "trait" then "TraitInfo" else "InterfaceInfo"
+
+private fun reflection_object_field_infos_code(className: String, fields: List[String], owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_field_info_codes(className, fields, 0, owner, allModules))
+
+private fun reflection_object_field_info_codes(className: String, fields: List[String], idx: int, owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        [reflection_object_field_info_code(field, owner, allModules)]
-            + reflection_object_field_info_codes(fields[1:], owner, allModules)
+        [reflection_object_field_info_code(className, field, idx, owner, allModules)]
+            + reflection_object_field_info_codes(className, fields[1:], idx + 1, owner, allModules)
 
-private fun reflection_object_field_info_code(field: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+private fun reflection_object_field_info_code(className: String, field: String, idx: int, owner: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"FieldInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(object_field_schema_name(field)) + "\"")
         + ", " + java_map_entry("type", reflection_any_info_code(schema_type_reference(object_field_schema_type(field)), owner, allModules))
-        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", owner.functions),
+            owner,
+            allModules
+        ))
         + "))"
 
 private fun reflection_object_method_infos_code(className: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2727,12 +2797,45 @@ private fun reflection_object_method_info_codes(className: String, functions: Li
         else reflection_object_method_info_codes(className, functions[1:], owner, allModules)
 
 private fun reflection_object_method_info_code(function: CompiledFunction, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    let className = compiled_object_method_class_name(function.name)
+    let methodName = compiled_object_method_name(function.name)
     "__capy_data(\"MethodInfo\", java.util.Map.ofEntries("
-        + java_map_entry("name", "\"" + escape_java_string(compiled_object_method_name(function.name)) + "\"")
+        + java_map_entry("name", "\"" + escape_java_string(methodName) + "\"")
         + ", " + java_map_entry("pkg", package_info_code(owner))
         + ", " + java_map_entry("params", reflection_method_param_infos_code(function.parameters, owner, allModules))
         + ", " + java_map_entry("return_type", reflection_any_info_code(function.returnType, owner, allModules))
-        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_oo_annotation|method|" + className + "|" + methodName + "|", owner.functions),
+            owner,
+            allModules
+        ))
+        + "))"
+
+private fun reflection_object_interface_method_infos_code(interfaceName: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_interface_method_info_codes(interfaceName, functions, owner, allModules))
+
+private fun reflection_object_interface_method_info_codes(interfaceName: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_interface_method_function_for_interface(function, interfaceName)
+        then [reflection_object_interface_method_info_code(function, owner, allModules)]
+            + reflection_object_interface_method_info_codes(interfaceName, functions[1:], owner, allModules)
+        else reflection_object_interface_method_info_codes(interfaceName, functions[1:], owner, allModules)
+
+private fun reflection_object_interface_method_info_code(function: CompiledFunction, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    let interfaceName = compiled_object_interface_method_owner_name(function.name)
+    let methodName = compiled_object_interface_method_name(function.name)
+    "__capy_data(\"MethodInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(methodName) + "\"")
+        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("params", reflection_method_param_infos_code(function.parameters, owner, allModules))
+        + ", " + java_map_entry("return_type", reflection_any_info_code(function.returnType, owner, allModules))
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_oo_annotation|method|" + interfaceName + "|" + methodName + "|", owner.functions),
+            owner,
+            allModules
+        ))
         + "))"
 
 private fun reflection_method_param_infos_code(parameters: List[CompiledFunctionParameter], owner: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2971,6 +3074,9 @@ private fun java_object_type_reference_for_class(moduleClassName: String, object
 
 private fun java_object_interface_type_reference(binding: JavaObjectInterfaceBinding): CompiledTypeReference =
     CompiledTypeReference { name: java_object_interface_type_name_for_class(binding.moduleClassName, binding.objectInterface.name), arguments: [] }
+
+private fun java_object_interface_type_reference_for_module(module: CompiledModule, objectInterface: CompiledObjectOrientedInterface): CompiledTypeReference =
+    CompiledTypeReference { name: java_object_interface_type_name(module, objectInterface.name), arguments: [] }
 
 private fun java_object_type_name(module: CompiledModule, className: String): String =
     java_object_type_name_for_class(module_fqcn(module), className)
@@ -5566,7 +5672,7 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     else if reflection_function_call(call, module)
     then data_type_reference("DataValueInfo")
     else if object_type_function_call(call, module, allModules)
-    then object_type_method_call_type()
+    then object_type_function_call_type(call, module, allModules)
     else if call.name == "assert_all" | call.name == "assert_that"
     then assert_type()
     else if call.name == "test"
@@ -6457,7 +6563,7 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     else if call.name == "to_long"
     then long_type()
     else if object_type_method_call(call, module, allModules)
-    then object_type_method_call_type()
+    then object_type_method_call_type(call, module, allModules)
     else if object_method_call(call, env, module, allModules)
     then object_method_call_type(call, env, module, allModules)
     else match find_extension_method(call, env, module, allModules) with

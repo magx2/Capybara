@@ -30,7 +30,7 @@ from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, An
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
 from /dev/capylang/compiler/parser/FunctionAnnotationArgument import { FunctionAnnotationArgument }
-from /dev/capylang/compiler/parser/FunctionAnnotationValue import { FunctionAnnotationStringValue, FunctionAnnotationValue }
+from /dev/capylang/compiler/parser/FunctionAnnotationValue import { FunctionAnnotationBoolValue, FunctionAnnotationDoubleValue, FunctionAnnotationFloatValue, FunctionAnnotationIntValue, FunctionAnnotationLongValue, FunctionAnnotationNothingValue, FunctionAnnotationStringValue, FunctionAnnotationTypeNameValue, FunctionAnnotationValue }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
 from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
@@ -141,6 +141,7 @@ private fun compile_object_interface(interface: ObjectOrientedInterface, module:
     CompiledObjectOrientedInterface {
         name: interface.name,
         visibility: interface.visibility,
+        kind: interface.kind,
         parents: compile_types_in_module(interface.parents, module, allModules),
         methods: compile_object_methods(interface.name, interface.methods, module, allModules),
         location: compile_location(interface.location)
@@ -204,7 +205,9 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
     case None -> []
     case Some { interface } ->
         [compile_object_interface_schema_function(interface)]
+            + [compile_object_interface_kind_schema_function(interface)]
             + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0)
+            + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + interface.name + "|", interface.annotations, 0)
             + compile_object_interface_method_functions(interface.name, interface.methods, module, allModules)
             + compile_object_interface_functions(interfaces[1:], module, allModules)
 
@@ -212,6 +215,13 @@ private fun compile_object_interface_schema_function(interface: ObjectOrientedIn
     compile_schema_constant(
         "__capy_oo_interface|" + interface.name,
         interface.visibility,
+        interface.location
+    )
+
+private fun compile_object_interface_kind_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
+    compile_schema_constant(
+        "__capy_oo_interface_kind|" + interface.name,
+        interface.kind,
         interface.location
     )
 
@@ -228,7 +238,10 @@ private fun parent_location(parent: TypeReference): SourceLocation =
 private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
-    case Some { method } -> [compile_object_interface_method_function(interfaceName, method, module, allModules)] + compile_object_interface_method_functions(interfaceName, methods[1:], module, allModules)
+    case Some { method } ->
+        [compile_object_interface_method_function(interfaceName, method, module, allModules)]
+            + compile_function_annotation_application_schema("__capy_oo_annotation|method|" + interfaceName + "|" + method.name + "|", method.annotations, 0)
+            + compile_object_interface_method_functions(interfaceName, methods[1:], module, allModules)
 
 private fun compile_object_interface_method_function(interfaceName: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
@@ -247,7 +260,9 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
         [compile_object_class_schema_function(class)]
             + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
             + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0)
+            + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + class.name + "|", class.annotations, 0)
             + compile_object_field_schema_functions(class.name, class.fields, module, allModules, 0)
+            + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
             + compile_object_field_init_functions(class.name, class.parameters, class.fields, module, allModules)
             + compile_object_init_functions(class.name, class.parameters, class.initBlocks, module, allModules, 0)
             + compile_object_method_functions(class.name, class.methods, module, allModules)
@@ -280,6 +295,13 @@ private fun compile_object_field_schema_functions(className: String, fields: Lis
     case Some { field } ->
         [compile_schema_constant("__capy_oo_field|" + className + "|" + idx, object_field_schema(field, module, allModules), field.location)]
             + compile_object_field_schema_functions(className, fields[1:], module, allModules, idx + 1)
+
+private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        compile_function_annotation_application_schema("__capy_oo_annotation|field|" + className + "|" + idx + "|", field.annotations, 0)
+            + compile_object_field_annotation_schema_functions(className, fields[1:], idx + 1)
 
 private fun object_field_schema(field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): String =
     field.name + "|" + field.visibility + "|" + compiled_type_reference_schema(compile_type_in_module(field.typeReference, module, allModules)) + "|" + object_field_has_value_schema(field)
@@ -325,7 +347,10 @@ private fun compile_object_init_function(className: String, parameters: List[Fun
 private fun compile_object_method_functions(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
-    case Some { method } -> [compile_object_method_function(className, method, module, allModules)] + compile_object_method_functions(className, methods[1:], module, allModules)
+    case Some { method } ->
+        [compile_object_method_function(className, method, module, allModules)]
+            + compile_function_annotation_application_schema("__capy_oo_annotation|method|" + className + "|" + method.name + "|", method.annotations, 0)
+            + compile_object_method_functions(className, methods[1:], module, allModules)
 
 private fun compile_object_method_function(className: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     let functionName = className + "." + method.name
@@ -602,6 +627,40 @@ private fun annotation_value_schema(value: AnnotationValue): String =
     case AnnotationBoolValue literal -> if literal.value then "bool:true" else "bool:false"
     case AnnotationTypeNameValue literal -> "type:" + literal.value
     case AnnotationNothingValue _ -> "nothing:"
+
+private fun compile_function_annotation_application_schema(prefix: String, annotations: List[FunctionAnnotationApplication], idx: int): List[CompiledFunction] =
+    match annotations[0] with
+    case None -> []
+    case Some { annotation } ->
+        [compile_schema_constant(prefix + idx, function_annotation_application_schema(annotation), annotation.location)]
+            + compile_function_annotation_application_schema(prefix, annotations[1:], idx + 1)
+
+private fun function_annotation_application_schema(annotation: FunctionAnnotationApplication): String =
+    annotation.name + "|" + function_annotation_arguments_schema(annotation.arguments)
+
+private fun function_annotation_arguments_schema(arguments: List[FunctionAnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> function_annotation_argument_schema(argument) + function_annotation_argument_schema_tail(arguments[1:])
+
+private fun function_annotation_argument_schema_tail(arguments: List[FunctionAnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ";" + function_annotation_arguments_schema(arguments)
+
+private fun function_annotation_argument_schema(argument: FunctionAnnotationArgument): String =
+    argument.name + "=" + function_annotation_value_schema(argument.value)
+
+private fun function_annotation_value_schema(value: FunctionAnnotationValue): String =
+    match value with
+    case FunctionAnnotationStringValue literal -> "string:" + literal.value
+    case FunctionAnnotationIntValue literal -> "int:" + literal.source
+    case FunctionAnnotationLongValue literal -> "long:" + literal.source
+    case FunctionAnnotationDoubleValue literal -> "double:" + literal.source
+    case FunctionAnnotationFloatValue literal -> "float:" + literal.source
+    case FunctionAnnotationBoolValue literal -> if literal.value then "bool:true" else "bool:false"
+    case FunctionAnnotationTypeNameValue literal -> "type:" + literal.value
+    case FunctionAnnotationNothingValue _ -> "nothing:"
 
 private fun compile_data_schema_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
     match parents[0] with
