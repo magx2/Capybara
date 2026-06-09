@@ -26,3 +26,19 @@ fun run_lambda_unused_middle() = run((a, _, c, d) => a + c)
 fun run0(fun: () => String) = fun()
 
 fun run_lambda_no_args() = run0(() => "Hello, Wrold")
+
+fun run_partial_function_call() =
+    let increment = plus(_, 1, 0, 1)
+    increment(41)
+
+fun run_partial_function_call_multiple_arguments() =
+    let combine = plus(10, _, _, 2)
+    combine(7, 3)
+
+fun run_partial_method_call() =
+    let has_suffix = "capybara".end_with(_)
+    has_suffix("bara")
+
+fun run_partial_extension_method_call() =
+    let contains_value: int => bool = [1, 2, 3].contains(_)
+    contains_value(2) & !contains_value(4)

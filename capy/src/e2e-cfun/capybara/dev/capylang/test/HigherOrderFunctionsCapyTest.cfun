@@ -14,6 +14,10 @@ fun tests(): Effect[TestFile] =
         test("invoke_hof_unused ignores its lambda argument", () => invoke_hof_unused_ignores_its_lambda_argument()),
         test("run_lambda_unused_middle ignores unused middle arguments", () => run_lambda_unused_middle_ignores_unused_middle_arguments()),
         test("run_lambda_no_args invokes a no-arg lambda", () => run_lambda_no_args_invokes_a_no_arg_lambda()),
+        test("run_partial_function_call invokes a partially applied function", () => run_partial_function_call_invokes_a_partially_applied_function()),
+        test("run_partial_function_call_multiple_arguments preserves placeholder order", () => run_partial_function_call_multiple_arguments_preserves_placeholder_order()),
+        test("run_partial_method_call invokes a partially applied method", () => run_partial_method_call_invokes_a_partially_applied_method()),
+        test("run_partial_extension_method_call invokes a partially applied extension method", () => run_partial_extension_method_call_invokes_a_partially_applied_extension_method()),
     ])
 
 private fun map_applies_a_referenced_function(): Assert =
@@ -46,3 +50,19 @@ private fun run_lambda_unused_middle_ignores_unused_middle_arguments(): Assert =
 private fun run_lambda_no_args_invokes_a_no_arg_lambda(): Assert =
     let value: String = run_lambda_no_args()
     assert_that(value).is_equal_to("Hello, Wrold")
+
+private fun run_partial_function_call_invokes_a_partially_applied_function(): Assert =
+    let value: int = run_partial_function_call()
+    assert_that(value).is_equal_to(42)
+
+private fun run_partial_function_call_multiple_arguments_preserves_placeholder_order(): Assert =
+    let value: int = run_partial_function_call_multiple_arguments()
+    assert_that(value).is_equal_to(11)
+
+private fun run_partial_method_call_invokes_a_partially_applied_method(): Assert =
+    let value: bool = run_partial_method_call()
+    assert_that(value).is_true()
+
+private fun run_partial_extension_method_call_invokes_a_partially_applied_extension_method(): Assert =
+    let value: bool = run_partial_extension_method_call()
+    assert_that(value).is_true()
