@@ -124,7 +124,7 @@ private fun java_constants(constants: List[CompiledFunction], previous: List[Com
     match constants[0] with
     case None -> if previous.is_empty() then "" else newline()
     case Some { constant } ->
-        java_constant(constant, constant_bindings(previous), module, allModules)
+        java_constant(constant, constant_bindings(previous, module, allModules), module, allModules)
         + java_constants(constants[1:], [constant] + previous, module, allModules)
 
 private fun java_constant(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -137,21 +137,18 @@ private fun constant_type(constant: CompiledFunction, env: List[JavaBinding], mo
     then expression_type(constant.body, env, module, allModules)
     else constant.returnType
 
-private fun constant_bindings(constants: List[CompiledFunction]): List[JavaBinding] =
+private fun constant_bindings(constants: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): List[JavaBinding] =
     match constants[0] with
     case None -> []
-    case Some { constant } -> [java_binding(constant.name, constant_type_reference(constant))] + constant_bindings(constants[1:])
+    case Some { constant } ->
+        let rest = constant_bindings(constants[1:], module, allModules)
+        [java_binding(constant.name, constant_type(constant, rest, module, allModules))] + rest
 
 private fun java_binding(name: String, typeReference: CompiledTypeReference): JavaBinding =
     JavaBinding { name: name, typeReference: typeReference, javaName: java_identifier(name) }
 
 private fun java_binding_with_java_name(name: String, typeReference: CompiledTypeReference, javaName: String): JavaBinding =
     JavaBinding { name: name, typeReference: typeReference, javaName: javaName }
-
-private fun constant_type_reference(constant: CompiledFunction): CompiledTypeReference =
-    if constant.returnType.name.is_empty()
-    then object_type()
-    else constant.returnType
 
 private fun constant_functions(functions: List[CompiledFunction]): List[CompiledFunction] =
     match functions[0] with
@@ -181,7 +178,7 @@ private fun java_functions(functions: List[CompiledFunction], module: CompiledMo
 private fun java_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     let returnTypeReference = effective_function_return_type(function, module, allModules)
     let returnType = java_type(returnTypeReference)
-    let env = java_function_bindings(function) + constant_bindings(constant_functions(module.functions))
+    let env = java_function_bindings(function) + constant_bindings(constant_functions(module.functions), module, allModules)
     "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
     + java_function_body(function, returnTypeReference, env, module, allModules)
     + "    }" + newline()
@@ -235,7 +232,9 @@ private fun java_visibility_prefix(visibility: String): String =
     else "public "
 
 private fun java_function_body(function: CompiledFunction, returnType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match function.body with
+    if tail_recursive_function(function, env, module, allModules)
+    then tail_recursive_function_body(function, returnType, env, module, allModules)
+    else match function.body with
     case CompiledBlockExpression block ->
         let effectBody =
             match block.bindings[0] with
@@ -272,6 +271,124 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         if !expression_emittable(function.body, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
+
+private fun tail_recursive_function(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_references_function(function.body, function.name)
+        & tail_recursive_expression(function.body, function)
+        & expression_emittable(function.body, env, module, allModules)
+
+private fun tail_recursive_expression(expression: CompiledExpression, function: CompiledFunction): bool =
+    match expression with
+    case CompiledFunctionCallExpression call ->
+        if call.name == function.name
+        then tail_self_call_compatible(function.parameters, call.arguments) & !expressions_reference_function(call.arguments, function.name)
+        else !expressions_reference_function(call.arguments, function.name)
+    case CompiledIfExpression ifExpression ->
+        !expression_references_function(ifExpression.condition, function.name)
+            & tail_recursive_expression(ifExpression.thenBranch, function)
+            & tail_recursive_expression(ifExpression.elseBranch, function)
+    case CompiledBlockExpression block ->
+        !let_bindings_reference_function(block.bindings, function.name)
+            & tail_recursive_expression(block.result, function)
+    case CompiledMatchExpression matchExpression ->
+        !expression_references_function(matchExpression.value, function.name)
+            & tail_match_cases_recursive(matchExpression.cases, function)
+    case _ -> !expression_references_function(expression, function.name)
+
+private fun tail_match_cases_recursive(cases: List[CompiledMatchCase], function: CompiledFunction): bool =
+    match cases[0] with
+    case None -> true
+    case Some { matchCase } ->
+        (!matchCase.hasLiteral | !expression_references_function(matchCase.literal, function.name))
+            & (!matchCase.hasGuard | !expression_references_function(matchCase.guard, function.name))
+            & tail_recursive_expression(matchCase.body, function)
+            & tail_match_cases_recursive(cases[1:], function)
+
+private fun tail_self_call_compatible(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression]): bool =
+    match parameters[0] with
+    case None -> arguments.is_empty()
+    case Some _ ->
+        match arguments[0] with
+        case None -> false
+        case Some _ -> tail_self_call_compatible(parameters[1:], arguments[1:])
+
+private fun tail_recursive_function_body(function: CompiledFunction, returnType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "        while (true) {" + newline()
+        + tail_expression_statements(function.body, function, env, returnType, module, allModules, "            ")
+        + "        }" + newline()
+
+private fun tail_expression_statements(expression: CompiledExpression, function: CompiledFunction, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    match expression with
+    case CompiledFunctionCallExpression call ->
+        if call.name == function.name
+        then tail_self_call_statements(function.parameters, call.arguments, call.location, env, module, allModules, indent)
+        else indent + "return " + expression_code(expression, env, expectedType, module, allModules) + ";" + newline()
+    case CompiledIfExpression ifExpression ->
+        indent + "if (" + truthy_expression_code(ifExpression.condition, env, module, allModules) + ") {" + newline()
+            + tail_expression_statements(ifExpression.thenBranch, function, env, expectedType, module, allModules, indent + "    ")
+            + indent + "} else {" + newline()
+            + tail_expression_statements(ifExpression.elseBranch, function, env, expectedType, module, allModules, indent + "    ")
+            + indent + "}" + newline()
+    case CompiledBlockExpression block ->
+        block_statements(block.bindings, env, expectedType, module, allModules, indent)
+            + tail_expression_statements(block.result, function, block_env(block.bindings, env, module, allModules), expectedType, module, allModules, indent)
+    case CompiledMatchExpression matchExpression ->
+        tail_match_expression_statements(matchExpression, function, env, expectedType, module, allModules, indent)
+    case _ -> indent + "return " + expression_code(expression, env, expectedType, module, allModules) + ";" + newline()
+
+private fun tail_self_call_statements(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], location: CompiledSourceLocation, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    tail_self_call_temp_statements(parameters, arguments, location, env, module, allModules, indent, 0)
+        + tail_self_call_assign_statements(parameters, location, indent, 0)
+        + indent + "continue;" + newline()
+
+private fun tail_self_call_temp_statements(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], location: CompiledSourceLocation, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String, idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        match arguments[0] with
+        case None -> ""
+        case Some { argument } ->
+            let tempName = tail_argument_temp_name(parameter, location, idx)
+            indent + java_type(parameter.typeReference) + " " + tempName + " = "
+                + expression_code(argument, env, parameter.typeReference, module, allModules) + ";" + newline()
+                + tail_self_call_temp_statements(parameters[1:], arguments[1:], location, env, module, allModules, indent, idx + 1)
+
+private fun tail_self_call_assign_statements(parameters: List[CompiledFunctionParameter], location: CompiledSourceLocation, indent: String, idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        indent + java_identifier(parameter.name) + " = " + tail_argument_temp_name(parameter, location, idx) + ";" + newline()
+            + tail_self_call_assign_statements(parameters[1:], location, indent, idx + 1)
+
+private fun tail_argument_temp_name(parameter: CompiledFunctionParameter, location: CompiledSourceLocation, idx: int): String =
+    "__capy_tail_" + java_identifier(parameter.name) + "_" + location.line + "_" + location.column + "_" + idx
+
+private fun tail_match_expression_statements(matchExpression: CompiledMatchExpression, function: CompiledFunction, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    let valueType = expression_type(matchExpression.value, env, module, allModules)
+    let valueCode = expression_code(matchExpression.value, env, valueType, module, allModules)
+    let matchValueName = "__capy_match_value_" + matchExpression.location.line + "_" + matchExpression.location.column
+    let cases = ordered_match_cases(matchExpression.cases)
+    indent + java_type(valueType) + " " + matchValueName + " = " + valueCode + ";" + newline()
+        + tail_match_case_statements(cases, matchValueName, valueType, function, env, expectedType, module, allModules, indent)
+        + indent + "return unsupported(\"match\");" + newline()
+
+private fun tail_match_case_statements(cases: List[CompiledMatchCase], valueCode: String, valueType: CompiledTypeReference, function: CompiledFunction, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    match cases[0] with
+    case None -> ""
+    case Some { matchCase } ->
+        indent + "if (" + match_case_condition_code(matchCase, valueCode, valueType, env, module, allModules) + ") {" + newline()
+            + match_binding_statements(matchCase.bindings, matchCase, valueCode, valueType, 0, module, allModules, indent + "    ")
+            + tail_match_guarded_statement(matchCase, valueType, function, env, expectedType, module, allModules, indent + "    ")
+            + indent + "}" + newline()
+            + tail_match_case_statements(cases[1:], valueCode, valueType, function, env, expectedType, module, allModules, indent)
+
+private fun tail_match_guarded_statement(matchCase: CompiledMatchCase, valueType: CompiledTypeReference, function: CompiledFunction, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    let caseEnv = match_env(matchCase.bindings, matchCase, valueType, 0, env, module, allModules)
+    if matchCase.hasGuard
+    then indent + "if (" + truthy_expression_code(matchCase.guard, caseEnv, module, allModules) + ") {" + newline()
+        + tail_expression_statements(matchCase.body, function, caseEnv, expectedType, module, allModules, indent + "    ")
+        + indent + "}" + newline()
+    else tail_expression_statements(matchCase.body, function, caseEnv, expectedType, module, allModules, indent)
 
 private fun java_parameters(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
@@ -369,7 +486,7 @@ private fun variable_expression_code(variable: CompiledVariableExpression, env: 
         case Some { constant } -> value_conversion_code(constant.javaName, constant.typeReference, expectedType, module, allModules)
         case None ->
             match find_constant_in_scope(variable.name, module, allModules) with
-            case Some { function } -> value_conversion_code(java_identifier(variable.name), function.returnType, expectedType, module, allModules)
+            case Some { function } -> value_conversion_code(java_identifier(variable.name), effective_function_return_type(function, module, allModules), expectedType, module, allModules)
             case None -> numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
 
 private fun placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
@@ -4158,7 +4275,7 @@ private fun data_constructor_literal_type(typeName: String, function: CompiledFu
         else data_type_reference(typeName)
 
 private fun data_constructor_inferred_return_type(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let constructorEnv = java_function_bindings(function) + constant_bindings(constant_functions(module.functions))
+    let constructorEnv = java_function_bindings(function) + constant_bindings(constant_functions(module.functions), module, allModules)
     data_constructor_inferred_expression_type(function.body, constructorEnv, module, allModules)
 
 private fun data_constructor_inferred_expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -4243,7 +4360,7 @@ private fun variable_expression_type(variable: CompiledVariableExpression, env: 
         case Some { constant } -> constant.typeReference
         case None ->
             match find_constant_in_scope(variable.name, module, allModules) with
-            case Some { function } -> function.returnType
+            case Some { function } -> effective_function_return_type(function, module, allModules)
             case None -> object_type()
 
 private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -4635,7 +4752,7 @@ private fun effective_function_return_type(function: CompiledFunction, module: C
     then function.returnType
     else
         let owner = function_owner_module(function, module, allModules)
-        let env = java_function_bindings(function) + constant_bindings(constant_functions(owner.functions))
+        let env = java_function_bindings(function) + constant_bindings(constant_functions(owner.functions), owner, allModules)
         expression_type(function.body, env, owner, allModules)
 
 private fun function_owner_module(function: CompiledFunction, fallback: CompiledModule, modules: List[CompiledModule]): CompiledModule =
@@ -6790,7 +6907,7 @@ private fun test_gather_calls_for_module(functions: List[CompiledFunction], modu
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        let env = parameter_bindings(function.parameters) + constant_bindings(constant_functions(module.functions))
+        let env = parameter_bindings(function.parameters) + constant_bindings(constant_functions(module.functions), module, allModules)
         let current =
             if function.name == "tests" & expression_emittable(function.body, env, module, allModules)
             then module_fqcn(module) + ".tests().unsafeRun()"
