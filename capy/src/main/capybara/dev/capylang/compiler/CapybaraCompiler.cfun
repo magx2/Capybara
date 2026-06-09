@@ -485,7 +485,7 @@ private fun compiler_tuple_type(arguments: List[TypeReference]): TypeReference =
     TypeReference { name: "Tuple", arguments: arguments }
 
 private fun placeholder_source(source: String): bool =
-    source == "???"
+    source == "???" | source == "_"
 
 private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
     match imports[0] with
