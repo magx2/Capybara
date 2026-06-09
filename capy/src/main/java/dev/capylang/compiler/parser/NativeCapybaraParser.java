@@ -442,6 +442,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Definition.EnumDeclaration(
                 types.getFirst().getText(),
                 List.copyOf(values),
+                definitionAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }

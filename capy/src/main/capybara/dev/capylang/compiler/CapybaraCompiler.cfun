@@ -159,7 +159,8 @@ private fun compile_enum_declaration(declaration: EnumDeclaration): List[Compile
         compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|0", "name|String", declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|1", "order|int", declaration.location),
-    ] + compile_enum_values(declaration.name, declaration.values, 0)
+    ] + compile_annotation_application_schema("__capy_schema_annotation|enum|" + declaration.name + "|", declaration.annotations, 0)
+        + compile_enum_values(declaration.name, declaration.values, 0)
 
 private fun compile_enum_values(enumName: String, values: List[EnumValueDeclaration], idx: int): List[CompiledFunction] =
     match values[0] with
