@@ -1,0 +1,8 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+
+data CompiledObjectOrientedUnit {
+    name: String,
+    path: String,
+    classes: List[CompiledObjectOrientedClass]
+}

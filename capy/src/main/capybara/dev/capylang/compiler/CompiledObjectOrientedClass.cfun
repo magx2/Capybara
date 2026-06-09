@@ -1,0 +1,12 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+
+data CompiledObjectOrientedClass {
+    name: String,
+    visibility: String,
+    parameters: List[CompiledFunctionParameter],
+    methods: List[CompiledObjectOrientedMethod],
+    location: CompiledSourceLocation
+}

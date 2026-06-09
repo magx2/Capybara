@@ -217,6 +217,11 @@ def e2eCfunCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-cfun/capybar
 def e2eCfunGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-cfun')
 def e2eCfunLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-cfun')
 def e2eCfunTestResultsDir = layout.buildDirectory.dir('test-results/e2e-cfun')
+def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
+def e2eCooSelectedCapybaraSourceDir = layout.buildDirectory.dir('generated/sources/capybara/selected/e2e-coo')
+def e2eCooGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara-e2e-coo/java')
+def e2eCooLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara-e2e-coo/linked')
+def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
@@ -244,6 +249,12 @@ sourceSets {
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
     }
+    e2eCoo {
+        java.srcDir e2eCooGeneratedJavaDir
+        resources.srcDir file('src/e2e-coo/resources')
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
 }
 
 tasks.named('compileJava', JavaCompile) {
@@ -258,6 +269,7 @@ tasks.named('compileJava', JavaCompile) {
 
 tasks.named('compileCapybara') {
     writeLinkedOutput.set(false)
+    includeJavaLibResources.set(false)
 }
 
 configurations {
@@ -265,13 +277,19 @@ configurations {
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
     e2eCfunImplementation.extendsFrom testImplementation
     e2eCfunRuntimeOnly.extendsFrom testRuntimeOnly
+    e2eCooImplementation.extendsFrom testImplementation
+    e2eCooRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 dependencies {
     e2eCfunImplementation 'dev.capylang:capybara-lib:0.3.0@jar'
+    e2eCooImplementation 'dev.capylang:capybara-lib:0.3.0@jar'
 }
 
 def e2eCfunRuntimeDependencies = configurations.e2eCfunRuntimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def e2eCooRuntimeDependencies = configurations.e2eCooRuntimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
 
@@ -319,15 +337,34 @@ def e2eCfunTests = tasks.register('e2e-cfun', InProcessCapybaraTestTask) {
     shouldRunAfter test
 }
 
+def e2eCooTests = tasks.register('e2e-coo', InProcessCapybaraTestTask) {
+    description = 'Runs object-oriented Capybara e2e tests on Java.'
+    group = 'verification'
+    dependsOn tasks.named('compileE2eCooJava')
+    runtimeClasspath.from(files(
+            sourceSets.e2eCoo.output,
+            sourceSets.main.output,
+            e2eCooRuntimeDependencies
+    ))
+    outputDir.set(e2eCooTestResultsDir)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
+    shouldRunAfter test
+}
+
 tasks.register('e2eTests') {
     description = 'Runs functional Capybara e2e tests.'
     group = 'verification'
     dependsOn e2eCfunTests
+    dependsOn e2eCooTests
 }
 
 check {
     dependsOn integrationTests
     dependsOn e2eCfunTests
+    dependsOn e2eCooTests
 }
 
 def linkCapybaraE2eCfunSources = tasks.register('linkCapybaraE2eCfunSources', InProcessCapybaraCompileTask) {
@@ -346,6 +383,46 @@ def linkCapybaraE2eCfunSources = tasks.register('linkCapybaraE2eCfunSources', In
 
 tasks.named('compileE2eCfunJava') {
     dependsOn linkCapybaraE2eCfunSources
+}
+
+def prepareE2eCooTask089Sources = tasks.register('prepareE2eCooTask089Sources', Sync) {
+    group = 'build'
+    description = 'Prepares the ranked TASK-089 object-oriented e2e Capybara sources.'
+
+    from(e2eCooCapybaraSourceDir) {
+        include 'dev/capylang/test/ObjectMethodInterop.cfun'
+        include 'dev/capylang/test/ObjectMethodInterop.coo'
+        include 'dev/capylang/test/ObjectMethodInteropCapyTest.cfun'
+    }
+    into e2eCooSelectedCapybaraSourceDir
+}
+
+def cleanE2eCooGeneratedSources = tasks.register('cleanE2eCooGeneratedSources', Delete) {
+    group = 'build'
+    description = 'Removes stale generated object-oriented e2e Java and linked files.'
+
+    delete e2eCooGeneratedJavaDir
+    delete e2eCooLinkedOutputDir
+}
+
+def linkCapybaraE2eCooSources = tasks.register('linkCapybaraE2eCooSources', InProcessCapybaraCompileTask) {
+    group = 'build'
+    description = 'Compiles object-oriented e2e-test Capybara files and generates Java in one pass without launching a separate JVM.'
+    dependsOn cleanE2eCooGeneratedSources
+    dependsOn prepareE2eCooTask089Sources
+    dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
+    dependsOn ':capy:classes'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(e2eCooSelectedCapybaraSourceDir)
+    additionalInputDirs.from(capybaraLibLinkedDir)
+    linkedOutputDir.set(e2eCooLinkedOutputDir)
+    generatedOutputDir.set(e2eCooGeneratedJavaDir)
+    compilerVersion.set(project.version.toString())
+}
+
+tasks.named('compileE2eCooJava') {
+    dependsOn linkCapybaraE2eCooSources
 }
 
 jar {

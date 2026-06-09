@@ -46,10 +46,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var source = stripImports(module.input());
         var definitions = switch (module.sourceKind()) {
             case FUNCTIONAL -> parseFunctional(module, source.body());
-            case OBJECT_ORIENTED -> {
-                parseObjectOriented(module, source.body());
-                yield List.<Definition>of();
-            }
+            case OBJECT_ORIENTED -> List.<Definition>of();
+        };
+        var objectOriented = switch (module.sourceKind()) {
+            case FUNCTIONAL -> new ObjectOriented(List.of());
+            case OBJECT_ORIENTED -> parseObjectOriented(module, source.body());
         };
         var functional = new Functional(definitions);
         return new ParsedModule(
@@ -57,6 +58,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 module.path(),
                 functional,
                 definitions,
+                objectOriented,
                 source.imports(),
                 module.sourceKind()
         );
@@ -94,7 +96,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return List.copyOf(definitions);
     }
 
-    private void parseObjectOriented(RawModule module, String source) {
+    private ObjectOriented parseObjectOriented(RawModule module, String source) {
         var lexer = new dev.capylang.parser.antlr.ObjectOrientedLexer(CharStreams.fromString(source));
         var tokens = new CommonTokenStream(lexer);
         var parser = new dev.capylang.parser.antlr.ObjectOrientedParser(tokens);
@@ -106,8 +108,16 @@ public final class NativeCapybaraParser implements CapybaraParser {
         lexer.addErrorListener(listener);
         parser.addErrorListener(listener);
 
-        parser.program();
+        var program = parser.program();
         throwIfInvalid(module, errors);
+
+        var classes = new ArrayList<ObjectOrientedClass>();
+        for (var definition : program.definition()) {
+            if (definition.classDeclaration() != null) {
+                classes.add(objectOrientedClass(definition.classDeclaration()));
+            }
+        }
+        return new ObjectOriented(List.copyOf(classes));
     }
 
     private static BaseErrorListener errorListener(List<SyntaxError> errors) {
@@ -222,6 +232,265 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return Definition.UnsupportedDefinition.INSTANCE;
         }
         return Definition.UnsupportedDefinition.INSTANCE;
+    }
+
+    private static ObjectOrientedClass objectOrientedClass(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ClassDeclarationContext ctx
+    ) {
+        var methods = new ArrayList<ObjectOrientedMethod>();
+        for (var member : ctx.typeBody().memberDeclaration()) {
+            if (member.methodDeclaration() != null) {
+                methods.add(objectOrientedMethod(member.methodDeclaration()));
+            }
+        }
+        return new ObjectOrientedClass(
+                ctx.TYPE().getText(),
+                "public",
+                objectConstructorParameters(ctx.constructorParameters()),
+                List.copyOf(methods),
+                location(ctx)
+        );
+    }
+
+    private static List<FunctionParameter> objectConstructorParameters(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ConstructorParametersContext ctx
+    ) {
+        if (ctx == null || ctx.parameters() == null) {
+            return List.of();
+        }
+        return objectParameters(ctx.parameters());
+    }
+
+    private static ObjectOrientedMethod objectOrientedMethod(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MethodDeclarationContext ctx
+    ) {
+        var visibility = ctx.visibility() == null ? "public" : ctx.visibility().getText();
+        return new ObjectOrientedMethod(
+                ctx.identifier().getText(),
+                visibility,
+                ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
+                ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
+                objectMethodBody(ctx.methodBody()),
+                location(ctx)
+        );
+    }
+
+    private static List<FunctionParameter> objectParameters(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ParametersContext ctx
+    ) {
+        var parameters = new ArrayList<FunctionParameter>();
+        for (var parameter : ctx.parameter()) {
+            parameters.add(new FunctionParameter(
+                    parameter.identifier().getText(),
+                    typeReference(parameter.type().getText()),
+                    location(parameter)
+            ));
+        }
+        return List.copyOf(parameters);
+    }
+
+    private static Expression objectMethodBody(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MethodBodyContext ctx
+    ) {
+        if (ctx == null) {
+            return new Expression.UnsupportedExpression("", new SourceLocation(0, 0));
+        }
+        if (ctx.expression() != null) {
+            return objectExpression(ctx.expression());
+        }
+        return objectStatementBlock(ctx.statementBlock());
+    }
+
+    private static Expression objectStatementBlock(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext ctx
+    ) {
+        if (ctx.statement().size() == 1) {
+            return objectStatement(ctx.statement().getFirst());
+        }
+        return unsupported(ctx);
+    }
+
+    private static Expression objectStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext ctx
+    ) {
+        if (ctx.returnStatement() != null) {
+            return objectExpression(ctx.returnStatement().expression());
+        }
+        if (ctx.ifStatement() != null) {
+            return objectIfStatement(ctx.ifStatement());
+        }
+        if (ctx.statementBlock() != null) {
+            return objectStatementBlock(ctx.statementBlock());
+        }
+        return unsupported(ctx);
+    }
+
+    private static Expression objectIfStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.IfStatementContext ctx
+    ) {
+        var elseBranch = objectElseBranch(ctx);
+        if (elseBranch == null) {
+            return unsupported(ctx);
+        }
+        return new Expression.IfExpression(
+                objectExpression(ctx.expression()),
+                objectStatementBlock(ctx.statementBlock(0)),
+                elseBranch,
+                location(ctx)
+        );
+    }
+
+    private static Expression objectElseBranch(
+            dev.capylang.parser.antlr.ObjectOrientedParser.IfStatementContext ctx
+    ) {
+        if (ctx.ifStatement() != null) {
+            return objectIfStatement(ctx.ifStatement());
+        }
+        if (ctx.statementBlock().size() > 1) {
+            return objectStatementBlock(ctx.statementBlock(1));
+        }
+        return null;
+    }
+
+    private static Expression objectExpression(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ExpressionContext ctx
+    ) {
+        if (!ctx.letExpression().isEmpty()) {
+            return unsupported(ctx);
+        }
+        return objectExpressionNoLet(ctx.expressionNoLet());
+    }
+
+    private static Expression objectExpressionNoLet(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ExpressionNoLetContext ctx
+    ) {
+        if (ctx.ifExpression() != null) {
+            return new Expression.IfExpression(
+                    objectExpression(ctx.ifExpression().expression(0)),
+                    objectExpression(ctx.ifExpression().expression(1)),
+                    objectExpression(ctx.ifExpression().expression(2)),
+                    location(ctx.ifExpression())
+            );
+        }
+        if (ctx.value() != null) {
+            return objectValue(ctx.value());
+        }
+        if (ctx.expression() != null) {
+            return objectExpression(ctx.expression());
+        }
+        if (ctx.expressionNoLet().size() == 2 && ctx.infixOperator() != null) {
+            return new Expression.BinaryExpression(
+                    ctx.infixOperator().getText(),
+                    objectExpressionNoLet(ctx.expressionNoLet(0)),
+                    objectExpressionNoLet(ctx.expressionNoLet(1)),
+                    location(ctx)
+            );
+        }
+        if (ctx.expressionNoLet().size() == 1 && ctx.methodIdentifier() != null) {
+            return new Expression.MethodCallExpression(
+                    objectExpressionNoLet(ctx.expressionNoLet(0)),
+                    ctx.methodIdentifier().getText(),
+                    objectMethodArguments(ctx.methodArgumentList()),
+                    location(ctx)
+            );
+        }
+        if (ctx.expressionNoLet().size() == 1 && ctx.identifier() != null && ctx.methodIdentifier() == null) {
+            return new Expression.FieldAccessExpression(
+                    objectExpressionNoLet(ctx.expressionNoLet(0)),
+                    ctx.identifier().getText(),
+                    location(ctx)
+            );
+        }
+        if (ctx.functionCall() != null) {
+            return objectFunctionCall(ctx.functionCall());
+        }
+        return unsupported(ctx);
+    }
+
+    private static Expression objectFunctionCall(
+            dev.capylang.parser.antlr.ObjectOrientedParser.FunctionCallContext ctx
+    ) {
+        return new Expression.FunctionCallExpression(
+                functionCallName(ctx.getText()),
+                objectArguments(ctx.argumentList()),
+                location(ctx)
+        );
+    }
+
+    private static String functionCallName(String source) {
+        var argumentsStart = source.indexOf('(');
+        return argumentsStart < 0 ? source : source.substring(0, argumentsStart);
+    }
+
+    private static List<Expression> objectArguments(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ArgumentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var arguments = new ArrayList<Expression>();
+        for (var expression : ctx.expression()) {
+            arguments.add(objectExpression(expression));
+        }
+        return List.copyOf(arguments);
+    }
+
+    private static List<Expression> objectMethodArguments(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MethodArgumentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var arguments = new ArrayList<Expression>();
+        for (var argument : ctx.methodArgument()) {
+            if (argument.namedMethodArgument() != null) {
+                arguments.add(objectExpression(argument.namedMethodArgument().expression()));
+            } else {
+                arguments.add(objectExpression(argument.expression()));
+            }
+        }
+        return List.copyOf(arguments);
+    }
+
+    private static Expression objectValue(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ValueContext ctx
+    ) {
+        if (ctx.literal() != null) {
+            return objectLiteral(ctx.literal());
+        }
+        if (ctx.identifier() != null) {
+            return new Expression.VariableExpression(ctx.identifier().getText(), location(ctx));
+        }
+        if (ctx.qualifiedType() != null) {
+            return new Expression.VariableExpression(ctx.qualifiedType().getText(), location(ctx));
+        }
+        return unsupported(ctx);
+    }
+
+    private static Expression objectLiteral(
+            dev.capylang.parser.antlr.ObjectOrientedParser.LiteralContext ctx
+    ) {
+        var source = ctx.getText();
+        var location = location(ctx);
+        if (ctx.INT_LITERAL() != null) {
+            return new Expression.IntLiteral(Integer.parseInt(cleanNumber(source)), source, location);
+        }
+        if (ctx.LONG_LITERAL() != null) {
+            return new Expression.LongLiteral(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+        }
+        if (ctx.FLOAT_LITERAL() != null) {
+            return new Expression.FloatLiteral(Float.parseFloat(cleanFloat(source)), source, location);
+        }
+        if (ctx.DOUBLE_LITERAL() != null) {
+            return new Expression.DoubleLiteral(Double.parseDouble(cleanDouble(source)), source, location);
+        }
+        if (ctx.BOOL_LITERAL() != null) {
+            return new Expression.BoolLiteral(Boolean.parseBoolean(source), source, location);
+        }
+        if (ctx.STRING_LITERAL() != null) {
+            return new Expression.StringLiteral(unquote(source), source, location);
+        }
+        return unsupported(ctx);
     }
 
     private static Definition.DeriverDeclaration deriverDeclaration(
@@ -1799,6 +2068,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.ArgumentListContext arguments,
             SourceLocation location
     ) {
+        if (receiver instanceof Expression.VariableExpression variable) {
+            return new Expression.FunctionCallExpression(variable.name(), arguments(arguments), location);
+        }
         return new Expression.MethodCallExpression(receiver, "__capy_call", arguments(arguments), location);
     }
 
@@ -2757,7 +3029,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static boolean isInvocationExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
-        return ctx.argumentList() != null && ctx.expressionNoLet().size() == 1 && hasChild(ctx, "(");
+        return ctx.expressionNoLet().size() == 1 && hasChild(ctx, "(");
     }
 
     private static boolean isSliceExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
@@ -2769,7 +3041,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static boolean isInvocationExpressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetNoPipeContext ctx) {
-        return ctx.argumentList() != null && ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "(");
+        return ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, "(");
     }
 
     private static boolean isUnary(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {
