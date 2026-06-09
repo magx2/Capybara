@@ -4,8 +4,33 @@ from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclarat
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
-data AnnotationDeclaration {}
-data DataFieldDeclaration { name: String, typeReference: TypeReference, location: SourceLocation }
+data AnnotationArgument { name: String, value: AnnotationValue, location: SourceLocation }
+data AnnotationApplication { name: String, arguments: List[AnnotationArgument], location: SourceLocation }
+data AnnotationStringValue { value: String, source: String, location: SourceLocation }
+data AnnotationIntValue { value: int, source: String, location: SourceLocation }
+data AnnotationLongValue { value: long, source: String, location: SourceLocation }
+data AnnotationDoubleValue { value: double, source: String, location: SourceLocation }
+data AnnotationFloatValue { value: float, source: String, location: SourceLocation }
+data AnnotationBoolValue { value: bool, source: String, location: SourceLocation }
+data AnnotationTypeNameValue { value: String, source: String, location: SourceLocation }
+data AnnotationNothingValue { source: String, location: SourceLocation }
+data AnnotationFieldDeclaration {
+    name: String,
+    typeReference: TypeReference,
+    defaultValue: AnnotationValue,
+    hasDefault: bool,
+    location: SourceLocation
+}
+data AnnotationDeclaration {
+    name: String,
+    visibility: String,
+    repeatable: bool,
+    targets: List[String],
+    fields: List[AnnotationFieldDeclaration],
+    annotations: List[AnnotationApplication],
+    location: SourceLocation
+}
+data DataFieldDeclaration { name: String, typeReference: TypeReference, annotations: List[AnnotationApplication], location: SourceLocation }
 data DataParentDeclaration { typeReference: TypeReference, location: SourceLocation }
 data DataDeclaration {
     name: String,
@@ -13,6 +38,7 @@ data DataDeclaration {
     parameters: List[String],
     fields: List[DataFieldDeclaration],
     parents: List[DataParentDeclaration],
+    annotations: List[AnnotationApplication],
     location: SourceLocation
 }
 data DeriverDeclaration {}
@@ -33,3 +59,12 @@ union Definition = AnnotationDeclaration
                  | PrimitiveBackedTypeDeclaration
                  | TypeDeclaration
                  | UnsupportedDefinition
+
+union AnnotationValue = AnnotationBoolValue
+                      | AnnotationDoubleValue
+                      | AnnotationFloatValue
+                      | AnnotationIntValue
+                      | AnnotationLongValue
+                      | AnnotationNothingValue
+                      | AnnotationStringValue
+                      | AnnotationTypeNameValue
