@@ -1,6 +1,0 @@
-data ObjectOriented {}
-
-data ObjectOrientedModule {
-    name: String,
-    path: String
-}

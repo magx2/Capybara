@@ -1,0 +1,12 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
+from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+data ObjectOrientedClass {
+    name: String,
+    visibility: String,
+    parameters: List[FunctionParameter],
+    methods: List[ObjectOrientedMethod],
+    location: SourceLocation
+}

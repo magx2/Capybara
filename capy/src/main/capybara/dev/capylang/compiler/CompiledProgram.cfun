@@ -5,11 +5,11 @@ from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledN
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
-from /dev/capylang/compiler/ObjectOrientedModule import { ObjectOrientedModule }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 
 data CompiledProgram {
     modules: List[CompiledModule],
-    objectOrientedModules: List[ObjectOrientedModule],
+    objectOrientedModules: List[CompiledObjectOrientedUnit],
     nativeProviders: NativeProviderManifest,
     nativeProviderCatalog: NativeProviderCatalog,
 }
