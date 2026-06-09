@@ -49,7 +49,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             case OBJECT_ORIENTED -> List.<Definition>of();
         };
         var objectOriented = switch (module.sourceKind()) {
-            case FUNCTIONAL -> new ObjectOriented(List.of());
+            case FUNCTIONAL -> new ObjectOriented(List.of(), List.of());
             case OBJECT_ORIENTED -> parseObjectOriented(module, source.body());
         };
         var functional = new Functional(definitions);
@@ -111,13 +111,16 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var program = parser.program();
         throwIfInvalid(module, errors);
 
+        var interfaces = new ArrayList<ObjectOrientedInterface>();
         var classes = new ArrayList<ObjectOrientedClass>();
         for (var definition : program.definition()) {
             if (definition.classDeclaration() != null) {
                 classes.add(objectOrientedClass(definition.classDeclaration()));
+            } else if (definition.interfaceDeclaration() != null) {
+                interfaces.add(objectOrientedInterface(definition.interfaceDeclaration()));
             }
         }
-        return new ObjectOriented(List.copyOf(classes));
+        return new ObjectOriented(List.copyOf(interfaces), List.copyOf(classes));
     }
 
     private static BaseErrorListener errorListener(List<SyntaxError> errors) {
@@ -237,9 +240,15 @@ public final class NativeCapybaraParser implements CapybaraParser {
     private static ObjectOrientedClass objectOrientedClass(
             dev.capylang.parser.antlr.ObjectOrientedParser.ClassDeclarationContext ctx
     ) {
+        var fields = new ArrayList<ObjectOrientedField>();
+        var initBlocks = new ArrayList<Expression>();
         var methods = new ArrayList<ObjectOrientedMethod>();
         for (var member : ctx.typeBody().memberDeclaration()) {
-            if (member.methodDeclaration() != null) {
+            if (member.fieldDeclaration() != null) {
+                fields.add(objectOrientedField(member.fieldDeclaration()));
+            } else if (member.initBlock() != null) {
+                initBlocks.add(objectStatementBlock(member.initBlock().statementBlock()));
+            } else if (member.methodDeclaration() != null) {
                 methods.add(objectOrientedMethod(member.methodDeclaration()));
             }
         }
@@ -247,7 +256,56 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.TYPE().getText(),
                 "public",
                 objectConstructorParameters(ctx.constructorParameters()),
+                objectParents(ctx.inheritanceClause()),
+                List.copyOf(fields),
+                List.copyOf(initBlocks),
                 List.copyOf(methods),
+                location(ctx)
+        );
+    }
+
+    private static ObjectOrientedInterface objectOrientedInterface(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InterfaceDeclarationContext ctx
+    ) {
+        var methods = new ArrayList<ObjectOrientedMethod>();
+        for (var member : ctx.interfaceBody().interfaceMemberDeclaration()) {
+            if (member.interfaceMethodDeclaration() != null) {
+                methods.add(objectOrientedInterfaceMethod(member.interfaceMethodDeclaration()));
+            }
+        }
+        return new ObjectOrientedInterface(
+                ctx.TYPE().getText(),
+                "public",
+                objectParents(ctx.inheritanceClause()),
+                List.copyOf(methods),
+                location(ctx)
+        );
+    }
+
+    private static List<TypeReference> objectParents(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InheritanceClauseContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var parents = new ArrayList<TypeReference>();
+        for (var type : ctx.qualifiedType()) {
+            parents.add(typeReference(type.getText()));
+        }
+        return List.copyOf(parents);
+    }
+
+    private static ObjectOrientedField objectOrientedField(
+            dev.capylang.parser.antlr.ObjectOrientedParser.FieldDeclarationContext ctx
+    ) {
+        var visibility = ctx.visibility() == null ? "public" : ctx.visibility().getText();
+        var hasValue = ctx.expression() != null;
+        return new ObjectOrientedField(
+                ctx.identifier().getText(),
+                visibility,
+                typeReference(ctx.type().getText()),
+                hasValue ? objectExpression(ctx.expression()) : unsupported(ctx),
+                hasValue,
                 location(ctx)
         );
     }
@@ -271,6 +329,20 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
                 ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
                 objectMethodBody(ctx.methodBody()),
+                location(ctx)
+        );
+    }
+
+    private static ObjectOrientedMethod objectOrientedInterfaceMethod(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InterfaceMethodDeclarationContext ctx
+    ) {
+        var visibility = ctx.visibility() == null ? "public" : ctx.visibility().getText();
+        return new ObjectOrientedMethod(
+                ctx.identifier().getText(),
+                visibility,
+                ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
+                ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
+                unsupported(ctx),
                 location(ctx)
         );
     }
@@ -321,6 +393,9 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.statementBlock() != null) {
             return objectStatementBlock(ctx.statementBlock());
+        }
+        if (ctx.expressionStatement() != null) {
+            return objectCallExpression(ctx.expressionStatement().callExpression());
         }
         return unsupported(ctx);
     }
@@ -403,6 +478,40 @@ public final class NativeCapybaraParser implements CapybaraParser {
         }
         if (ctx.functionCall() != null) {
             return objectFunctionCall(ctx.functionCall());
+        }
+        if (ctx.thisExpression() != null) {
+            return new Expression.VariableExpression("this", location(ctx));
+        }
+        return unsupported(ctx);
+    }
+
+    private static Expression objectCallExpression(
+            dev.capylang.parser.antlr.ObjectOrientedParser.CallExpressionContext ctx
+    ) {
+        if (ctx.functionCall() != null) {
+            return objectFunctionCall(ctx.functionCall());
+        }
+        if (ctx.methodIdentifier() != null) {
+            var receiver = ctx.thisExpression() != null
+                    ? new Expression.VariableExpression("this", location(ctx.thisExpression()))
+                    : ctx.value() != null
+                            ? objectValue(ctx.value())
+                            : ctx.callExpression() != null
+                                    ? objectCallExpression(ctx.callExpression())
+                                    : unsupported(ctx);
+            return new Expression.MethodCallExpression(
+                    receiver,
+                    ctx.methodIdentifier().getText(),
+                    objectMethodArguments(ctx.methodArgumentList()),
+                    location(ctx)
+            );
+        }
+        if (ctx.callExpression() != null && ctx.argumentList() != null) {
+            var receiver = objectCallExpression(ctx.callExpression());
+            if (receiver instanceof Expression.VariableExpression variable) {
+                return new Expression.FunctionCallExpression(variable.name(), objectArguments(ctx.argumentList()), location(ctx));
+            }
+            return new Expression.MethodCallExpression(receiver, "__capy_call", objectArguments(ctx.argumentList()), location(ctx));
         }
         return unsupported(ctx);
     }

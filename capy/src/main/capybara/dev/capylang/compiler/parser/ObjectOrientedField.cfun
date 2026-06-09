@@ -1,0 +1,12 @@
+from /dev/capylang/compiler/parser/Expression import { Expression }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+data ObjectOrientedField {
+    name: String,
+    visibility: String,
+    typeReference: TypeReference,
+    value: Expression,
+    hasValue: bool,
+    location: SourceLocation
+}

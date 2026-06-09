@@ -1,8 +1,10 @@
 from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
 
 data CompiledObjectOrientedUnit {
     name: String,
     path: String,
+    interfaces: List[CompiledObjectOrientedInterface],
     classes: List[CompiledObjectOrientedClass]
 }
