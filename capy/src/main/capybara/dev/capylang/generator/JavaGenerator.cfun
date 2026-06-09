@@ -2412,6 +2412,9 @@ private fun assert_method_call_code(call: CompiledMethodCallExpression, env: Lis
 
 private fun extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
+    extension_method_call_code_with_receiver_type(function, call, receiverType, env, module, allModules)
+
+private fun extension_method_call_code_with_receiver_type(function: CompiledFunction, call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let parameters = bound_extension_method_parameters(function, receiverType)
     java_function_name(function)
         + "("
@@ -2703,7 +2706,9 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
     let receiverCode = expression_code(index.receiver, env, receiverType, module, allModules)
     let indexCode = string_index_argument_code(index.index, env, module, allModules)
     let resultType = expression_type(index, env, module, allModules)
-    if receiverType.name == "String" & index.hasEndIndex
+    if !built_in_index_expression(index, receiverType)
+    then user_defined_index_code(index, receiverType, env, expectedType, module, allModules)
+    else if receiverType.name == "String" & index.hasEndIndex
     then "__capy_string_slice("
         + receiverCode
         + ", "
@@ -2726,6 +2731,32 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
         + list_slice_end_index_code(receiverCode, index.endIndex, env, module, allModules)
         + ")"
     else list_optional_index_code(receiverCode, indexCode)
+
+private fun built_in_index_expression(index: CompiledIndexExpression, receiverType: CompiledTypeReference): bool =
+    if index.hasEndIndex
+    then receiverType.name == "String" | receiverType.name == "Tuple" | receiverType.name == "List"
+    else receiverType.name == "String" | receiverType.name == "Tuple" | receiverType.name == "List" | receiverType.name == "Dict"
+
+private fun user_defined_index_code(index: CompiledIndexExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let call = index_get_call(index)
+    match find_extension_method_in_scope(receiverType.name, "get", module, allModules) with
+    case Some { function } ->
+        let callType = bound_extension_method_return_type(function, receiverType)
+        value_conversion_code(extension_method_call_code_with_receiver_type(function, call, receiverType, env, module, allModules), callType, expectedType, module, allModules)
+    case None -> value_conversion_code("unsupported(\"index get\")", object_type(), expectedType, module, allModules)
+
+private fun index_get_call(index: CompiledIndexExpression): CompiledMethodCallExpression =
+    CompiledMethodCallExpression {
+        receiver: index.receiver,
+        name: "get",
+        arguments: index_get_arguments(index),
+        location: index.location
+    }
+
+private fun index_get_arguments(index: CompiledIndexExpression): List[CompiledExpression] =
+    if index.hasEndIndex
+    then [index.index, index.endIndex]
+    else [index.index]
 
 private fun list_slice_start_index_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
@@ -3712,7 +3743,7 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledSetLiteral literal -> set_type(first_expression_type(literal.values, env, module, allModules))
     case CompiledDictLiteral literal -> dict_type(first_dict_value_type(literal.entries, env, module, allModules))
     case CompiledTupleLiteral literal -> tuple_type(expression_types(literal.values, env, module, allModules))
-    case CompiledIndexExpression index -> indexed_type(index, expression_type(index.receiver, env, module, allModules))
+    case CompiledIndexExpression index -> indexed_type(index, expression_type(index.receiver, env, module, allModules), env, module, allModules)
     case CompiledDataLiteral literal -> data_literal_expression_type(literal, env, module, allModules)
     case CompiledFieldAccessExpression access -> field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
@@ -4118,8 +4149,10 @@ private fun expression_types(expressions: List[CompiledExpression], env: List[Ja
     case None -> []
     case Some { expression } -> [expression_type(expression, env, module, allModules)] + expression_types(expressions[1:], env, module, allModules)
 
-private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType: CompiledTypeReference): CompiledTypeReference =
-    if receiverType.name == "Tuple"
+private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if !built_in_index_expression(indexExpression, receiverType)
+    then user_defined_index_type(receiverType, module, allModules)
+    else if receiverType.name == "Tuple"
     then
         if indexExpression.hasEndIndex
         then tuple_type(tuple_slice_arguments(
@@ -4138,6 +4171,11 @@ private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType:
     else if receiverType.name == "Dict"
     then if indexExpression.hasEndIndex then object_type() else option_type(first_type_argument(receiverType))
     else object_type()
+
+private fun user_defined_index_type(receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_extension_method_in_scope(receiverType.name, "get", module, allModules) with
+    case Some { function } -> bound_extension_method_return_type(function, receiverType)
+    case None -> object_type()
 
 private fun normalized_tuple_slice_end_index(arguments: List[CompiledTypeReference], expression: CompiledExpression): int =
     match expression with
@@ -5386,6 +5424,9 @@ private fun regex_method_emittable(call: CompiledMethodCallExpression, env: List
 
 private fun extension_method_call_emittable(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
+    extension_method_call_emittable_with_receiver_type(function, call, receiverType, env, module, allModules)
+
+private fun extension_method_call_emittable_with_receiver_type(function: CompiledFunction, call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let parameters = bound_extension_method_parameters(function, receiverType)
     concrete_return_type(bound_extension_method_return_type(function, receiverType))
         & expression_emittable(call.receiver, env, module, allModules)
@@ -5707,7 +5748,9 @@ private fun test_file_call_emittable(arguments: List[CompiledExpression], env: L
 
 private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(index.receiver, env, module, allModules)
-    if receiverType.name == "List"
+    if !built_in_index_expression(index, receiverType)
+    then user_defined_index_emittable(index, receiverType, env, module, allModules)
+    else if receiverType.name == "List"
     then expression_emittable(index.receiver, env, module, allModules)
         & expression_emittable(index.index, env, module, allModules)
         & (!index.hasEndIndex | expression_emittable(index.endIndex, env, module, allModules))
@@ -5727,6 +5770,11 @@ private fun index_emittable(index: CompiledIndexExpression, env: List[JavaBindin
         & expression_emittable(index.index, env, module, allModules)
         & type_assignable(string_type(), expression_type(index.index, env, module, allModules))
     else false
+
+private fun user_defined_index_emittable(index: CompiledIndexExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_extension_method_in_scope(receiverType.name, "get", module, allModules) with
+    case Some { function } -> extension_method_call_emittable_with_receiver_type(function, index_get_call(index), receiverType, env, module, allModules)
+    case None -> false
 
 private fun index_literal_emittable(index: CompiledExpression): bool =
     match index with
