@@ -4577,18 +4577,98 @@ private fun reflection_call_emittable(call: CompiledFunctionCallExpression, env:
 private fun reflection_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let value = argument(call.arguments, 0)
     let valueType = expression_type(value, env, module, allModules)
-    let dataName = type_unqualified_name(valueType.name)
-    let owner = reflection_owner_module(dataName, module, allModules)
     let valueName = "__capy_reflection_value_" + call.location.line + "_" + call.location.column
     "((java.util.function.Supplier<java.util.Map<java.lang.String, java.lang.Object>>) () -> {" + newline()
         + "            java.lang.Object " + valueName + " = " + expression_code(value, env, valueType, module, allModules) + ";" + newline()
-        + "            return " + reflection_value_info_code(dataName, valueName, owner, allModules) + ";" + newline()
+        + "            return " + reflection_value_info_for_type_code(valueType, valueName, module, allModules) + ";" + newline()
         + "        }).get()"
+
+private fun reflection_value_info_for_type_code(valueType: CompiledTypeReference, valueCode: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if valueType.name == "data"
+    then reflection_dynamic_value_info_code(valueCode, module, allModules)
+    else
+        let dataName = type_unqualified_name(valueType.name)
+        let owner = reflection_owner_module(dataName, module, allModules)
+        reflection_value_info_code(dataName, valueCode, owner, allModules)
 
 private fun reflection_value_info_code(dataName: String, valueCode: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
     if enum_type_exists(dataName, owner, allModules)
     then reflection_enum_value_info_code(dataName, valueCode, owner, allModules)
     else reflection_data_value_info_code(dataName, valueCode, owner, allModules)
+
+private fun reflection_dynamic_value_info_code(valueCode: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let runtimeTypeName = "__capy_reflection_runtime_type"
+    let modules = reflection_dispatch_modules(module, allModules)
+    "((java.util.function.Supplier<java.util.Map<java.lang.String, java.lang.Object>>) () -> {" + newline()
+        + "                java.lang.String " + runtimeTypeName + " = __capy_data_type(" + valueCode + ");" + newline()
+        + reflection_dynamic_enum_value_cases_code(modules, runtimeTypeName, valueCode, allModules)
+        + reflection_dynamic_data_type_cases_code(modules, runtimeTypeName, valueCode, allModules)
+        + "                return " + reflection_unknown_data_value_info_code(runtimeTypeName) + ";" + newline()
+        + "            }).get()"
+
+private fun reflection_dispatch_modules(module: CompiledModule, allModules: List[CompiledModule]): List[CompiledModule] =
+    [module] + reflection_imported_modules(module.imports, module, allModules)
+
+private fun reflection_imported_modules(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): List[CompiledModule] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } ->
+        if stdlib_import(declaration.modulePath)
+        then reflection_imported_modules(imports[1:], module, allModules)
+        else match find_module_by_class(imported_module_class(module, declaration.modulePath), allModules) with
+            case Some { importedModule } -> [importedModule] + reflection_imported_modules(imports[1:], module, allModules)
+            case None -> reflection_imported_modules(imports[1:], module, allModules)
+
+private fun reflection_dynamic_enum_value_cases_code(modules: List[CompiledModule], runtimeTypeName: String, valueCode: String, allModules: List[CompiledModule]): String =
+    match modules[0] with
+    case None -> ""
+    case Some { module } ->
+        reflection_dynamic_enum_value_cases_in_module_code(schema_values("__capy_schema_type|", module.functions), module, runtimeTypeName, valueCode, allModules)
+            + reflection_dynamic_enum_value_cases_code(modules[1:], runtimeTypeName, valueCode, allModules)
+
+private fun reflection_dynamic_enum_value_cases_in_module_code(typeNames: List[String], owner: CompiledModule, runtimeTypeName: String, valueCode: String, allModules: List[CompiledModule]): String =
+    match typeNames[0] with
+    case None -> ""
+    case Some { typeName } ->
+        if enum_type_exists_in_functions(typeName, owner.functions)
+        then reflection_dynamic_enum_value_cases_for_type_code(typeName, enum_values_in_functions(typeName, owner.functions), owner, runtimeTypeName, valueCode, allModules)
+            + reflection_dynamic_enum_value_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
+        else reflection_dynamic_enum_value_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
+
+private fun reflection_dynamic_enum_value_cases_for_type_code(enumName: String, values: List[String], owner: CompiledModule, runtimeTypeName: String, valueCode: String, allModules: List[CompiledModule]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } ->
+        "                if (__capy_enum_is(" + valueCode + ") && java.util.Objects.equals(" + runtimeTypeName + ", \"" + escape_java_string(value) + "\")) {" + newline()
+            + "                    return " + reflection_enum_value_info_code(enumName, valueCode, owner, allModules) + ";" + newline()
+            + "                }" + newline()
+            + reflection_dynamic_enum_value_cases_for_type_code(enumName, values[1:], owner, runtimeTypeName, valueCode, allModules)
+
+private fun reflection_dynamic_data_type_cases_code(modules: List[CompiledModule], runtimeTypeName: String, valueCode: String, allModules: List[CompiledModule]): String =
+    match modules[0] with
+    case None -> ""
+    case Some { module } ->
+        reflection_dynamic_data_type_cases_in_module_code(schema_values("__capy_schema_type|", module.functions), module, runtimeTypeName, valueCode, allModules)
+            + reflection_dynamic_data_type_cases_code(modules[1:], runtimeTypeName, valueCode, allModules)
+
+private fun reflection_dynamic_data_type_cases_in_module_code(typeNames: List[String], owner: CompiledModule, runtimeTypeName: String, valueCode: String, allModules: List[CompiledModule]): String =
+    match typeNames[0] with
+    case None -> ""
+    case Some { typeName } ->
+        if enum_type_exists_in_functions(typeName, owner.functions)
+        then reflection_dynamic_data_type_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
+        else "                if (java.util.Objects.equals(" + runtimeTypeName + ", \"" + escape_java_string(typeName) + "\")) {" + newline()
+            + "                    return " + reflection_data_value_info_code(typeName, valueCode, owner, allModules) + ";" + newline()
+            + "                }" + newline()
+            + reflection_dynamic_data_type_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
+
+private fun reflection_unknown_data_value_info_code(nameCode: String): String =
+    "__capy_data(\"DataValueInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", nameCode)
+        + ", " + java_map_entry("pkg", package_info_literal_code("", ""))
+        + ", " + java_map_entry("fields", "java.util.List.of()")
+        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + "))"
 
 private fun reflection_owner_module(dataName: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledModule =
     match data_type_owner_module(dataName, module, allModules) with
@@ -4598,8 +4678,8 @@ private fun reflection_owner_module(dataName: String, module: CompiledModule, al
 private fun reflection_data_value_info_code(dataName: String, valueCode: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"DataValueInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(dataName) + "\"")
-        + ", " + java_map_entry("pkg", package_info_code(owner))
-        + ", " + java_map_entry("fields", reflection_field_value_infos_code(dataName, valueCode, data_type_fields(dataName, owner, allModules), 0, owner, allModules))
+        + ", " + java_map_entry("pkg", data_value_package_info_code(owner))
+        + ", " + java_map_entry("fields", reflection_field_value_infos_code(dataName, valueCode, reflection_data_type_fields(dataName, owner, allModules), 0, owner, allModules))
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
             schema_values("__capy_schema_annotation|data|" + dataName + "|", owner.functions),
             owner,
@@ -4610,7 +4690,7 @@ private fun reflection_data_value_info_code(dataName: String, valueCode: String,
 private fun reflection_enum_value_info_code(dataName: String, valueCode: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"DataValueInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "(java.lang.String) __capy_data_field(" + valueCode + ", \"name\")")
-        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("pkg", data_value_package_info_code(owner))
         + ", " + java_map_entry("fields", "java.util.List.of()")
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
             schema_values("__capy_schema_annotation|enum|" + dataName + "|", owner.functions),
@@ -4657,6 +4737,14 @@ private fun reflection_type_package_info_code(typeName: String, module: Compiled
 
 private fun package_info_code(module: CompiledModule): String =
     package_info_literal_code(module.name, module.path)
+
+private fun data_value_package_info_code(module: CompiledModule): String =
+    package_info_literal_code(module.name, module_reflection_path(module))
+
+private fun module_reflection_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else module.path + "/" + module.name
 
 private fun package_info_literal_code(name: String, path: String): String =
     "__capy_data(\"PackageInfo\", java.util.Map.ofEntries("
@@ -6207,6 +6295,12 @@ private fun data_type_fields(name: String, module: CompiledModule, allModules: L
         data_type_parent_fields(data_type_parent_types(name, module, allModules), module, allModules)
     )
 
+private fun reflection_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    merge_schema_fields(
+        reflection_data_type_parent_fields(data_type_parent_types(name, module, allModules), module, allModules),
+        data_type_direct_fields(name, module, allModules)
+    )
+
 private fun data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if schema_type_exists(name, module.functions)
     then schema_values("__capy_schema_field|" + name + "|", module.functions)
@@ -6269,6 +6363,16 @@ private fun data_type_parent_fields(parents: List[String], module: CompiledModul
         merge_schema_fields(
             data_type_fields(parentName, module, allModules),
             data_type_parent_fields(parents[1:], module, allModules)
+        )
+
+private fun reflection_data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentName = schema_type_reference(parent).name
+        merge_schema_fields(
+            reflection_data_type_fields(parentName, module, allModules),
+            reflection_data_type_parent_fields(parents[1:], module, allModules)
         )
 
 private fun merge_schema_fields(first: List[String], second: List[String]): List[String] =
@@ -7871,6 +7975,12 @@ private fun java_data_helpers(): String =
         + "    }" + newline() + newline()
         + "    private static boolean __capy_data_is_any(java.lang.Object value) {" + newline()
         + "        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\");" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.String __capy_data_type(java.lang.Object value) {" + newline()
+        + "        if (value instanceof java.util.Map<?, ?> map && map.get(\"__type\") instanceof java.lang.String type) {" + newline()
+        + "            return type;" + newline()
+        + "        }" + newline()
+        + "        return \"\";" + newline()
         + "    }" + newline() + newline()
         + "    private static boolean __capy_enum_is(java.lang.Object value) {" + newline()
         + "        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\") && map.get(\"name\") instanceof java.lang.String && map.get(\"order\") instanceof java.lang.Integer;" + newline()
