@@ -236,31 +236,7 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
     then tail_recursive_function_body(function, returnType, env, module, allModules)
     else match function.body with
     case CompiledBlockExpression block ->
-        let effectBody =
-            match block.bindings[0] with
-            case Some { binding } ->
-                let valueType = binding_value_type(binding, env, module, allModules)
-                let boundBinding = local_java_binding(binding.name, first_type_argument(valueType), binding.location, env)
-                let boundEnv = [boundBinding] + env
-                if returnType.name == "Effect"
-                    & binding.operator == "<-"
-                    & valueType.name == "Effect"
-                    & block.bindings[1:].is_empty()
-                    & expression_emittable(binding.value, env, module, allModules)
-                    & expression_emittable(block.result, boundEnv, module, allModules)
-                then
-                    let resultType = expression_type(block.result, boundEnv, module, allModules)
-                    if resultType.name == "Effect"
-                    then "        return " + expression_code(binding.value, env, valueType, module, allModules)
-                        + ".flatMap(" + boundBinding.javaName + " -> "
-                        + expression_code(block.result, boundEnv, returnType, module, allModules)
-                        + ");" + newline()
-                    else "        return " + expression_code(binding.value, env, valueType, module, allModules)
-                        + ".map(" + boundBinding.javaName + " -> "
-                        + expression_code(block.result, boundEnv, first_type_argument(returnType), module, allModules)
-                        + ");" + newline()
-                else ""
-            case None -> ""
+        let effectBody = effect_block_body(block, env, returnType, module, allModules, "        ")
         if !effectBody.is_empty()
         then effectBody
         else if !expression_emittable(function.body, env, module, allModules)
@@ -271,6 +247,54 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         if !expression_emittable(function.body, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
+
+private fun effect_block_body(block: CompiledBlockExpression, env: List[JavaBinding], returnType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    if returnType.name == "Effect" & effect_block_emittable(block.bindings, block.result, env, returnType, module, allModules)
+    then indent + "return " + effect_block_expression(block.bindings, block.result, env, returnType, module, allModules, indent) + ";" + newline()
+    else ""
+
+private fun effect_block_expression(bindings: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaBinding], returnType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    match bindings[0] with
+    case None -> effect_block_result_expression(result, env, returnType, module, allModules)
+    case Some { binding } ->
+        let valueType = binding_type(binding, env, module, allModules)
+        let localBinding = local_java_binding(binding.name, valueType, binding.location, env)
+        if binding.operator == "<-"
+        then effect_bind_expression(binding, localBinding, bindings[1:], result, env, returnType, module, allModules, indent)
+        else effect_local_expression(binding, localBinding, valueType, bindings[1:], result, env, returnType, module, allModules, indent)
+
+private fun effect_block_result_expression(result: CompiledExpression, env: List[JavaBinding], returnType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultType = expression_type(result, env, module, allModules)
+    if resultType.name == "Effect"
+    then expression_code(result, env, returnType, module, allModules)
+    else "capy.lang.Effect.pure(" + expression_code(result, env, first_type_argument(returnType), module, allModules) + ")"
+
+private fun effect_bind_expression(binding: CompiledLetBinding, localBinding: JavaBinding, rest: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaBinding], returnType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    let wrapperType = binding_value_type(binding, env, module, allModules)
+    expression_code(binding.value, env, wrapperType, module, allModules)
+        + ".flatMap(" + localBinding.javaName + " -> "
+        + effect_block_expression(rest, result, [localBinding] + env, returnType, module, allModules, indent + "    ")
+        + ")"
+
+private fun effect_local_expression(binding: CompiledLetBinding, localBinding: JavaBinding, valueType: CompiledTypeReference, rest: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaBinding], returnType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    "((java.util.function.Supplier<" + java_type(returnType) + ">) () -> {" + newline()
+        + indent + "    " + java_type(valueType) + " " + localBinding.javaName + " = "
+        + expression_code(binding.value, env, valueType, module, allModules) + ";" + newline()
+        + indent + "    return " + effect_block_expression(rest, result, [localBinding] + env, returnType, module, allModules, indent + "    ") + ";" + newline()
+        + indent + "}).get()"
+
+private fun effect_block_emittable(bindings: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaBinding], returnType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match bindings[0] with
+    case None -> expression_emittable(result, env, module, allModules)
+    case Some { binding } ->
+        let valueType = binding_type(binding, env, module, allModules)
+        let localBinding = local_java_binding(binding.name, valueType, binding.location, env)
+        if binding.operator == "<-"
+        then binding_value_type(binding, env, module, allModules).name == "Effect"
+            & expression_emittable(binding.value, env, module, allModules)
+            & effect_block_emittable(bindings[1:], result, [localBinding] + env, returnType, module, allModules)
+        else expression_emittable(binding.value, env, module, allModules)
+            & effect_block_emittable(bindings[1:], result, [localBinding] + env, returnType, module, allModules)
 
 private fun tail_recursive_function(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     expression_references_function(function.body, function.name)
@@ -1502,6 +1526,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then
         let valueType = if expectedType.name == "Effect" then first_type_argument(expectedType) else expression_type(argument(call.arguments, 0), env, module, allModules)
         "capy.lang.Effect.pure(" + expression_code(argument(call.arguments, 0), env, valueType, module, allModules) + ")"
+    else if stdlib_effect_function_call(call, module)
+    then stdlib_effect_function_call_code(call.name)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then
         let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
@@ -4429,6 +4455,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then function_type_return_type(lookup_binding(call.name, env))
     else if call.name == "pure" & effect_member_imported("pure", module.imports)
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
+    else if stdlib_effect_function_call(call, module)
+    then stdlib_effect_function_call_type(call.name)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if stdlib_to_seq_call(call, module)
@@ -4488,6 +4516,29 @@ private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaB
         match expression with
         case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, lambda_env(lambda.parameters, env), module, allModules))
         case _ -> effect_type(object_type())
+
+private fun stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.arguments.is_empty()
+        & !function_defined(call.name, module.functions)
+        & if call.name == "current_millis"
+            then system_member_imported("current_millis", module.imports)
+            else if call.name == "nano_time"
+            then system_member_imported("nano_time", module.imports)
+            else if call.name == "now"
+            then clock_member_imported("now", module.imports)
+            else false
+
+private fun stdlib_effect_function_call_code(name: String): String =
+    if name == "current_millis"
+    then "capy.lang.System.currentMillis()"
+    else if name == "nano_time"
+    then "capy.lang.System.nanoTime()"
+    else "capy.dateTime.Clock.now()"
+
+private fun stdlib_effect_function_call_type(name: String): CompiledTypeReference =
+    if name == "now"
+    then effect_type(date_time_type())
+    else effect_type(long_type())
 
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
@@ -6128,6 +6179,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then match call.arguments[0] with
         case None -> false
         case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
+    else if stdlib_effect_function_call(call, module)
+    then true
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then match call.arguments[0] with
         case None -> false
@@ -6710,6 +6763,12 @@ private fun program_member_imported(member: String, imports: List[CompiledImport
 
 private fun effect_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/lang/Effect", "capy/lang/Effect")
+
+private fun system_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/lang/System", "capy/lang/System")
+
+private fun clock_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/date_time/Clock", "capy/date_time/Clock")
 
 private fun result_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/lang/Result", "capy/lang/Result")
