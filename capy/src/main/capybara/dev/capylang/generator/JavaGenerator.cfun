@@ -547,6 +547,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then collection_pipe_code(binary, leftType, env, module, allModules)
     else if binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
     then binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
+    else if stdlib_path_slash_expression(binary, leftType, module)
+    then stdlib_path_slash_code(binary, env, module, allModules)
     else if collection_plus_expression(binary.operator, leftType, rightType)
     then collection_plus_code(binary, leftType, rightType, env, module, allModules)
     else if collection_minus_expression(binary.operator, leftType, rightType)
@@ -1528,6 +1530,10 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
         "capy.lang.Effect.pure(" + expression_code(argument(call.arguments, 0), env, valueType, module, allModules) + ")"
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_code(call.name)
+    else if stdlib_path_function_call(call, module)
+    then stdlib_path_function_call_code(call, env, module, allModules)
+    else if stdlib_io_function_call(call, module)
+    then stdlib_io_function_call_code(call, env, module, allModules)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then console_print_call_code(call, env, module, allModules)
     else if console_read_line_call(call, module)
@@ -3860,6 +3866,8 @@ private fun field_access_code(access: CompiledFieldAccessExpression, env: List[J
     then enum_static_field_access_code(access, module, allModules)
     else if access.name == "value" & numeric_type(expression_type(access.receiver, env, module, allModules))
     then expression_code(access.receiver, env, expectedType, module, allModules)
+    else if access.name == "value" & stdlib_byte_count_type(expression_type(access.receiver, env, module, allModules))
+    then stdlib_byte_count_value_code(access, env, expectedType, module, allModules)
     else
         let sourceType = field_access_type(access, env, module, allModules)
         let castType = field_access_cast_type(sourceType, expectedType)
@@ -4183,7 +4191,14 @@ private fun match_binding_whole_value(matchCase: CompiledMatchCase): bool =
 private fun match_binding_whole_value_type(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): CompiledTypeReference =
     if matchCase.typeName.is_empty()
     then valueType
+    else if result_match_case(matchCase, valueType)
+    then result_match_whole_value_type(matchCase, valueType)
     else CompiledTypeReference { name: matchCase.typeName, arguments: [] }
+
+private fun result_match_whole_value_type(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): CompiledTypeReference =
+    if result_success_constructor(matchCase.typeName)
+    then CompiledTypeReference { name: "/capy/lang/Result.Success", arguments: [first_type_argument(valueType)] }
+    else CompiledTypeReference { name: "/capy/lang/Result.Error", arguments: [] }
 
 private fun primitive_match_type(typeName: String): bool =
     typeName == "byte" | typeName == "int" | typeName == "long" | typeName == "float" | typeName == "double" | typeName == "bool" | typeName == "String"
@@ -4227,6 +4242,8 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
         then collection_pipe_result_type(binary, leftType, env, module, allModules)
         else if binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
         then binary_extension_operator_type_with_left_type(binary, leftType, module, allModules)
+        else if stdlib_path_slash_expression(binary, leftType, module)
+        then stdlib_path_type()
         else binary_result_type(
             binary.operator,
             leftType,
@@ -4440,11 +4457,24 @@ private fun field_access_type(access: CompiledFieldAccessExpression, env: List[J
         let receiverType = expression_type(access.receiver, env, module, allModules)
         if access.name == "value" & numeric_type(receiverType)
         then receiverType
+        else if access.name == "value" & stdlib_byte_count_type(receiverType)
+        then long_type()
+        else if result_match_whole_value_field(access.name, receiverType)
+        then result_match_whole_value_field_type(access.name, receiverType)
         else match find_data_type(receiverType.name, module, allModules) with
             case Some { dataType } ->
                 let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
                 declared_named_field_type(access.name, data_type_fields(dataType, module, allModules), bindings, object_type())
             case None -> object_type()
+
+private fun result_match_whole_value_field(name: String, receiverType: CompiledTypeReference): bool =
+    (receiverType.name == "/capy/lang/Result.Error" & name == "message")
+        | (receiverType.name == "/capy/lang/Result.Success" & name == "value")
+
+private fun result_match_whole_value_field_type(name: String, receiverType: CompiledTypeReference): CompiledTypeReference =
+    if receiverType.name == "/capy/lang/Result.Success" & name == "value"
+    then first_type_argument(receiverType)
+    else string_type()
 
 private fun function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "delay"
@@ -4455,6 +4485,10 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_type(call.name)
+    else if stdlib_path_function_call(call, module)
+    then stdlib_path_type()
+    else if stdlib_io_function_call(call, module)
+    then stdlib_io_function_call_type(call.name)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if console_read_line_call(call, module)
@@ -4539,6 +4573,222 @@ private fun stdlib_effect_function_call_type(name: String): CompiledTypeReferenc
     if name == "now"
     then effect_type(date_time_type())
     else effect_type(long_type())
+
+private fun stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.name == "from_string"
+        & one_method_argument(call.arguments)
+        & !function_defined(call.name, module.functions)
+        & stdlib_path_member_imported("from_string", module.imports)
+
+private fun stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((java.lang.Object) capy.io.PathModule.fromString("
+        + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+        + "))"
+
+private fun stdlib_path_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.arguments[0] with
+    case None -> false
+    case Some { value } -> call.arguments[1:].is_empty()
+        & type_assignable(string_type(), expression_type(value, env, module, allModules))
+        & expression_emittable(value, env, module, allModules)
+
+private fun stdlib_io_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    !function_defined(call.name, module.functions)
+        & stdlib_io_function_name(call.name)
+        & stdlib_io_member_imported(call.name, module.imports)
+
+private fun stdlib_io_function_name(name: String): bool =
+    stdlib_io_one_path_function(name)
+        | stdlib_io_text_payload_function(name)
+        | stdlib_io_lines_payload_function(name)
+        | stdlib_io_bytes_payload_function(name)
+        | stdlib_io_two_path_function(name)
+
+private fun stdlib_io_one_path_function(name: String): bool =
+    name == "read_text"
+        | name == "read_lines"
+        | name == "read_bytes"
+        | name == "exists"
+        | name == "is_file"
+        | name == "is_directory"
+        | name == "size"
+        | name == "create_file"
+        | name == "create_directory"
+        | name == "create_directories"
+        | name == "list_entries"
+        | name == "delete"
+
+private fun stdlib_io_text_payload_function(name: String): bool =
+    name == "write_text" | name == "append_text"
+
+private fun stdlib_io_lines_payload_function(name: String): bool =
+    name == "write_lines" | name == "append_lines"
+
+private fun stdlib_io_bytes_payload_function(name: String): bool =
+    name == "write_bytes" | name == "append_bytes"
+
+private fun stdlib_io_two_path_function(name: String): bool =
+    name == "copy" | name == "copy_replace" | name == "move" | name == "move_replace"
+
+private fun stdlib_io_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let callCode = "capy.io.IO." + stdlib_io_java_method(call.name) + "(" + stdlib_io_arguments_code(call, env, module, allModules) + ")"
+    if stdlib_io_bool_effect_function(call.name)
+    then callCode
+    else stdlib_effect_object_cast(callCode)
+
+private fun stdlib_io_arguments_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if stdlib_io_one_path_function(call.name)
+    then stdlib_path_argument_code(argument(call.arguments, 0), env, module, allModules)
+    else stdlib_path_argument_code(argument(call.arguments, 0), env, module, allModules)
+        + ", "
+        + stdlib_io_second_argument_code(call.name, argument(call.arguments, 1), env, module, allModules)
+
+private fun stdlib_io_second_argument_code(name: String, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if stdlib_io_text_payload_function(name)
+    then expression_code(expression, env, string_type(), module, allModules)
+    else if stdlib_io_lines_payload_function(name)
+    then expression_code(expression, env, list_type(string_type()), module, allModules)
+    else if stdlib_io_bytes_payload_function(name)
+    then expression_code(expression, env, list_type(byte_type()), module, allModules)
+    else stdlib_path_argument_code(expression, env, module, allModules)
+
+private fun stdlib_path_argument_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((capy.io.Path) " + expression_code(expression, env, object_type(), module, allModules) + ")"
+
+private fun stdlib_effect_object_cast(code: String): String =
+    "((capy.lang.Effect<java.lang.Object>) (capy.lang.Effect<?>) " + code + ")"
+
+private fun stdlib_io_java_method(name: String): String =
+    if name == "read_text"
+    then "readText"
+    else if name == "read_lines"
+    then "readLines"
+    else if name == "read_bytes"
+    then "readBytes"
+    else if name == "write_text"
+    then "writeText"
+    else if name == "write_lines"
+    then "writeLines"
+    else if name == "write_bytes"
+    then "writeBytes"
+    else if name == "append_text"
+    then "appendText"
+    else if name == "append_lines"
+    then "appendLines"
+    else if name == "append_bytes"
+    then "appendBytes"
+    else if name == "is_file"
+    then "isFile"
+    else if name == "is_directory"
+    then "isDirectory"
+    else if name == "create_file"
+    then "createFile"
+    else if name == "create_directory"
+    then "createDirectory"
+    else if name == "create_directories"
+    then "createDirectories"
+    else if name == "list_entries"
+    then "listEntries"
+    else if name == "copy_replace"
+    then "copyReplace"
+    else if name == "move_replace"
+    then "moveReplace"
+    else name
+
+private fun stdlib_io_bool_effect_function(name: String): bool =
+    name == "exists" | name == "is_file" | name == "is_directory"
+
+private fun stdlib_io_function_call_type(name: String): CompiledTypeReference =
+    if stdlib_io_bool_effect_function(name)
+    then effect_type(bool_type())
+    else effect_type(result_type(stdlib_io_result_value_type(name)))
+
+private fun stdlib_io_result_value_type(name: String): CompiledTypeReference =
+    if name == "read_text" | stdlib_io_text_payload_function(name)
+    then string_type()
+    else if name == "read_lines" | stdlib_io_lines_payload_function(name)
+    then list_type(string_type())
+    else if name == "read_bytes" | stdlib_io_bytes_payload_function(name)
+    then list_type(byte_type())
+    else if name == "size"
+    then stdlib_byte_count_type_reference()
+    else if name == "list_entries"
+    then list_type(stdlib_path_type())
+    else if name == "delete"
+    then bool_type()
+    else stdlib_path_type()
+
+private fun stdlib_io_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if stdlib_io_one_path_function(call.name)
+    then one_method_argument(call.arguments)
+        & stdlib_path_argument_emittable(argument(call.arguments, 0), env, module, allModules)
+    else if stdlib_io_text_payload_function(call.name)
+    then two_method_arguments(call.arguments)
+        & stdlib_path_argument_emittable(argument(call.arguments, 0), env, module, allModules)
+        & typed_argument_emittable(argument(call.arguments, 1), string_type(), env, module, allModules)
+    else if stdlib_io_lines_payload_function(call.name)
+    then two_method_arguments(call.arguments)
+        & stdlib_path_argument_emittable(argument(call.arguments, 0), env, module, allModules)
+        & typed_argument_emittable(argument(call.arguments, 1), list_type(string_type()), env, module, allModules)
+    else if stdlib_io_bytes_payload_function(call.name)
+    then two_method_arguments(call.arguments)
+        & stdlib_path_argument_emittable(argument(call.arguments, 0), env, module, allModules)
+        & typed_argument_emittable(argument(call.arguments, 1), list_type(byte_type()), env, module, allModules)
+    else two_method_arguments(call.arguments)
+        & stdlib_path_argument_emittable(argument(call.arguments, 0), env, module, allModules)
+        & stdlib_path_argument_emittable(argument(call.arguments, 1), env, module, allModules)
+
+private fun typed_argument_emittable(expression: CompiledExpression, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(expression, env, module, allModules)
+        & type_assignable(expectedType, expression_type(expression, env, module, allModules))
+
+private fun stdlib_path_argument_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(expression, env, module, allModules)
+        & stdlib_path_type_reference(expression_type(expression, env, module, allModules), module)
+
+private fun stdlib_path_slash_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, module: CompiledModule): bool =
+    binary.operator == "/"
+        & stdlib_path_type_reference(leftType, module)
+        & stdlib_path_member_imported("/", module.imports)
+
+private fun stdlib_path_slash_code(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((java.lang.Object) "
+        + stdlib_path_argument_code(binary.left, env, module, allModules)
+        + ".slash("
+        + stdlib_path_slash_right_code(binary.right, env, module, allModules)
+        + "))"
+
+private fun stdlib_path_slash_right_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let rightType = expression_type(expression, env, module, allModules)
+    if type_assignable(string_type(), rightType)
+    then expression_code(expression, env, string_type(), module, allModules)
+    else stdlib_path_argument_code(expression, env, module, allModules)
+
+private fun stdlib_path_slash_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let rightType = expression_type(binary.right, env, module, allModules)
+    expression_emittable(binary.left, env, module, allModules)
+        & expression_emittable(binary.right, env, module, allModules)
+        & (type_assignable(string_type(), rightType) | stdlib_path_type_reference(rightType, module))
+
+private fun stdlib_path_type_reference(type: CompiledTypeReference, module: CompiledModule): bool =
+    type.name == "/capy/io/Path"
+        | (type_unqualified_name(type.name) == "Path" & stdlib_path_member_imported("Path", module.imports))
+
+private fun stdlib_path_type(): CompiledTypeReference =
+    data_type_reference("Path")
+
+private fun stdlib_byte_count_type_reference(): CompiledTypeReference =
+    data_type_reference("byte_count")
+
+private fun stdlib_byte_count_type(type: CompiledTypeReference): bool =
+    type.name == "/capy/io/ByteSize.byte_count" | type_unqualified_name(type.name) == "byte_count"
+
+private fun stdlib_byte_count_value_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    numeric_widening_code(
+        "((java.lang.Long) " + expression_code(access.receiver, env, object_type(), module, allModules) + ")",
+        long_type(),
+        expectedType
+    )
 
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
@@ -5663,6 +5913,8 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
         then collection_pipe_emittable(e, env, module, allModules)
         else if binary_extension_operator_expression_with_left_type(e, leftType, module, allModules)
         then binary_extension_operator_emittable_with_left_type(e, leftType, env, module, allModules)
+        else if stdlib_path_slash_expression(e, leftType, module)
+        then stdlib_path_slash_emittable(e, env, module, allModules)
         else java_binary_operator_emittable(e, env, module, allModules) & expression_emittable(e.left, env, module, allModules) & expression_emittable(e.right, env, module, allModules)
     case CompiledUnaryExpression e -> java_unary_operator_emittable(e, env, module, allModules) & expression_emittable(e.expression, env, module, allModules)
     case CompiledFunctionCallExpression e -> function_call_emittable(e, env, module, allModules)
@@ -6192,6 +6444,10 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
         case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
     else if stdlib_effect_function_call(call, module)
     then true
+    else if stdlib_path_function_call(call, module)
+    then stdlib_path_function_call_emittable(call, env, module, allModules)
+    else if stdlib_io_function_call(call, module)
+    then stdlib_io_function_call_emittable(call, env, module, allModules)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then match call.arguments[0] with
         case None -> false
@@ -6803,6 +7059,12 @@ private fun console_read_line_call(call: CompiledFunctionCallExpression, module:
 
 private fun console_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/io/Console", "capy/io/Console")
+
+private fun stdlib_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")
+
+private fun stdlib_path_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/io/Path", "capy/io/Path")
 
 private fun module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
     match imports[0] with
