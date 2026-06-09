@@ -387,12 +387,14 @@ tasks.named('compileE2eCfunJava') {
 
 def prepareE2eCooTask089Sources = tasks.register('prepareE2eCooTask089Sources', Sync) {
     group = 'build'
-    description = 'Prepares the ranked TASK-089 object-oriented e2e Capybara sources.'
+    description = 'Prepares the ranked TASK-089 and TASK-090 object-oriented e2e Capybara sources.'
 
     from(e2eCooCapybaraSourceDir) {
         include 'dev/capylang/test/ObjectMethodInterop.cfun'
         include 'dev/capylang/test/ObjectMethodInterop.coo'
         include 'dev/capylang/test/ObjectMethodInteropCapyTest.cfun'
+        include 'dev/capylang/test/ConstructedObjects.coo'
+        include 'dev/capylang/test/ConstructedObjectsCapyTest.cfun'
     }
     into e2eCooSelectedCapybaraSourceDir
 }

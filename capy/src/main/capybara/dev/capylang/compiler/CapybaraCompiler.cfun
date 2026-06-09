@@ -12,6 +12,8 @@ from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionP
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledProgram import { * }
@@ -27,6 +29,8 @@ from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter 
 from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
 from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
 from /dev/capylang/compiler/parser/ObjectOrientedClass import { ObjectOrientedClass }
+from /dev/capylang/compiler/parser/ObjectOrientedField import { ObjectOrientedField }
+from /dev/capylang/compiler/parser/ObjectOrientedInterface import { ObjectOrientedInterface }
 from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
 from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
 from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
@@ -98,7 +102,9 @@ private fun compile_module(module: ParsedModule): CompiledModule =
         path: normalize_module_path(module.path),
         types: {:},
         visiblePrimitiveBackedTypes: {:},
-        functions: compile_functions(module.definitions, module.definitions) + compile_object_class_functions(module.objectOriented.classes),
+        functions: compile_functions(module.definitions, module.definitions)
+            + compile_object_interface_functions(module.objectOriented.interfaces)
+            + compile_object_class_functions(module.objectOriented.classes),
         imports: compile_imports(module.imports),
         derivers: derivers,
         annotations: compile_annotations(module.definitions),
@@ -109,13 +115,28 @@ private fun compile_object_oriented_modules(modules: List[ParsedModule]): List[C
     match modules[0] with
     case None -> []
     case Some { module } ->
-        if module.objectOriented.classes.is_empty()
+        if module.objectOriented.interfaces.is_empty() & module.objectOriented.classes.is_empty()
         then compile_object_oriented_modules(modules[1:])
         else [CompiledObjectOrientedUnit {
             name: module.name,
             path: normalize_module_path(module.path),
+            interfaces: compile_object_interfaces(module.objectOriented.interfaces),
             classes: compile_object_classes(module.objectOriented.classes)
         }] + compile_object_oriented_modules(modules[1:])
+
+private fun compile_object_interfaces(interfaces: List[ObjectOrientedInterface]): List[CompiledObjectOrientedInterface] =
+    match interfaces[0] with
+    case None -> []
+    case Some { interface } -> [compile_object_interface(interface)] + compile_object_interfaces(interfaces[1:])
+
+private fun compile_object_interface(interface: ObjectOrientedInterface): CompiledObjectOrientedInterface =
+    CompiledObjectOrientedInterface {
+        name: interface.name,
+        visibility: interface.visibility,
+        parents: compile_types(interface.parents),
+        methods: compile_object_methods(interface.name, interface.methods),
+        location: compile_location(interface.location)
+    }
 
 private fun compile_object_classes(classes: List[ObjectOrientedClass]): List[CompiledObjectOrientedClass] =
     match classes[0] with
@@ -127,9 +148,32 @@ private fun compile_object_class(class: ObjectOrientedClass): CompiledObjectOrie
         name: class.name,
         visibility: class.visibility,
         parameters: compile_parameters(class.parameters),
+        parents: compile_types(class.parents),
+        fields: compile_object_fields(class.name, class.fields),
+        initBlocks: compile_object_init_blocks(class.name, class.initBlocks),
         methods: compile_object_methods(class.name, class.methods),
         location: compile_location(class.location)
     }
+
+private fun compile_object_fields(className: String, fields: List[ObjectOrientedField]): List[CompiledObjectOrientedField] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> [compile_object_field(className, field)] + compile_object_fields(className, fields[1:])
+
+private fun compile_object_field(className: String, field: ObjectOrientedField): CompiledObjectOrientedField =
+    CompiledObjectOrientedField {
+        name: field.name,
+        visibility: field.visibility,
+        typeReference: compile_type(field.typeReference),
+        value: compile_expression_in_function(field.value, className + "." + field.name),
+        hasValue: field.hasValue,
+        location: compile_location(field.location)
+    }
+
+private fun compile_object_init_blocks(className: String, initBlocks: List[Expression]): List[CompiledExpression] =
+    match initBlocks[0] with
+    case None -> []
+    case Some { initBlock } -> [compile_expression_in_function(initBlock, className + ".init")] + compile_object_init_blocks(className, initBlocks[1:])
 
 private fun compile_object_methods(className: String, methods: List[ObjectOrientedMethod]): List[CompiledObjectOrientedMethod] =
     match methods[0] with
@@ -147,11 +191,57 @@ private fun compile_object_method(className: String, method: ObjectOrientedMetho
         location: compile_location(method.location)
     }
 
+private fun compile_object_interface_functions(interfaces: List[ObjectOrientedInterface]): List[CompiledFunction] =
+    match interfaces[0] with
+    case None -> []
+    case Some { interface } ->
+        [compile_object_interface_schema_function(interface)]
+            + compile_object_interface_parent_schema_functions(interface.name, interface.parents, 0)
+            + compile_object_interface_method_functions(interface.name, interface.methods)
+            + compile_object_interface_functions(interfaces[1:])
+
+private fun compile_object_interface_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
+    compile_schema_constant(
+        "__capy_oo_interface|" + interface.name,
+        interface.visibility,
+        interface.location
+    )
+
+private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], idx: int): List[CompiledFunction] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [compile_schema_constant("__capy_oo_interface_parent|" + interfaceName + "|" + idx, type_reference_schema(parent), parent_location(parent))]
+            + compile_object_interface_parent_schema_functions(interfaceName, parents[1:], idx + 1)
+
+private fun parent_location(parent: TypeReference): SourceLocation =
+    SourceLocation { line: 0, column: 0 }
+
+private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_object_interface_method_function(interfaceName, method)] + compile_object_interface_method_functions(interfaceName, methods[1:])
+
+private fun compile_object_interface_method_function(interfaceName: String, method: ObjectOrientedMethod): CompiledFunction =
+    CompiledFunction {
+        name: "__capy_oo_interface_method|" + interfaceName + "|" + method.name,
+        visibility: "oo_interface_method:" + method.visibility,
+        parameters: compile_parameters(method.parameters),
+        returnType: compile_type(method.returnType),
+        body: compile_expression_in_function(method.body, interfaceName + "." + method.name),
+        location: compile_location(method.location)
+    }
+
 private fun compile_object_class_functions(classes: List[ObjectOrientedClass]): List[CompiledFunction] =
     match classes[0] with
     case None -> []
     case Some { class } ->
         [compile_object_class_schema_function(class)]
+            + compile_object_class_parameter_schema_functions(class.name, class.parameters, 0)
+            + compile_object_class_parent_schema_functions(class.name, class.parents, 0)
+            + compile_object_field_schema_functions(class.name, class.fields, 0)
+            + compile_object_field_init_functions(class.name, class.parameters, class.fields)
+            + compile_object_init_functions(class.name, class.parameters, class.initBlocks, 0)
             + compile_object_method_functions(class.name, class.methods)
             + compile_object_class_functions(classes[1:])
 
@@ -161,6 +251,68 @@ private fun compile_object_class_schema_function(class: ObjectOrientedClass): Co
         class.visibility,
         class.location
     )
+
+private fun compile_object_class_parameter_schema_functions(className: String, parameters: List[FunctionParameter], idx: int): List[CompiledFunction] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [compile_schema_constant("__capy_oo_param|" + className + "|" + idx, parameter.name + "|" + type_reference_schema(parameter.typeReference), parameter.location)]
+            + compile_object_class_parameter_schema_functions(className, parameters[1:], idx + 1)
+
+private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], idx: int): List[CompiledFunction] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [compile_schema_constant("__capy_oo_parent|" + className + "|" + idx, type_reference_schema(parent), parent_location(parent))]
+            + compile_object_class_parent_schema_functions(className, parents[1:], idx + 1)
+
+private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [compile_schema_constant("__capy_oo_field|" + className + "|" + idx, object_field_schema(field), field.location)]
+            + compile_object_field_schema_functions(className, fields[1:], idx + 1)
+
+private fun object_field_schema(field: ObjectOrientedField): String =
+    field.name + "|" + field.visibility + "|" + type_reference_schema(field.typeReference) + "|" + object_field_has_value_schema(field)
+
+private fun object_field_has_value_schema(field: ObjectOrientedField): String =
+    if field.hasValue then "true" else "false"
+
+private fun compile_object_field_init_functions(className: String, parameters: List[FunctionParameter], fields: List[ObjectOrientedField]): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        if field.hasValue
+        then [compile_object_field_init_function(className, parameters, field)] + compile_object_field_init_functions(className, parameters, fields[1:])
+        else compile_object_field_init_functions(className, parameters, fields[1:])
+
+private fun compile_object_field_init_function(className: String, parameters: List[FunctionParameter], field: ObjectOrientedField): CompiledFunction =
+    CompiledFunction {
+        name: "__capy_oo_field_init|" + className + "|" + field.name,
+        visibility: "oo_field_init",
+        parameters: compile_parameters(parameters),
+        returnType: compile_type(field.typeReference),
+        body: compile_expression_in_function(field.value, className + "." + field.name),
+        location: compile_location(field.location)
+    }
+
+private fun compile_object_init_functions(className: String, parameters: List[FunctionParameter], initBlocks: List[Expression], idx: int): List[CompiledFunction] =
+    match initBlocks[0] with
+    case None -> []
+    case Some { initBlock } ->
+        [compile_object_init_function(className, parameters, initBlock, idx)]
+            + compile_object_init_functions(className, parameters, initBlocks[1:], idx + 1)
+
+private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: Expression, idx: int): CompiledFunction =
+    CompiledFunction {
+        name: "__capy_oo_init|" + className + "|" + idx,
+        visibility: "oo_init",
+        parameters: compile_parameters(parameters),
+        returnType: compile_type(compiler_any_type()),
+        body: compile_expression_in_function(initBlock, className + ".init"),
+        location: compile_location(expression_location(initBlock))
+    }
 
 private fun compile_object_method_functions(className: String, methods: List[ObjectOrientedMethod]): List[CompiledFunction] =
     match methods[0] with
@@ -776,6 +928,35 @@ private fun compile_location(location: SourceLocation): CompiledSourceLocation =
         line: location.line,
         column: location.column
     }
+
+private fun expression_location(expression: Expression): SourceLocation =
+    match expression with
+    case UnsupportedExpression value -> value.location
+    case IntLiteral value -> value.location
+    case LongLiteral value -> value.location
+    case FloatLiteral value -> value.location
+    case DoubleLiteral value -> value.location
+    case BoolLiteral value -> value.location
+    case StringLiteral value -> value.location
+    case VariableExpression value -> value.location
+    case IfExpression value -> value.location
+    case BinaryExpression value -> value.location
+    case UnaryExpression value -> value.location
+    case FunctionCallExpression value -> value.location
+    case FunctionReferenceExpression value -> value.location
+    case MethodCallExpression value -> value.location
+    case WithExpression value -> value.location
+    case LambdaExpression value -> value.location
+    case ListLiteral value -> value.location
+    case SetLiteral value -> value.location
+    case DictLiteral value -> value.location
+    case TupleLiteral value -> value.location
+    case IndexExpression value -> value.location
+    case DataLiteral value -> value.location
+    case FieldAccessExpression value -> value.location
+    case ReduceExpression value -> value.location
+    case MatchExpression value -> value.location
+    case BlockExpression value -> value.location
 
 private fun compile_expression_in_function(expression: Expression, functionName: String): CompiledExpression =
     match expression with
