@@ -163,11 +163,14 @@ private fun java_object_classes(classes: List[CompiledObjectOrientedClass], modu
             + java_object_classes(classes[1:], module, allModules)
 
 private fun java_object_class(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
-    "    " + java_visibility_prefix(objectClass.visibility) + "static final class " + java_identifier(objectClass.name) + java_object_class_parent_clause(objectClass.parents, module, allModules) + " {" + newline()
+    "    " + java_visibility_prefix(objectClass.visibility) + "static " + java_object_class_final_modifier(objectClass) + "class " + java_identifier(objectClass.name) + java_object_class_parent_clause(objectClass.parents, module, allModules) + " {" + newline()
     + java_object_fields(objectClass.fields)
     + java_object_constructor(objectClass, module, allModules)
     + java_object_methods(objectClass.methods, objectClass, module, allModules)
     + "    }" + newline()
+
+private fun java_object_class_final_modifier(objectClass: CompiledObjectOrientedClass): String =
+    if objectClass.open then "" else "final "
 
 private fun java_object_class_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
     if parents.is_empty()
@@ -370,6 +373,7 @@ private fun compiled_object_class(function: CompiledFunction, functions: List[Co
     CompiledObjectOrientedClass {
         name: className,
         visibility: schema_value(function),
+        open: compiled_object_class_open(className, functions),
         parameters: compiled_object_class_parameters(className, functions),
         parents: schema_type_references(schema_values("__capy_oo_parent|" + className + "|", functions)),
         fields: compiled_object_fields(className, functions),
@@ -377,6 +381,11 @@ private fun compiled_object_class(function: CompiledFunction, functions: List[Co
         methods: compiled_object_methods(className, functions),
         location: function.location
     }
+
+private fun compiled_object_class_open(className: String, functions: List[CompiledFunction]): bool =
+    match schema_value_named("__capy_oo_class_open|" + className, functions) with
+    case Some { value } -> value == "true"
+    case None -> false
 
 private fun compiled_object_class_parameters(className: String, functions: List[CompiledFunction]): List[CompiledFunctionParameter] =
     match functions[0] with
@@ -2736,7 +2745,7 @@ private fun reflection_object_info_code(className: String, owner: CompiledModule
     "__capy_data(\"ObjectInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(className) + "\"")
         + ", " + java_map_entry("pkg", package_info_code(owner))
-        + ", " + java_map_entry("open", "false")
+        + ", " + java_map_entry("open", reflection_object_open_code(className, owner.functions))
         + ", " + java_map_entry("fields", reflection_object_field_infos_code(className, schema_values("__capy_oo_field|" + className + "|", owner.functions), owner, allModules))
         + ", " + java_map_entry("methods", reflection_object_method_infos_code(className, owner.functions, owner, allModules))
         + ", " + java_map_entry("parents", reflection_parent_infos_code(schema_values("__capy_oo_parent|" + className + "|", owner.functions), owner, allModules))
@@ -2746,6 +2755,9 @@ private fun reflection_object_info_code(className: String, owner: CompiledModule
             allModules
         ))
         + "))"
+
+private fun reflection_object_open_code(className: String, functions: List[CompiledFunction]): String =
+    if compiled_object_class_open(className, functions) then "true" else "false"
 
 private fun reflection_object_interface_info_code(objectInterface: CompiledObjectOrientedInterface, owner: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"" + reflection_object_interface_info_type(objectInterface) + "\", java.util.Map.ofEntries("
