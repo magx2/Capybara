@@ -199,6 +199,36 @@ private fun java_object_class_final_modifier(objectClass: CompiledObjectOriented
     if objectClass.open then "" else "final "
 
 private fun java_object_class_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let interfaceParents = java_object_class_interface_parents(parents, module, allModules)
+    match java_object_class_parent(parents, module, allModules) with
+    case Some { parent } -> " extends " + java_object_parent_type(parent, module, allModules) + java_object_class_implements_clause(interfaceParents, module, allModules)
+    case None -> java_object_class_implements_clause(interfaceParents, module, allModules)
+
+private fun java_object_class_parent(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
+    match parents[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { parent } ->
+        if java_object_parent_is_class(parent, module, allModules)
+        then /capy/lang/Option.Some { parent }
+        else java_object_class_parent(parents[1:], module, allModules)
+
+private fun java_object_class_interface_parents(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): List[CompiledTypeReference] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        if java_object_parent_is_class(parent, module, allModules)
+        then java_object_class_interface_parents(parents[1:], module, allModules)
+        else [parent] + java_object_class_interface_parents(parents[1:], module, allModules)
+
+private fun java_object_parent_is_class(parent: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_object_class_by_type(parent, allModules) with
+    case Some _ -> true
+    case None ->
+        match find_object_class_in_scope(parent.name, module, allModules) with
+        case Some _ -> true
+        case None -> false
+
+private fun java_object_class_implements_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
     if parents.is_empty()
     then ""
     else " implements " + java_object_parent_types(parents, module, allModules)
@@ -292,7 +322,10 @@ private fun java_object_return_statements(expression: CompiledExpression, return
         block_statements(block.bindings, env, returnType, module, allModules, indent)
             + java_object_return_statements(block.result, returnType, block_env(block.bindings, env, module, allModules), module, allModules, indent)
     case _ ->
-        if returnType.name == "void"
+        let expressionType = expression_type(expression, env, module, allModules)
+        if returnType.name == "void" & expressionType.name == "Effect"
+        then indent + expression_code(expression, env, expressionType, module, allModules) + ".unsafeRun();" + newline()
+        else if returnType.name == "void"
         then indent + expression_code(expression, env, object_type(), module, allModules) + ";" + newline()
         else indent + "return " + expression_code(expression, env, returnType, module, allModules) + ";" + newline()
 
@@ -5696,7 +5729,7 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     else if stdlib_io_function_call(call, module)
     then stdlib_io_function_call_type(call.name)
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
-    then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
+    then console_print_call_type(call, env, module, allModules)
     else if console_read_line_call(call, module)
     then effect_type(option_type(string_type()))
     else if stdlib_to_seq_call(call, module)
@@ -8815,7 +8848,8 @@ private fun java_method_supported(name: String): bool =
         | name == "replace" | name == "trim" | name == "size"
 
 private fun java_type(type: CompiledTypeReference): String =
-    if type.name == "void" then "void"
+    if type.name == "array" then java_type(first_type_argument(type)) + "[]"
+    else if type.name == "void" then "void"
     else if type.name == "byte" then "byte"
     else if type.name == "int" then "int"
     else if type.name == "long" then "long"
@@ -8826,6 +8860,7 @@ private fun java_type(type: CompiledTypeReference): String =
 
 private fun boxed_java_type(type: CompiledTypeReference): String =
     if function_type(type) then java_functional_type(type)
+    else if type.name == "array" then java_type(first_type_argument(type)) + "[]"
     else if java_object_type(type) then java_object_type_java_name(type)
     else if type.name == "byte" then "java.lang.Byte"
     else if type.name == "int" then "java.lang.Integer"
@@ -8961,10 +8996,21 @@ private fun console_print_name(name: String): bool =
     name == "print" | name == "println" | name == "print_error" | name == "println_error"
 
 private fun console_print_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let argumentExpression = argument(call.arguments, 0)
+    let argumentType = expression_type(argumentExpression, env, module, allModules)
+    if argumentType.name == "Effect"
+    then expression_code(argumentExpression, env, argumentType, module, allModules)
+        + ".map(__capy_console_value -> dev.capylang.ConsoleUtil." + console_util_method(call.name) + "(__capy_console_value))"
+    else
+        let valueCode = expression_code(argumentExpression, env, argumentType, module, allModules)
+        "capy.lang.Effect.delay(() -> { var __capy_console_value = " + valueCode + "; "
+            + "return dev.capylang.ConsoleUtil." + console_util_method(call.name) + "(__capy_console_value); })"
+
+private fun console_print_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
-    let valueCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
-    "capy.lang.Effect.delay(() -> { var __capy_console_value = " + valueCode + "; "
-        + "return dev.capylang.ConsoleUtil." + console_util_method(call.name) + "(__capy_console_value); })"
+    if argumentType.name == "Effect"
+    then argumentType
+    else effect_type(argumentType)
 
 private fun console_read_line_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     call.name == "read_line" & call.arguments.is_empty() & console_member_imported("read_line", module.imports)

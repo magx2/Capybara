@@ -3447,19 +3447,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
         if (ctx == null) {
             return missingType();
         }
-        var text = ctx.getText();
-        var bracket = text.indexOf('[');
-        if (bracket < 0) {
-            return new TypeReference(text, List.of());
-        }
-        var name = text.substring(0, bracket);
-        var argsText = text.substring(bracket + 1, text.length() - 1);
-        return new TypeReference(name, splitTypeArguments(argsText).stream()
-                .map(NativeCapybaraParser::typeReference)
-                .toList());
+        return typeReference(ctx.getText());
     }
 
     private static TypeReference typeReference(String text) {
+        if (text.endsWith("[]")) {
+            return new TypeReference("array", List.of(typeReference(text.substring(0, text.length() - 2))));
+        }
         var bracket = text.indexOf('[');
         if (bracket < 0) {
             return new TypeReference(text, List.of());
