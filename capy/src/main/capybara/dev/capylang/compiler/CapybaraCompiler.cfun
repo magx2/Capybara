@@ -1,6 +1,6 @@
 from /capy/collection/Dict import { * }
 from /capy/collection/List import { * }
-from /capy/collection/Set import { Set }
+from /capy/collection/Set import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
@@ -25,6 +25,7 @@ from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
 from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, DeriveApplication, DeriverDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition, TypeDeclaration }
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
@@ -60,24 +61,25 @@ fun compile(
     }] })
     else
         let capybara_parser <- parser()
-        capybara_parser.parse(rawModules).map(program => compiled_program(program, nativeProviders, nativeImplementationProviders))
+        capybara_parser.parse(rawModules).map(program => compiled_program(program, libraries, nativeProviders, nativeImplementationProviders))
 
 private fun compiled_program(
     program: /dev/capylang/compiler/parser/ParsedProgram,
+    libraries: Set[CompiledModule],
     nativeProviders: NativeProviderManifest,
     nativeImplementationProviders: NativeProviderManifest
 ): Either[CompiledProgram, List[CompilerError]] =
     Left { CompiledProgram {
-        modules: compile_modules(program.modules, program.modules),
+        modules: compile_modules(program.modules, program.modules, libraries.to_list()),
         objectOrientedModules: compile_object_oriented_modules(program.modules, program.modules),
         nativeProviders: nativeProviders,
         nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
     }}
 
-private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule]): List[CompiledModule] =
+private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraries: List[CompiledModule]): List[CompiledModule] =
     match modules[0] with
     case None -> []
-    case Some { module } -> merge_compiled_module(compile_module(module, allModules), compile_modules(modules[1:], allModules))
+    case Some { module } -> merge_compiled_module(compile_module_with_libraries(module, allModules, libraries), compile_modules(modules[1:], allModules, libraries))
 
 private fun merge_compiled_module(module: CompiledModule, modules: List[CompiledModule]): List[CompiledModule] =
     match modules[0] with
@@ -118,6 +120,124 @@ private fun compile_module(module: ParsedModule, allModules: List[ParsedModule])
         annotations: compile_annotations(module.definitions),
         staticImports: []
     }
+
+private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraries: List[CompiledModule]): CompiledModule =
+    let compiled = compile_module(module, allModules)
+    compiled.with(
+        functions: compiled.functions + imported_library_functions(compiled.imports, libraries),
+        staticImports: library_static_imports(compiled.imports, libraries)
+    )
+
+private fun imported_library_functions(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[CompiledFunction] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } ->
+        if declaration.qualified
+        then imported_library_functions(imports[1:], libraries)
+        else imported_library_functions_for_import(declaration, libraries) + imported_library_functions(imports[1:], libraries)
+
+private fun imported_library_functions_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[CompiledFunction] =
+    match find_imported_library(declaration, libraries) with
+    case Some { library } -> imported_library_functions_from_module(declaration, library.functions)
+    case None -> []
+
+private fun imported_library_functions_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction]): List[CompiledFunction] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if imported_library_function(declaration, function)
+        then [function.with(visibility: "imported")] + imported_library_functions_from_module(declaration, functions[1:])
+        else imported_library_functions_from_module(declaration, functions[1:])
+
+private fun imported_library_function(declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
+    compiled_import_includes_name(function.name, declaration)
+        & function.visibility != "private"
+        & function.visibility != "const:private"
+        & !compiler_string_has_prefix(function.visibility, "const:schema")
+
+private fun library_static_imports(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[StaticImport] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } ->
+        if declaration.qualified | compiler_stdlib_import(declaration.modulePath)
+        then library_static_imports(imports[1:], libraries)
+        else library_static_imports_for_import(declaration, libraries) + library_static_imports(imports[1:], libraries)
+
+private fun library_static_imports_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[StaticImport] =
+    match find_imported_library(declaration, libraries) with
+    case Some { library } ->
+        if declaration.wildcard & declaration.excludedNames.is_empty()
+        then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
+        else explicit_library_static_imports(declaration, library, library.functions)
+    case None -> []
+
+private fun explicit_library_static_imports(declaration: CompiledImportDeclaration, library: CompiledModule, functions: List[CompiledFunction]): List[StaticImport] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if imported_library_function(declaration, function)
+        then [StaticImport { className: compiled_module_class_name(library), memberName: compiler_java_function_name(function), enumValue: false }]
+            + explicit_library_static_imports(declaration, library, functions[1:])
+        else explicit_library_static_imports(declaration, library, functions[1:])
+
+private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match libraries[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { library } ->
+        if imported_library_matches(declaration.modulePath, library)
+        then /capy/lang/Option.Some { library }
+        else find_imported_library(declaration, libraries[1:])
+
+private fun imported_library_matches(modulePath: String, library: CompiledModule): bool =
+    let className = compiled_module_class_name(library)
+    modulePath == library.name
+        | normalize_module_path(modulePath) == compiled_module_path(library)
+        | modulePath == className
+
+private fun compiled_module_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else module.path + "/" + module.name
+
+private fun compiled_module_class_name(module: CompiledModule): String =
+    compiled_module_path(module).replace("/", ".")
+
+private fun compiler_stdlib_import(modulePath: String): bool =
+    compiler_string_has_prefix(modulePath, "/capy/") | compiler_string_has_prefix(modulePath, "capy/")
+
+private fun compiled_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
+    if declaration.wildcard
+    then !compiler_string_list_contains(declaration.excludedNames, name)
+    else compiler_string_list_contains(declaration.importedNames, name)
+
+private fun compiler_java_function_name(function: CompiledFunction): String =
+    if function.name == "tests"
+    then "tests"
+    else if function.name == "main"
+    then "main"
+    else compiler_java_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
+
+private fun compiler_java_identifier(name: String): String =
+    let sanitized = compiler_java_identifier_chars(name, 0, "")
+    let nonEmpty = if sanitized.is_empty() then "_" else sanitized
+    match nonEmpty[0] with
+    case None -> "_"
+    case Some { char } -> if compiler_java_identifier_start_char(char) then nonEmpty else "_" + nonEmpty
+
+private fun compiler_java_identifier_chars(name: String, idx: int, acc: String): String =
+    if idx >= name.size().value
+    then acc
+    else match name[idx] with
+        case None -> acc
+        case Some { char } ->
+            let next = if compiler_java_identifier_part_char(char) then char else "_"
+            compiler_java_identifier_chars(name, idx + 1, acc + next)
+
+private fun compiler_java_identifier_start_char(char: String): bool =
+    ("ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char) | ("abcdefghijklmnopqrstuvwxyz" ? char) | char == "_" | char == "$"
+
+private fun compiler_java_identifier_part_char(char: String): bool =
+    compiler_java_identifier_start_char(char) | ("0123456789" ? char)
 
 private fun compile_object_oriented_modules(modules: List[ParsedModule], allModules: List[ParsedModule]): List[CompiledObjectOrientedUnit] =
     match modules[0] with

@@ -610,7 +610,15 @@ private fun java_imports(module: CompiledModule, allModules: List[CompiledModule
     "import java.util.*;" + newline()
     + "import java.util.function.*;" + newline()
     + static_imports(module.imports, module, allModules)
+    + compiled_static_imports(module.staticImports)
     + newline()
+
+private fun compiled_static_imports(imports: List[StaticImport]): String =
+    match imports[0] with
+    case None -> ""
+    case Some { staticImport } ->
+        "import static " + staticImport.className + "." + staticImport.memberName + ";" + newline()
+            + compiled_static_imports(imports[1:])
 
 private fun static_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): String =
     match imports[0] with
@@ -719,6 +727,9 @@ private fun compiled_constant(function: CompiledFunction): bool =
 private fun compiled_schema(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.visibility, "const:schema")
 
+private fun imported_function(function: CompiledFunction): bool =
+    function.visibility == "imported"
+
 private fun compiled_object_helper_function(function: CompiledFunction): bool =
     compiled_object_method_function(function)
         | compiled_object_interface_method_function(function)
@@ -732,7 +743,7 @@ private fun java_functions(functions: List[CompiledFunction], module: CompiledMo
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if compiled_constant(function) | compiled_object_helper_function(function)
+        if compiled_constant(function) | compiled_object_helper_function(function) | imported_function(function)
         then java_functions(functions[1:], module, allModules, nativeProviderCatalog)
         else java_function(function, module, allModules, nativeProviderCatalog) + newline() + java_functions(functions[1:], module, allModules, nativeProviderCatalog)
 

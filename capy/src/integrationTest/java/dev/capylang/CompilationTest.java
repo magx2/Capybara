@@ -7,10 +7,13 @@ import dev.capylang.compiler.OutputType;
 import dev.capylang.generator.Generator;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
-import dev.capylang.compiler.Result;
+import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.compiler.parser.SourceKind;
+import capy.lang.Either;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -18,13 +21,13 @@ class CompilationTest {
     @ParameterizedTest(name = "{index}: should {0}")
     @MethodSource
     void test(String code) {
-        var rawModules = List.of(new RawModule("Main", "/capybara", code));
+        var rawModules = List.of(rawModule("Main", "/capybara", code));
         System.out.println(" === PARSING === ");
         System.out.println(rawModules);
 
-        var link = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
-        if (link instanceof Result.Error<CompiledProgram>) {
-            var errors = ((Result.Error<CompiledProgram>) link).errors();
+        var link = CapybaraCompiler.compile(rawModules, new LinkedHashSet<>(), emptyNativeProviders(), emptyNativeProviders()).unsafeRun();
+        if (link instanceof Either.Right<?, ?> error) {
+            var errors = (List<?>) error.value();
             throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
         }
         System.out.println("\n === LINKING === ");
@@ -34,13 +37,20 @@ class CompilationTest {
         Arrays.stream(OutputType.values())
                 .parallel()
                 .map(type -> {
-                    var generator = Generator.findGenerator(type);
-                    var linkedProgram = ((Result.Success<CompiledProgram>) link).value();
-                    var compiled = generator.generate(linkedProgram);
+                    var linkedProgram = (CompiledProgram) ((Either.Left<?, ?>) link).value();
+                    var compiled = Generator.generate(linkedProgram, type);
                     return "\t === " + type + " === \n" + compiled;
                 })
                 .forEach(System.out::println);
 
+    }
+
+    private static RawModule rawModule(String name, String path, String input) {
+        return new RawModule(name, path, input, SourceKind.FUNCTIONAL);
+    }
+
+    private static NativeProviderManifest emptyNativeProviders() {
+        return new NativeProviderManifest(List.of());
     }
 
     static Stream<Arguments> test() {
