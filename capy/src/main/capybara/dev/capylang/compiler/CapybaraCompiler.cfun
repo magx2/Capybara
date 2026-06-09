@@ -6,6 +6,7 @@ from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -16,7 +17,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
-from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition }
+from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, DeriveApplication, DeriverDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition, TypeDeclaration }
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
@@ -61,16 +62,76 @@ private fun compile_modules(modules: List[ParsedModule]): List[CompiledModule] =
     case Some { module } -> [compile_module(module)] + compile_modules(modules[1:])
 
 private fun compile_module(module: ParsedModule): CompiledModule =
+    let derivers = compile_derivers(module.definitions)
     CompiledModule {
         name: module.name,
         path: normalize_module_path(module.path),
         types: {:},
         visiblePrimitiveBackedTypes: {:},
-        functions: compile_functions(module.definitions),
+        functions: compile_functions(module.definitions, module.definitions),
         imports: compile_imports(module.imports),
-        derivers: {:},
+        derivers: derivers,
         annotations: compile_annotations(module.definitions),
         staticImports: []
+    }
+
+private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDeriverDeclaration] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        match definition with
+        case DeriverDeclaration declaration ->
+            compile_derivers(definitions[1:]) + (declaration.name, compile_deriver_declaration(declaration))
+        case _ -> compile_derivers(definitions[1:])
+
+private fun compile_deriver_declaration(declaration: DeriverDeclaration): CompiledDeriverDeclaration =
+    CompiledDeriverDeclaration {
+        name: declaration.name,
+        visibility: declaration.visibility,
+        methods: compile_deriver_methods(declaration.methods),
+        location: compile_location(declaration.location)
+    }
+
+private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_function(method)] + compile_deriver_methods(methods[1:])
+
+private fun compile_derived_functions_for_type(typeName: String, derives: List[DeriveApplication], definitions: List[Definition]): List[CompiledFunction] =
+    match derives[0] with
+    case None -> []
+    case Some { derive } ->
+        match find_deriver(derive.name, definitions) with
+        case Some { deriver } ->
+            compile_derived_methods(typeName, deriver.methods)
+                + compile_derived_functions_for_type(typeName, derives[1:], definitions)
+        case None -> compile_derived_functions_for_type(typeName, derives[1:], definitions)
+
+private fun find_deriver(name: String, definitions: List[Definition]): /capy/lang/Option[DeriverDeclaration] =
+    match definitions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { definition } ->
+        match definition with
+        case DeriverDeclaration declaration ->
+            if declaration.name == name
+            then /capy/lang/Option.Some { declaration }
+            else find_deriver(name, definitions[1:])
+        case _ -> find_deriver(name, definitions[1:])
+
+private fun compile_derived_methods(typeName: String, methods: List[FunctionDeclaration]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_derived_method(typeName, method)] + compile_derived_methods(typeName, methods[1:])
+
+private fun compile_derived_method(typeName: String, method: FunctionDeclaration): CompiledFunction =
+    let functionName = typeName + "." + method.name
+    CompiledFunction {
+        name: functionName,
+        visibility: method.visibility,
+        parameters: compile_parameters(method.parameters),
+        returnType: compile_type(method.returnType),
+        body: compile_expression_in_function(method.body, functionName),
+        location: compile_location(method.location)
     }
 
 private fun compile_annotations(definitions: List[Definition]): Dict[CompiledAnnotationDeclaration] =
@@ -135,16 +196,22 @@ private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
         location: compile_location(constant.location)
     }
 
-private fun compile_functions(definitions: List[Definition]): List[CompiledFunction] =
+private fun compile_functions(definitions: List[Definition], allDefinitions: List[Definition]): List[CompiledFunction] =
     match definitions[0] with
     case None -> []
     case Some { definition } ->
         match definition with
-        case ConstantDefinition { constant } -> [compile_constant(constant)] + compile_functions(definitions[1:])
-        case DataDeclaration declaration -> compile_data_declaration(declaration) + compile_functions(definitions[1:])
-        case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:])
-        case FunctionDefinition { function } -> [compile_function(function)] + compile_functions(definitions[1:])
-        case _ -> compile_functions(definitions[1:])
+        case ConstantDefinition { constant } -> [compile_constant(constant)] + compile_functions(definitions[1:], allDefinitions)
+        case DataDeclaration declaration ->
+            compile_data_declaration(declaration)
+                + compile_derived_functions_for_type(declaration.name, declaration.derives, allDefinitions)
+                + compile_functions(definitions[1:], allDefinitions)
+        case TypeDeclaration declaration ->
+            compile_derived_functions_for_type(declaration.name, declaration.derives, allDefinitions)
+                + compile_functions(definitions[1:], allDefinitions)
+        case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:], allDefinitions)
+        case FunctionDefinition { function } -> [compile_function(function)] + compile_functions(definitions[1:], allDefinitions)
+        case _ -> compile_functions(definitions[1:], allDefinitions)
 
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
     [compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location)]

@@ -472,7 +472,11 @@ private fun java_method_parameter_tail(parameters: List[CompiledFunctionParamete
 
 private fun java_function_bindings(function: CompiledFunction): List[JavaBinding] =
     if extension_method_function(function)
-    then [java_binding("this", method_receiver_type(function))] + parameter_bindings(function.parameters)
+    then
+        let receiverType = method_receiver_type(function)
+        [java_binding("this", receiverType)]
+            + parameter_bindings(function.parameters)
+            + [java_binding_with_java_name("receiver", receiverType, java_identifier("this"))]
     else parameter_bindings(function.parameters)
 
 private fun parameter_bindings(parameters: List[CompiledFunctionParameter]): List[JavaBinding] =
@@ -596,6 +600,11 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then "(" + truthy_expression_code(binary.left, env, module, allModules)
         + " " + java_boolean_operator(binary.operator) + " "
         + truthy_expression_code(binary.right, env, module, allModules)
+        + ")"
+    else if string_concat_expression(binary.operator, leftType, rightType)
+    then "(" + expression_code(binary.left, env, string_concat_operand_type(leftType), module, allModules)
+        + " + "
+        + expression_code(binary.right, env, string_concat_operand_type(rightType), module, allModules)
         + ")"
     else if string_left_numeric_operator(binary.operator, leftType, rightType)
     then "(" + expression_code(binary.left, env, leftType, module, allModules)
@@ -898,7 +907,7 @@ private fun extension_operator_arguments_emittable(parameters: List[CompiledFunc
 
 private fun extension_operator_argument_emittable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let argumentType = expression_type(argument, env, module, allModules)
-    expression_emittable(argument, env, module, allModules)
+    parameter_argument_emittable(target, argument, env, module, allModules)
         & (
             parameter_argument_assignable(target, argument, env, module, allModules)
             | (function_type(target) & function_type(argumentType))
@@ -1252,6 +1261,14 @@ private fun stdlib_date_time_type_module_path(typeName: String): String =
     else if name == "Duration" | name == "DateDuration" | name == "WeekDuration"
     then "capy/date_time/Duration"
     else ""
+
+private fun string_concat_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    operator == "+" & (leftType.name == "String" | rightType.name == "String")
+
+private fun string_concat_operand_type(type: CompiledTypeReference): CompiledTypeReference =
+    if type.name == "any"
+    then object_type()
+    else type
 
 private fun stdlib_date_time_type_name(typeName: String): bool =
     let name = type_unqualified_name(typeName)
@@ -3379,6 +3396,12 @@ private fun monadic_binding_statement(binding: CompiledLetBinding, localBinding:
         + indent + "    return ((" + boxed_java_type(expectedType) + ") " + bindName + ");" + newline()
         + indent + "}" + newline()
         + indent + java_type(valueType) + " " + localBinding.javaName + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + bindName + "));" + newline()
+    else if option_type_name(wrapperType.name)
+    then indent + java_type(wrapperType) + " " + bindName + " = " + expression_code(binding.value, env, wrapperType, module, allModules) + ";" + newline()
+        + indent + "if (" + bindName + ".isEmpty()) {" + newline()
+        + indent + "    return ((" + boxed_java_type(expectedType) + ") " + bindName + ");" + newline()
+        + indent + "}" + newline()
+        + indent + java_type(valueType) + " " + localBinding.javaName + " = ((" + boxed_java_type(valueType) + ") " + bindName + ".get());" + newline()
     else indent + "java.lang.Object " + bindName + " = " + expression_code(binding.value, env, wrapperType, module, allModules) + ";" + newline()
         + indent + java_type(valueType) + " " + localBinding.javaName + " = ((" + boxed_java_type(valueType) + ") __capy_data_value_field(" + bindName + "));" + newline()
 
