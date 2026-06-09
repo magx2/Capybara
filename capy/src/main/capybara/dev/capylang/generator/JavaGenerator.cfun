@@ -330,9 +330,15 @@ private fun expression_code(
         + ")"
     case CompiledBinaryExpression binary -> binary_expression_code(binary, env, expectedType, module, allModules)
     case CompiledUnaryExpression unary -> unary_expression_code(unary, env, expectedType, module, allModules)
-    case CompiledFunctionCallExpression call -> value_conversion_code(function_call_code(call, env, expectedType, module, allModules), function_call_type(call, env, module, allModules), expectedType, module, allModules)
+    case CompiledFunctionCallExpression call ->
+        if partial_function_call(call)
+        then partial_function_call_code(call, env, expectedType, module, allModules)
+        else value_conversion_code(function_call_code(call, env, expectedType, module, allModules), function_call_type(call, env, module, allModules), expectedType, module, allModules)
     case CompiledFunctionReferenceExpression reference -> function_reference_code(reference, expectedType, module, allModules)
-    case CompiledMethodCallExpression call -> value_conversion_code(method_call_code(call, env, expectedType, module, allModules), method_call_type(call, env, module, allModules), expectedType, module, allModules)
+    case CompiledMethodCallExpression call ->
+        if partial_method_call(call)
+        then partial_method_call_code(call, env, expectedType, module, allModules)
+        else value_conversion_code(method_call_code(call, env, expectedType, module, allModules), method_call_type(call, env, module, allModules), expectedType, module, allModules)
     case CompiledWithExpression withExpression -> value_conversion_code(with_expression_code(withExpression, env, module, allModules), with_expression_type(withExpression, env, module, allModules), expectedType, module, allModules)
     case CompiledLambdaExpression lambda -> lambda_expression_code(lambda, env, expectedType, module, allModules)
     case CompiledListLiteral literal -> list_literal_code(literal, env, expectedType, module, allModules)
@@ -1263,6 +1269,322 @@ private fun function_value_call_argument_tail(parameters: List[CompiledTypeRefer
     case Some { expression } ->
         ", " + expression_code(expression, env, function_type_parameter_at(parameters, 0), module, allModules)
         + function_value_call_argument_tail(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun partial_function_call(call: CompiledFunctionCallExpression): bool =
+    arguments_contain_placeholder(call.arguments)
+
+private fun partial_method_call(call: CompiledMethodCallExpression): bool =
+    arguments_contain_placeholder(call.arguments)
+
+private fun arguments_contain_placeholder(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { expression } -> partial_placeholder_expression(expression) | arguments_contain_placeholder(arguments[1:])
+
+private fun partial_placeholder_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledUnsupportedExpression unsupported -> compiled_placeholder_source(unsupported.source)
+    case _ -> false
+
+private fun partial_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let names = partial_placeholder_names(call.arguments, env)
+    let type = partial_expected_type(expectedType, partial_function_call_type(call, env, module, allModules))
+    "((" + boxed_java_type(type) + ") (" + partial_lambda_parameters(names)
+        + " -> " + partial_function_call_body_code(call, names, env, module, allModules) + "))"
+
+private fun partial_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let names = partial_placeholder_names(call.arguments, env)
+    let type = partial_expected_type(expectedType, partial_method_call_type(call, env, module, allModules))
+    "((" + boxed_java_type(type) + ") (" + partial_lambda_parameters(names)
+        + " -> " + partial_method_call_body_code(call, names, env, module, allModules) + "))"
+
+private fun partial_expected_type(expectedType: CompiledTypeReference, inferredType: CompiledTypeReference): CompiledTypeReference =
+    if function_type(expectedType) then expectedType else inferredType
+
+private fun partial_function_call_body_code(call: CompiledFunctionCallExpression, names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if qualified_call_name(call.name)
+    then
+        match find_qualified_function(call.name, module, allModules) with
+        case Some { function } ->
+            qualified_call_class_name(call.name, module) + "." + java_function_name(function)
+                + "(" + partial_parameter_expression_list_code(function.parameters, call.arguments, names, env, module, allModules) + ")"
+        case None ->
+            qualified_call_class_name(call.name, module) + "." + java_identifier(qualified_call_member(call.name))
+                + "(" + partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+    else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
+        case Some { function } ->
+            java_function_name(function) + "(" + partial_parameter_expression_list_code(function.parameters, call.arguments, names, env, module, allModules) + ")"
+        case None -> java_function_call_name(call.name, module, allModules) + "(" + partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+
+private fun partial_method_call_body_code(call: CompiledMethodCallExpression, names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    match find_extension_method(call, env, module, allModules) with
+    case Some { function } -> partial_extension_method_call_body_code(function, call, names, receiverType, env, module, allModules)
+    case None -> expression_code(call.receiver, env, receiverType, module, allModules)
+        + "." + java_method_name(call.name)
+        + "(" + partial_method_expression_list_code(call.arguments, names, receiverType, call.name, env, module, allModules) + ")"
+
+private fun partial_extension_method_call_body_code(function: CompiledFunction, call: CompiledMethodCallExpression, names: List[String], receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let parameters = bound_extension_method_parameters(function, receiverType)
+    java_function_name(function)
+        + "("
+        + expression_code(call.receiver, env, receiverType, module, allModules)
+        + partial_extension_method_call_argument_tail(function.parameters, parameters, call.arguments, names, env, module, allModules)
+        + ")"
+
+private fun partial_extension_method_call_argument_tail(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if arguments.is_empty()
+    then ""
+    else ", " + partial_extension_parameter_expression_list_code(declaredParameters, boundParameters, arguments, names, env, module, allModules)
+
+private fun partial_function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if qualified_call_name(call.name)
+    then
+        match find_qualified_function(call.name, module, allModules) with
+        case Some { function } -> partial_function_type(function.parameters, call.arguments, effective_function_return_type(function, module, allModules))
+        case None -> partial_unknown_function_type(call.arguments)
+    else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
+        case Some { function } -> partial_function_type(function.parameters, call.arguments, effective_function_return_type(function, module, allModules))
+        case None -> partial_unknown_function_type(call.arguments)
+
+private fun partial_method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    match find_extension_method(call, env, module, allModules) with
+    case Some { function } ->
+        CompiledTypeReference {
+            name: function_type_reference_text(
+                partial_extension_method_parameter_types(bound_extension_method_parameters(function, receiverType), call.arguments),
+                bound_extension_method_return_type(function, receiverType)
+            ),
+            arguments: []
+        }
+    case None ->
+        CompiledTypeReference {
+            name: function_type_reference_text(
+                partial_method_parameter_types(call.arguments, receiverType, call.name),
+                partial_method_return_type(call, receiverType, env, module, allModules)
+            ),
+            arguments: []
+        }
+
+private fun partial_function_type(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], returnType: CompiledTypeReference): CompiledTypeReference =
+    CompiledTypeReference {
+        name: function_type_reference_text(partial_function_parameter_types(parameters, arguments), returnType),
+        arguments: []
+    }
+
+private fun partial_unknown_function_type(arguments: List[CompiledExpression]): CompiledTypeReference =
+    CompiledTypeReference {
+        name: function_type_reference_text(partial_unknown_parameter_types(arguments), object_type()),
+        arguments: []
+    }
+
+private fun partial_function_parameter_types(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression]): List[CompiledTypeReference] =
+    match arguments[0] with
+    case None -> []
+    case Some { expression } ->
+        let parameterType = parameter_type_at(parameters, 0, object_type())
+        if partial_placeholder_expression(expression)
+        then [parameterType] + partial_function_parameter_types(parameters[1:], arguments[1:])
+        else partial_function_parameter_types(parameters[1:], arguments[1:])
+
+private fun partial_unknown_parameter_types(arguments: List[CompiledExpression]): List[CompiledTypeReference] =
+    match arguments[0] with
+    case None -> []
+    case Some { expression } ->
+        if partial_placeholder_expression(expression)
+        then [object_type()] + partial_unknown_parameter_types(arguments[1:])
+        else partial_unknown_parameter_types(arguments[1:])
+
+private fun partial_method_parameter_types(arguments: List[CompiledExpression], receiverType: CompiledTypeReference, name: String): List[CompiledTypeReference] =
+    match arguments[0] with
+    case None -> []
+    case Some { expression } ->
+        if partial_placeholder_expression(expression)
+        then [partial_method_argument_type(receiverType, name)] + partial_method_parameter_types(arguments[1:], receiverType, name)
+        else partial_method_parameter_types(arguments[1:], receiverType, name)
+
+private fun partial_extension_method_parameter_types(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression]): List[CompiledTypeReference] =
+    match arguments[0] with
+    case None -> []
+    case Some { expression } ->
+        let parameterType = parameter_type_at(parameters, 0, object_type())
+        if partial_placeholder_expression(expression)
+        then [parameterType] + partial_extension_method_parameter_types(parameters[1:], arguments[1:])
+        else partial_extension_method_parameter_types(parameters[1:], arguments[1:])
+
+private fun partial_method_argument_type(receiverType: CompiledTypeReference, name: String): CompiledTypeReference =
+    if receiverType.name == "String" & string_java_method(name)
+    then string_type()
+    else object_type()
+
+private fun partial_method_return_type(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if receiverType.name == "String" & string_java_method(call.name)
+    then string_java_method_type(call.name)
+    else match find_extension_method(call, env, module, allModules) with
+        case Some { function } -> bound_extension_method_return_type(function, receiverType)
+        case None -> object_type()
+
+private fun partial_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    partial_arguments_emittable(call.arguments, env, module, allModules)
+        & if qualified_call_name(call.name)
+            then match find_qualified_function(call.name, module, allModules) with
+                case Some _ -> true
+                case None -> false
+            else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
+                case Some _ -> true
+                case None -> false
+
+private fun partial_method_call_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(call.receiver, env, module, allModules)
+        & partial_arguments_emittable(call.arguments, env, module, allModules)
+        & (string_java_method_call(call, env, module, allModules)
+            | match find_extension_method(call, env, module, allModules) with
+                case Some _ -> true
+                case None -> java_method_supported(call.name))
+
+private fun partial_arguments_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> true
+    case Some { expression } ->
+        (partial_placeholder_expression(expression) | expression_emittable(expression, env, module, allModules))
+            & partial_arguments_emittable(arguments[1:], env, module, allModules)
+
+private fun partial_placeholder_names(arguments: List[CompiledExpression], env: List[JavaBinding]): List[String] =
+    partial_placeholder_names_with_used(arguments, env, [])
+
+private fun partial_placeholder_names_with_used(arguments: List[CompiledExpression], env: List[JavaBinding], used: List[String]): List[String] =
+    match arguments[0] with
+    case None -> []
+    case Some { expression } ->
+        if partial_placeholder_expression(expression)
+        then
+            let name = available_partial_parameter_name(used, env, 1)
+            [name] + partial_placeholder_names_with_used(arguments[1:], env, [name] + used)
+        else partial_placeholder_names_with_used(arguments[1:], env, used)
+
+private fun available_partial_parameter_name(used: List[String], env: List[JavaBinding], idx: int): String =
+    let name = "capybaraPartial" + idx
+    if binding_exists(name, env) | string_list_contains(name, used)
+    then available_partial_parameter_name(used, env, idx + 1)
+    else name
+
+private fun string_list_contains(value: String, values: List[String]): bool =
+    match values[0] with
+    case None -> false
+    case Some { item } -> item == value | string_list_contains(value, values[1:])
+
+private fun partial_lambda_parameters(names: List[String]): String =
+    match names[0] with
+    case None -> "()"
+    case Some { name } ->
+        if names[1:].is_empty()
+        then java_identifier(name)
+        else "(" + partial_lambda_parameter_list(names) + ")"
+
+private fun partial_lambda_parameter_list(names: List[String]): String =
+    match names[0] with
+    case None -> ""
+    case Some { name } -> java_identifier(name) + partial_lambda_parameter_tail(names[1:])
+
+private fun partial_lambda_parameter_tail(names: List[String]): String =
+    match names[0] with
+    case None -> ""
+    case Some { name } -> ", " + java_identifier(name) + partial_lambda_parameter_tail(names[1:])
+
+private fun partial_argument_name(names: List[String]): String =
+    match names[0] with
+    case Some { name } -> java_identifier(name)
+    case None -> "__capy_missing_partial"
+
+private fun partial_parameter_expression_list_code(parameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let parameterType = parameter_type_at(parameters, 0, expression_type(expression, env, module, allModules))
+        if partial_placeholder_expression(expression)
+        then partial_argument_name(names) + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names[1:], env, module, allModules)
+        else expression_code(expression, env, parameterType, module, allModules)
+            + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names, env, module, allModules)
+
+private fun partial_parameter_expression_list_tail(parameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let parameterType = parameter_type_at(parameters, 0, expression_type(expression, env, module, allModules))
+        if partial_placeholder_expression(expression)
+        then ", " + partial_argument_name(names) + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names[1:], env, module, allModules)
+        else ", " + expression_code(expression, env, parameterType, module, allModules)
+            + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names, env, module, allModules)
+
+private fun partial_expression_list_code(expressions: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        if partial_placeholder_expression(expression)
+        then partial_argument_name(names) + partial_expression_list_tail(expressions[1:], names[1:], env, module, allModules)
+        else expression_code(expression, env, expression_type(expression, env, module, allModules), module, allModules)
+            + partial_expression_list_tail(expressions[1:], names, env, module, allModules)
+
+private fun partial_expression_list_tail(expressions: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        if partial_placeholder_expression(expression)
+        then ", " + partial_argument_name(names) + partial_expression_list_tail(expressions[1:], names[1:], env, module, allModules)
+        else ", " + expression_code(expression, env, expression_type(expression, env, module, allModules), module, allModules)
+            + partial_expression_list_tail(expressions[1:], names, env, module, allModules)
+
+private fun partial_method_expression_list_code(expressions: List[CompiledExpression], names: List[String], receiverType: CompiledTypeReference, methodName: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let argumentType = partial_method_argument_type(receiverType, methodName)
+        if partial_placeholder_expression(expression)
+        then partial_argument_name(names) + partial_method_expression_list_tail(expressions[1:], names[1:], receiverType, methodName, env, module, allModules)
+        else expression_code(expression, env, argumentType, module, allModules)
+            + partial_method_expression_list_tail(expressions[1:], names, receiverType, methodName, env, module, allModules)
+
+private fun partial_method_expression_list_tail(expressions: List[CompiledExpression], names: List[String], receiverType: CompiledTypeReference, methodName: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let argumentType = partial_method_argument_type(receiverType, methodName)
+        if partial_placeholder_expression(expression)
+        then ", " + partial_argument_name(names) + partial_method_expression_list_tail(expressions[1:], names[1:], receiverType, methodName, env, module, allModules)
+        else ", " + expression_code(expression, env, argumentType, module, allModules)
+            + partial_method_expression_list_tail(expressions[1:], names, receiverType, methodName, env, module, allModules)
+
+private fun partial_extension_parameter_expression_list_code(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let fallback = expression_type(expression, env, module, allModules)
+        let declaredType = parameter_type_at(declaredParameters, 0, fallback)
+        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        if partial_placeholder_expression(expression)
+        then partial_extension_argument_code(partial_argument_name(names), declaredType, boundType)
+            + partial_extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], names[1:], env, module, allModules)
+        else extension_argument_code(expression, declaredType, boundType, env, module, allModules)
+            + partial_extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], names, env, module, allModules)
+
+private fun partial_extension_parameter_expression_list_tail(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], expressions: List[CompiledExpression], names: List[String], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let fallback = expression_type(expression, env, module, allModules)
+        let declaredType = parameter_type_at(declaredParameters, 0, fallback)
+        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        if partial_placeholder_expression(expression)
+        then ", " + partial_extension_argument_code(partial_argument_name(names), declaredType, boundType)
+            + partial_extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], names[1:], env, module, allModules)
+        else ", " + extension_argument_code(expression, declaredType, boundType, env, module, allModules)
+            + partial_extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], names, env, module, allModules)
+
+private fun partial_extension_argument_code(code: String, declaredType: CompiledTypeReference, boundType: CompiledTypeReference): String =
+    if extension_function_argument_needs_erased_cast(declaredType, boundType)
+    then "((" + java_type(declaredType) + ") (" + raw_java_functional_type(declaredType) + ") " + code + ")"
+    else code
 
 private fun function_reference_code(reference: CompiledFunctionReferenceExpression, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if function_type(expectedType)
@@ -2520,7 +2842,21 @@ private fun inferred_binding_value_type(expression: CompiledExpression, valueTyp
         if valueType.arguments.is_empty()
         then inferred_data_literal_reference(valueType.name, literal, env, module, allModules)
         else valueType
+    case CompiledLambdaExpression lambda -> inferred_lambda_function_type(lambda, env, module, allModules)
     case _ -> valueType
+
+private fun inferred_lambda_function_type(lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let parameters = lambda_object_parameter_types(lambda.parameters)
+    let lambdaEnv = typed_lambda_env(lambda.parameters, parameters, env)
+    CompiledTypeReference {
+        name: function_type_reference_text(parameters, expression_type(lambda.body, lambdaEnv, module, allModules)),
+        arguments: []
+    }
+
+private fun lambda_object_parameter_types(parameters: List[String]): List[CompiledTypeReference] =
+    match parameters[0] with
+    case None -> []
+    case Some _ -> [object_type()] + lambda_object_parameter_types(parameters[1:])
 
 private fun assert_that_code(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let actualType = expression_type(expression, env, module, allModules)
@@ -3345,9 +3681,15 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
             expression_type(binary.right, env, module, allModules)
         )
     case CompiledUnaryExpression unary -> if unary.operator == "!" then bool_type() else expression_type(unary.expression, env, module, allModules)
-    case CompiledFunctionCallExpression call -> function_call_type(call, env, module, allModules)
+    case CompiledFunctionCallExpression call ->
+        if partial_function_call(call)
+        then partial_function_call_type(call, env, module, allModules)
+        else function_call_type(call, env, module, allModules)
     case CompiledFunctionReferenceExpression reference -> function_reference_type(reference, module, allModules)
-    case CompiledMethodCallExpression call -> method_call_type(call, env, module, allModules)
+    case CompiledMethodCallExpression call ->
+        if partial_method_call(call)
+        then partial_method_call_type(call, env, module, allModules)
+        else method_call_type(call, env, module, allModules)
     case CompiledWithExpression withExpression -> with_expression_type(withExpression, env, module, allModules)
     case CompiledLambdaExpression _ -> supplier_type(assert_type())
     case CompiledListLiteral literal -> list_type(first_expression_type(literal.values, env, module, allModules))
@@ -4916,7 +5258,9 @@ private fun byte_literal_source(source: String): bool =
 
 private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    if call.name == "size"
+    if partial_method_call(call)
+    then partial_method_call_emittable(call, env, module, allModules)
+    else if call.name == "size"
     then (receiverType.name == "List" | receiverType.name == "Set" | receiverType.name == "Dict" | receiverType.name == "String" | receiverType.name == "char")
         & call.arguments.is_empty()
         & expression_emittable(call.receiver, env, module, allModules)
@@ -5157,7 +5501,9 @@ private fun primitive_conversion_receiver(name: String, receiverType: CompiledTy
     else false
 
 private fun function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if call.name == "delay"
+    if partial_function_call(call)
+    then partial_function_call_emittable(call, env, module, allModules)
+    else if call.name == "delay"
     then delay_call_emittable(call.arguments, env, module, allModules)
     else if binding_exists(call.name, env) & function_type(lookup_binding(call.name, env))
     then function_value_call_emittable(call, env, module, allModules)
