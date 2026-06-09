@@ -6,9 +6,13 @@ from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
@@ -4578,8 +4582,13 @@ private fun reflection_call_code(call: CompiledFunctionCallExpression, env: List
     let valueName = "__capy_reflection_value_" + call.location.line + "_" + call.location.column
     "((java.util.function.Supplier<java.util.Map<java.lang.String, java.lang.Object>>) () -> {" + newline()
         + "            java.lang.Object " + valueName + " = " + expression_code(value, env, valueType, module, allModules) + ";" + newline()
-        + "            return " + reflection_data_value_info_code(dataName, valueName, owner, allModules) + ";" + newline()
+        + "            return " + reflection_value_info_code(dataName, valueName, owner, allModules) + ";" + newline()
         + "        }).get()"
+
+private fun reflection_value_info_code(dataName: String, valueCode: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    if enum_type_exists(dataName, owner, allModules)
+    then reflection_enum_value_info_code(dataName, valueCode, owner, allModules)
+    else reflection_data_value_info_code(dataName, valueCode, owner, allModules)
 
 private fun reflection_owner_module(dataName: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledModule =
     match data_type_owner_module(dataName, module, allModules) with
@@ -4593,6 +4602,18 @@ private fun reflection_data_value_info_code(dataName: String, valueCode: String,
         + ", " + java_map_entry("fields", reflection_field_value_infos_code(dataName, valueCode, data_type_fields(dataName, owner, allModules), 0, owner, allModules))
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
             schema_values("__capy_schema_annotation|data|" + dataName + "|", owner.functions),
+            owner,
+            allModules
+        ))
+        + "))"
+
+private fun reflection_enum_value_info_code(dataName: String, valueCode: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"DataValueInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "(java.lang.String) __capy_data_field(" + valueCode + ", \"name\")")
+        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("fields", "java.util.List.of()")
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_schema_annotation|enum|" + dataName + "|", owner.functions),
             owner,
             allModules
         ))
@@ -4832,7 +4853,9 @@ private fun find_qualified_annotation_binding(name: String, module: CompiledModu
         case None -> find_qualified_annotation_binding_in_class(className, member, allModules)
 
 private fun find_qualified_annotation_binding_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
-    match find_module_by_class(className, allModules) with
+    if stdlib_annotations_class(className)
+    then stdlib_annotation_binding(member)
+    else match find_module_by_class(className, allModules) with
     case Some { module } ->
         {
             match module.annotations.get(member) with
@@ -4863,9 +4886,12 @@ private fun find_annotation_binding_in_imports(name: String, imports: List[Compi
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if annotation_import_matches(name, declaration)
-        then find_annotation_binding_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
-        else find_annotation_binding_in_imports(name, imports[1:], module, allModules)
+        match stdlib_annotation_binding_in_import(name, declaration) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None ->
+            if annotation_import_matches(name, declaration)
+            then find_annotation_binding_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+            else find_annotation_binding_in_imports(name, imports[1:], module, allModules)
 
 private fun find_annotation_binding_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[AnnotationBinding] =
     match find_module_by_class(className, allModules) with
@@ -4891,6 +4917,47 @@ private fun annotation_import_matches(name: String, declaration: CompiledImportD
     !stdlib_import(declaration.modulePath)
         & !declaration.qualified
         & import_includes_name(name, declaration)
+
+private fun stdlib_annotation_binding_in_import(name: String, declaration: CompiledImportDeclaration): /capy/lang/Option[AnnotationBinding] =
+    if !declaration.qualified
+        & stdlib_annotations_module_path(declaration.modulePath)
+        & import_includes_name(name, declaration)
+    then stdlib_annotation_binding(name)
+    else /capy/lang/Option.None {}
+
+private fun stdlib_annotation_binding(name: String): /capy/lang/Option[AnnotationBinding] =
+    if name == "Deprecated"
+    then /capy/lang/Option.Some { AnnotationBinding {
+        declaration: CompiledAnnotationDeclaration {
+            name: "Deprecated",
+            visibility: "public",
+            repeatable: false,
+            targets: ["fun", "method", "const", "data", "union", "enum", "type", "deriver", "class", "interface", "trait", "field", "init"],
+            fields: ["message|String|false|nothing:", "since|String|true|string:"],
+            location: CompiledSourceLocation { line: 2, column: 0 }
+        },
+        module: stdlib_annotations_module()
+    }}
+    else /capy/lang/Option.None {}
+
+private fun stdlib_annotations_module(): CompiledModule =
+    CompiledModule {
+        name: "Annotations",
+        path: "capy/meta_prog",
+        types: {:},
+        visiblePrimitiveBackedTypes: {:},
+        functions: [],
+        imports: [],
+        derivers: {:},
+        annotations: {:},
+        staticImports: []
+    }
+
+private fun stdlib_annotations_class(className: String): bool =
+    className == "capy.meta_prog.Annotations"
+
+private fun stdlib_annotations_module_path(path: String): bool =
+    path == "/capy/meta_prog/Annotations" | path == "capy/meta_prog/Annotations"
 
 private fun data_type_owner_module(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     if schema_type_exists(name, module.functions)
