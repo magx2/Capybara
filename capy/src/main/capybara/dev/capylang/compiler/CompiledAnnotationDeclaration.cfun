@@ -1,1 +1,11 @@
-data CompiledAnnotationDeclaration {}
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+
+data CompiledAnnotationDeclaration {
+    name: String,
+    visibility: String,
+    repeatable: bool,
+    targets: List[String],
+    fields: List[String],
+    location: CompiledSourceLocation
+}

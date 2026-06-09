@@ -1,8 +1,10 @@
+from /capy/collection/Dict import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { Set }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
@@ -14,7 +16,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
-from /dev/capylang/compiler/parser/Definition import { ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition }
+from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition }
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
@@ -67,9 +69,42 @@ private fun compile_module(module: ParsedModule): CompiledModule =
         functions: compile_functions(module.definitions),
         imports: compile_imports(module.imports),
         derivers: {:},
-        annotations: {:},
+        annotations: compile_annotations(module.definitions),
         staticImports: []
     }
+
+private fun compile_annotations(definitions: List[Definition]): Dict[CompiledAnnotationDeclaration] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        match definition with
+        case AnnotationDeclaration declaration ->
+            compile_annotations(definitions[1:]) + (declaration.name, compile_annotation_declaration(declaration))
+        case _ -> compile_annotations(definitions[1:])
+
+private fun compile_annotation_declaration(declaration: AnnotationDeclaration): CompiledAnnotationDeclaration =
+    CompiledAnnotationDeclaration {
+        name: declaration.name,
+        visibility: declaration.visibility,
+        repeatable: declaration.repeatable,
+        targets: declaration.targets,
+        fields: compile_annotation_fields(declaration.fields),
+        location: compile_location(declaration.location)
+    }
+
+private fun compile_annotation_fields(fields: List[AnnotationFieldDeclaration]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> [compile_annotation_field(field)] + compile_annotation_fields(fields[1:])
+
+private fun compile_annotation_field(field: AnnotationFieldDeclaration): String =
+    field.name
+        + "|" + type_reference_schema(field.typeReference)
+        + "|" + annotation_default_present_schema(field.hasDefault)
+        + "|" + annotation_value_schema(field.defaultValue)
+
+private fun annotation_default_present_schema(hasDefault: bool): String =
+    if hasDefault then "true" else "false"
 
 private fun normalize_module_path(path: String): String =
     if compiler_string_has_prefix(path, "/")
@@ -116,6 +151,8 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
         + compile_data_schema_fields(declaration.name, declaration.fields, 0)
         + compile_data_schema_parents(declaration.name, declaration.parents, 0)
+        + compile_annotation_application_schema("__capy_schema_annotation|data|" + declaration.name + "|", declaration.annotations, 0)
+        + compile_data_field_annotation_schema(declaration.name, declaration.fields, 0)
 
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
     [
@@ -180,6 +217,50 @@ private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldD
     case Some { field } ->
         [compile_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.location)]
             + compile_data_schema_fields(dataName, fields[1:], idx + 1)
+
+private fun compile_data_field_annotation_schema(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        compile_annotation_application_schema(
+            "__capy_schema_annotation|field|" + dataName + "|" + idx + "|",
+            field.annotations,
+            0
+        ) + compile_data_field_annotation_schema(dataName, fields[1:], idx + 1)
+
+private fun compile_annotation_application_schema(prefix: String, annotations: List[AnnotationApplication], idx: int): List[CompiledFunction] =
+    match annotations[0] with
+    case None -> []
+    case Some { annotation } ->
+        [compile_schema_constant(prefix + idx, annotation_application_schema(annotation), annotation.location)]
+            + compile_annotation_application_schema(prefix, annotations[1:], idx + 1)
+
+private fun annotation_application_schema(annotation: AnnotationApplication): String =
+    annotation.name + "|" + annotation_arguments_schema(annotation.arguments)
+
+private fun annotation_arguments_schema(arguments: List[AnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> annotation_argument_schema(argument) + annotation_argument_schema_tail(arguments[1:])
+
+private fun annotation_argument_schema_tail(arguments: List[AnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ";" + annotation_arguments_schema(arguments)
+
+private fun annotation_argument_schema(argument: AnnotationArgument): String =
+    argument.name + "=" + annotation_value_schema(argument.value)
+
+private fun annotation_value_schema(value: AnnotationValue): String =
+    match value with
+    case AnnotationStringValue literal -> "string:" + literal.value
+    case AnnotationIntValue literal -> "int:" + literal.source
+    case AnnotationLongValue literal -> "long:" + literal.source
+    case AnnotationDoubleValue literal -> "double:" + literal.source
+    case AnnotationFloatValue literal -> "float:" + literal.source
+    case AnnotationBoolValue literal -> if literal.value then "bool:true" else "bool:false"
+    case AnnotationTypeNameValue literal -> "type:" + literal.value
+    case AnnotationNothingValue _ -> "nothing:"
 
 private fun compile_data_schema_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
     match parents[0] with
