@@ -376,8 +376,20 @@ public final class NativeCapybaraParser implements CapybaraParser {
     private static Expression objectStatementBlock(
             dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext ctx
     ) {
-        if (ctx.statement().size() == 1) {
-            return objectStatement(ctx.statement().getFirst());
+        var bindings = new ArrayList<Expression.LetBinding>();
+        for (var idx = 0; idx < ctx.statement().size(); idx++) {
+            var statement = ctx.statement().get(idx);
+            if (statement.letStatement() != null) {
+                bindings.add(objectLetBinding(statement.letStatement()));
+            } else if (idx == ctx.statement().size() - 1) {
+                var result = objectStatement(statement);
+                if (bindings.isEmpty()) {
+                    return result;
+                }
+                return new Expression.BlockExpression(List.copyOf(bindings), result, location(ctx));
+            } else {
+                return unsupported(ctx);
+            }
         }
         return unsupported(ctx);
     }
@@ -398,6 +410,19 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return objectCallExpression(ctx.expressionStatement().callExpression());
         }
         return unsupported(ctx);
+    }
+
+    private static Expression.LetBinding objectLetBinding(
+            dev.capylang.parser.antlr.ObjectOrientedParser.LetStatementContext ctx
+    ) {
+        var type = ctx.type() == null ? missingType() : typeReference(ctx.type().getText());
+        return new Expression.LetBinding(
+                ctx.identifier().getText(),
+                type,
+                ctx.letBindingOperator().getText(),
+                objectExpression(ctx.expression()),
+                location(ctx)
+        );
     }
 
     private static Expression objectIfStatement(
@@ -430,10 +455,28 @@ public final class NativeCapybaraParser implements CapybaraParser {
     private static Expression objectExpression(
             dev.capylang.parser.antlr.ObjectOrientedParser.ExpressionContext ctx
     ) {
-        if (!ctx.letExpression().isEmpty()) {
-            return unsupported(ctx);
+        var bindings = new ArrayList<Expression.LetBinding>();
+        for (var let : ctx.letExpression()) {
+            bindings.add(objectLetBinding(let));
         }
-        return objectExpressionNoLet(ctx.expressionNoLet());
+        var result = objectExpressionNoLet(ctx.expressionNoLet());
+        if (bindings.isEmpty()) {
+            return result;
+        }
+        return new Expression.BlockExpression(List.copyOf(bindings), result, location(ctx));
+    }
+
+    private static Expression.LetBinding objectLetBinding(
+            dev.capylang.parser.antlr.ObjectOrientedParser.LetExpressionContext ctx
+    ) {
+        var type = ctx.type() == null ? missingType() : typeReference(ctx.type().getText());
+        return new Expression.LetBinding(
+                ctx.identifier().getText(),
+                type,
+                ctx.letBindingOperator().getText(),
+                objectExpressionNoLet(ctx.expressionNoLet()),
+                location(ctx)
+        );
     }
 
     private static Expression objectExpressionNoLet(
@@ -446,6 +489,15 @@ public final class NativeCapybaraParser implements CapybaraParser {
                     objectExpression(ctx.ifExpression().expression(2)),
                     location(ctx.ifExpression())
             );
+        }
+        if (ctx.newData() != null) {
+            return objectDataLiteral(ctx.newData());
+        }
+        if (ctx.constructorData() != null) {
+            return objectConstructorDataLiteral(ctx.constructorData());
+        }
+        if (ctx.matchExpression() != null) {
+            return objectMatchExpression(ctx.matchExpression());
         }
         if (ctx.value() != null) {
             return objectValue(ctx.value());
@@ -483,6 +535,209 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return new Expression.VariableExpression("this", location(ctx));
         }
         return unsupported(ctx);
+    }
+
+    private static Expression objectDataLiteral(dev.capylang.parser.antlr.ObjectOrientedParser.NewDataContext ctx) {
+        var typeName = ctx.BANG() == null
+                ? ctx.type().getText()
+                : "__capy_raw|" + ctx.type().getText();
+        return new Expression.DataLiteral(
+                typeName,
+                objectDataFields(ctx.fieldAssignmentList()),
+                location(ctx)
+        );
+    }
+
+    private static Expression objectConstructorDataLiteral(
+            dev.capylang.parser.antlr.ObjectOrientedParser.ConstructorDataContext ctx
+    ) {
+        return new Expression.DataLiteral(
+                "*",
+                objectDataFields(ctx.fieldAssignmentList()),
+                location(ctx)
+        );
+    }
+
+    private static List<Expression.DataField> objectDataFields(
+            dev.capylang.parser.antlr.ObjectOrientedParser.FieldAssignmentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var fields = new ArrayList<Expression.DataField>();
+        var positionalIndex = 0;
+        for (var assignment : ctx.fieldAssignment()) {
+            if (assignment.namedFieldAssignment() != null) {
+                fields.add(objectNamedDataField(assignment.namedFieldAssignment()));
+                positionalIndex++;
+            } else if (assignment.spreadFieldAssignment() != null) {
+                fields.add(new Expression.DataField(
+                        "",
+                        objectExpression(assignment.spreadFieldAssignment().expression()),
+                        true,
+                        location(assignment)
+                ));
+            } else if (assignment.positionalFieldAssignment() != null) {
+                fields.add(new Expression.DataField(
+                        "$" + positionalIndex,
+                        objectExpression(assignment.positionalFieldAssignment().expression()),
+                        false,
+                        location(assignment)
+                ));
+                positionalIndex++;
+            } else {
+                fields.add(new Expression.DataField(
+                        "$unsupported",
+                        unsupported(assignment),
+                        false,
+                        location(assignment)
+                ));
+                positionalIndex++;
+            }
+        }
+        return List.copyOf(fields);
+    }
+
+    private static Expression.DataField objectNamedDataField(
+            dev.capylang.parser.antlr.ObjectOrientedParser.NamedFieldAssignmentContext ctx
+    ) {
+        var name = ctx.identifier() == null
+                ? unquote(ctx.STRING_LITERAL().getText())
+                : ctx.identifier().getText();
+        return new Expression.DataField(name, objectExpression(ctx.expression()), false, location(ctx));
+    }
+
+    private static Expression objectMatchExpression(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MatchExpressionContext ctx
+    ) {
+        var cases = new ArrayList<Expression.MatchCase>();
+        for (var caseList : ctx.matchCaseList()) {
+            for (var matchCase : caseList.matchCase()) {
+                cases.addAll(objectMatchCases(matchCase));
+            }
+        }
+        return new Expression.MatchExpression(objectExpression(ctx.expression()), List.copyOf(cases), location(ctx));
+    }
+
+    private static List<Expression.MatchCase> objectMatchCases(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MatchCaseContext ctx
+    ) {
+        if (ctx.pattern().isEmpty()) {
+            return List.of(objectMatchCase(ctx, null));
+        }
+        var cases = new ArrayList<Expression.MatchCase>();
+        for (var pattern : ctx.pattern()) {
+            cases.add(objectMatchCase(ctx, pattern));
+        }
+        return List.copyOf(cases);
+    }
+
+    private static Expression.MatchCase objectMatchCase(
+            dev.capylang.parser.antlr.ObjectOrientedParser.MatchCaseContext ctx,
+            dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext pattern
+    ) {
+        return new Expression.MatchCase(
+                objectPatternTypeName(pattern),
+                objectPatternBindings(pattern),
+                objectPatternBindsWholeValue(pattern),
+                objectPatternLiteral(pattern),
+                objectPatternHasLiteral(pattern),
+                objectPatternWildcard(pattern),
+                ctx.guard == null ? unsupported(ctx) : objectExpression(ctx.guard),
+                ctx.guard != null,
+                objectExpression(ctx.body),
+                location(ctx)
+        );
+    }
+
+    private static String objectPatternTypeName(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
+        if (ctx == null) {
+            return "";
+        }
+        if (ctx.constructorPattern() != null) {
+            return ctx.constructorPattern().TYPE().getText();
+        }
+        if (ctx.typedPattern() != null) {
+            return ctx.typedPattern().patternType().getText();
+        }
+        if (ctx.TYPE() != null) {
+            return ctx.TYPE().getText();
+        }
+        return "";
+    }
+
+    private static List<String> objectPatternBindings(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
+        if (ctx == null) {
+            return List.of();
+        }
+        if (ctx.typedPattern() != null && ctx.typedPattern().NAME() != null) {
+            return List.of(ctx.typedPattern().NAME().getText());
+        }
+        if (ctx.wildcardPattern() != null && ctx.wildcardPattern().NAME() != null) {
+            return List.of(ctx.wildcardPattern().NAME().getText());
+        }
+        if (ctx.constructorPattern() == null || ctx.constructorPattern().fieldPatternList() == null) {
+            return List.of();
+        }
+        var bindings = new ArrayList<String>();
+        var idx = 0;
+        for (var fieldPattern : ctx.constructorPattern().fieldPatternList().pattern()) {
+            if (fieldPattern.identifier() != null) {
+                bindings.add(fieldPattern.identifier().getText());
+            } else if (fieldPattern.patternType() != null && fieldPattern.patternType().lowerQualifiedType() != null) {
+                bindings.add(fieldPattern.patternType().lowerQualifiedType().getText());
+            } else if (fieldPattern.wildcardPattern() != null && fieldPattern.wildcardPattern().NAME() != null) {
+                bindings.add(fieldPattern.wildcardPattern().NAME().getText());
+            } else if (fieldPattern.wildcardPattern() != null) {
+                bindings.add("__capy_ignore_" + idx);
+            }
+            idx++;
+        }
+        return List.copyOf(bindings);
+    }
+
+    private static boolean objectPatternWildcard(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
+        return ctx != null && ctx.wildcardPattern() != null;
+    }
+
+    private static boolean objectPatternBindsWholeValue(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
+        return ctx != null && (ctx.typedPattern() != null || ctx.wildcardPattern() != null);
+    }
+
+    private static boolean objectPatternHasLiteral(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
+        return ctx != null
+                && (ctx.INT_LITERAL() != null
+                || ctx.LONG_LITERAL() != null
+                || ctx.BOOL_LITERAL() != null
+                || ctx.STRING_LITERAL() != null
+                || ctx.FLOAT_LITERAL() != null);
+    }
+
+    private static Expression objectPatternLiteral(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
+        if (ctx == null) {
+            return unsupportedLiteral();
+        }
+        var location = location(ctx);
+        if (ctx.INT_LITERAL() != null) {
+            var source = ctx.INT_LITERAL().getText();
+            return new Expression.IntLiteral(Integer.parseInt(cleanNumber(source)), source, location);
+        }
+        if (ctx.LONG_LITERAL() != null) {
+            var source = ctx.LONG_LITERAL().getText();
+            return new Expression.LongLiteral(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+        }
+        if (ctx.FLOAT_LITERAL() != null) {
+            var source = ctx.FLOAT_LITERAL().getText();
+            return new Expression.FloatLiteral(Float.parseFloat(cleanFloat(source)), source, location);
+        }
+        if (ctx.BOOL_LITERAL() != null) {
+            var source = ctx.BOOL_LITERAL().getText();
+            return new Expression.BoolLiteral(Boolean.parseBoolean(source), source, location);
+        }
+        if (ctx.STRING_LITERAL() != null) {
+            return stringLiteralExpression(ctx.STRING_LITERAL().getText(), location);
+        }
+        return unsupportedLiteral();
     }
 
     private static Expression objectCallExpression(
