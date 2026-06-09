@@ -1,5 +1,6 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
@@ -13,6 +14,8 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data JavaBinding { name: String, typeReference: CompiledTypeReference, javaName: String }
 data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
+data AnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
+data SchemaAnnotationArgument { name: String, kind: String, value: String }
 
 const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -299,7 +302,35 @@ private fun effect_block_emittable(bindings: List[CompiledLetBinding], result: C
 private fun tail_recursive_function(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     expression_references_function(function.body, function.name)
         & tail_recursive_expression(function.body, function)
-        & expression_emittable(function.body, env, module, allModules)
+        & tail_recursive_body_emittable(function.body, function, env, module, allModules)
+
+private fun tail_recursive_body_emittable(expression: CompiledExpression, function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledFunctionCallExpression call ->
+        if call.name == function.name
+        then tail_self_call_compatible(function.parameters, call.arguments) & expressions_emittable(call.arguments, env, module, allModules)
+        else expression_emittable(expression, env, module, allModules)
+    case CompiledIfExpression ifExpression ->
+        truthy_expression_emittable(ifExpression.condition, env, module, allModules)
+            & tail_recursive_body_emittable(ifExpression.thenBranch, function, env, module, allModules)
+            & tail_recursive_body_emittable(ifExpression.elseBranch, function, env, module, allModules)
+    case CompiledBlockExpression block ->
+        let_bindings_emittable(block.bindings, env, module, allModules)
+            & tail_recursive_body_emittable(block.result, function, block_env(block.bindings, env, module, allModules), module, allModules)
+    case CompiledMatchExpression matchExpression ->
+        expression_emittable(matchExpression.value, env, module, allModules)
+            & tail_match_cases_emittable(matchExpression.cases, expression_type(matchExpression.value, env, module, allModules), function, env, module, allModules)
+    case _ -> expression_emittable(expression, env, module, allModules)
+
+private fun tail_match_cases_emittable(cases: List[CompiledMatchCase], valueType: CompiledTypeReference, function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match cases[0] with
+    case None -> false
+    case Some { matchCase } ->
+        let caseEnv = match_env(matchCase.bindings, matchCase, valueType, 0, env, module, allModules)
+        tail_recursive_body_emittable(matchCase.body, function, caseEnv, module, allModules)
+            & (!matchCase.hasGuard | truthy_expression_emittable(matchCase.guard, caseEnv, module, allModules))
+            & (!matchCase.hasLiteral | expression_emittable(matchCase.literal, env, module, allModules))
+            & (cases[1:].is_empty() | tail_match_cases_emittable(cases[1:], valueType, function, env, module, allModules))
 
 private fun tail_recursive_expression(expression: CompiledExpression, function: CompiledFunction): bool =
     match expression with
@@ -1540,6 +1571,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then "capy.lang.Effect.delay(() -> dev.capylang.ConsoleUtil.readLine())"
     else if stdlib_to_seq_call(call, module)
     then stdlib_to_seq_code(call, env, module, allModules)
+    else if reflection_function_call(call, module)
+    then reflection_call_code(call, env, module, allModules)
     else if call.name == "assert_all"
     then "capy.test.Assert.assertAll(" + expression_code(argument(call.arguments, 0), env, list_type(assert_type()), module, allModules) + ")"
     else if call.name == "assert_that"
@@ -4495,6 +4528,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then effect_type(option_type(string_type()))
     else if stdlib_to_seq_call(call, module)
     then stdlib_to_seq_type(call, env, module, allModules)
+    else if reflection_function_call(call, module)
+    then data_type_reference("DataValueInfo")
     else if call.name == "assert_all" | call.name == "assert_that"
     then assert_type()
     else if call.name == "test"
@@ -4521,6 +4556,372 @@ private fun stdlib_to_seq_type(call: CompiledFunctionCallExpression, env: List[J
     if argumentType.name == "Dict"
     then seq_type(tuple_type([string_type(), first_type_argument(argumentType)]))
     else seq_type(collection_value_type(argumentType))
+
+private fun reflection_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.name == "reflection"
+        & !function_defined("reflection", module.functions)
+        & reflection_member_imported("reflection", module.imports)
+
+private fun reflection_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match call.arguments[0] with
+    case None -> false
+    case Some { value } ->
+        call.arguments[1:].is_empty()
+            & expression_emittable(value, env, module, allModules)
+            & (generated_data_object_type(expression_type(value, env, module, allModules)) | expression_type(value, env, module, allModules).name == "data")
+
+private fun reflection_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let value = argument(call.arguments, 0)
+    let valueType = expression_type(value, env, module, allModules)
+    let dataName = type_unqualified_name(valueType.name)
+    let owner = reflection_owner_module(dataName, module, allModules)
+    let valueName = "__capy_reflection_value_" + call.location.line + "_" + call.location.column
+    "((java.util.function.Supplier<java.util.Map<java.lang.String, java.lang.Object>>) () -> {" + newline()
+        + "            java.lang.Object " + valueName + " = " + expression_code(value, env, valueType, module, allModules) + ";" + newline()
+        + "            return " + reflection_data_value_info_code(dataName, valueName, owner, allModules) + ";" + newline()
+        + "        }).get()"
+
+private fun reflection_owner_module(dataName: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledModule =
+    match data_type_owner_module(dataName, module, allModules) with
+    case Some { owner } -> owner
+    case None -> module
+
+private fun reflection_data_value_info_code(dataName: String, valueCode: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"DataValueInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(dataName) + "\"")
+        + ", " + java_map_entry("pkg", package_info_code(owner))
+        + ", " + java_map_entry("fields", reflection_field_value_infos_code(dataName, valueCode, data_type_fields(dataName, owner, allModules), 0, owner, allModules))
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_schema_annotation|data|" + dataName + "|", owner.functions),
+            owner,
+            allModules
+        ))
+        + "))"
+
+private fun reflection_field_value_infos_code(dataName: String, valueCode: String, fields: List[String], idx: int, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_field_value_info_codes(dataName, valueCode, fields, idx, owner, allModules))
+
+private fun reflection_field_value_info_codes(dataName: String, valueCode: String, fields: List[String], idx: int, owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [reflection_field_value_info_code(dataName, valueCode, field, idx, owner, allModules)]
+            + reflection_field_value_info_codes(dataName, valueCode, fields[1:], idx + 1, owner, allModules)
+
+private fun reflection_field_value_info_code(dataName: String, valueCode: String, field: String, idx: int, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    let fieldName = schema_field_name(field)
+    let fieldType = schema_type_reference(schema_field_type_name(field))
+    "__capy_data(\"FieldValueInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(fieldName) + "\"")
+        + ", " + java_map_entry("type", reflection_any_info_code(fieldType, owner, allModules))
+        + ", " + java_map_entry("value", "__capy_data_field(" + valueCode + ", \"" + escape_java_string(fieldName) + "\")")
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
+            schema_values("__capy_schema_annotation|field|" + dataName + "|" + idx + "|", owner.functions),
+            owner,
+            allModules
+        ))
+        + "))"
+
+private fun reflection_any_info_code(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"DataInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(type_unqualified_name(type.name)) + "\"")
+        + ", " + java_map_entry("pkg", reflection_type_package_info_code(type.name, module, allModules))
+        + ", " + java_map_entry("annotations", "java.util.List.of()")
+        + "))"
+
+private fun reflection_type_package_info_code(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match data_type_owner_module(type_unqualified_name(typeName), module, allModules) with
+    case Some { owner } -> package_info_code(owner)
+    case None -> package_info_literal_code("", "")
+
+private fun package_info_code(module: CompiledModule): String =
+    package_info_literal_code(module.name, module.path)
+
+private fun package_info_literal_code(name: String, path: String): String =
+    "__capy_data(\"PackageInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(name) + "\"")
+        + ", " + java_map_entry("path", "\"" + escape_java_string(path) + "\"")
+        + "))"
+
+private fun reflection_annotation_infos_code(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_annotation_info_codes(values, usageModule, allModules))
+
+private fun reflection_annotation_info_codes(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [reflection_annotation_info_code(value, usageModule, allModules)]
+            + reflection_annotation_info_codes(values[1:], usageModule, allModules)
+
+private fun reflection_annotation_info_code(value: String, usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = annotation_schema_name(value)
+    let explicitArguments = annotation_schema_arguments(annotation_schema_arguments_source(value))
+    match find_annotation_binding(name, usageModule, allModules) with
+    case Some { binding } ->
+        "__capy_data(\"AnnotationInfo\", java.util.Map.ofEntries("
+            + java_map_entry("name", "\"" + escape_java_string(binding.declaration.name) + "\"")
+            + ", " + java_map_entry("pkg", package_info_code(binding.module))
+            + ", " + java_map_entry("arguments", java_list_code(annotation_argument_info_codes(explicitArguments, binding.declaration.fields)))
+            + "))"
+    case None ->
+        "__capy_data(\"AnnotationInfo\", java.util.Map.ofEntries("
+            + java_map_entry("name", "\"" + escape_java_string(annotation_display_name(name)) + "\"")
+            + ", " + java_map_entry("pkg", package_info_code(usageModule))
+            + ", " + java_map_entry("arguments", java_list_code(explicit_annotation_argument_info_codes(explicitArguments)))
+            + "))"
+
+private fun annotation_display_name(name: String): String =
+    if qualified_call_name(name) then qualified_call_member(name) else name
+
+private fun annotation_argument_info_codes(arguments: List[SchemaAnnotationArgument], fields: List[String]): List[String] =
+    explicit_annotation_argument_info_codes(arguments) + default_annotation_argument_info_codes(fields, arguments)
+
+private fun explicit_annotation_argument_info_codes(arguments: List[SchemaAnnotationArgument]): List[String] =
+    match arguments[0] with
+    case None -> []
+    case Some { argument } ->
+        [annotation_argument_info_code(argument.name, schema_annotation_value_code(argument))]
+            + explicit_annotation_argument_info_codes(arguments[1:])
+
+private fun default_annotation_argument_info_codes(fields: List[String], explicitArguments: List[SchemaAnnotationArgument]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        let fieldName = annotation_field_schema_name(field)
+        if annotation_field_schema_has_default(field) & !schema_annotation_argument_exists(fieldName, explicitArguments)
+        then [annotation_argument_info_code(fieldName, annotation_field_schema_default_value_code(field))]
+            + default_annotation_argument_info_codes(fields[1:], explicitArguments)
+        else default_annotation_argument_info_codes(fields[1:], explicitArguments)
+
+private fun schema_annotation_argument_exists(name: String, arguments: List[SchemaAnnotationArgument]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> argument.name == name | schema_annotation_argument_exists(name, arguments[1:])
+
+private fun annotation_argument_info_code(name: String, valueCode: String): String =
+    "__capy_data(\"AnnotationArgumentInfo\", java.util.Map.ofEntries("
+        + java_map_entry("name", "\"" + escape_java_string(name) + "\"")
+        + ", " + java_map_entry("value", valueCode)
+        + "))"
+
+private fun schema_annotation_value_code(argument: SchemaAnnotationArgument): String =
+    annotation_value_code(argument.kind, argument.value)
+
+private fun annotation_value_code(kind: String, value: String): String =
+    if kind == "string"
+    then "__capy_data(\"AnnotationString\", java.util.Map.ofEntries(" + java_map_entry("value", "\"" + escape_java_string(value) + "\"") + "))"
+    else if kind == "int"
+    then "__capy_data(\"AnnotationInt\", java.util.Map.ofEntries(" + java_map_entry("value", value) + "))"
+    else if kind == "long"
+    then "__capy_data(\"AnnotationLong\", java.util.Map.ofEntries(" + java_map_entry("value", value) + "))"
+    else if kind == "double"
+    then "__capy_data(\"AnnotationDouble\", java.util.Map.ofEntries(" + java_map_entry("value", value) + "))"
+    else if kind == "float"
+    then "__capy_data(\"AnnotationFloat\", java.util.Map.ofEntries(" + java_map_entry("value", value) + "))"
+    else if kind == "bool"
+    then "__capy_data(\"AnnotationBool\", java.util.Map.ofEntries(" + java_map_entry("value", value) + "))"
+    else if kind == "type"
+    then "__capy_data(\"AnnotationTypeName\", java.util.Map.ofEntries(" + java_map_entry("value", "\"" + escape_java_string(value) + "\"") + "))"
+    else "__capy_data(\"AnnotationNothing\", java.util.Map.ofEntries())"
+
+private fun annotation_schema_name(value: String): String =
+    let separator = first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun annotation_schema_arguments_source(value: String): String =
+    let separator = first_index_of(value, "|", 0)
+    if separator < 0
+    then ""
+    else value[separator + 1, value.size().value]
+
+private fun annotation_schema_arguments(value: String): List[SchemaAnnotationArgument] =
+    if value.is_empty()
+    then []
+    else
+        let separator = first_index_of(value, ";", 0)
+        if separator < 0
+        then [annotation_schema_argument(value)]
+        else [annotation_schema_argument(value[0, separator])] + annotation_schema_arguments(value[separator + 1, value.size().value])
+
+private fun annotation_schema_argument(value: String): SchemaAnnotationArgument =
+    let equals = first_index_of(value, "=", 0)
+    if equals < 0
+    then SchemaAnnotationArgument { name: value, kind: "nothing", value: "" }
+    else
+        let payload = value[equals + 1, value.size().value]
+        let colon = first_index_of(payload, ":", 0)
+        if colon < 0
+        then SchemaAnnotationArgument { name: value[0, equals], kind: "nothing", value: "" }
+        else SchemaAnnotationArgument {
+            name: value[0, equals],
+            kind: payload[0, colon],
+            value: payload[colon + 1, payload.size().value]
+        }
+
+private fun annotation_field_schema_name(value: String): String =
+    schema_field_name(value)
+
+private fun annotation_field_schema_has_default(value: String): bool =
+    let second = annotation_field_schema_second_separator(value)
+    let third = annotation_field_schema_third_separator(value)
+    if second < 0 | third < 0
+    then false
+    else value[second + 1, third] == "true"
+
+private fun annotation_field_schema_default_value_code(value: String): String =
+    let third = annotation_field_schema_third_separator(value)
+    if third < 0
+    then annotation_value_code("nothing", "")
+    else
+        let payload = value[third + 1, value.size().value]
+        let colon = first_index_of(payload, ":", 0)
+        if colon < 0
+        then annotation_value_code("nothing", "")
+        else annotation_value_code(payload[0, colon], payload[colon + 1, payload.size().value])
+
+private fun annotation_field_schema_second_separator(value: String): int =
+    let first = first_index_of(value, "|", 0)
+    if first < 0 then -1 else first_index_of(value, "|", first + 1)
+
+private fun annotation_field_schema_third_separator(value: String): int =
+    let second = annotation_field_schema_second_separator(value)
+    if second < 0 then -1 else first_index_of(value, "|", second + 1)
+
+private fun java_map_entry(name: String, valueCode: String): String =
+    "java.util.Map.entry(\"" + escape_java_string(name) + "\", " + valueCode + ")"
+
+private fun java_list_code(values: List[String]): String =
+    "java.util.List.of(" + java_code_list(values) + ")"
+
+private fun java_code_list(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> value + java_code_list_tail(values[1:])
+
+private fun java_code_list_tail(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some _ -> ", " + java_code_list(values)
+
+private fun find_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    if qualified_call_name(name)
+    then find_qualified_annotation_binding(name, module, allModules)
+    else
+        match module.annotations.get(name) with
+        case Some { declaration } -> /capy/lang/Option.Some { AnnotationBinding { declaration: declaration, module: module } }
+        case None ->
+            match find_annotation_binding_in_imports(name, module.imports, module, allModules) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> find_annotation_binding_in_modules(name, allModules)
+
+private fun find_qualified_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    let className = qualified_call_class_name(name, module)
+    let member = qualified_call_member(name)
+    if absolute_qualified_call_name(name)
+    then find_qualified_annotation_binding_in_class(className, member, allModules)
+    else match find_qualified_annotation_binding_in_imports(
+            className,
+            member,
+            module.imports,
+            module,
+            allModules
+        ) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> find_qualified_annotation_binding_in_class(className, member, allModules)
+
+private fun find_qualified_annotation_binding_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    match find_module_by_class(className, allModules) with
+    case Some { module } ->
+        {
+            match module.annotations.get(member) with
+            case Some { declaration } -> /capy/lang/Option.Some { AnnotationBinding { declaration: declaration, module: module } }
+            case None -> /capy/lang/Option.None {}
+        }
+    case None -> /capy/lang/Option.None {}
+
+private fun find_qualified_annotation_binding_in_imports(className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !stdlib_import(declaration.modulePath) & imported_module_class(module, declaration.modulePath) == className
+        then find_qualified_annotation_binding_in_import(className, member, imports[1:], module, allModules)
+        else find_qualified_annotation_binding_in_imports(className, member, imports[1:], module, allModules)
+
+private fun find_qualified_annotation_binding_in_import(className: String, member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_qualified_annotation_binding_in_module(member, rest, module, allModules, importedModule)
+    case None -> find_qualified_annotation_binding_in_imports(className, member, rest, module, allModules)
+
+private fun find_qualified_annotation_binding_in_module(member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[AnnotationBinding] =
+    match importedModule.annotations.get(member) with
+    case Some { declaration } -> /capy/lang/Option.Some { AnnotationBinding { declaration: declaration, module: importedModule } }
+    case None -> find_qualified_annotation_binding_in_imports(module_fqcn(importedModule), member, rest, module, allModules)
+
+private fun find_annotation_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if annotation_import_matches(name, declaration)
+        then find_annotation_binding_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else find_annotation_binding_in_imports(name, imports[1:], module, allModules)
+
+private fun find_annotation_binding_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[AnnotationBinding] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        {
+            match importedModule.annotations.get(name) with
+            case Some { declaration } -> /capy/lang/Option.Some { AnnotationBinding { declaration: declaration, module: importedModule } }
+            case None -> find_annotation_binding_in_imports(name, rest, module, allModules)
+        }
+    case _ -> find_annotation_binding_in_imports(name, rest, module, allModules)
+
+private fun find_annotation_binding_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        {
+            match module.annotations.get(name) with
+            case Some { declaration } -> /capy/lang/Option.Some { AnnotationBinding { declaration: declaration, module: module } }
+            case None -> find_annotation_binding_in_modules(name, modules[1:])
+        }
+
+private fun annotation_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & import_includes_name(name, declaration)
+
+private fun data_type_owner_module(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    if schema_type_exists(name, module.functions)
+    then /capy/lang/Option.Some { module }
+    else match data_type_owner_module_in_imports(name, module.imports, module, allModules) with
+        case Some { owner } -> /capy/lang/Option.Some { owner }
+        case None -> data_type_owner_module_in_modules(name, allModules)
+
+private fun data_type_owner_module_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(name, declaration)
+        then data_type_owner_module_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else data_type_owner_module_in_imports(name, imports[1:], module, allModules)
+
+private fun data_type_owner_module_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledModule] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        if schema_type_exists(name, importedModule.functions)
+        then /capy/lang/Option.Some { importedModule }
+        else data_type_owner_module_in_imports(name, rest, module, allModules)
+    case None -> data_type_owner_module_in_imports(name, rest, module, allModules)
+
+private fun data_type_owner_module_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        if schema_type_exists(name, module.functions)
+        then /capy/lang/Option.Some { module }
+        else data_type_owner_module_in_modules(name, modules[1:])
 
 private fun qualified_function_call_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_qualified_function(name, module, allModules) with
@@ -5397,6 +5798,8 @@ private fun find_data_type(name: String, module: CompiledModule, allModules: Lis
     then find_qualified_data_type(name, module, allModules)
     else if schema_type_exists(name, module.functions)
     then /capy/lang/Option.Some { name }
+    else if stdlib_reflection_type(name)
+    then /capy/lang/Option.Some { name }
     else match find_data_type_in_imports(name, module.imports, module, allModules) with
         case Some { value } -> /capy/lang/Option.Some { value }
         case None -> find_data_type_in_modules(name, allModules)
@@ -5740,9 +6143,56 @@ private fun data_type_fields(name: String, module: CompiledModule, allModules: L
 private fun data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if schema_type_exists(name, module.functions)
     then schema_values("__capy_schema_field|" + name + "|", module.functions)
+    else if stdlib_reflection_type(name)
+    then stdlib_reflection_type_fields(name)
     else match data_type_fields_in_imports(name, module.imports, module, allModules) with
         case Some { value } -> value
         case None -> data_type_fields_in_modules(name, allModules)
+
+private fun stdlib_reflection_type(name: String): bool =
+    name == "PackageInfo"
+        | name == "AnyInfo"
+        | name == "AnnotationValue"
+        | name == "AnnotationInfo"
+        | name == "AnnotationArgumentInfo"
+        | name == "DataValueInfo"
+        | name == "FieldValueInfo"
+        | name == "DataInfo"
+        | name == "AnnotationString"
+        | name == "AnnotationInt"
+        | name == "AnnotationLong"
+        | name == "AnnotationDouble"
+        | name == "AnnotationFloat"
+        | name == "AnnotationBool"
+        | name == "AnnotationTypeName"
+        | name == "AnnotationNothing"
+
+private fun stdlib_reflection_type_fields(name: String): List[String] =
+    if name == "PackageInfo"
+    then ["name|String", "path|String"]
+    else if name == "AnnotationInfo"
+    then ["name|String", "pkg|PackageInfo", "arguments|List[AnnotationArgumentInfo]"]
+    else if name == "AnnotationArgumentInfo"
+    then ["name|String", "value|AnnotationValue"]
+    else if name == "DataValueInfo"
+    then ["name|String", "pkg|PackageInfo", "fields|List[FieldValueInfo]", "annotations|List[AnnotationInfo]"]
+    else if name == "FieldValueInfo"
+    then ["name|String", "type|AnyInfo", "value|any", "annotations|List[AnnotationInfo]"]
+    else if name == "DataInfo"
+    then ["name|String", "pkg|PackageInfo", "annotations|List[AnnotationInfo]"]
+    else if name == "AnnotationString" | name == "AnnotationTypeName"
+    then ["value|String"]
+    else if name == "AnnotationInt"
+    then ["value|int"]
+    else if name == "AnnotationLong"
+    then ["value|long"]
+    else if name == "AnnotationDouble"
+    then ["value|double"]
+    else if name == "AnnotationFloat"
+    then ["value|float"]
+    else if name == "AnnotationBool"
+    then ["value|bool"]
+    else []
 
 private fun data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match parents[0] with
@@ -6456,6 +6906,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then true
     else if stdlib_to_seq_call(call, module)
     then stdlib_to_seq_call_emittable(call, env, module, allModules)
+    else if reflection_function_call(call, module)
+    then reflection_call_emittable(call, env, module, allModules)
     else if call.name == "assert_all"
     then expressions_emittable(call.arguments, env, module, allModules)
     else if call.name == "assert_that"
@@ -7044,6 +7496,9 @@ private fun result_member_imported(member: String, imports: List[CompiledImportD
 
 private fun seq_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/lang/Seq", "capy/lang/Seq")
+
+private fun reflection_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/meta_prog/Reflection", "capy/meta_prog/Reflection")
 
 private fun console_print_name(name: String): bool =
     name == "print" | name == "println" | name == "print_error" | name == "println_error"

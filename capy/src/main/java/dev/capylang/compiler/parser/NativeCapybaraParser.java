@@ -201,7 +201,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
 
     private static Definition functionalDefinition(dev.capylang.parser.antlr.FunctionalParser.DefinitionContext definition) {
         if (definition.annotationDeclaration() != null) {
-            return Definition.AnnotationDeclaration.INSTANCE;
+            return annotationDeclaration(definition.annotationDeclaration());
         }
         if (definition.dataDeclaration() != null) {
             return Definition.UnsupportedDefinition.INSTANCE;
@@ -222,6 +222,198 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return Definition.TypeDeclaration.INSTANCE;
         }
         return Definition.UnsupportedDefinition.INSTANCE;
+    }
+
+    private static Definition.AnnotationDeclaration annotationDeclaration(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationDeclarationContext ctx
+    ) {
+        var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
+        return new Definition.AnnotationDeclaration(
+                ctx.TYPE().getText(),
+                visibility,
+                ctx.multipleModifier() != null,
+                annotationTargets(ctx.annotationTargetClause()),
+                annotationFields(ctx.annotationBody()),
+                definitionAnnotationApplications(ctx.annotationBlock()),
+                location(ctx)
+        );
+    }
+
+    private static List<String> annotationTargets(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationTargetClauseContext ctx
+    ) {
+        var targets = new ArrayList<String>();
+        for (var target : ctx.annotationTarget()) {
+            targets.add(target.getText());
+        }
+        return List.copyOf(targets);
+    }
+
+    private static List<Definition.AnnotationFieldDeclaration> annotationFields(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationBodyContext ctx
+    ) {
+        var fields = new ArrayList<Definition.AnnotationFieldDeclaration>();
+        for (var field : ctx.annotationFieldDeclaration()) {
+            fields.add(annotationField(field));
+        }
+        return List.copyOf(fields);
+    }
+
+    private static Definition.AnnotationFieldDeclaration annotationField(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationFieldDeclarationContext ctx
+    ) {
+        var hasDefault = ctx.annotationValue() != null;
+        return new Definition.AnnotationFieldDeclaration(
+                ctx.identifier().getText(),
+                annotationTypeReference(ctx.annotationFieldType().annotationTypeReference()),
+                hasDefault ? definitionAnnotationValue(ctx.annotationValue()) : new Definition.AnnotationNothingValue("", location(ctx)),
+                hasDefault,
+                location(ctx)
+        );
+    }
+
+    private static TypeReference annotationTypeReference(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationTypeReferenceContext ctx
+    ) {
+        return new TypeReference(ctx.getText(), List.of());
+    }
+
+    private static List<Definition.AnnotationApplication> definitionAnnotationApplications(
+            List<dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext> blocks
+    ) {
+        var applications = new ArrayList<Definition.AnnotationApplication>();
+        for (var block : blocks) {
+            applications.add(definitionAnnotationApplication(block));
+        }
+        return List.copyOf(applications);
+    }
+
+    private static Definition.AnnotationApplication definitionAnnotationApplication(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext ctx
+    ) {
+        return new Definition.AnnotationApplication(
+                ctx.annotationName().getText(),
+                definitionAnnotationArguments(ctx.annotationArgumentList()),
+                location(ctx)
+        );
+    }
+
+    private static List<Definition.AnnotationArgument> definitionAnnotationArguments(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationArgumentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var arguments = new ArrayList<Definition.AnnotationArgument>();
+        for (var argument : ctx.annotationArgument()) {
+            arguments.add(new Definition.AnnotationArgument(
+                    argument.identifier().getText(),
+                    definitionAnnotationValue(argument.annotationValue()),
+                    location(argument)
+            ));
+        }
+        return List.copyOf(arguments);
+    }
+
+    private static Definition.AnnotationValue definitionAnnotationValue(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationValueContext ctx
+    ) {
+        var source = ctx.getText();
+        var location = location(ctx);
+        if (ctx.STRING_LITERAL() != null) {
+            return new Definition.AnnotationStringValue(unquote(source), source, location);
+        }
+        if (ctx.INT_LITERAL() != null) {
+            return new Definition.AnnotationIntValue(Integer.parseInt(cleanNumber(source)), source, location);
+        }
+        if (ctx.LONG_LITERAL() != null) {
+            return new Definition.AnnotationLongValue(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+        }
+        if (ctx.DOUBLE_LITERAL() != null) {
+            return new Definition.AnnotationDoubleValue(Double.parseDouble(cleanDouble(source)), source, location);
+        }
+        if (ctx.FLOAT_LITERAL() != null) {
+            return new Definition.AnnotationFloatValue(Float.parseFloat(cleanFloat(source)), source, location);
+        }
+        if (ctx.BOOL_LITERAL() != null) {
+            return new Definition.AnnotationBoolValue(Boolean.parseBoolean(source), source, location);
+        }
+        if (ctx.NOTHING_LITERAL() != null) {
+            return new Definition.AnnotationNothingValue(source, location);
+        }
+        if (ctx.annotationTypeReference() != null) {
+            return new Definition.AnnotationTypeNameValue(ctx.annotationTypeReference().getText(), source, location);
+        }
+        return new Definition.AnnotationNothingValue(source, location);
+    }
+
+    private static List<AnnotationApplication> annotationApplications(
+            List<dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext> blocks
+    ) {
+        var applications = new ArrayList<AnnotationApplication>();
+        for (var block : blocks) {
+            applications.add(annotationApplication(block));
+        }
+        return List.copyOf(applications);
+    }
+
+    private static AnnotationApplication annotationApplication(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext ctx
+    ) {
+        return new AnnotationApplication(
+                ctx.annotationName().getText(),
+                annotationArguments(ctx.annotationArgumentList()),
+                location(ctx)
+        );
+    }
+
+    private static List<AnnotationArgument> annotationArguments(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationArgumentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var arguments = new ArrayList<AnnotationArgument>();
+        for (var argument : ctx.annotationArgument()) {
+            arguments.add(new AnnotationArgument(
+                    argument.identifier().getText(),
+                    annotationValue(argument.annotationValue()),
+                    location(argument)
+            ));
+        }
+        return List.copyOf(arguments);
+    }
+
+    private static AnnotationValue annotationValue(
+            dev.capylang.parser.antlr.FunctionalParser.AnnotationValueContext ctx
+    ) {
+        var source = ctx.getText();
+        var location = location(ctx);
+        if (ctx.STRING_LITERAL() != null) {
+            return new AnnotationStringValue(unquote(source), source, location);
+        }
+        if (ctx.INT_LITERAL() != null) {
+            return new AnnotationIntValue(Integer.parseInt(cleanNumber(source)), source, location);
+        }
+        if (ctx.LONG_LITERAL() != null) {
+            return new AnnotationLongValue(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+        }
+        if (ctx.DOUBLE_LITERAL() != null) {
+            return new AnnotationDoubleValue(Double.parseDouble(cleanDouble(source)), source, location);
+        }
+        if (ctx.FLOAT_LITERAL() != null) {
+            return new AnnotationFloatValue(Float.parseFloat(cleanFloat(source)), source, location);
+        }
+        if (ctx.BOOL_LITERAL() != null) {
+            return new AnnotationBoolValue(Boolean.parseBoolean(source), source, location);
+        }
+        if (ctx.NOTHING_LITERAL() != null) {
+            return new AnnotationNothingValue(source, location);
+        }
+        if (ctx.annotationTypeReference() != null) {
+            return new AnnotationTypeNameValue(ctx.annotationTypeReference().getText(), source, location);
+        }
+        return new AnnotationNothingValue(source, location);
     }
 
     private static ConstantDeclaration constantDeclaration(
@@ -324,6 +516,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(parameters),
                 returnType,
                 functionBody(ctx.functionBody(), localNames),
+                annotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -348,6 +541,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(parameters),
                 returnType,
                 rewriteLocalFunctionCalls(expression(ctx.expression()), localNames),
+                annotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -357,14 +551,21 @@ public final class NativeCapybaraParser implements CapybaraParser {
     ) {
         var declaration = ctx.genericTypeDeclaration();
         var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
-        return dataDeclarationDefinitions(declaration, visibility, ctx.dataBody(), ctx.constructorClause(), location(ctx));
+        return dataDeclarationDefinitions(
+                declaration,
+                visibility,
+                ctx.dataBody(),
+                ctx.constructorClause(),
+                definitionAnnotationApplications(ctx.annotationBlock()),
+                location(ctx)
+        );
     }
 
     private static List<Definition> localDataDeclarationDefinitions(
             dev.capylang.parser.antlr.FunctionalParser.LocalDataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
-        return dataDeclarationDefinitions(declaration, "private", ctx.dataBody(), ctx.constructorClause(), location(ctx));
+        return dataDeclarationDefinitions(declaration, "private", ctx.dataBody(), ctx.constructorClause(), List.of(), location(ctx));
     }
 
     private static List<Definition> typeDeclarationDefinitions(
@@ -450,6 +651,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             String visibility,
             dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
             dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause,
+            List<Definition.AnnotationApplication> annotations,
             SourceLocation location
     ) {
         var name = dataTypeName(declaration);
@@ -460,6 +662,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 dataTypeParameters(declaration),
                 dataDeclarationOwnFields(dataBody),
                 dataDeclarationParents(dataBody),
+                annotations,
                 location
         ));
         if (constructorClause != null) {
@@ -503,6 +706,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 parameters,
                 new TypeReference("any", List.of()),
                 rewriteConstructorData(expression(constructorClause.expression()), name),
+                List.of(),
                 location(constructorClause)
         ));
     }
@@ -616,7 +820,12 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var name = ctx.identifier() != null
                 ? ctx.identifier().getText()
                 : unquote(ctx.STRING_LITERAL().getText());
-        return new Definition.DataFieldDeclaration(name, typeReference(ctx.type()), location(ctx));
+        return new Definition.DataFieldDeclaration(
+                name,
+                typeReference(ctx.type()),
+                definitionAnnotationApplications(ctx.annotationBlock()),
+                location(ctx)
+        );
     }
 
     private static List<Definition.DataParentDeclaration> dataDeclarationParents(
