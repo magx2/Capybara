@@ -1503,7 +1503,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.MethodArgumentListContext arguments,
             SourceLocation location
     ) {
-        if (!name.equals("reduce") || arguments == null || arguments.methodArgument().size() != 1) {
+        if (!(name.equals("reduce") || name.equals("reduce_left")) || arguments == null || arguments.methodArgument().size() != 1) {
             return null;
         }
         var argument = arguments.methodArgument().get(0);
