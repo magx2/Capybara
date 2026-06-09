@@ -118,6 +118,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 classes.add(objectOrientedClass(definition.classDeclaration()));
             } else if (definition.interfaceDeclaration() != null) {
                 interfaces.add(objectOrientedInterface(definition.interfaceDeclaration()));
+            } else if (definition.traitDeclaration() != null) {
+                interfaces.add(objectOrientedTrait(definition.traitDeclaration()));
             }
         }
         return new ObjectOriented(List.copyOf(interfaces), List.copyOf(classes));
@@ -260,6 +262,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(fields),
                 List.copyOf(initBlocks),
                 List.copyOf(methods),
+                objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -276,8 +279,30 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new ObjectOrientedInterface(
                 ctx.TYPE().getText(),
                 "public",
+                "interface",
                 objectParents(ctx.inheritanceClause()),
                 List.copyOf(methods),
+                objectAnnotationApplications(ctx.annotationBlock()),
+                location(ctx)
+        );
+    }
+
+    private static ObjectOrientedInterface objectOrientedTrait(
+            dev.capylang.parser.antlr.ObjectOrientedParser.TraitDeclarationContext ctx
+    ) {
+        var methods = new ArrayList<ObjectOrientedMethod>();
+        for (var member : ctx.typeBody().memberDeclaration()) {
+            if (member.methodDeclaration() != null) {
+                methods.add(objectOrientedMethod(member.methodDeclaration()));
+            }
+        }
+        return new ObjectOrientedInterface(
+                ctx.TYPE().getText(),
+                "public",
+                "trait",
+                objectParents(ctx.inheritanceClause()),
+                List.copyOf(methods),
+                objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -306,6 +331,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 typeReference(ctx.type().getText()),
                 hasValue ? objectExpression(ctx.expression()) : unsupported(ctx),
                 hasValue,
+                objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -329,6 +355,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
                 ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
                 objectMethodBody(ctx.methodBody()),
+                objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -343,6 +370,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
                 ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
                 unsupported(ctx),
+                objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
     }
@@ -1015,6 +1043,75 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return new Definition.AnnotationTypeNameValue(ctx.annotationTypeReference().getText(), source, location);
         }
         return new Definition.AnnotationNothingValue(source, location);
+    }
+
+    private static List<FunctionAnnotationApplication> objectAnnotationApplications(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext> blocks
+    ) {
+        var applications = new ArrayList<FunctionAnnotationApplication>();
+        for (var block : blocks) {
+            applications.add(objectAnnotationApplication(block));
+        }
+        return List.copyOf(applications);
+    }
+
+    private static FunctionAnnotationApplication objectAnnotationApplication(
+            dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext ctx
+    ) {
+        return new FunctionAnnotationApplication(
+                ctx.annotationName().getText(),
+                objectAnnotationArguments(ctx.annotationArgumentList()),
+                location(ctx)
+        );
+    }
+
+    private static List<FunctionAnnotationArgument> objectAnnotationArguments(
+            dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationArgumentListContext ctx
+    ) {
+        if (ctx == null) {
+            return List.of();
+        }
+        var arguments = new ArrayList<FunctionAnnotationArgument>();
+        for (var argument : ctx.annotationArgument()) {
+            arguments.add(new FunctionAnnotationArgument(
+                    argument.identifier().getText(),
+                    objectAnnotationValue(argument.annotationValue()),
+                    location(argument)
+            ));
+        }
+        return List.copyOf(arguments);
+    }
+
+    private static FunctionAnnotationValue objectAnnotationValue(
+            dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationValueContext ctx
+    ) {
+        var source = ctx.getText();
+        var location = location(ctx);
+        if (ctx.STRING_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationStringValue(unquote(source), source, location);
+        }
+        if (ctx.INT_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationIntValue(Integer.parseInt(cleanNumber(source)), source, location);
+        }
+        if (ctx.LONG_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationLongValue(Long.parseLong(cleanNumber(source.substring(0, source.length() - 1))), source, location);
+        }
+        if (ctx.DOUBLE_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationDoubleValue(Double.parseDouble(cleanDouble(source)), source, location);
+        }
+        if (ctx.FLOAT_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationFloatValue(Float.parseFloat(cleanFloat(source)), source, location);
+        }
+        if (ctx.BOOL_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationBoolValue(Boolean.parseBoolean(source), source, location);
+        }
+        if (ctx.NOTHING_LITERAL() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationNothingValue(source, location);
+        }
+        if (ctx.annotationTypeReference() != null) {
+            return new FunctionAnnotationValue.FunctionAnnotationTypeNameValue(ctx.annotationTypeReference().getText(), source, location);
+        }
+        return new FunctionAnnotationValue.FunctionAnnotationNothingValue(source, location);
     }
 
     private static List<FunctionAnnotationApplication> annotationApplications(
