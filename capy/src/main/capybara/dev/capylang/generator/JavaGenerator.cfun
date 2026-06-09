@@ -40,6 +40,32 @@ const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVW
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
 const JAVA_RESERVED_WORDS = "|abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|var|record|yield|sealed|permits|_|"
 const JAVA_OBJECT_TYPE_PREFIX = "__capy_oo|"
+const OO_INTERFACE_SCHEMA_PREFIX = "__capy_oo_interface|"
+const OO_INTERFACE_METHOD_FUNCTION_PREFIX = "__capy_oo_interface_method|"
+const OO_CLASS_SCHEMA_PREFIX = "__capy_oo_class|"
+const OO_CLASS_PARAMETER_SCHEMA_PREFIX = "__capy_oo_param|"
+const OO_FIELD_SCHEMA_PREFIX = "__capy_oo_field|"
+const OO_FIELD_INIT_FUNCTION_PREFIX = "__capy_oo_field_init|"
+const OO_INIT_FUNCTION_PREFIX = "__capy_oo_init|"
+const OO_METHOD_FUNCTION_PREFIX = "__capy_oo_method|"
+
+private fun java_object_type_prefix_size(): int =
+    "__capy_oo|".size().value
+
+private fun oo_interface_schema_prefix_size(): int =
+    "__capy_oo_interface|".size().value
+
+private fun oo_interface_method_function_prefix_size(): int =
+    "__capy_oo_interface_method|".size().value
+
+private fun oo_class_schema_prefix_size(): int =
+    "__capy_oo_class|".size().value
+
+private fun oo_init_function_prefix_size(): int =
+    "__capy_oo_init|".size().value
+
+private fun oo_method_function_prefix_size(): int =
+    "__capy_oo_method|".size().value
 
 fun java_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
@@ -298,10 +324,10 @@ private fun compiled_object_interfaces(functions: List[CompiledFunction]): List[
         else compiled_object_interfaces(functions[1:])
 
 private fun compiled_object_interface_schema(function: CompiledFunction): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_interface|")
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_INTERFACE_SCHEMA_PREFIX)
 
 private fun compiled_object_interface(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedInterface =
-    let interfaceName = function.name["__capy_oo_interface|".size().value, function.name.size().value]
+    let interfaceName = function.name[oo_interface_schema_prefix_size(), function.name.size().value]
     CompiledObjectOrientedInterface {
         name: interfaceName,
         visibility: schema_value(function),
@@ -325,7 +351,7 @@ private fun compiled_object_interface_methods(interfaceName: String, functions: 
         else compiled_object_interface_methods(interfaceName, functions[1:])
 
 private fun compiled_object_interface_method_function(function: CompiledFunction): bool =
-    java_generator_string_has_prefix(function.name, "__capy_oo_interface_method|")
+    java_generator_string_has_prefix(function.name, OO_INTERFACE_METHOD_FUNCTION_PREFIX)
 
 private fun compiled_object_interface_method_function_for_interface(function: CompiledFunction, interfaceName: String): bool =
     if compiled_object_interface_method_function(function)
@@ -343,12 +369,12 @@ private fun compiled_object_interface_method(function: CompiledFunction): Compil
     }
 
 private fun compiled_object_interface_method_owner_name(name: String): String =
-    let rest = name["__capy_oo_interface_method|".size().value, name.size().value]
+    let rest = name[oo_interface_method_function_prefix_size(), name.size().value]
     let separator = first_index_of(rest, "|", 0)
     if separator < 0 then rest else rest[0, separator]
 
 private fun compiled_object_interface_method_name(name: String): String =
-    let rest = name["__capy_oo_interface_method|".size().value, name.size().value]
+    let rest = name[oo_interface_method_function_prefix_size(), name.size().value]
     let separator = first_index_of(rest, "|", 0)
     if separator < 0 then "" else rest[separator + 1, rest.size().value]
 
@@ -366,10 +392,10 @@ private fun compiled_object_classes(functions: List[CompiledFunction]): List[Com
         else compiled_object_classes(functions[1:])
 
 private fun compiled_object_class_schema(function: CompiledFunction): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_class|")
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_CLASS_SCHEMA_PREFIX)
 
 private fun compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
-    let className = function.name[16, function.name.size().value]
+    let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
     CompiledObjectOrientedClass {
         name: className,
         visibility: schema_value(function),
@@ -396,7 +422,7 @@ private fun compiled_object_class_parameters(className: String, functions: List[
         else compiled_object_class_parameters(className, functions[1:])
 
 private fun compiled_object_class_parameter_schema_for_class(function: CompiledFunction, className: String): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_param|" + className + "|")
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_CLASS_PARAMETER_SCHEMA_PREFIX + className + "|")
 
 private fun compiled_object_class_parameter(function: CompiledFunction): CompiledFunctionParameter =
     let value = schema_value(function)
@@ -423,7 +449,7 @@ private fun compiled_object_fields(className: String, functions: List[CompiledFu
         else compiled_object_fields(className, functions[1:])
 
 private fun compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_field|" + className + "|")
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_FIELD_SCHEMA_PREFIX + className + "|")
 
 private fun compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
     let value = schema_value(function)
@@ -446,7 +472,7 @@ private fun find_compiled_object_field_init(className: String, fieldName: String
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if function.name == "__capy_oo_field_init|" + className + "|" + fieldName
+        if function.name == OO_FIELD_INIT_FUNCTION_PREFIX + className + "|" + fieldName
         then /capy/lang/Option.Some { function }
         else find_compiled_object_field_init(className, fieldName, functions[1:])
 
@@ -476,10 +502,6 @@ private fun object_field_schema_second_separator(value: String): int =
     let first = first_index_of(value, "|", 0)
     if first < 0 then -1 else first_index_of(value, "|", first + 1)
 
-private fun object_field_schema_third_separator(value: String): int =
-    let second = object_field_schema_second_separator(value)
-    if second < 0 then -1 else first_index_of(value, "|", second + 1)
-
 private fun object_field_schema_last_separator(value: String): int =
     last_index_of(value, "|", 0, -1)
 
@@ -492,7 +514,7 @@ private fun compiled_object_init_blocks(className: String, functions: List[Compi
         else compiled_object_init_blocks(className, functions[1:])
 
 private fun compiled_object_init_function(function: CompiledFunction): bool =
-    java_generator_string_has_prefix(function.name, "__capy_oo_init|")
+    java_generator_string_has_prefix(function.name, OO_INIT_FUNCTION_PREFIX)
 
 private fun compiled_object_init_function_for_class(function: CompiledFunction, className: String): bool =
     if compiled_object_init_function(function)
@@ -500,12 +522,12 @@ private fun compiled_object_init_function_for_class(function: CompiledFunction, 
     else false
 
 private fun compiled_object_init_class_name(name: String): String =
-    let rest = name["__capy_oo_init|".size().value, name.size().value]
+    let rest = name[oo_init_function_prefix_size(), name.size().value]
     let separator = first_index_of(rest, "|", 0)
     if separator < 0 then rest else rest[0, separator]
 
 private fun compiled_object_field_init_function(function: CompiledFunction): bool =
-    java_generator_string_has_prefix(function.name, "__capy_oo_field_init|")
+    java_generator_string_has_prefix(function.name, OO_FIELD_INIT_FUNCTION_PREFIX)
 
 private fun missing_compiled_expression(location: CompiledSourceLocation): CompiledExpression =
     CompiledUnsupportedExpression { source: "", location: location }
@@ -519,7 +541,7 @@ private fun compiled_object_methods(className: String, functions: List[CompiledF
         else compiled_object_methods(className, functions[1:])
 
 private fun compiled_object_method_function(function: CompiledFunction): bool =
-    java_generator_string_has_prefix(function.name, "__capy_oo_method|")
+    java_generator_string_has_prefix(function.name, OO_METHOD_FUNCTION_PREFIX)
 
 private fun compiled_object_method_function_for_class(function: CompiledFunction, className: String): bool =
     if compiled_object_method_function(function)
@@ -537,12 +559,12 @@ private fun compiled_object_method(function: CompiledFunction): CompiledObjectOr
     }
 
 private fun compiled_object_method_class_name(name: String): String =
-    let rest = name[17, name.size().value]
+    let rest = name[oo_method_function_prefix_size(), name.size().value]
     let separator = first_index_of(rest, "|", 0)
     if separator < 0 then rest else rest[0, separator]
 
 private fun compiled_object_method_name(name: String): String =
-    let rest = name[17, name.size().value]
+    let rest = name[oo_method_function_prefix_size(), name.size().value]
     let separator = first_index_of(rest, "|", 0)
     if separator < 0 then "" else rest[separator + 1, rest.size().value]
 
@@ -2913,7 +2935,7 @@ private fun find_object_method(call: CompiledMethodCallExpression, env: List[Jav
     match find_object_class_by_type(receiverType, allModules) with
     case Some { binding } ->
         {
-            match find_object_method_in_class(call.name, binding.objectClass.methods) with
+            match find_object_method_in_methods(call.name, binding.objectClass.methods) with
             case Some { method } -> /capy/lang/Option.Some { JavaResolvedObjectMethod { receiverType: java_object_type_reference_for_class(binding.moduleClassName, binding.objectClass), method: method } }
             case None -> find_object_interface_method(call.name, receiverType, module, allModules)
         }
@@ -2922,7 +2944,7 @@ private fun find_object_method(call: CompiledMethodCallExpression, env: List[Jav
 private fun find_object_interface_method(name: String, receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaResolvedObjectMethod] =
     match find_object_interface_by_type(receiverType, allModules) with
     case Some { binding } -> {
-        match find_object_method_in_class(name, binding.objectInterface.methods) with
+        match find_object_method_in_methods(name, binding.objectInterface.methods) with
         case Some { method } -> /capy/lang/Option.Some { JavaResolvedObjectMethod { receiverType: java_object_interface_type_reference(binding), method: method } }
         case None -> /capy/lang/Option.None {}
     }
@@ -2952,13 +2974,13 @@ private fun find_object_field_in_class(name: String, fields: List[CompiledObject
         then /capy/lang/Option.Some { field }
         else find_object_field_in_class(name, fields[1:])
 
-private fun find_object_method_in_class(name: String, methods: List[CompiledObjectOrientedMethod]): /capy/lang/Option[CompiledObjectOrientedMethod] =
+private fun find_object_method_in_methods(name: String, methods: List[CompiledObjectOrientedMethod]): /capy/lang/Option[CompiledObjectOrientedMethod] =
     match methods[0] with
     case None -> /capy/lang/Option.None {}
     case Some { method } ->
         if method.name == name
         then /capy/lang/Option.Some { method }
-        else find_object_method_in_class(name, methods[1:])
+        else find_object_method_in_methods(name, methods[1:])
 
 private fun find_object_class_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectClassBinding] =
     if qualified_call_name(name)
@@ -3117,8 +3139,6 @@ private fun java_object_type(type: CompiledTypeReference): bool =
 
 private fun java_object_type_java_name(type: CompiledTypeReference): String =
     type.name[java_object_type_prefix_size(), type.name.size().value]
-
-private fun java_object_type_prefix_size(): int = 10
 
 private fun stdlib_to_seq_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     call.name == "to_seq" & seq_member_imported("to_seq", module.imports) & one_method_argument(call.arguments)

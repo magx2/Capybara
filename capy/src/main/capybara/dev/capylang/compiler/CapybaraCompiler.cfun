@@ -207,7 +207,7 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
     case Some { interface } ->
         [compile_object_interface_schema_function(interface)]
             + [compile_object_interface_kind_schema_function(interface)]
-            + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0)
+            + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0, interface.location)
             + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + interface.name + "|", interface.annotations, 0)
             + compile_object_interface_method_functions(interface.name, interface.methods, module, allModules)
             + compile_object_interface_functions(interfaces[1:], module, allModules)
@@ -226,15 +226,12 @@ private fun compile_object_interface_kind_schema_function(interface: ObjectOrien
         interface.location
     )
 
-private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parents[0] with
     case None -> []
     case Some { parent } ->
-        [compile_schema_constant("__capy_oo_interface_parent|" + interfaceName + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), parent_location(parent))]
-            + compile_object_interface_parent_schema_functions(interfaceName, parents[1:], module, allModules, idx + 1)
-
-private fun parent_location(parent: TypeReference): SourceLocation =
-    SourceLocation { line: 0, column: 0 }
+        [compile_schema_constant("__capy_oo_interface_parent|" + interfaceName + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
+            + compile_object_interface_parent_schema_functions(interfaceName, parents[1:], module, allModules, idx + 1, location)
 
 private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
@@ -261,7 +258,7 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
         [compile_object_class_schema_function(class)]
             + [compile_object_class_open_schema_function(class)]
             + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
-            + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0)
+            + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0, class.location)
             + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + class.name + "|", class.annotations, 0)
             + compile_object_field_schema_functions(class.name, class.fields, module, allModules, 0)
             + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
@@ -291,12 +288,12 @@ private fun compile_object_class_parameter_schema_functions(className: String, p
         [compile_schema_constant("__capy_oo_param|" + className + "|" + idx, parameter.name + "|" + compiled_type_reference_schema(compile_type_in_module(parameter.typeReference, module, allModules)), parameter.location)]
             + compile_object_class_parameter_schema_functions(className, parameters[1:], module, allModules, idx + 1)
 
-private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parents[0] with
     case None -> []
     case Some { parent } ->
-        [compile_schema_constant("__capy_oo_parent|" + className + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), parent_location(parent))]
-            + compile_object_class_parent_schema_functions(className, parents[1:], module, allModules, idx + 1)
+        [compile_schema_constant("__capy_oo_parent|" + className + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
+            + compile_object_class_parent_schema_functions(className, parents[1:], module, allModules, idx + 1, location)
 
 private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match fields[0] with
