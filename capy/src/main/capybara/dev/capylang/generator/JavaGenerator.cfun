@@ -7,6 +7,8 @@ from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionP
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
@@ -20,6 +22,8 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data JavaBinding { name: String, typeReference: CompiledTypeReference, javaName: String }
 data JavaObjectClassBinding { moduleClassName: String, objectClass: CompiledObjectOrientedClass }
+data JavaObjectInterfaceBinding { moduleClassName: String, objectInterface: CompiledObjectOrientedInterface }
+data JavaObjectFieldBinding { moduleClassName: String, objectClass: CompiledObjectOrientedClass, field: CompiledObjectOrientedField }
 data JavaObjectMethodBinding { moduleClassName: String, objectClass: CompiledObjectOrientedClass, method: CompiledObjectOrientedMethod }
 data JavaDataTypeBinding { module: CompiledModule, name: String }
 data JavaQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
@@ -51,6 +55,7 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     + "public final class " + module.name + " {" + newline()
     + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
     + java_function_type_interfaces()
+    + java_object_interfaces(compiled_object_interfaces(module.functions), module, allModules)
     + java_object_classes(compiled_object_classes(module.functions), module, allModules)
     + java_constants(constant_functions(module.functions), [], module, allModules)
     + java_functions(module.functions, module, allModules)
@@ -67,6 +72,30 @@ private fun java_function_type_interfaces(): String =
     + "        R apply(A a, B b, C c, D d);" + newline()
     + "    }" + newline() + newline()
 
+private fun java_object_interfaces(interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match interfaces[0] with
+    case None -> ""
+    case Some { objectInterface } ->
+        java_object_interface(objectInterface, module, allModules) + newline()
+            + java_object_interfaces(interfaces[1:], module, allModules)
+
+private fun java_object_interface(objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "    " + java_visibility_prefix(objectInterface.visibility) + "interface " + java_identifier(objectInterface.name) + java_object_interface_parent_clause(objectInterface.parents, module, allModules) + " {" + newline()
+    + java_object_interface_methods(objectInterface.methods, module, allModules)
+    + "    }" + newline()
+
+private fun java_object_interface_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if parents.is_empty()
+    then ""
+    else " extends " + java_object_parent_types(parents, module, allModules)
+
+private fun java_object_interface_methods(methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match methods[0] with
+    case None -> ""
+    case Some { method } ->
+        "        " + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ");" + newline()
+            + java_object_interface_methods(methods[1:], module, allModules)
+
 private fun java_object_classes(classes: List[CompiledObjectOrientedClass], module: CompiledModule, allModules: List[CompiledModule]): String =
     match classes[0] with
     case None -> ""
@@ -76,10 +105,71 @@ private fun java_object_classes(classes: List[CompiledObjectOrientedClass], modu
             + java_object_classes(classes[1:], module, allModules)
 
 private fun java_object_class(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
-    "    " + java_visibility_prefix(objectClass.visibility) + "static final class " + java_identifier(objectClass.name) + " {" + newline()
-    + "        public " + java_identifier(objectClass.name) + "(" + java_parameters(objectClass.parameters) + ") {" + "}" + newline() + newline()
+    "    " + java_visibility_prefix(objectClass.visibility) + "static final class " + java_identifier(objectClass.name) + java_object_class_parent_clause(objectClass.parents, module, allModules) + " {" + newline()
+    + java_object_fields(objectClass.fields)
+    + java_object_constructor(objectClass, module, allModules)
     + java_object_methods(objectClass.methods, objectClass, module, allModules)
     + "    }" + newline()
+
+private fun java_object_class_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if parents.is_empty()
+    then ""
+    else " implements " + java_object_parent_types(parents, module, allModules)
+
+private fun java_object_parent_types(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parents[0] with
+    case None -> ""
+    case Some { parent } -> java_object_parent_type(parent, module, allModules) + java_object_parent_type_tail(parents[1:], module, allModules)
+
+private fun java_object_parent_type_tail(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parents[0] with
+    case None -> ""
+    case Some _ -> ", " + java_object_parent_types(parents, module, allModules)
+
+private fun java_object_parent_type(parent: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_object_interface_by_name(parent.name, module, allModules) with
+    case Some { binding } -> binding.moduleClassName + "." + java_identifier(binding.objectInterface.name)
+    case None -> java_identifier(type_unqualified_name(parent.name))
+
+private fun java_object_fields(fields: List[CompiledObjectOrientedField]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        "        " + java_visibility_prefix(field.visibility) + java_type(field.typeReference) + " " + java_identifier(field.name) + ";" + newline()
+            + java_object_fields(fields[1:])
+
+private fun java_object_constructor(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let env = java_object_constructor_bindings(objectClass, module)
+    "        public " + java_identifier(objectClass.name) + "(" + java_parameters(objectClass.parameters) + ") {" + newline()
+    + java_object_field_assignments(objectClass.fields, env, module, allModules)
+    + java_object_init_statements(objectClass.initBlocks, env, module, allModules)
+    + "        }" + newline() + newline()
+
+private fun java_object_constructor_bindings(objectClass: CompiledObjectOrientedClass, module: CompiledModule): List[JavaBinding] =
+    [java_binding_with_java_name("this", java_object_type_reference(module, objectClass), "this")]
+        + parameter_bindings(objectClass.parameters)
+
+private fun java_object_field_assignments(fields: List[CompiledObjectOrientedField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        (if field.hasValue
+        then "            this." + java_identifier(field.name) + " = " + expression_code(field.value, env, field.typeReference, module, allModules) + ";" + newline()
+        else "")
+            + java_object_field_assignments(fields[1:], env, module, allModules)
+
+private fun java_object_init_statements(initBlocks: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match initBlocks[0] with
+    case None -> ""
+    case Some { initBlock } ->
+        java_object_init_statement(initBlock, env, module, allModules)
+            + java_object_init_statements(initBlocks[1:], env, module, allModules)
+
+private fun java_object_init_statement(initBlock: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let type = expression_type(initBlock, env, module, allModules)
+    if type.name == "Effect"
+    then "            " + expression_code(initBlock, env, type, module, allModules) + ".unsafeRun();" + newline()
+    else "            " + expression_code(initBlock, env, type, module, allModules) + ";" + newline()
 
 private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
@@ -136,6 +226,66 @@ private fun java_object_constructor_argument_name_tail(parameters: List[Compiled
     case None -> ""
     case Some { parameter } -> ", " + java_identifier(parameter.name) + java_object_constructor_argument_name_tail(parameters[1:])
 
+private fun compiled_object_interfaces(functions: List[CompiledFunction]): List[CompiledObjectOrientedInterface] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_interface_schema(function)
+        then [compiled_object_interface(function, functions)] + compiled_object_interfaces(functions[1:])
+        else compiled_object_interfaces(functions[1:])
+
+private fun compiled_object_interface_schema(function: CompiledFunction): bool =
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_interface|")
+
+private fun compiled_object_interface(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedInterface =
+    let interfaceName = function.name["__capy_oo_interface|".size().value, function.name.size().value]
+    CompiledObjectOrientedInterface {
+        name: interfaceName,
+        visibility: schema_value(function),
+        parents: schema_type_references(schema_values("__capy_oo_interface_parent|" + interfaceName + "|", functions)),
+        methods: compiled_object_interface_methods(interfaceName, functions),
+        location: function.location
+    }
+
+private fun compiled_object_interface_methods(interfaceName: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedMethod] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_interface_method_function_for_interface(function, interfaceName)
+        then [compiled_object_interface_method(function)] + compiled_object_interface_methods(interfaceName, functions[1:])
+        else compiled_object_interface_methods(interfaceName, functions[1:])
+
+private fun compiled_object_interface_method_function(function: CompiledFunction): bool =
+    java_generator_string_has_prefix(function.name, "__capy_oo_interface_method|")
+
+private fun compiled_object_interface_method_function_for_interface(function: CompiledFunction, interfaceName: String): bool =
+    compiled_object_interface_method_function(function) & compiled_object_interface_method_owner_name(function.name) == interfaceName
+
+private fun compiled_object_interface_method(function: CompiledFunction): CompiledObjectOrientedMethod =
+    CompiledObjectOrientedMethod {
+        name: compiled_object_interface_method_name(function.name),
+        visibility: compiled_object_interface_method_visibility(function.visibility),
+        parameters: function.parameters,
+        returnType: function.returnType,
+        body: function.body,
+        location: function.location
+    }
+
+private fun compiled_object_interface_method_owner_name(name: String): String =
+    let rest = name["__capy_oo_interface_method|".size().value, name.size().value]
+    let separator = first_index_of(rest, "|", 0)
+    if separator < 0 then rest else rest[0, separator]
+
+private fun compiled_object_interface_method_name(name: String): String =
+    let rest = name["__capy_oo_interface_method|".size().value, name.size().value]
+    let separator = first_index_of(rest, "|", 0)
+    if separator < 0 then "" else rest[separator + 1, rest.size().value]
+
+private fun compiled_object_interface_method_visibility(visibility: String): String =
+    if java_generator_string_has_prefix(visibility, "oo_interface_method:")
+    then visibility["oo_interface_method:".size().value, visibility.size().value]
+    else visibility
+
 private fun compiled_object_classes(functions: List[CompiledFunction]): List[CompiledObjectOrientedClass] =
     match functions[0] with
     case None -> []
@@ -152,10 +302,131 @@ private fun compiled_object_class(function: CompiledFunction, functions: List[Co
     CompiledObjectOrientedClass {
         name: className,
         visibility: schema_value(function),
-        parameters: [],
+        parameters: compiled_object_class_parameters(className, functions),
+        parents: schema_type_references(schema_values("__capy_oo_parent|" + className + "|", functions)),
+        fields: compiled_object_fields(className, functions),
+        initBlocks: compiled_object_init_blocks(className, functions),
         methods: compiled_object_methods(className, functions),
         location: function.location
     }
+
+private fun compiled_object_class_parameters(className: String, functions: List[CompiledFunction]): List[CompiledFunctionParameter] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_class_parameter_schema_for_class(function, className)
+        then [compiled_object_class_parameter(function)] + compiled_object_class_parameters(className, functions[1:])
+        else compiled_object_class_parameters(className, functions[1:])
+
+private fun compiled_object_class_parameter_schema_for_class(function: CompiledFunction, className: String): bool =
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_param|" + className + "|")
+
+private fun compiled_object_class_parameter(function: CompiledFunction): CompiledFunctionParameter =
+    let value = schema_value(function)
+    let separator = first_index_of(value, "|", 0)
+    if separator < 0
+    then CompiledFunctionParameter { name: value, typeReference: object_type(), location: function.location }
+    else CompiledFunctionParameter {
+        name: value[0, separator],
+        typeReference: schema_type_reference(value[separator + 1, value.size().value]),
+        location: function.location
+    }
+
+private fun schema_type_references(values: List[String]): List[CompiledTypeReference] =
+    match values[0] with
+    case None -> []
+    case Some { value } -> [schema_type_reference(value)] + schema_type_references(values[1:])
+
+private fun compiled_object_fields(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedField] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_field_schema_for_class(function, className)
+        then [compiled_object_field(className, function, functions)] + compiled_object_fields(className, functions[1:])
+        else compiled_object_fields(className, functions[1:])
+
+private fun compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
+    compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_field|" + className + "|")
+
+private fun compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
+    let value = schema_value(function)
+    let fieldName = object_field_schema_name(value)
+    CompiledObjectOrientedField {
+        name: fieldName,
+        visibility: object_field_schema_visibility(value),
+        typeReference: schema_type_reference(object_field_schema_type(value)),
+        value: compiled_object_field_value(className, fieldName, functions, function.location),
+        hasValue: object_field_schema_has_value(value),
+        location: function.location
+    }
+
+private fun compiled_object_field_value(className: String, fieldName: String, functions: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
+    match find_compiled_object_field_init(className, fieldName, functions) with
+    case Some { function } -> function.body
+    case None -> missing_compiled_expression(location)
+
+private fun find_compiled_object_field_init(className: String, fieldName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if function.name == "__capy_oo_field_init|" + className + "|" + fieldName
+        then /capy/lang/Option.Some { function }
+        else find_compiled_object_field_init(className, fieldName, functions[1:])
+
+private fun object_field_schema_name(value: String): String =
+    let first = first_index_of(value, "|", 0)
+    if first < 0 then value else value[0, first]
+
+private fun object_field_schema_visibility(value: String): String =
+    let first = first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else first_index_of(value, "|", first + 1)
+    if first < 0 | second < 0 then "public" else value[first + 1, second]
+
+private fun object_field_schema_type(value: String): String =
+    let second = object_field_schema_second_separator(value)
+    let third = if second < 0 then -1 else first_index_of(value, "|", second + 1)
+    if second < 0
+    then "any"
+    else if third < 0
+    then value[second + 1, value.size().value]
+    else value[second + 1, third]
+
+private fun object_field_schema_has_value(value: String): bool =
+    let third = object_field_schema_third_separator(value)
+    third >= 0 & value[third + 1, value.size().value] == "true"
+
+private fun object_field_schema_second_separator(value: String): int =
+    let first = first_index_of(value, "|", 0)
+    if first < 0 then -1 else first_index_of(value, "|", first + 1)
+
+private fun object_field_schema_third_separator(value: String): int =
+    let second = object_field_schema_second_separator(value)
+    if second < 0 then -1 else first_index_of(value, "|", second + 1)
+
+private fun compiled_object_init_blocks(className: String, functions: List[CompiledFunction]): List[CompiledExpression] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_object_init_function_for_class(function, className)
+        then [function.body] + compiled_object_init_blocks(className, functions[1:])
+        else compiled_object_init_blocks(className, functions[1:])
+
+private fun compiled_object_init_function(function: CompiledFunction): bool =
+    java_generator_string_has_prefix(function.name, "__capy_oo_init|")
+
+private fun compiled_object_init_function_for_class(function: CompiledFunction, className: String): bool =
+    compiled_object_init_function(function) & compiled_object_init_class_name(function.name) == className
+
+private fun compiled_object_init_class_name(name: String): String =
+    let rest = name["__capy_oo_init|".size().value, name.size().value]
+    let separator = first_index_of(rest, "|", 0)
+    if separator < 0 then rest else rest[0, separator]
+
+private fun compiled_object_field_init_function(function: CompiledFunction): bool =
+    java_generator_string_has_prefix(function.name, "__capy_oo_field_init|")
+
+private fun missing_compiled_expression(location: CompiledSourceLocation): CompiledExpression =
+    CompiledUnsupportedExpression { source: "", location: location }
 
 private fun compiled_object_methods(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedMethod] =
     match functions[0] with
@@ -231,6 +502,7 @@ private fun explicit_static_imports(functions: List[CompiledFunction], declarati
 
 private fun static_import_function(function: CompiledFunction, declaration: CompiledImportDeclaration): bool =
     !compiled_schema(function)
+        & !compiled_object_helper_function(function)
         & function.visibility != "private"
         & function.visibility != "const:private"
         & import_includes_name(function.name, declaration)
@@ -308,6 +580,12 @@ private fun compiled_constant(function: CompiledFunction): bool =
 private fun compiled_schema(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.visibility, "const:schema")
 
+private fun compiled_object_helper_function(function: CompiledFunction): bool =
+    compiled_object_method_function(function)
+        | compiled_object_interface_method_function(function)
+        | compiled_object_field_init_function(function)
+        | compiled_object_init_function(function)
+
 private fun constant_java_visibility(function: CompiledFunction): String =
     java_visibility_prefix(function.visibility.replace("const:", ""))
 
@@ -315,7 +593,7 @@ private fun java_functions(functions: List[CompiledFunction], module: CompiledMo
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if compiled_constant(function) | compiled_object_method_function(function)
+        if compiled_constant(function) | compiled_object_helper_function(function)
         then java_functions(functions[1:], module, allModules)
         else java_function(function, module, allModules) + newline() + java_functions(functions[1:], module, allModules)
 
@@ -2235,6 +2513,30 @@ private fun find_object_method(call: CompiledMethodCallExpression, env: List[Jav
         }
     case _ -> /capy/lang/Option.None {}
 
+private fun object_field_access(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_object_field(access, env, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+private fun find_object_field(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectFieldBinding] =
+    let receiverType = expression_type(access.receiver, env, module, allModules)
+    match find_object_class_by_type(receiverType, allModules) with
+    case Some { binding } ->
+        {
+            match find_object_field_in_class(access.name, binding.objectClass.fields) with
+            case Some { field } -> /capy/lang/Option.Some { JavaObjectFieldBinding { moduleClassName: binding.moduleClassName, objectClass: binding.objectClass, field: field } }
+            case None -> /capy/lang/Option.None {}
+        }
+    case _ -> /capy/lang/Option.None {}
+
+private fun find_object_field_in_class(name: String, fields: List[CompiledObjectOrientedField]): /capy/lang/Option[CompiledObjectOrientedField] =
+    match fields[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { field } ->
+        if field.name == name
+        then /capy/lang/Option.Some { field }
+        else find_object_field_in_class(name, fields[1:])
+
 private fun find_object_method_in_class(name: String, methods: List[CompiledObjectOrientedMethod]): /capy/lang/Option[CompiledObjectOrientedMethod] =
     match methods[0] with
     case None -> /capy/lang/Option.None {}
@@ -2244,12 +2546,21 @@ private fun find_object_method_in_class(name: String, methods: List[CompiledObje
         else find_object_method_in_class(name, methods[1:])
 
 private fun find_object_class_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectClassBinding] =
-    match find_object_class(name, module) with
-    case Some { binding } -> /capy/lang/Option.Some { binding }
-    case None -> find_object_class_in_imports(name, module.imports, module, allModules)
+    if qualified_call_name(name)
+    then find_qualified_object_class(name, module, allModules)
+    else match find_object_class(name, module) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> find_object_class_in_imports(name, module.imports, module, allModules)
 
 private fun find_object_class(name: String, module: CompiledModule): /capy/lang/Option[JavaObjectClassBinding] =
     find_object_class_in_classes(name, compiled_object_classes(module.functions), module)
+
+private fun find_qualified_object_class(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectClassBinding] =
+    let className = qualified_call_class_name(name, module)
+    let member = qualified_call_member(name)
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_object_class(member, importedModule)
+    case None -> /capy/lang/Option.None {}
 
 private fun find_object_class_in_classes(name: String, classes: List[CompiledObjectOrientedClass], module: CompiledModule): /capy/lang/Option[JavaObjectClassBinding] =
     match classes[0] with
@@ -2292,6 +2603,49 @@ private fun find_object_class_by_type_in_module(typeName: String, classes: List[
         if typeName == java_object_type_name(module, objectClass.name)
         then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: objectClass } }
         else find_object_class_by_type_in_module(typeName, classes[1:], module)
+
+private fun find_object_interface_by_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    if qualified_call_name(name)
+    then find_qualified_object_interface(name, module, allModules)
+    else match find_object_interface(name, module) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> find_object_interface_in_imports(name, module.imports, module, allModules)
+
+private fun find_qualified_object_interface(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    let className = qualified_call_class_name(name, module)
+    let member = qualified_call_member(name)
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> find_object_interface(member, importedModule)
+    case None -> /capy/lang/Option.None {}
+
+private fun find_object_interface(name: String, module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    find_object_interface_in_interfaces(name, compiled_object_interfaces(module.functions), module)
+
+private fun find_object_interface_in_interfaces(name: String, interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    match interfaces[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { objectInterface } ->
+        if objectInterface.name == name
+        then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: objectInterface } }
+        else find_object_interface_in_interfaces(name, interfaces[1:], module)
+
+private fun find_object_interface_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !stdlib_import(declaration.modulePath) & !declaration.qualified & import_includes_name(name, declaration)
+        then find_object_interface_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else find_object_interface_in_imports(name, imports[1:], module, allModules)
+
+private fun find_object_interface_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } ->
+        {
+            match find_object_interface(name, importedModule) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> find_object_interface_in_imports(name, rest, module, allModules)
+        }
+    case _ -> find_object_interface_in_imports(name, rest, module, allModules)
 
 private fun java_object_type_reference(module: CompiledModule, objectClass: CompiledObjectOrientedClass): CompiledTypeReference =
     java_object_type_reference_for_class(module_fqcn(module), objectClass)
@@ -4207,6 +4561,8 @@ private fun bound_schema_types(types: List[CompiledTypeReference], bindings: Lis
 private fun field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if enum_static_field_access(access, env, module, allModules)
     then enum_static_field_access_code(access, module, allModules)
+    else if object_field_access(access, env, module, allModules)
+    then object_field_access_code(access, env, expectedType, module, allModules)
     else if access.name == "value" & numeric_type(expression_type(access.receiver, env, module, allModules))
     then expression_code(access.receiver, env, expectedType, module, allModules)
     else if access.name == "value" & stdlib_byte_count_type(expression_type(access.receiver, env, module, allModules))
@@ -4221,6 +4577,19 @@ private fun field_access_code(access: CompiledFieldAccessExpression, env: List[J
             castType,
             expectedType
         )
+
+private fun object_field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_object_field(access, env, module, allModules) with
+    case Some { binding } ->
+        let receiverType = java_object_type_reference_for_class(binding.moduleClassName, binding.objectClass)
+        value_conversion_code(
+            expression_code(access.receiver, env, receiverType, module, allModules) + "." + java_identifier(binding.field.name),
+            binding.field.typeReference,
+            expectedType,
+            module,
+            allModules
+        )
+    case None -> "__capy_data_field(" + expression_code(access.receiver, env, object_type(), module, allModules) + ", \"" + escape_java_string(access.name) + "\")"
 
 private fun field_access_cast_type(sourceType: CompiledTypeReference, expectedType: CompiledTypeReference): CompiledTypeReference =
     if sourceType.name == "any"
@@ -4796,6 +5165,8 @@ private fun option_type(argument: CompiledTypeReference): CompiledTypeReference 
 private fun field_access_type(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if enum_static_field_access(access, env, module, allModules)
     then enum_static_field_access_type(access)
+    else if object_field_access(access, env, module, allModules)
+    then object_field_access_type(access, env, module, allModules)
     else
         let receiverType = expression_type(access.receiver, env, module, allModules)
         if access.name == "value" & numeric_type(receiverType)
@@ -4805,6 +5176,11 @@ private fun field_access_type(access: CompiledFieldAccessExpression, env: List[J
         else if result_match_whole_value_field(access.name, receiverType)
         then result_match_whole_value_field_type(access.name, receiverType)
         else data_field_type(access.name, receiverType, object_type(), module, allModules)
+
+private fun object_field_access_type(access: CompiledFieldAccessExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match find_object_field(access, env, module, allModules) with
+    case Some { binding } -> binding.field.typeReference
+    case None -> object_type()
 
 private fun data_field_type(name: String, receiverType: CompiledTypeReference, fallback: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if qualified_call_name(receiverType.name)
@@ -7799,6 +8175,8 @@ private fun function_type_assignable(target: CompiledTypeReference, source: Comp
 private fun value_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     if stdlib_type_reference_assignable(target, source)
     then true
+    else if object_type_assignable(target, source, module, allModules)
+    then true
     else if runtime_supertype_assignable(target, source, module, allModules)
     then true
     else if generated_data_object_type(target) & generated_data_object_type(source)
@@ -7808,6 +8186,29 @@ private fun value_assignable(target: CompiledTypeReference, source: CompiledType
     else match primitive_backed_backing_type(source.name, module, allModules) with
         case Some { backingType } -> type_assignable(target, backingType)
         case None -> false
+
+private fun object_type_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_object_class_by_type(source, allModules) with
+    case Some { binding } ->
+        object_type_name_matches(target.name, binding.objectClass.name)
+            | object_parent_assignable(target.name, binding.objectClass.parents, module, allModules)
+    case None -> false
+
+private fun object_parent_assignable(targetName: String, parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match parents[0] with
+    case None -> false
+    case Some { parent } ->
+        object_type_name_matches(targetName, parent.name)
+            | object_parent_assignable(targetName, object_interface_parent_types(parent.name, module, allModules), module, allModules)
+            | object_parent_assignable(targetName, parents[1:], module, allModules)
+
+private fun object_interface_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[CompiledTypeReference] =
+    match find_object_interface_by_name(name, module, allModules) with
+    case Some { binding } -> binding.objectInterface.parents
+    case None -> []
+
+private fun object_type_name_matches(first: String, second: String): bool =
+    first == second | type_unqualified_name(first) == type_unqualified_name(second)
 
 private fun runtime_supertype_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     if target.name == "enum"
@@ -8039,6 +8440,7 @@ private fun console_read_line_call(call: CompiledFunctionCallExpression, module:
 
 private fun console_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/io/Console", "capy/io/Console")
+        | module_member_imported(member, imports, "/capy/io/Stdout", "capy/io/Stdout")
 
 private fun stdlib_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")

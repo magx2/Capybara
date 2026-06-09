@@ -1,18 +1,12 @@
 from /capy/collection/List import { List }
-from /dev/capylang/compiler/parser/Expression import { Expression }
-from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
-from /dev/capylang/compiler/parser/ObjectOrientedField import { ObjectOrientedField }
 from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
-data ObjectOrientedClass {
+data ObjectOrientedInterface {
     name: String,
     visibility: String,
-    parameters: List[FunctionParameter],
     parents: List[TypeReference],
-    fields: List[ObjectOrientedField],
-    initBlocks: List[Expression],
     methods: List[ObjectOrientedMethod],
     location: SourceLocation
 }
