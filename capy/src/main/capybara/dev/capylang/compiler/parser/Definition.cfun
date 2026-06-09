@@ -30,6 +30,7 @@ data AnnotationDeclaration {
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
+data DeriveApplication { name: String, location: SourceLocation }
 data DataFieldDeclaration { name: String, typeReference: TypeReference, annotations: List[AnnotationApplication], location: SourceLocation }
 data DataParentDeclaration { typeReference: TypeReference, location: SourceLocation }
 data DataDeclaration {
@@ -39,13 +40,29 @@ data DataDeclaration {
     fields: List[DataFieldDeclaration],
     parents: List[DataParentDeclaration],
     annotations: List[AnnotationApplication],
+    derives: List[DeriveApplication],
     location: SourceLocation
 }
-data DeriverDeclaration {}
+data DeriverDeclaration {
+    name: String,
+    visibility: String,
+    methods: List[FunctionDeclaration],
+    annotations: List[AnnotationApplication],
+    location: SourceLocation
+}
 data EnumValueDeclaration { name: String, location: SourceLocation }
 data EnumDeclaration { name: String, values: List[EnumValueDeclaration], annotations: List[AnnotationApplication], location: SourceLocation }
 data PrimitiveBackedTypeDeclaration {}
-data TypeDeclaration {}
+data TypeDeclaration {
+    name: String,
+    visibility: String,
+    parameters: List[String],
+    fields: List[DataFieldDeclaration],
+    variants: List[TypeReference],
+    annotations: List[AnnotationApplication],
+    derives: List[DeriveApplication],
+    location: SourceLocation
+}
 data UnsupportedDefinition {}
 data ConstantDefinition { constant: ConstantDeclaration }
 data FunctionDefinition { function: FunctionDeclaration }
