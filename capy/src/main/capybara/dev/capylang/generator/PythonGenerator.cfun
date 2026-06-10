@@ -210,22 +210,10 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
         + " " + python_boolean_operator(binary.operator) + " "
         + python_truthy_expression_code(binary.right, env, module, allModules)
         + ")"
-    else if binary.operator == "+"
-    then python_binary_runtime_call("__capy_add", binary, env, module, allModules)
-    else if binary.operator == "-"
-    then python_binary_runtime_call("__capy_sub", binary, env, module, allModules)
-    else if binary.operator == "*"
-    then python_binary_runtime_call("__capy_mul", binary, env, module, allModules)
-    else if binary.operator == "/"
-    then python_binary_runtime_call("__capy_div", binary, env, module, allModules)
-    else if binary.operator == "^"
-    then python_binary_runtime_call("__capy_pow", binary, env, module, allModules)
-    else if binary.operator == "%"
-    then python_binary_runtime_call("__capy_mod", binary, env, module, allModules)
-    else if binary.operator == "?"
-    then python_binary_runtime_call("__capy_contains", binary, env, module, allModules)
-    else "(" + python_expression_code(binary.left, env, module, allModules)
-        + " " + python_binary_operator(binary.operator) + " "
+    else match python_binary_runtime_helper(binary.operator) with
+    case Some { helper } -> python_binary_runtime_call(helper, binary, env, module, allModules)
+    case None -> "(" + python_expression_code(binary.left, env, module, allModules)
+        + " " + binary.operator + " "
         + python_expression_code(binary.right, env, module, allModules)
         + ")"
 
@@ -251,31 +239,34 @@ private fun python_binary_runtime_call(name: String, binary: CompiledBinaryExpre
         + ", "
         + python_expression_code(binary.right, env, module, allModules)
         + ")"
-    if python_long_integer_literal_binary(binary.left, binary.right)
+    if python_long_binary_expression(binary, env, module, allModules)
     then "__capy_long(" + code + ")"
     else code
 
-private fun python_long_integer_literal_binary(left: CompiledExpression, right: CompiledExpression): bool =
-    (python_long_literal_expression(left) & python_integer_literal_expression(right))
-        | (python_integer_literal_expression(left) & python_long_literal_expression(right))
+private fun python_binary_runtime_helper(operator: String): /capy/lang/Option[String] =
+    if operator == "+"
+    then Some { "__capy_add" }
+    else if operator == "-"
+    then Some { "__capy_sub" }
+    else if operator == "*"
+    then Some { "__capy_mul" }
+    else if operator == "/"
+    then Some { "__capy_div" }
+    else if operator == "^"
+    then Some { "__capy_pow" }
+    else if operator == "%"
+    then Some { "__capy_mod" }
+    else if operator == "?"
+    then Some { "__capy_contains" }
+    else /capy/lang/Option.None {}
 
-private fun python_integer_literal_expression(expression: CompiledExpression): bool =
-    match expression with
-    case CompiledIntLiteral _ -> true
-    case CompiledLongLiteral _ -> true
-    case _ -> false
+private fun python_binary_runtime_operator(operator: String): bool =
+    match python_binary_runtime_helper(operator) with
+    case Some _ -> true
+    case None -> false
 
-private fun python_long_literal_expression(expression: CompiledExpression): bool =
-    match expression with
-    case CompiledLongLiteral _ -> true
-    case _ -> false
-
-private fun python_binary_operator(operator: String): String =
-    if operator == "!="
-    then "!="
-    else if operator == "=="
-    then "=="
-    else operator
+private fun python_long_binary_expression(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_type(binary, env, module, allModules) == python_long_type()
 
 private fun python_boolean_operator(operator: String): String =
     if operator == "&" then "and" else "or"
@@ -649,7 +640,7 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_int_type()
     else if python_primitive_conversion_method_call(call, env, module, allModules)
     then if call.name == "to_int" then python_int_type() else python_long_type()
-    else if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
+    else if python_assert_method(call.name)
     then python_assert_type()
     else match python_find_extension_method(call, env, module, allModules) with
         case Some { function } -> function.returnType.name
@@ -676,8 +667,9 @@ private fun python_comparison_operator(operator: String): bool =
     operator == "==" | operator == "!=" | operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "?"
 
 private fun python_numeric_binary_operator(operator: String): bool =
-    operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
-        | operator == ".and." | operator == ".nand." | operator == ".or." | operator == ".xor."
+    (python_binary_runtime_operator(operator) & operator != "?")
+        | python_bitwise_binary_operator(operator)
+        | operator == ".nand."
 
 private fun python_numeric_type(type: String): bool =
     type == "byte" | type == "int" | type == "long" | type == "float" | type == "double"
@@ -1301,25 +1293,11 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
             & python_expression_gatherable(block.result, python_block_env(block.bindings, env), module, allModules)
 
 private fun python_binary_operator_gatherable(operator: String): bool =
-    operator == "+"
-        | operator == "-"
-        | operator == "*"
-        | operator == "/"
-        | operator == "%"
-        | operator == "^"
-        | operator == "=="
-        | operator == "!="
-        | operator == ">"
-        | operator == "<"
-        | operator == ">="
-        | operator == "<="
-        | operator == "?"
-        | operator == "&"
-        | operator == "|"
-        | operator == ".and."
+    python_binary_runtime_operator(operator)
+        | python_comparison_operator(operator)
+        | python_bool_binary_operator(operator)
+        | python_bitwise_binary_operator(operator)
         | operator == ".nand."
-        | operator == ".or."
-        | operator == ".xor."
 
 private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = python_expression_type(binary.left, env, module, allModules)
@@ -1352,7 +1330,7 @@ private fun python_function_call_gatherable(call: CompiledFunctionCallExpression
     else false
 
 private fun python_method_call_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
+    if python_assert_method(call.name)
     then if python_expression_gatherable(call.receiver, env, module, allModules)
         then python_expressions_gatherable(call.arguments, env, module, allModules)
         else false
@@ -1367,11 +1345,6 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
             python_expression_gatherable(call.receiver, env, module, allModules)
                 & python_expressions_gatherable(call.arguments, env, module, allModules)
         case None -> false
-
-private fun python_local_function_exists(name: String, functions: List[CompiledFunction]): bool =
-    match python_find_local_function(name, functions) with
-    case Some _ -> true
-    case None -> false
 
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
     python_local_function_count(name, functions) == 1
@@ -1507,6 +1480,9 @@ private fun python_zero_arg_lambda(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression lambda -> lambda.parameters.is_empty()
     case _ -> false
+
+private fun python_assert_method(name: String): bool =
+    name == "is_equal_to" | name == "is_true" | name == "is_false"
 
 private fun python_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     python_merge_schema_fields(
