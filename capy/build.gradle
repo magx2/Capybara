@@ -218,7 +218,8 @@ def e2eCfunGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capyb
 def e2eCfunLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-cfun')
 def e2eCfunTestResultsDir = layout.buildDirectory.dir('test-results/e2e-cfun')
 def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
-def e2eCooSelectedCapybaraSourceDir = layout.buildDirectory.dir('generated/sources/capybara/selected/e2e-coo')
+def e2eCooNativeSourceDir = layout.projectDirectory.dir('src/e2e-coo/native')
+def e2eCooPreparedSourceDir = layout.buildDirectory.dir('generated/sources/capybara/e2e-coo')
 def e2eCooGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara-e2e-coo/java')
 def e2eCooLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara-e2e-coo/linked')
 def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
@@ -376,43 +377,15 @@ tasks.named('compileE2eCfunJava') {
     dependsOn linkCapybaraE2eCfunSources
 }
 
-def prepareE2eCooTask089Sources = tasks.register('prepareE2eCooTask089Sources', Sync) {
+def prepareE2eCooSources = tasks.register('prepareE2eCooSources', Sync) {
     group = 'build'
-    description = 'Prepares the ranked TASK-089, TASK-090, TASK-091, TASK-094, TASK-095, TASK-097, and TASK-099 object-oriented e2e Capybara sources.'
+    description = 'Prepares all object-oriented e2e Capybara sources in the compiler input-root layout.'
 
-    from(e2eCooCapybaraSourceDir) {
-        include 'dev/capylang/test/ObjectMethodInterop.cfun'
-        include 'dev/capylang/test/ObjectMethodInterop.coo'
-        include 'dev/capylang/test/ObjectMethodInteropCapyTest.cfun'
-        include 'dev/capylang/test/ConstructedObjects.coo'
-        include 'dev/capylang/test/ConstructedObjectsCapyTest.cfun'
-        include 'dev/capylang/test/ObjectConstructionInterop.cfun'
-        include 'dev/capylang/test/ObjectConstructionInteropCapyTest.cfun'
-        include 'dev/capylang/test/NativeWiring.coo'
-        include 'dev/capylang/test/NativeWiringProvider.cfun'
-        include 'dev/capylang/test/NativeWiringCapyTest.cfun'
-        include 'dev/capylang/test/SharedInterop.cfun'
-        include 'dev/capylang/test/SharedInterop.coo'
-        include 'dev/capylang/test/SharedInteropCapyTest.cfun'
-        include 'dev/capylang/test/ObjectOrientedFpInterop.cfun'
-        include 'dev/capylang/test/ObjectOrientedFpInterop.coo'
-        include 'dev/capylang/test/ObjectOrientedFpInteropCapyTest.cfun'
-        include 'dev/capylang/test/ObjectOrientedReflectionAnnotations.cfun'
-        include 'dev/capylang/test/ObjectOrientedReflection.coo'
-        include 'dev/capylang/test/ObjectOrientedReflectionCapyTest.cfun'
-        include 'dev/capylang/test/ObjectOrientedAnnotationDefinitions.cfun'
-        include 'dev/capylang/test/ObjectOrientedAnnotations.coo'
-        include 'dev/capylang/test/ObjectOrientedAnnotationsCapyTest.cfun'
-        include 'dev/capylang/test/ObjectOrientedAnnotationDefinitionsCapyTest.cfun'
-        include 'dev/capylang/test/ObjectOrientedRuntime.cfun'
-        include 'dev/capylang/test/ObjectOrientedRuntime.coo'
-        include 'dev/capylang/test/ObjectOrientedRuntimeCapyTest.cfun'
-    }
-    from(layout.projectDirectory.dir('src/e2e-coo/native')) {
-        include 'java/**'
+    from(e2eCooCapybaraSourceDir)
+    from(e2eCooNativeSourceDir) {
         into 'native'
     }
-    into e2eCooSelectedCapybaraSourceDir
+    into e2eCooPreparedSourceDir
 }
 
 def cleanE2eCooGeneratedSources = tasks.register('cleanE2eCooGeneratedSources', Delete) {
@@ -427,12 +400,13 @@ def linkCapybaraE2eCooSources = tasks.register('linkCapybaraE2eCooSources', InPr
     group = 'build'
     description = 'Compiles object-oriented e2e-test Capybara files and generates Java in one pass without launching a separate JVM.'
     dependsOn cleanE2eCooGeneratedSources
-    dependsOn prepareE2eCooTask089Sources
+    dependsOn prepareE2eCooSources
     dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
     dependsOn ':capy:classes'
+    mustRunAfter cleanE2eCooGeneratedSources
 
     runtimeClasspath.from(capyRuntimeClasspath)
-    inputDir.set(e2eCooSelectedCapybaraSourceDir)
+    inputDir.set(e2eCooPreparedSourceDir)
     additionalInputDirs.from(capybaraLibLinkedDir)
     linkedOutputDir.set(e2eCooLinkedOutputDir)
     generatedOutputDir.set(e2eCooGeneratedJavaDir)
