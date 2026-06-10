@@ -135,8 +135,17 @@ private fun java_object_top_level_interface_methods(methods: List[CompiledObject
     match methods[0] with
     case None -> ""
     case Some { method } ->
-        java_object_interface_method(method, objectInterface, module, allModules, "    ")
+        java_object_top_level_interface_method(method, objectInterface, module, allModules)
             + java_object_top_level_interface_methods(methods[1:], objectInterface, module, allModules)
+
+private fun java_object_top_level_interface_method(method: CompiledObjectOrientedMethod, objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if objectInterface.kind == "trait"
+    then
+        let env = java_object_interface_method_bindings(method.parameters, objectInterface, module)
+        "    default " + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ") {" + newline()
+        + java_object_interface_method_body(method, env, module, allModules, "        ")
+        + "    }" + newline()
+    else "    " + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ");" + newline()
 
 private fun java_object_interfaces(interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule, allModules: List[CompiledModule]): String =
     match interfaces[0] with
@@ -1148,6 +1157,20 @@ private fun java_parameter_tail(parameters: List[CompiledFunctionParameter]): St
     match parameters[0] with
     case None -> ""
     case Some { parameter } -> ", " + java_type(parameter.typeReference) + " " + java_identifier(parameter.name) + java_parameter_tail(parameters[1:])
+
+private fun top_level_java_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        top_level_java_type(parameter.typeReference, module, allModules) + " " + java_identifier(parameter.name)
+            + top_level_java_parameter_tail(parameters[1:], module, allModules)
+
+private fun top_level_java_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        ", " + top_level_java_type(parameter.typeReference, module, allModules) + " " + java_identifier(parameter.name)
+            + top_level_java_parameter_tail(parameters[1:], module, allModules)
 
 private fun java_function_parameters(function: CompiledFunction): String =
     if extension_method_function(function)
@@ -8906,6 +8929,84 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "/capy/lang/Program" then "capy.lang.Program"
     else if stdlib_date_time_type_name(type.name) then stdlib_date_time_java_type(type.name)
     else "java.lang.Object"
+
+private fun top_level_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if type.name == "array" then top_level_java_type(first_type_argument(type), module, allModules) + "[]"
+    else if type.name == "void" then "void"
+    else if type.name == "byte" then "byte"
+    else if type.name == "int" then "int"
+    else if type.name == "long" then "long"
+    else if type.name == "float" then "float"
+    else if type.name == "double" then "double"
+    else if type.name == "bool" then "boolean"
+    else top_level_boxed_java_type(type, module, allModules)
+
+private fun top_level_boxed_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if function_type(type) then top_level_java_functional_type(type, module, allModules)
+    else if type.name == "array" then top_level_java_type(first_type_argument(type), module, allModules) + "[]"
+    else if java_object_type(type) then java_object_type_java_name(type)
+    else if type.name == "byte" then "java.lang.Byte"
+    else if type.name == "int" then "java.lang.Integer"
+    else if type.name == "long" then "java.lang.Long"
+    else if type.name == "float" then "java.lang.Float"
+    else if type.name == "double" then "java.lang.Double"
+    else if type.name == "bool" then "java.lang.Boolean"
+    else if type.name == "String" then "java.lang.String"
+    else if type.name == "List" then "java.util.List<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "Set" then "java.util.Set<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "Dict" then "java.util.Map<java.lang.String, " + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if option_type_name(type.name) then "java.util.Optional<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "Tuple" then "java.util.List<?>"
+    else if type.name == "Effect" then "capy.lang.Effect<" + top_level_generic_argument_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "Assert" then "capy.test.Assert"
+    else if type.name == "TestFile" then "capy.test.CapyTest.TestFile"
+    else if type.name == "TestCase" then "capy.test.CapyTest.TestCase"
+    else if type.name == "Supplier" then "java.util.function.Supplier<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "/capy/lang/Program" then "capy.lang.Program"
+    else if stdlib_date_time_type_name(type.name) then stdlib_date_time_java_type(type.name)
+    else match top_level_data_type_java_name(type, module, allModules) with
+        case Some { name } -> name
+        case None -> "java.lang.Object"
+
+private fun top_level_java_functional_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let parameters = function_type_parameters(type)
+    let returnType = function_type_return_type(type)
+    if parameters.is_empty()
+    then "java.util.function.Supplier<" + top_level_boxed_java_type(returnType, module, allModules) + ">"
+    else if parameters.size().value == 1
+    then "java.util.function.Function<" + top_level_boxed_java_type(function_type_parameter_at(parameters, 0), module, allModules) + ", " + top_level_boxed_java_type(returnType, module, allModules) + ">"
+    else if parameters.size().value == 2
+    then "java.util.function.BiFunction<" + top_level_boxed_java_type(function_type_parameter_at(parameters, 0), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 1), module, allModules) + ", " + top_level_boxed_java_type(returnType, module, allModules) + ">"
+    else "java.lang.Object"
+
+private fun top_level_generic_argument_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if type_parameter(type) then "?" else top_level_boxed_java_type(type, module, allModules)
+
+private fun top_level_data_type_java_name(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let name = type_unqualified_name(type.name)
+    if type.name ? "/" | qualified_call_name(type.name)
+    then top_level_qualified_data_type_java_name(type.name, name, module, allModules)
+    else match data_type_owner_module(name, module, allModules) with
+        case Some { owner } -> /capy/lang/Option.Some { top_level_owned_data_type_java_name(name, module, owner) }
+        case None -> /capy/lang/Option.None {}
+
+private fun top_level_qualified_data_type_java_name(typeName: String, memberName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let className = if qualified_call_name(typeName) then qualified_call_class_name(typeName, module) else path_to_class(java_generator_normalize_import_module_path(typeName))
+    match find_module_by_class(className, allModules) with
+    case Some { owner } -> /capy/lang/Option.Some { top_level_owned_data_type_java_name(memberName, module, owner) }
+    case None -> /capy/lang/Option.Some { if type_unqualified_name(className) == memberName then className else className + "." + java_identifier(memberName) }
+
+private fun top_level_owned_data_type_java_name(name: String, current: CompiledModule, owner: CompiledModule): String =
+    let ownerPackage = module_package_fqcn(owner)
+    let currentPackage = module_package_fqcn(current)
+    let ownerClass = if ownerPackage.is_empty() then java_identifier(owner.name) else ownerPackage + "." + java_identifier(owner.name)
+    let ownedName = if owner.name == name then ownerClass else ownerClass + "." + java_identifier(name)
+    if ownerPackage == currentPackage
+    then if owner.name == name then java_identifier(name) else java_identifier(owner.name) + "." + java_identifier(name)
+    else ownedName
+
+private fun module_package_fqcn(module: CompiledModule): String =
+    if module.path.is_empty() then "" else module.path.replace("/", ".")
 
 private fun function_type(type: CompiledTypeReference): bool =
     type.name ? "=>"
