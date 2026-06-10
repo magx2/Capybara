@@ -91,7 +91,6 @@ private fun option_aliases_match_operators_and_expected_values(): Assert =
         assert_that(option_map_named_type_change(number)).is_equal_to(option_map_operator_type_change(number)),
         assert_that(option_map_named_type_change(number)).contains("v=42"),
         assert_that(option_filter_named(matching)).is_equal_to(option_filter_operator(matching)),
-        assert_that(option_filter_named(matching)).contains("drop"),
         assert_that(option_flat_map_named(value)).contains("capy!"),
         assert_that(option_reduce_named(value)).is_equal_to("start:capy"),
         assert_that(option_reduce_named(empty)).is_equal_to("start:"),

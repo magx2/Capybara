@@ -3451,10 +3451,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static TypeReference typeReference(String text) {
+        if (hasTopLevelFunctionArrow(text)) {
+            return new TypeReference(text, List.of());
+        }
         if (text.endsWith("[]")) {
             return new TypeReference("array", List.of(typeReference(text.substring(0, text.length() - 2))));
         }
-        var bracket = text.indexOf('[');
+        var bracket = topLevelGenericBracket(text);
         if (bracket < 0) {
             return new TypeReference(text, List.of());
         }
@@ -3464,6 +3467,41 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         .map(NativeCapybaraParser::typeReference)
                         .toList()
         );
+    }
+
+    private static boolean hasTopLevelFunctionArrow(String text) {
+        var bracketDepth = 0;
+        var parenDepth = 0;
+        for (var i = 0; i < text.length() - 1; i++) {
+            var c = text.charAt(i);
+            if (c == '[') {
+                bracketDepth++;
+            } else if (c == ']') {
+                bracketDepth--;
+            } else if (c == '(') {
+                parenDepth++;
+            } else if (c == ')') {
+                parenDepth--;
+            } else if (c == '=' && text.charAt(i + 1) == '>' && bracketDepth == 0 && parenDepth == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int topLevelGenericBracket(String text) {
+        var parenDepth = 0;
+        for (var i = 0; i < text.length(); i++) {
+            var c = text.charAt(i);
+            if (c == '(') {
+                parenDepth++;
+            } else if (c == ')') {
+                parenDepth--;
+            } else if (c == '[' && parenDepth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static List<String> splitTypeArguments(String text) {

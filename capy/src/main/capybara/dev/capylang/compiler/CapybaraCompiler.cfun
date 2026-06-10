@@ -192,6 +192,7 @@ private fun imported_library_matches(modulePath: String, library: CompiledModule
     let className = compiled_module_class_name(library)
     modulePath == library.name
         | normalize_module_path(modulePath) == compiled_module_path(library)
+        | normalize_import_module_path(modulePath) == compiled_module_path(library)
         | modulePath == className
 
 private fun compiled_module_path(module: CompiledModule): String =
@@ -586,6 +587,19 @@ private fun normalize_module_path(path: String): String =
     then normalize_module_path(path[1, path.size()])
     else path
 
+private fun normalize_import_module_path(path: String): String =
+    let normalized = normalize_module_path(path)
+    if compiler_string_has_prefix(normalized, "dev/capylang/capybara/")
+    then normalize_capybara_import_suffix(normalized["dev/capylang/capybara/".size(), normalized.size()], "dev/capylang/")
+    else if compiler_string_has_prefix(normalized, "capybara/")
+    then normalize_capybara_import_suffix(normalized["capybara/".size(), normalized.size()], "")
+    else normalized
+
+private fun normalize_capybara_import_suffix(suffix: String, prefix: String): String =
+    if compiler_string_has_prefix(suffix, "test/")
+    then prefix + suffix
+    else prefix + "test/" + suffix
+
 private fun compiler_string_has_prefix(value: String, prefix: String): bool =
     compiler_string_has_prefix_at(value, prefix, 0)
 
@@ -972,8 +986,68 @@ private fun compile_return_type(type: TypeReference, parameters: List[FunctionPa
 
 private fun compile_return_type_in_module(type: TypeReference, parameters: List[FunctionParameter], body: Expression, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
     if type.name.is_empty()
-    then compile_type_in_module(infer_return_type(body, parameters, 0), module, allModules)
+    then compile_type_in_module(infer_return_type_in_module(body, parameters, module, allModules, 0), module, allModules)
     else compile_type_in_module(type, module, allModules)
+
+private fun infer_return_type_in_module(expression: Expression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    if depth > 16
+    then missing_type()
+    else match expression with
+    case FunctionCallExpression call -> infer_function_call_type(call, module, allModules, depth + 1)
+    case IfExpression ifExpression -> infer_if_type_in_module(ifExpression, env, module, allModules, depth + 1)
+    case BlockExpression block -> infer_return_type_in_module(block.result, block_type_env_in_module(block.bindings, env, module, allModules, depth + 1), module, allModules, depth + 1)
+    case _ -> infer_return_type(expression, env, depth + 1)
+
+private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    let thenType = infer_return_type_in_module(ifExpression.thenBranch, env, module, allModules, depth + 1)
+    let elseType = infer_return_type_in_module(ifExpression.elseBranch, env, module, allModules, depth + 1)
+    if thenType.name.is_empty()
+    then elseType
+    else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
+    then thenType
+    else if compiler_data_object_type(thenType) & compiler_data_object_type(elseType)
+    then compiler_preferred_data_object_type(thenType, elseType)
+    else missing_type()
+
+private fun block_type_env_in_module(bindings: List[LetBinding], env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): List[FunctionParameter] =
+    match bindings[0] with
+    case None -> env
+    case Some { binding } ->
+        let bindingType = if binding.typeReference.name.is_empty() then infer_return_type_in_module(binding.value, env, module, allModules, depth + 1) else binding.typeReference
+        block_type_env_in_module(bindings[1:], [FunctionParameter {
+            name: binding.name,
+            typeReference: bindingType,
+            location: binding.location
+        }] + env, module, allModules, depth + 1)
+
+private fun infer_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    if compiler_qualified_name(call.name)
+    then infer_qualified_function_call_type(call, module, allModules, depth + 1)
+    else infer_function_call_type_in_module(compiler_qualified_member_name("." + call.name), module, allModules, depth + 1)
+
+private fun infer_qualified_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    match find_parsed_module_by_class(compiler_qualified_class_name(call.name, module), allModules) with
+    case Some { targetModule } -> infer_function_call_type_in_module(compiler_qualified_member_name(call.name), targetModule, allModules, depth + 1)
+    case None -> missing_type()
+
+private fun infer_function_call_type_in_module(name: String, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    match find_function_declaration(name, module.definitions) with
+    case Some { function } ->
+        if function.returnType.name.is_empty()
+        then infer_return_type_in_module(function.body, function.parameters, module, allModules, depth + 1)
+        else function.returnType
+    case None -> missing_type()
+
+private fun find_function_declaration(name: String, definitions: List[Definition]): /capy/lang/Option[FunctionDeclaration] =
+    match definitions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { definition } ->
+        match definition with
+        case FunctionDefinition { function } ->
+            if function.name == name
+            then /capy/lang/Option.Some { function }
+            else find_function_declaration(name, definitions[1:])
+        case _ -> find_function_declaration(name, definitions[1:])
 
 private fun infer_return_type(expression: Expression, env: List[FunctionParameter], depth: int): TypeReference =
     if depth > 16
@@ -1396,16 +1470,16 @@ private fun compiler_qualified_member_name(name: String): String =
 private fun compiler_qualified_class_name(name: String, module: ParsedModule): String =
     let qualifier = name[0, compiler_last_index_of(name, ".", 0, -1)]
     if compiler_string_has_prefix(qualifier, "/")
-    then qualifier[1, qualifier.size()].replace("/", ".")
+    then normalize_import_module_path(qualifier).replace("/", ".")
     else if qualifier ? "/"
-    then qualifier.replace("/", ".")
+    then normalize_import_module_path(qualifier).replace("/", ".")
     else compiler_imported_module_class(module, qualifier)
 
 private fun compiler_imported_module_class(module: ParsedModule, modulePath: String): String =
     if compiler_string_has_prefix(modulePath, "/")
-    then modulePath[1, modulePath.size()].replace("/", ".")
+    then normalize_import_module_path(modulePath).replace("/", ".")
     else if modulePath ? "/"
-    then modulePath.replace("/", ".")
+    then normalize_import_module_path(modulePath).replace("/", ".")
     else if module.path.is_empty()
     then modulePath
     else normalize_module_path(module.path).replace("/", ".") + "." + modulePath

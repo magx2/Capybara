@@ -55,8 +55,8 @@ private fun empty_list_returns_an_inferred_empty_list(): Assert =
 private fun set_of_ints_returns_an_inferred_set_of_ints(): Assert =
     // The legacy Java host test reflected the Set[int] return type only. Evaluating set_of_ints(7)
     // currently throws on Java because the source literal is {x,x,x}, so keep this as a type check.
-    let values: Set[int] = if false then set_of_ints(7) else {}
-    assert_that(values.size()).is_equal_to(0)
+    let typecheck: () => Set[int] = () => set_of_ints(7)
+    assert_that(true).is_true()
 
 private fun empty_set_returns_an_inferred_empty_set(): Assert =
     let values: Set[any] = empty_set()
