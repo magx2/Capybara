@@ -26,6 +26,7 @@ public final class ObjectOrientedJavaGenerator {
     private final Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes;
     private final Map<String, SingletonTypeInfo> singletonTypes;
     private final Map<String, List<NativeProviderInfo>> nativeProvidersByModule;
+    private final Set<String> topLevelTypeReferences;
     private int syntheticCounter = 0;
 
     public ObjectOrientedJavaGenerator() {
@@ -48,6 +49,15 @@ public final class ObjectOrientedJavaGenerator {
             Map<String, SingletonTypeInfo> singletonTypes,
             Collection<NativeProviderInfo> nativeProviders
     ) {
+        this(primitiveBackedTypes, singletonTypes, nativeProviders, Set.of());
+    }
+
+    public ObjectOrientedJavaGenerator(
+            Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes,
+            Map<String, SingletonTypeInfo> singletonTypes,
+            Collection<NativeProviderInfo> nativeProviders,
+            Collection<String> topLevelTypeReferences
+    ) {
         this.primitiveBackedTypes = Map.copyOf(primitiveBackedTypes);
         this.singletonTypes = Map.copyOf(singletonTypes);
         this.nativeProvidersByModule = nativeProviders.stream()
@@ -56,6 +66,7 @@ public final class ObjectOrientedJavaGenerator {
                         LinkedHashMap::new,
                         Collectors.toUnmodifiableList()
                 ));
+        this.topLevelTypeReferences = Set.copyOf(topLevelTypeReferences);
     }
 
     public List<GeneratedModule> generate(List<ObjectOrientedModule> modules) {
@@ -217,16 +228,26 @@ public final class ObjectOrientedJavaGenerator {
                 .filter(symbol -> !"*".equals(symbol))
                 .filter(symbol -> !symbol.isBlank())
                 .collect(Collectors.toUnmodifiableSet());
-        var ownerReference = renderOwnerReference(normalizePackageName(module.path()), module.name());
+        var packageName = normalizePackageName(module.path());
+        var ownerReference = renderOwnerReference(packageName, module.name());
         return referencedTypeTokens(module).stream()
                 .filter(symbol -> !localDefinitions.contains(symbol))
                 .filter(symbol -> !module.name().equals(symbol))
                 .filter(symbol -> !explicitlyImportedSymbols.contains(symbol))
                 .filter(symbol -> !isBuiltInTypeToken(symbol))
-                .map(symbol -> ownerReference + "." + symbol)
+                .map(symbol -> inferSameModuleImportReference(packageName, ownerReference, symbol))
+                .flatMap(Optional::stream)
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    private Optional<String> inferSameModuleImportReference(String packageName, String ownerReference, String symbol) {
+        var peerReference = packageName.isBlank() ? symbol : packageName + "." + symbol;
+        if (topLevelTypeReferences.contains(peerReference)) {
+            return packageName.isBlank() ? Optional.empty() : Optional.of(peerReference);
+        }
+        return Optional.of(ownerReference + "." + symbol);
     }
 
     private boolean isBuiltInTypeToken(String symbol) {
