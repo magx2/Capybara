@@ -6,7 +6,7 @@ buildscript {
         mavenCentral()
         ivy {
             name = 'CapybaraRelease'
-            url = uri('https://github.com/magx2/Capybara/releases/download/release/0.3.0')
+            url = uri('https://github.com/magx2/Capybara/releases/download/release/0.3.1')
             patternLayout {
                 artifact('[artifact]-[revision].[ext]')
             }
@@ -16,8 +16,8 @@ buildscript {
         }
     }
     dependencies {
-        classpath 'dev.capylang:gradle:0.3.0@jar'
-        classpath 'dev.capylang:capy:0.3.0@jar'
+        classpath 'dev.capylang:gradle:0.3.1@jar'
+        classpath 'dev.capylang:capy:0.3.1@jar'
     }
 }
 
@@ -31,7 +31,7 @@ apply plugin: 'dev.capylang'
 repositories {
     ivy {
         name = 'CapybaraRelease'
-        url = uri('https://github.com/magx2/Capybara/releases/download/release/0.3.0')
+        url = uri('https://github.com/magx2/Capybara/releases/download/release/0.3.1')
         patternLayout {
             artifact('[artifact]-[revision].[ext]')
         }
@@ -197,7 +197,7 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
-    implementation 'dev.capylang:capybara-lib:0.3.0@jar'
+    implementation 'dev.capylang:capybara-lib:0.3.1@jar'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
@@ -258,16 +258,6 @@ sourceSets {
     }
 }
 
-tasks.named('compileJava', JavaCompile) {
-    def generatedParserInterface = layout.buildDirectory
-            .file('generated/sources/capybara/java/dev/capylang/compiler/parser/CapybaraParser.java')
-            .get()
-            .asFile
-            .toPath()
-            .normalize()
-    source = source.filter { file -> file.toPath().normalize() != generatedParserInterface }
-}
-
 tasks.named('compileCapybara') {
     writeLinkedOutput.set(false)
     includeJavaLibResources.set(false)
@@ -283,8 +273,8 @@ configurations {
 }
 
 dependencies {
-    e2eCfunImplementation 'dev.capylang:capybara-lib:0.3.0@jar'
-    e2eCooImplementation 'dev.capylang:capybara-lib:0.3.0@jar'
+    e2eCfunImplementation 'dev.capylang:capybara-lib:0.3.1@jar'
+    e2eCooImplementation 'dev.capylang:capybara-lib:0.3.1@jar'
 }
 
 def e2eCfunRuntimeDependencies = configurations.e2eCfunRuntimeClasspath.incoming.artifactView {
