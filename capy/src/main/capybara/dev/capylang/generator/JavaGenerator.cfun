@@ -869,10 +869,6 @@ private fun method_owner_name(name: String): String =
     let idx = last_dot_index(name)
     if idx < 0 then "" else name[0, idx]
 
-private fun method_member_name(name: String): String =
-    let idx = last_dot_index(name)
-    if idx < 0 then name else name[idx + 1, name.size().value]
-
 private fun last_dot_index(name: String): int =
     last_dot_index_from(name, 0, -1)
 
@@ -1151,26 +1147,30 @@ private fun java_parameters(parameters: List[CompiledFunctionParameter]): String
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        java_type(parameter.typeReference) + " " + java_identifier(parameter.name) + java_parameter_tail(parameters[1:])
+        java_parameter(parameter) + java_parameter_tail(parameters[1:])
 
 private fun java_parameter_tail(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> ", " + java_type(parameter.typeReference) + " " + java_identifier(parameter.name) + java_parameter_tail(parameters[1:])
+    case Some { parameter } -> ", " + java_parameter(parameter) + java_parameter_tail(parameters[1:])
+
+private fun java_parameter(parameter: CompiledFunctionParameter): String =
+    java_type(parameter.typeReference) + " " + java_identifier(parameter.name)
 
 private fun top_level_java_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        top_level_java_type(parameter.typeReference, module, allModules) + " " + java_identifier(parameter.name)
-            + top_level_java_parameter_tail(parameters[1:], module, allModules)
+        top_level_java_parameter(parameter, module, allModules) + top_level_java_parameter_tail(parameters[1:], module, allModules)
 
 private fun top_level_java_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        ", " + top_level_java_type(parameter.typeReference, module, allModules) + " " + java_identifier(parameter.name)
-            + top_level_java_parameter_tail(parameters[1:], module, allModules)
+        ", " + top_level_java_parameter(parameter, module, allModules) + top_level_java_parameter_tail(parameters[1:], module, allModules)
+
+private fun top_level_java_parameter(parameter: CompiledFunctionParameter, module: CompiledModule, allModules: List[CompiledModule]): String =
+    top_level_java_type(parameter.typeReference, module, allModules) + " " + java_identifier(parameter.name)
 
 private fun java_function_parameters(function: CompiledFunction): String =
     if extension_method_function(function)
@@ -1558,45 +1558,20 @@ private fun boolean_binary_operator(operator: String): bool =
 private fun java_boolean_operator(operator: String): String =
     if operator == "&" then "&&" else "||"
 
-private fun binary_extension_operator_expression(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match find_binary_extension_operator(binary, env, module, allModules) with
-    case Some _ -> true
-    case None -> false
-
 private fun binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some _ -> true
     case None -> false
-
-private fun binary_extension_operator_code(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match find_binary_extension_operator(binary, env, module, allModules) with
-    case Some { function } -> extension_method_call_code(function, binary_extension_method_call(binary), env, module, allModules)
-    case None -> "unsupported(\"extension operator\")"
 
 private fun binary_extension_operator_code_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> extension_method_call_code(function, binary_extension_method_call(binary), env, module, allModules)
     case None -> "unsupported(\"extension operator\")"
 
-private fun binary_extension_operator_type(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    match find_binary_extension_operator(binary, env, module, allModules) with
-    case Some { function } -> bound_extension_method_return_type(function, expression_type(binary.left, env, module, allModules))
-    case None -> object_type()
-
 private fun binary_extension_operator_type_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> bound_extension_method_return_type(function, leftType)
     case None -> object_type()
-
-private fun binary_extension_operator_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match find_binary_extension_operator(binary, env, module, allModules) with
-    case Some { function } ->
-        let receiverType = expression_type(binary.left, env, module, allModules)
-        let parameters = bound_extension_method_parameters(function, receiverType)
-        concrete_return_type(bound_extension_method_return_type(function, receiverType))
-            & expression_emittable(binary.left, env, module, allModules)
-            & extension_operator_arguments_emittable(parameters, [binary.right], env, module, allModules)
-    case None -> false
 
 private fun binary_extension_operator_emittable_with_left_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
@@ -7246,14 +7221,6 @@ private fun find_qualified_data_type_binding(name: String, module: CompiledModul
         allModules
     )
 
-private fun find_qualified_data_type_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    match find_module_by_class(className, allModules) with
-    case Some { importedModule } ->
-        if schema_type_exists(member, importedModule.functions)
-        then /capy/lang/Option.Some { member }
-        else /capy/lang/Option.None {}
-    case None -> /capy/lang/Option.None {}
-
 private fun find_qualified_data_type_binding_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[JavaDataTypeBinding] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } ->
@@ -8895,78 +8862,83 @@ private fun java_method_supported(name: String): bool =
         | name == "replace" | name == "trim" | name == "size"
 
 private fun java_type(type: CompiledTypeReference): String =
+    let primitive_type = primitive_java_type_name(type.name)
     if type.name == "array" then java_type(first_type_argument(type)) + "[]"
-    else if type.name == "void" then "void"
-    else if type.name == "byte" then "byte"
-    else if type.name == "int" then "int"
-    else if type.name == "long" then "long"
-    else if type.name == "float" then "float"
-    else if type.name == "double" then "double"
-    else if type.name == "bool" then "boolean"
+    else if !primitive_type.is_empty() then primitive_type
     else boxed_java_type(type)
 
 private fun boxed_java_type(type: CompiledTypeReference): String =
+    let primitive_type = boxed_primitive_java_type_name(type.name)
+    let simple_type = simple_java_type_name(type.name)
     if function_type(type) then java_functional_type(type)
     else if type.name == "array" then java_type(first_type_argument(type)) + "[]"
     else if java_object_type(type) then java_object_type_java_name(type)
-    else if type.name == "byte" then "java.lang.Byte"
-    else if type.name == "int" then "java.lang.Integer"
-    else if type.name == "long" then "java.lang.Long"
-    else if type.name == "float" then "java.lang.Float"
-    else if type.name == "double" then "java.lang.Double"
-    else if type.name == "bool" then "java.lang.Boolean"
-    else if type.name == "String" then "java.lang.String"
-    else if type.name == "List" then "java.util.List<" + boxed_java_type(first_type_argument(type)) + ">"
-    else if type.name == "Set" then "java.util.Set<" + boxed_java_type(first_type_argument(type)) + ">"
-    else if type.name == "Dict" then "java.util.Map<java.lang.String, " + boxed_java_type(first_type_argument(type)) + ">"
-    else if option_type_name(type.name) then "java.util.Optional<" + boxed_java_type(first_type_argument(type)) + ">"
+    else if !primitive_type.is_empty() then primitive_type
+    else if boxed_container_java_type_name(type.name) then boxed_container_java_type(type.name, boxed_java_type(first_type_argument(type)))
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + generic_argument_java_type(first_type_argument(type)) + ">"
-    else if type.name == "Assert" then "capy.test.Assert"
-    else if type.name == "TestFile" then "capy.test.CapyTest.TestFile"
-    else if type.name == "TestCase" then "capy.test.CapyTest.TestCase"
-    else if type.name == "Supplier" then "java.util.function.Supplier<" + boxed_java_type(first_type_argument(type)) + ">"
-    else if type.name == "/capy/lang/Program" then "capy.lang.Program"
-    else if stdlib_date_time_type_name(type.name) then stdlib_date_time_java_type(type.name)
+    else if !simple_type.is_empty() then simple_type
     else "java.lang.Object"
 
 private fun top_level_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let primitive_type = primitive_java_type_name(type.name)
     if type.name == "array" then top_level_java_type(first_type_argument(type), module, allModules) + "[]"
-    else if type.name == "void" then "void"
-    else if type.name == "byte" then "byte"
-    else if type.name == "int" then "int"
-    else if type.name == "long" then "long"
-    else if type.name == "float" then "float"
-    else if type.name == "double" then "double"
-    else if type.name == "bool" then "boolean"
+    else if !primitive_type.is_empty() then primitive_type
     else top_level_boxed_java_type(type, module, allModules)
 
 private fun top_level_boxed_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let primitive_type = boxed_primitive_java_type_name(type.name)
+    let simple_type = simple_java_type_name(type.name)
     if function_type(type) then top_level_java_functional_type(type, module, allModules)
     else if type.name == "array" then top_level_java_type(first_type_argument(type), module, allModules) + "[]"
     else if java_object_type(type) then java_object_type_java_name(type)
-    else if type.name == "byte" then "java.lang.Byte"
-    else if type.name == "int" then "java.lang.Integer"
-    else if type.name == "long" then "java.lang.Long"
-    else if type.name == "float" then "java.lang.Float"
-    else if type.name == "double" then "java.lang.Double"
-    else if type.name == "bool" then "java.lang.Boolean"
-    else if type.name == "String" then "java.lang.String"
-    else if type.name == "List" then "java.util.List<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
-    else if type.name == "Set" then "java.util.Set<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
-    else if type.name == "Dict" then "java.util.Map<java.lang.String, " + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
-    else if option_type_name(type.name) then "java.util.Optional<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if !primitive_type.is_empty() then primitive_type
+    else if boxed_container_java_type_name(type.name) then boxed_container_java_type(type.name, top_level_boxed_java_type(first_type_argument(type), module, allModules))
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + top_level_generic_argument_java_type(first_type_argument(type), module, allModules) + ">"
-    else if type.name == "Assert" then "capy.test.Assert"
-    else if type.name == "TestFile" then "capy.test.CapyTest.TestFile"
-    else if type.name == "TestCase" then "capy.test.CapyTest.TestCase"
-    else if type.name == "Supplier" then "java.util.function.Supplier<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
-    else if type.name == "/capy/lang/Program" then "capy.lang.Program"
-    else if stdlib_date_time_type_name(type.name) then stdlib_date_time_java_type(type.name)
+    else if !simple_type.is_empty() then simple_type
     else match top_level_data_type_java_name(type, module, allModules) with
         case Some { name } -> name
         case None -> "java.lang.Object"
+
+private fun primitive_java_type_name(name: String): String =
+    if name == "void" then "void"
+    else if name == "byte" then "byte"
+    else if name == "int" then "int"
+    else if name == "long" then "long"
+    else if name == "float" then "float"
+    else if name == "double" then "double"
+    else if name == "bool" then "boolean"
+    else ""
+
+private fun boxed_primitive_java_type_name(name: String): String =
+    if name == "byte" then "java.lang.Byte"
+    else if name == "int" then "java.lang.Integer"
+    else if name == "long" then "java.lang.Long"
+    else if name == "float" then "java.lang.Float"
+    else if name == "double" then "java.lang.Double"
+    else if name == "bool" then "java.lang.Boolean"
+    else ""
+
+private fun boxed_container_java_type(name: String, argument: String): String =
+    if name == "List" then "java.util.List<" + argument + ">"
+    else if name == "Set" then "java.util.Set<" + argument + ">"
+    else if name == "Dict" then "java.util.Map<java.lang.String, " + argument + ">"
+    else if option_type_name(name) then "java.util.Optional<" + argument + ">"
+    else if name == "Supplier" then "java.util.function.Supplier<" + argument + ">"
+    else ""
+
+private fun boxed_container_java_type_name(name: String): bool =
+    name == "List" | name == "Set" | name == "Dict" | option_type_name(name) | name == "Supplier"
+
+private fun simple_java_type_name(name: String): String =
+    if name == "String" then "java.lang.String"
+    else if name == "Assert" then "capy.test.Assert"
+    else if name == "TestFile" then "capy.test.CapyTest.TestFile"
+    else if name == "TestCase" then "capy.test.CapyTest.TestCase"
+    else if name == "/capy/lang/Program" then "capy.lang.Program"
+    else if stdlib_date_time_type_name(name) then stdlib_date_time_java_type(name)
+    else ""
 
 private fun top_level_java_functional_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let parameters = function_type_parameters(type)
@@ -9265,11 +9237,6 @@ private fun find_qualified_function_binding(name: String, module: CompiledModule
 private fun absolute_qualified_call_name(name: String): bool =
     java_generator_string_has_prefix(name, "/")
 
-private fun find_qualified_function_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> find_function(member, importedModule.functions)
-    case None -> /capy/lang/Option.None {}
-
 private fun find_qualified_function_binding_in_class(className: String, member: String, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } -> {
@@ -9279,14 +9246,6 @@ private fun find_qualified_function_binding_in_class(className: String, member: 
     }
     case _ -> /capy/lang/Option.None {}
 
-private fun find_qualified_function_in_imports(className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match imports[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { declaration } ->
-        if declaration.qualified & !stdlib_import(declaration.modulePath) & imported_module_class(module, declaration.modulePath) == className
-        then find_qualified_function_in_import(className, member, imports[1:], module, allModules)
-        else find_qualified_function_in_imports(className, member, imports[1:], module, allModules)
-
 private fun find_qualified_function_binding_in_imports(className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
@@ -9295,20 +9254,10 @@ private fun find_qualified_function_binding_in_imports(className: String, member
         then find_qualified_function_binding_in_import(className, member, imports[1:], module, allModules)
         else find_qualified_function_binding_in_imports(className, member, imports[1:], module, allModules)
 
-private fun find_qualified_function_in_import(className: String, member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> find_qualified_function_in_module(member, rest, module, allModules, importedModule)
-    case _ -> find_qualified_function_in_imports(className, member, rest, module, allModules)
-
 private fun find_qualified_function_binding_in_import(className: String, member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } -> find_qualified_function_binding_in_module(member, rest, module, allModules, importedModule)
     case _ -> find_qualified_function_binding_in_imports(className, member, rest, module, allModules)
-
-private fun find_qualified_function_in_module(member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunction] =
-    match find_function(member, importedModule.functions) with
-    case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> find_qualified_function_in_imports(module_fqcn(importedModule), member, rest, module, allModules)
 
 private fun find_qualified_function_binding_in_module(member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[JavaQualifiedFunctionBinding] =
     match find_function(member, importedModule.functions) with
