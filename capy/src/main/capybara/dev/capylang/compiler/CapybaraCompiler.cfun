@@ -1176,6 +1176,10 @@ private fun compiler_lambda_expression(expression: Expression): bool =
 private fun infer_unary_type(unary: UnaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
     if unary.operator == "!"
     then compiler_bool_type()
+    else if unary.operator == ".not."
+    then
+        let type = infer_return_type(unary.expression, env, depth + 1)
+        if compiler_integer_type(type) then type else missing_type()
     else infer_return_type(unary.expression, env, depth + 1)
 
 private fun infer_method_call_type(call: MethodCallExpression, env: List[FunctionParameter], depth: int): TypeReference =
@@ -1212,6 +1216,8 @@ private fun compiler_binary_result_type(operator: String, leftType: TypeReferenc
     then compiler_string_type()
     else if compiler_string_left_numeric_operator(operator, leftType, rightType)
     then compiler_string_type()
+    else if compiler_bitwise_binary_operator(operator) & compiler_integer_type(leftType) & compiler_integer_type(rightType)
+    then compiler_promoted_numeric_type(leftType, rightType)
     else if compiler_numeric_binary_operator(operator) & compiler_numeric_type(leftType) & compiler_numeric_type(rightType)
     then compiler_promoted_numeric_type(leftType, rightType)
     else missing_type()
@@ -1224,6 +1230,9 @@ private fun compiler_comparison_operator(operator: String): bool =
 
 private fun compiler_numeric_binary_operator(operator: String): bool =
     operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
+
+private fun compiler_bitwise_binary_operator(operator: String): bool =
+    operator == ".and." | operator == ".nand." | operator == ".or." | operator == ".xor."
 
 private fun compiler_string_left_numeric_operator(operator: String, leftType: TypeReference, rightType: TypeReference): bool =
     (operator == "-" | operator == "*" | operator == "/" | operator == "^") & leftType.name == "String" & compiler_numeric_type(rightType)
@@ -1241,6 +1250,9 @@ private fun compiler_promoted_numeric_type(leftType: TypeReference, rightType: T
 
 private fun compiler_numeric_type(type: TypeReference): bool =
     type.name == "byte" | type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
+
+private fun compiler_integer_type(type: TypeReference): bool =
+    type.name == "byte" | type.name == "int" | type.name == "long"
 
 private fun compiler_same_type(first: TypeReference, second: TypeReference): bool =
     first.name == second.name & compiler_same_type_arguments(first.arguments, second.arguments)

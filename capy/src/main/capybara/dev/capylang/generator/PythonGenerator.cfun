@@ -172,7 +172,17 @@ private fun python_variable_code(name: String, env: List[PythonBinding]): String
     case None -> python_identifier(name)
 
 private fun python_binary_expression_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if binary.operator == "&" | binary.operator == "|"
+    if binary.operator == ".nand."
+    then "(~(" + python_expression_code(binary.left, env, module, allModules)
+        + " & "
+        + python_expression_code(binary.right, env, module, allModules)
+        + "))"
+    else if python_bitwise_binary_operator(binary.operator)
+    then "(" + python_expression_code(binary.left, env, module, allModules)
+        + " " + python_bitwise_operator(binary.operator) + " "
+        + python_expression_code(binary.right, env, module, allModules)
+        + ")"
+    else if binary.operator == "&" | binary.operator == "|"
     then "(" + python_truthy_expression_code(binary.left, env, module, allModules)
         + " " + python_boolean_operator(binary.operator) + " "
         + python_truthy_expression_code(binary.right, env, module, allModules)
@@ -214,9 +224,23 @@ private fun python_binary_operator(operator: String): String =
 private fun python_boolean_operator(operator: String): String =
     if operator == "&" then "and" else "or"
 
+private fun python_bitwise_binary_operator(operator: String): bool =
+    operator == ".and." | operator == ".or." | operator == ".xor."
+
+private fun python_bitwise_operator(operator: String): String =
+    if operator == ".and."
+    then "&"
+    else if operator == ".or."
+    then "|"
+    else if operator == ".xor."
+    then "^"
+    else operator
+
 private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if unary.operator == "!"
     then "(not " + python_truthy_expression_code(unary.expression, env, module, allModules) + ")"
+    else if unary.operator == ".not."
+    then "(~" + python_expression_code(unary.expression, env, module, allModules) + ")"
     else "(" + unary.operator + python_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -974,6 +998,10 @@ private fun python_binary_operator_gatherable(operator: String): bool =
         | operator == "?"
         | operator == "&"
         | operator == "|"
+        | operator == ".and."
+        | operator == ".nand."
+        | operator == ".or."
+        | operator == ".xor."
 
 private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_binary_operator_gatherable(binary.operator)
@@ -990,7 +1018,7 @@ private fun python_lambda_expression(expression: CompiledExpression): bool =
     case _ -> false
 
 private fun python_unary_operator_gatherable(operator: String): bool =
-    operator == "-" | operator == "!"
+    operator == "-" | operator == "!" | operator == ".not."
 
 private fun python_function_call_gatherable(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expressions_gatherable(call.arguments, module, allModules)
