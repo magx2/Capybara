@@ -7,10 +7,11 @@ from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDec
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
-data PythonBinding { name: String, pythonName: String }
+data PythonBinding { name: String, pythonName: String, typeName: String }
 
 fun python_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
@@ -130,7 +131,7 @@ private fun python_parameter_bindings(parameters: List[CompiledFunctionParameter
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [PythonBinding { name: parameter.name, pythonName: python_identifier(parameter.name) }]
+        [PythonBinding { name: parameter.name, pythonName: python_identifier(parameter.name), typeName: parameter.typeReference.name }]
             + python_parameter_bindings(parameters[1:])
 
 private fun python_expression_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -267,9 +268,27 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else if python_primitive_conversion_method_call(call, env, module, allModules)
+    then python_primitive_conversion_method_code(call, env, module, allModules)
     else python_expression_code(call.receiver, env, module, allModules)
             + "." + python_method_name(call.name)
             + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_primitive_conversion_method_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let helper = if call.name == "to_int" then "__capy_to_int" else "__capy_to_long"
+    helper + "(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+
+private fun python_primitive_conversion_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.arguments.is_empty() & (call.name == "to_int" | call.name == "to_long")
+    then python_primitive_conversion_receiver(call.name, python_expression_type(call.receiver, env, module, allModules))
+    else false
+
+private fun python_primitive_conversion_receiver(name: String, receiverType: String): bool =
+    if name == "to_int"
+    then receiverType == "long" | receiverType == "float" | receiverType == "double"
+    else if name == "to_long"
+    then receiverType == "float" | receiverType == "double"
+    else false
 
 private fun python_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = python_lambda_bindings(lambda.parameters) + env
@@ -289,7 +308,7 @@ private fun python_lambda_bindings(parameters: List[String]): List[PythonBinding
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [PythonBinding { name: parameter, pythonName: python_identifier(parameter) }]
+        [PythonBinding { name: parameter, pythonName: python_identifier(parameter), typeName: python_unknown_type() }]
             + python_lambda_bindings(parameters[1:])
 
 private fun python_expression_list_code(expressions: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -422,13 +441,13 @@ private fun python_reduce_parameters(reduce: CompiledReduceExpression): String =
 private fun python_reduce_bindings(reduce: CompiledReduceExpression, env: List[PythonBinding]): List[PythonBinding] =
     if reduce.keyName.is_empty()
     then [
-            PythonBinding { name: reduce.accumulatorName, pythonName: python_identifier(reduce.accumulatorName) },
-            PythonBinding { name: reduce.valueName, pythonName: python_identifier(reduce.valueName) },
+            PythonBinding { name: reduce.accumulatorName, pythonName: python_identifier(reduce.accumulatorName), typeName: python_unknown_type() },
+            PythonBinding { name: reduce.valueName, pythonName: python_identifier(reduce.valueName), typeName: python_unknown_type() },
         ] + env
     else [
-            PythonBinding { name: reduce.accumulatorName, pythonName: python_identifier(reduce.accumulatorName) },
-            PythonBinding { name: reduce.keyName, pythonName: python_identifier(reduce.keyName) },
-            PythonBinding { name: reduce.valueName, pythonName: python_identifier(reduce.valueName) },
+            PythonBinding { name: reduce.accumulatorName, pythonName: python_identifier(reduce.accumulatorName), typeName: python_unknown_type() },
+            PythonBinding { name: reduce.keyName, pythonName: python_identifier(reduce.keyName), typeName: python_unknown_type() },
+            PythonBinding { name: reduce.valueName, pythonName: python_identifier(reduce.valueName), typeName: python_unknown_type() },
         ] + env
 
 private fun python_match_expression_code(matchExpression: CompiledMatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -493,7 +512,7 @@ private fun python_match_case_bindings(bindings: List[String]): List[PythonBindi
     match bindings[0] with
     case None -> []
     case Some { binding } ->
-        [PythonBinding { name: binding, pythonName: python_identifier(binding) }]
+        [PythonBinding { name: binding, pythonName: python_identifier(binding), typeName: python_unknown_type() }]
             + python_match_case_bindings(bindings[1:])
 
 private fun python_block_expression_code(block: CompiledBlockExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -508,20 +527,126 @@ private fun python_block_binding_expressions(bindings: List[CompiledLetBinding],
     case None -> ""
     case Some { binding } ->
         "(" + python_identifier(binding.name) + " := " + python_expression_code(binding.value, env, module, allModules) + "), "
-            + python_block_binding_expressions(bindings[1:], [PythonBinding { name: binding.name, pythonName: python_identifier(binding.name) }] + env, module, allModules)
+            + python_block_binding_expressions(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
 
 private fun python_block_statements(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
         indent + python_identifier(binding.name) + " = " + python_expression_code(binding.value, env, module, allModules) + python_newline()
-            + python_block_statements(bindings[1:], [PythonBinding { name: binding.name, pythonName: python_identifier(binding.name) }] + env, module, allModules, indent)
+            + python_block_statements(bindings[1:], [python_let_binding(binding)] + env, module, allModules, indent)
 
 private fun python_block_env(bindings: List[CompiledLetBinding], env: List[PythonBinding]): List[PythonBinding] =
     match bindings[0] with
     case None -> env
     case Some { binding } ->
-        python_block_env(bindings[1:], [PythonBinding { name: binding.name, pythonName: python_identifier(binding.name) }] + env)
+        python_block_env(bindings[1:], [python_let_binding(binding)] + env)
+
+private fun python_let_binding(binding: CompiledLetBinding): PythonBinding =
+    PythonBinding { name: binding.name, pythonName: python_identifier(binding.name), typeName: binding.typeReference.name }
+
+private fun python_expression_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledIntLiteral _ -> python_int_type()
+    case CompiledLongLiteral _ -> python_long_type()
+    case CompiledFloatLiteral _ -> python_float_type()
+    case CompiledDoubleLiteral _ -> python_double_type()
+    case CompiledBoolLiteral _ -> python_bool_type()
+    case CompiledStringLiteral _ -> python_string_type()
+    case CompiledVariableExpression variable -> python_variable_type(variable.name, env)
+    case CompiledUnaryExpression unary -> if unary.operator == "!" then python_bool_type() else python_expression_type(unary.expression, env, module, allModules)
+    case CompiledBinaryExpression binary -> python_binary_expression_type(binary, env, module, allModules)
+    case CompiledFunctionCallExpression call -> python_function_call_expression_type(call.name, module, allModules)
+    case CompiledMethodCallExpression call -> python_method_call_expression_type(call, env, module, allModules)
+    case CompiledListLiteral _ -> python_list_type()
+    case CompiledSetLiteral _ -> python_set_type()
+    case CompiledDictLiteral _ -> python_dict_type()
+    case CompiledTupleLiteral _ -> python_unknown_type()
+    case CompiledIndexExpression _ -> python_unknown_type()
+    case CompiledDataLiteral literal -> literal.typeName
+    case CompiledFieldAccessExpression _ -> python_unknown_type()
+    case CompiledReduceExpression reduce -> python_expression_type(reduce.initial, env, module, allModules)
+    case CompiledIfExpression ifExpression -> python_expression_type(ifExpression.thenBranch, env, module, allModules)
+    case CompiledBlockExpression block -> python_expression_type(block.result, python_block_env(block.bindings, env), module, allModules)
+    case _ -> python_unknown_type()
+
+private fun python_variable_type(name: String, env: List[PythonBinding]): String =
+    match python_lookup_binding(name, env) with
+    case Some { binding } -> binding.typeName
+    case None -> python_unknown_type()
+
+private fun python_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_local_function(name, module.functions) with
+    case Some { function } -> function.returnType.name
+    case None ->
+        match python_find_function_in_imports(name, module.imports, module, allModules) with
+        case Some { function } -> function.returnType.name
+        case None -> python_runtime_function_type(name)
+
+private fun python_runtime_function_type(name: String): String =
+    if name == "assert_that" | name == "assert_all"
+    then python_assert_type()
+    else if name == "test"
+    then python_test_case_type()
+    else if name == "test_file"
+    then python_effect_type()
+    else python_unknown_type()
+
+private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "size"
+    then python_int_type()
+    else if python_primitive_conversion_method_call(call, env, module, allModules)
+    then if call.name == "to_int" then python_int_type() else python_long_type()
+    else if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
+    then python_assert_type()
+    else python_unknown_type()
+
+private fun python_binary_expression_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftType = python_expression_type(binary.left, env, module, allModules)
+    let rightType = python_expression_type(binary.right, env, module, allModules)
+    if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
+    then python_bool_type()
+    else if binary.operator == "+" & (leftType == "String" | rightType == "String")
+    then python_string_type()
+    else if python_numeric_binary_operator(binary.operator) & python_numeric_type(leftType) & python_numeric_type(rightType)
+    then python_promoted_numeric_type(leftType, rightType)
+    else python_unknown_type()
+
+private fun python_bool_binary_operator(operator: String): bool =
+    operator == "&" | operator == "|"
+
+private fun python_comparison_operator(operator: String): bool =
+    operator == "==" | operator == "!=" | operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "?"
+
+private fun python_numeric_binary_operator(operator: String): bool =
+    operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
+        | operator == ".and." | operator == ".nand." | operator == ".or." | operator == ".xor."
+
+private fun python_numeric_type(type: String): bool =
+    type == "byte" | type == "int" | type == "long" | type == "float" | type == "double"
+
+private fun python_promoted_numeric_type(leftType: String, rightType: String): String =
+    if leftType == "double" | rightType == "double"
+    then python_double_type()
+    else if leftType == "float" | rightType == "float"
+    then python_float_type()
+    else if leftType == "long" | rightType == "long"
+    then python_long_type()
+    else python_int_type()
+
+private fun python_int_type(): String = "int"
+private fun python_long_type(): String = "long"
+private fun python_float_type(): String = "float"
+private fun python_double_type(): String = "double"
+private fun python_bool_type(): String = "bool"
+private fun python_string_type(): String = "String"
+private fun python_assert_type(): String = "Assert"
+private fun python_test_case_type(): String = "TestCase"
+private fun python_unknown_type(): String = "any"
+private fun python_list_type(): String = "List"
+private fun python_set_type(): String = "Set"
+private fun python_dict_type(): String = "Dict"
+private fun python_effect_type(): String = "Effect"
 
 private fun python_truthy_expression_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "bool(" + python_expression_code(expression, env, module, allModules) + ")"
@@ -647,7 +772,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "import math" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'pure', 'delay', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '__capy_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'pure', 'delay', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_data']" + python_newline()
     + python_newline()
     + "class Effect:" + python_newline()
     + "    def __init__(self, thunk):" + python_newline()
@@ -722,6 +847,29 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "def __capy_long(value):" + python_newline()
     + "    value = int(value)" + python_newline()
     + "    return ((value + 9223372036854775808) % 18446744073709551616) - 9223372036854775808" + python_newline()
+    + python_newline()
+    + "def __capy_to_int(value):" + python_newline()
+    + "    if isinstance(value, float):" + python_newline()
+    + "        if math.isnan(value):" + python_newline()
+    + "            return 0" + python_newline()
+    + "        if value > 2147483647.0:" + python_newline()
+    + "            return 2147483647" + python_newline()
+    + "        if value < -2147483648.0:" + python_newline()
+    + "            return -2147483648" + python_newline()
+    + "        return int(value)" + python_newline()
+    + "    value = int(value)" + python_newline()
+    + "    return ((value + 2147483648) % 4294967296) - 2147483648" + python_newline()
+    + python_newline()
+    + "def __capy_to_long(value):" + python_newline()
+    + "    if isinstance(value, float):" + python_newline()
+    + "        if math.isnan(value):" + python_newline()
+    + "            return 0" + python_newline()
+    + "        if value >= 9223372036854775808.0:" + python_newline()
+    + "            return 9223372036854775807" + python_newline()
+    + "        if value <= -9223372036854775808.0:" + python_newline()
+    + "            return -9223372036854775808" + python_newline()
+    + "        return int(value)" + python_newline()
+    + "    return __capy_long(value)" + python_newline()
     + python_newline()
     + "def digits(number):" + python_newline()
     + "    number = int(number)" + python_newline()
@@ -940,10 +1088,17 @@ private fun python_test_gather_calls_for_module(functions: List[CompiledFunction
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if function.name == "tests" & python_test_function_gatherable(function) & python_module_gatherable(module, allModules)
-        then "    files.extend(_gather_module(" + python_string_literal(python_module_import_name(module)) + "))" + python_newline()
+        python_test_gather_call_for_function(function, module, allModules)
             + python_test_gather_calls_for_module(functions[1:], module, allModules)
-        else python_test_gather_calls_for_module(functions[1:], module, allModules)
+
+private fun python_test_gather_call_for_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if function.name == "tests"
+    then if python_test_function_gatherable(function)
+        then if python_module_gatherable(module, allModules)
+            then "    files.extend(_gather_module(" + python_string_literal(python_module_import_name(module)) + "))" + python_newline()
+            else ""
+        else ""
+    else ""
 
 private fun python_module_gatherable(module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_module_imports_gatherable(module.imports, module, allModules)
@@ -969,12 +1124,15 @@ private fun python_module_functions_gatherable(functions: List[CompiledFunction]
             & python_module_functions_gatherable(functions[1:], module, allModules)
 
 private fun python_function_gatherable(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_imported_function(function)
-        | python_compiled_schema(function)
-        | python_compiled_object_helper_function(function)
-        | python_expression_gatherable(function.body, module, allModules)
+    if python_imported_function(function)
+    then true
+    else if python_compiled_schema(function)
+    then true
+    else if python_compiled_object_helper_function(function)
+    then true
+    else python_expression_gatherable(function.body, python_parameter_bindings(function.parameters), module, allModules)
 
-private fun python_expression_gatherable(expression: CompiledExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
     case CompiledUnsupportedExpression _ -> false
     case CompiledIntLiteral _ -> true
@@ -985,36 +1143,36 @@ private fun python_expression_gatherable(expression: CompiledExpression, module:
     case CompiledStringLiteral _ -> true
     case CompiledVariableExpression _ -> true
     case CompiledIfExpression ifExpression ->
-        python_expression_gatherable(ifExpression.condition, module, allModules)
-            & python_expression_gatherable(ifExpression.thenBranch, module, allModules)
-            & python_expression_gatherable(ifExpression.elseBranch, module, allModules)
-    case CompiledBinaryExpression binary -> python_binary_expression_gatherable(binary, module, allModules)
+        python_expression_gatherable(ifExpression.condition, env, module, allModules)
+            & python_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
+            & python_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+    case CompiledBinaryExpression binary -> python_binary_expression_gatherable(binary, env, module, allModules)
     case CompiledUnaryExpression unary ->
         python_unary_operator_gatherable(unary.operator)
-            & python_expression_gatherable(unary.expression, module, allModules)
+            & python_expression_gatherable(unary.expression, env, module, allModules)
     case CompiledFunctionCallExpression call ->
-        python_function_call_gatherable(call, module, allModules)
+        python_function_call_gatherable(call, env, module, allModules)
     case CompiledFunctionReferenceExpression _ -> false
     case CompiledMethodCallExpression call ->
-        python_method_call_gatherable(call, module, allModules)
+        python_method_call_gatherable(call, env, module, allModules)
     case CompiledWithExpression _ -> false
     case CompiledLambdaExpression lambda ->
-        python_expression_gatherable(lambda.body, module, allModules)
-    case CompiledListLiteral literal -> python_expressions_gatherable(literal.values, module, allModules)
-    case CompiledSetLiteral literal -> python_expressions_gatherable(literal.values, module, allModules)
-    case CompiledDictLiteral literal -> python_dict_entries_gatherable(literal.entries, module, allModules)
-    case CompiledTupleLiteral literal -> python_expressions_gatherable(literal.values, module, allModules)
+        python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
+    case CompiledListLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
+    case CompiledSetLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
+    case CompiledDictLiteral literal -> python_dict_entries_gatherable(literal.entries, env, module, allModules)
+    case CompiledTupleLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
     case CompiledIndexExpression index ->
-        python_expression_gatherable(index.receiver, module, allModules)
-            & python_expression_gatherable(index.index, module, allModules)
-            & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, module, allModules))
-    case CompiledDataLiteral literal -> python_data_fields_gatherable(literal.fields, module, allModules)
-    case CompiledFieldAccessExpression access -> python_expression_gatherable(access.receiver, module, allModules)
-    case CompiledReduceExpression reduce -> python_reduce_expression_gatherable(reduce, module, allModules)
-    case CompiledMatchExpression matchExpression -> python_match_expression_gatherable(matchExpression, module, allModules)
+        python_expression_gatherable(index.receiver, env, module, allModules)
+            & python_expression_gatherable(index.index, env, module, allModules)
+            & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+    case CompiledDataLiteral literal -> python_data_fields_gatherable(literal.fields, env, module, allModules)
+    case CompiledFieldAccessExpression access -> python_expression_gatherable(access.receiver, env, module, allModules)
+    case CompiledReduceExpression reduce -> python_reduce_expression_gatherable(reduce, env, module, allModules)
+    case CompiledMatchExpression matchExpression -> python_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
-        python_bindings_gatherable(block.bindings, module, allModules)
-            & python_expression_gatherable(block.result, module, allModules)
+        python_bindings_gatherable(block.bindings, env, module, allModules)
+            & python_expression_gatherable(block.result, python_block_env(block.bindings, env), module, allModules)
 
 private fun python_binary_operator_gatherable(operator: String): bool =
     operator == "+"
@@ -1037,11 +1195,11 @@ private fun python_binary_operator_gatherable(operator: String): bool =
         | operator == ".or."
         | operator == ".xor."
 
-private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_binary_operator_gatherable(binary.operator)
         & !python_unsupported_pipe_lambda(binary)
-        & python_expression_gatherable(binary.left, module, allModules)
-        & python_expression_gatherable(binary.right, module, allModules)
+        & python_expression_gatherable(binary.left, env, module, allModules)
+        & python_expression_gatherable(binary.right, env, module, allModules)
 
 private fun python_unsupported_pipe_lambda(binary: CompiledBinaryExpression): bool =
     binary.operator == "|" & python_lambda_expression(binary.right)
@@ -1054,19 +1212,27 @@ private fun python_lambda_expression(expression: CompiledExpression): bool =
 private fun python_unary_operator_gatherable(operator: String): bool =
     operator == "-" | operator == "!" | operator == ".not."
 
-private fun python_function_call_gatherable(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expressions_gatherable(call.arguments, module, allModules)
-        & (python_runtime_function(call.name)
-            | python_local_function_unambiguous(call.name, module.functions)
-            | python_imported_function_exists(call.name, module.imports, module, allModules))
+private fun python_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if python_expressions_gatherable(call.arguments, env, module, allModules)
+    then if python_runtime_function(call.name)
+        then true
+        else if python_local_function_unambiguous(call.name, module.functions)
+        then true
+        else python_imported_function_exists(call.name, module.imports, module, allModules)
+    else false
 
-private fun python_method_call_gatherable(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    (call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false")
-        & python_expression_gatherable(call.receiver, module, allModules)
-        & python_expressions_gatherable(call.arguments, module, allModules)
-    | call.name == "size"
-        & call.arguments.is_empty()
-        & python_expression_gatherable(call.receiver, module, allModules)
+private fun python_method_call_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
+    then if python_expression_gatherable(call.receiver, env, module, allModules)
+        then python_expressions_gatherable(call.arguments, env, module, allModules)
+        else false
+    else if call.name == "size"
+    then if call.arguments.is_empty()
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else false
+    else if python_primitive_conversion_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+    else false
 
 private fun python_local_function_exists(name: String, functions: List[CompiledFunction]): bool =
     match python_find_local_function(name, functions) with
@@ -1088,54 +1254,54 @@ private fun python_imported_function_exists(name: String, imports: List[Compiled
     case Some _ -> true
     case None -> false
 
-private fun python_expressions_gatherable(expressions: List[CompiledExpression], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_expressions_gatherable(expressions: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expressions[0] with
     case None -> true
     case Some { expression } ->
-        python_expression_gatherable(expression, module, allModules)
-            & python_expressions_gatherable(expressions[1:], module, allModules)
+        python_expression_gatherable(expression, env, module, allModules)
+            & python_expressions_gatherable(expressions[1:], env, module, allModules)
 
-private fun python_dict_entries_gatherable(entries: List[CompiledDictEntry], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_dict_entries_gatherable(entries: List[CompiledDictEntry], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match entries[0] with
     case None -> true
     case Some { entry } ->
-        python_expression_gatherable(entry.key, module, allModules)
-            & python_expression_gatherable(entry.value, module, allModules)
-            & python_dict_entries_gatherable(entries[1:], module, allModules)
+        python_expression_gatherable(entry.key, env, module, allModules)
+            & python_expression_gatherable(entry.value, env, module, allModules)
+            & python_dict_entries_gatherable(entries[1:], env, module, allModules)
 
-private fun python_data_fields_gatherable(fields: List[CompiledDataField], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_data_fields_gatherable(fields: List[CompiledDataField], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match fields[0] with
     case None -> true
     case Some { field } ->
         !field.spread
-            & python_expression_gatherable(field.value, module, allModules)
-            & python_data_fields_gatherable(fields[1:], module, allModules)
+            & python_expression_gatherable(field.value, env, module, allModules)
+            & python_data_fields_gatherable(fields[1:], env, module, allModules)
 
-private fun python_reduce_expression_gatherable(reduce: CompiledReduceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_reduce_expression_gatherable(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     !reduce.accumulatorName.is_empty()
         & !reduce.valueName.is_empty()
-        & python_expression_gatherable(reduce.receiver, module, allModules)
-        & python_expression_gatherable(reduce.initial, module, allModules)
-        & python_expression_gatherable(reduce.body, module, allModules)
+        & python_expression_gatherable(reduce.receiver, env, module, allModules)
+        & python_expression_gatherable(reduce.initial, env, module, allModules)
+        & python_expression_gatherable(reduce.body, python_reduce_bindings(reduce, env), module, allModules)
 
-private fun python_match_expression_gatherable(matchExpression: CompiledMatchExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(matchExpression.value, module, allModules)
-        & python_match_cases_gatherable(matchExpression.cases, module, allModules)
+private fun python_match_expression_gatherable(matchExpression: CompiledMatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_gatherable(matchExpression.value, env, module, allModules)
+        & python_match_cases_gatherable(matchExpression.cases, env, module, allModules)
 
 private fun python_match_supported(matchExpression: CompiledMatchExpression): bool =
     python_match_cases_supported(matchExpression.cases)
 
-private fun python_match_cases_gatherable(cases: List[CompiledMatchCase], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_match_cases_gatherable(cases: List[CompiledMatchCase], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        python_match_case_gatherable(matchCase, module, allModules)
-            & (cases[1:].is_empty() | python_match_cases_gatherable(cases[1:], module, allModules))
+        python_match_case_gatherable(matchCase, env, module, allModules)
+            & (cases[1:].is_empty() | python_match_cases_gatherable(cases[1:], env, module, allModules))
 
-private fun python_match_case_gatherable(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_match_case_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_match_case_supported(matchCase)
-        & (!matchCase.hasLiteral | python_expression_gatherable(matchCase.literal, module, allModules))
-        & python_expression_gatherable(matchCase.body, module, allModules)
+        & (!matchCase.hasLiteral | python_expression_gatherable(matchCase.literal, env, module, allModules))
+        & python_expression_gatherable(matchCase.body, python_match_case_env(matchCase, env), module, allModules)
 
 private fun python_match_cases_supported(cases: List[CompiledMatchCase]): bool =
     match cases[0] with
@@ -1148,13 +1314,13 @@ private fun python_match_case_supported(matchCase: CompiledMatchCase): bool =
     !matchCase.hasGuard
         & (matchCase.wildcard | !matchCase.typeName.is_empty() | matchCase.hasLiteral)
 
-private fun python_bindings_gatherable(bindings: List[CompiledLetBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_bindings_gatherable(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match bindings[0] with
     case None -> true
     case Some { binding } ->
         binding.operator == "="
-            & python_expression_gatherable(binding.value, module, allModules)
-            & python_bindings_gatherable(bindings[1:], module, allModules)
+            & python_expression_gatherable(binding.value, env, module, allModules)
+            & python_bindings_gatherable(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
 
 private fun python_test_function_gatherable(function: CompiledFunction): bool =
     match function.body with
