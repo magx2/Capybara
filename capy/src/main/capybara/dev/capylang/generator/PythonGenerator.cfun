@@ -106,9 +106,28 @@ private fun python_constant(function: CompiledFunction, module: CompiledModule, 
     python_identifier(function.name) + " = " + python_expression_code(function.body, [], module, allModules) + python_newline()
 
 private fun python_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let env = python_parameter_bindings(function.parameters)
-    "def " + python_function_name(function) + "(" + python_parameters(function.parameters) + "):" + python_newline()
+    let env = python_function_bindings(function)
+    "def " + python_function_name(function) + "(" + python_function_parameters(function) + "):" + python_newline()
     + python_return_statement(function.body, env, module, allModules, "    ")
+
+private fun python_function_parameters(function: CompiledFunction): String =
+    if python_extension_method_function(function)
+    then python_identifier("this") + python_method_parameter_tail(function.parameters)
+    else python_parameters(function.parameters)
+
+private fun python_method_parameter_tail(parameters: List[CompiledFunctionParameter]): String =
+    if parameters.is_empty()
+    then ""
+    else ", " + python_parameters(parameters)
+
+private fun python_function_bindings(function: CompiledFunction): List[PythonBinding] =
+    if python_extension_method_function(function)
+    then [PythonBinding {
+            name: "this",
+            pythonName: python_identifier("this"),
+            typeName: python_method_owner_name(function.name)
+        }] + python_parameter_bindings(function.parameters)
+    else python_parameter_bindings(function.parameters)
 
 private fun python_return_statement(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match expression with
@@ -173,7 +192,10 @@ private fun python_variable_code(name: String, env: List[PythonBinding]): String
     case None -> python_identifier(name)
 
 private fun python_binary_expression_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if binary.operator == ".nand."
+    let leftType = python_expression_type(binary.left, env, module, allModules)
+    if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
+    then python_binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
+    else if binary.operator == ".nand."
     then "(~(" + python_expression_code(binary.left, env, module, allModules)
         + " & "
         + python_expression_code(binary.right, env, module, allModules)
@@ -206,6 +228,21 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
         + " " + python_binary_operator(binary.operator) + " "
         + python_expression_code(binary.right, env, module, allModules)
         + ")"
+
+private fun python_binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+private fun python_binary_extension_operator_code_with_left_type(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some { function } ->
+        python_function_name(function)
+            + "("
+            + python_expression_code(binary.left, env, module, allModules)
+            + python_extension_method_argument_tail([binary.right], env, module, allModules)
+            + ")"
+    case None -> "__capy_unsupported('extension operator')"
 
 private fun python_binary_runtime_call(name: String, binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = name
@@ -270,9 +307,24 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
     else if python_primitive_conversion_method_call(call, env, module, allModules)
     then python_primitive_conversion_method_code(call, env, module, allModules)
-    else python_expression_code(call.receiver, env, module, allModules)
-            + "." + python_method_name(call.name)
-            + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+    else match python_find_extension_method(call, env, module, allModules) with
+        case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
+        case None ->
+            python_expression_code(call.receiver, env, module, allModules)
+                + "." + python_method_name(call.name)
+                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_function_name(function)
+        + "("
+        + python_expression_code(call.receiver, env, module, allModules)
+        + python_extension_method_argument_tail(call.arguments, env, module, allModules)
+        + ")"
+
+private fun python_extension_method_argument_tail(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if arguments.is_empty()
+    then ""
+    else ", " + python_expression_list_code(arguments, env, module, allModules)
 
 private fun python_primitive_conversion_method_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let helper = if call.name == "to_int" then "__capy_to_int" else "__capy_to_long"
@@ -599,11 +651,16 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then if call.name == "to_int" then python_int_type() else python_long_type()
     else if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
     then python_assert_type()
-    else python_unknown_type()
+    else match python_find_extension_method(call, env, module, allModules) with
+        case Some { function } -> function.returnType.name
+        case None -> python_unknown_type()
 
 private fun python_binary_expression_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
     let rightType = python_expression_type(binary.right, env, module, allModules)
+    match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some { function } -> function.returnType.name
+    case None ->
     if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
     then python_bool_type()
     else if binary.operator == "+" & (leftType == "String" | rightType == "String")
@@ -710,6 +767,59 @@ private fun python_find_imported_function_or_rest(name: String, importedModule: 
 private fun python_find_imported_module(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     python_find_module_by_path(python_import_module_path(declaration.modulePath, module), allModules)
 
+private fun python_find_extension_method(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    if receiverType == python_unknown_type()
+    then /capy/lang/Option.None {}
+    else python_find_extension_method_in_scope(receiverType, call.name, module, allModules)
+
+private fun python_find_binary_extension_operator_with_left_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    if leftType == python_unknown_type()
+    then /capy/lang/Option.None {}
+    else python_find_extension_method_in_scope(leftType, binary.operator, module, allModules)
+
+private fun python_find_extension_method_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_method_function(ownerName, methodName, module.functions) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> python_find_extension_method_in_imports(ownerName, methodName, module.imports, module, allModules)
+
+private fun python_find_method_function(ownerName: String, methodName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if python_method_function_matches(ownerName, methodName, function)
+        then /capy/lang/Option.Some { function }
+        else python_find_method_function(ownerName, methodName, functions[1:])
+
+private fun python_method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
+    if python_skip_function(function)
+    then false
+    else
+        let idx = python_last_dot_index(function.name)
+        if idx < 0
+        then false
+        else python_method_owner_base_name(function.name[0, idx]) == python_method_owner_base_name(ownerName)
+            & python_method_member_name(function.name[idx + 1, function.name.size().value]) == python_method_member_name(methodName)
+
+private fun python_find_extension_method_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.wildcard
+            & !declaration.qualified
+            & !python_stdlib_import(declaration.modulePath)
+            & !python_string_list_contains(methodName, declaration.excludedNames)
+        then python_find_extension_method_in_import(ownerName, methodName, imports[1:], declaration, module, allModules)
+        else python_find_extension_method_in_imports(ownerName, methodName, imports[1:], module, allModules)
+
+private fun python_find_extension_method_in_import(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case None -> python_find_extension_method_in_imports(ownerName, methodName, rest, module, allModules)
+    case Some { importedModule } ->
+        match python_find_method_function(ownerName, methodName, importedModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { function }
+        case None -> python_find_extension_method_in_imports(ownerName, methodName, rest, module, allModules)
+
 private fun python_import_module_path(modulePath: String, module: CompiledModule): String =
     if python_string_has_prefix(modulePath, "/")
     then modulePath[1, modulePath.size().value]
@@ -741,6 +851,22 @@ private fun python_module_path(module: CompiledModule): String =
     if module.path.is_empty()
     then module.name
     else module.path + "/" + module.name
+
+private fun python_extension_method_function(function: CompiledFunction): bool =
+    python_last_dot_index(function.name) >= 0
+
+private fun python_method_owner_name(name: String): String =
+    let idx = python_last_dot_index(name)
+    if idx < 0 then "" else name[0, idx]
+
+private fun python_method_owner_base_name(name: String): String =
+    let bracket = python_first_index_of(name, "[", 0)
+    if bracket < 0 then name else name[0, bracket]
+
+private fun python_method_member_name(name: String): String =
+    if name.size().value >= 2 & python_string_has_prefix(name, "`")
+    then name[1, name.size().value - 1]
+    else name
 
 private fun python_function_name(function: CompiledFunction): String =
     if function.name == "tests"
@@ -1130,7 +1256,7 @@ private fun python_function_gatherable(function: CompiledFunction, module: Compi
     then true
     else if python_compiled_object_helper_function(function)
     then true
-    else python_expression_gatherable(function.body, python_parameter_bindings(function.parameters), module, allModules)
+    else python_expression_gatherable(function.body, python_function_bindings(function), module, allModules)
 
 private fun python_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
@@ -1196,7 +1322,11 @@ private fun python_binary_operator_gatherable(operator: String): bool =
         | operator == ".xor."
 
 private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_binary_operator_gatherable(binary.operator)
+    let leftType = python_expression_type(binary.left, env, module, allModules)
+    if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
+    then python_expression_gatherable(binary.left, env, module, allModules)
+        & python_expression_gatherable(binary.right, env, module, allModules)
+    else python_binary_operator_gatherable(binary.operator)
         & !python_unsupported_pipe_lambda(binary)
         & python_expression_gatherable(binary.left, env, module, allModules)
         & python_expression_gatherable(binary.right, env, module, allModules)
@@ -1232,7 +1362,11 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
         else false
     else if python_primitive_conversion_method_call(call, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
-    else false
+    else match python_find_extension_method(call, env, module, allModules) with
+        case Some _ ->
+            python_expression_gatherable(call.receiver, env, module, allModules)
+                & python_expressions_gatherable(call.arguments, env, module, allModules)
+        case None -> false
 
 private fun python_local_function_exists(name: String, functions: List[CompiledFunction]): bool =
     match python_find_local_function(name, functions) with
@@ -1591,5 +1725,16 @@ private fun python_first_index_of(value: String, expected: String, idx: int): in
             if actual == expected
             then idx
             else python_first_index_of(value, expected, idx + 1)
+
+private fun python_last_dot_index(value: String): int =
+    python_last_dot_index_from(value, 0, -1)
+
+private fun python_last_dot_index_from(value: String, idx: int, found: int): int =
+    if idx >= value.size().value
+    then found
+    else match value[idx] with
+        case None -> found
+        case Some { actual } ->
+            python_last_dot_index_from(value, idx + 1, if actual == "." then idx else found)
 
 private fun python_newline(): String = '\n'
