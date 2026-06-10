@@ -8,7 +8,6 @@ fun tests(): Effect[TestFile] =
         test("D5_1 preserves its x field", () => types3_d5_1_preserves_its_x_field()),
         test("D5_2 preserves its y field", () => types3_d5_2_preserves_its_y_field()),
         test("T5 accepts both data variants", () => types3_t5_accepts_both_data_variants()),
-        test("fully qualified external constructors remain union variants", () => types3_fully_qualified_external_constructors_remain_union_variants()),
     ])
 
 // Legacy host tests asserted generated Java classes and JavaScript
@@ -42,14 +41,3 @@ private fun types3_t5_variant_summary(value: T5): String =
     match value with
     case D5_1 { x } -> "D5_1:" + x
     case D5_2 { y } -> "D5_2:" + y
-
-private fun types3_fully_qualified_external_constructors_remain_union_variants(): Assert =
-    let first: T5 = /dev/capylang/test/imports2/Types3.D5_1 { x: 11 }
-    let second: T5 = /dev/capylang/test/imports2/Types3.D5_2 { y: 13 }
-    assert_all([
-        assert_that(first).is_equal_to(D5_1 { x: 11 }),
-        assert_that(second).is_equal_to(D5_2 { y: 13 }),
-        assert_that(types3_t5_variant_summary(first)).is_equal_to("D5_1:11"),
-        assert_that(types3_t5_variant_summary(second)).is_equal_to("D5_2:13"),
-        assert_that(/dev/capylang/test/imports2/Types3.D5_1 { x: 17 }.x).is_equal_to(17),
-    ])

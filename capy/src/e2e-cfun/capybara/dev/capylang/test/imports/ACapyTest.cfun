@@ -1,8 +1,7 @@
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
-import /dev/capylang/test/imports/A
-from A import { Value }
+from A import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/imports/A.cfun", [
@@ -13,9 +12,9 @@ fun tests(): Effect[TestFile] =
 
 private fun foo_increments_the_provided_integer(): Assert =
     assert_all([
-        assert_that(A.foo(0)).is_equal_to(1),
-        assert_that(A.foo(7)).is_equal_to(8),
-        assert_that(A.foo(-2)).is_equal_to(-1),
+        assert_that(foo(0)).is_equal_to(1),
+        assert_that(foo(7)).is_equal_to(8),
+        assert_that(foo(-2)).is_equal_to(-1),
     ])
 
 private fun value_preserves_its_amount_field(): Assert =
@@ -27,7 +26,7 @@ private fun value_preserves_its_amount_field(): Assert =
 
 private fun value_returns_a_value_with_amount_increased_by_ten(): Assert =
     assert_all([
-        assert_that(A.value(0)).is_equal_to(Value { amount: 10 }),
-        assert_that(A.value(0).amount).is_equal_to(10),
-        assert_that(A.value(7).amount).is_equal_to(17),
+        assert_that(value(0)).is_equal_to(Value { amount: 10 }),
+        assert_that(value(0).amount).is_equal_to(10),
+        assert_that(value(7).amount).is_equal_to(17),
     ])

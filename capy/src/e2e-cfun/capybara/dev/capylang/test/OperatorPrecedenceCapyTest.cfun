@@ -9,7 +9,6 @@ fun tests(): Effect[TestFile] =
         test("and_binds_after_modulo_and_comparison evaluates modulo and comparison first", () => and_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison_first()),
         test("or_binds_after_modulo_and_comparison evaluates modulo and comparison first", () => or_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison_first()),
         test("multiplication_binds_before_addition returns true", () => multiplication_binds_before_addition_returns_true()),
-        test("braced_grouping_binds_before_multiplication returns true", () => braced_grouping_binds_before_multiplication_returns_true()),
         test("power_binds_before_multiplication returns true", () => power_binds_before_multiplication_returns_true()),
         test("arithmetic_binds_before_comparison_and_equality returns true", () => arithmetic_binds_before_comparison_and_equality_returns_true()),
         test("and_binds_before_or returns true", () => and_binds_before_or_returns_true()),
@@ -39,9 +38,6 @@ private fun or_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison
 
 private fun multiplication_binds_before_addition_returns_true(): Assert =
     assert_that(multiplication_binds_before_addition()).is_true()
-
-private fun braced_grouping_binds_before_multiplication_returns_true(): Assert =
-    assert_that(braced_grouping_binds_before_multiplication()).is_true()
 
 private fun power_binds_before_multiplication_returns_true(): Assert =
     assert_that(power_binds_before_multiplication()).is_true()

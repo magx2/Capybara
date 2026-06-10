@@ -51,10 +51,10 @@ private fun qualified_type_imports_construct_expected_data(): Assert =
 
 private fun fully_qualified_types_and_constructors_construct_expected_variants(): Assert =
     assert_all([
-        assert_that(type5(5, 2)).is_equal_to(/dev/capylang/test/imports2/Types3.D5_1 { x: 5 }),
-        assert_that(/dev/capylang/test/imports2/Types3.D5_1 { x: 5 }.x).is_equal_to(5),
-        assert_that(type5(0, 7)).is_equal_to(/dev/capylang/test/imports2/Types3.D5_2 { y: 7 }),
-        assert_that(/dev/capylang/test/imports2/Types3.D5_2 { y: 7 }.y).is_equal_to(7),
+        assert_that(type5(5, 2)).is_equal_to(/dev/capylang/capybara/imports2/Types3.D5_1 { x: 5 }),
+        assert_that(/dev/capylang/capybara/imports2/Types3.D5_1 { x: 5 }.x).is_equal_to(5),
+        assert_that(type5(0, 7)).is_equal_to(/dev/capylang/capybara/imports2/Types3.D5_2 { y: 7 }),
+        assert_that(/dev/capylang/capybara/imports2/Types3.D5_2 { y: 7 }.y).is_equal_to(7),
     ])
 
 private fun qualified_only_imports_stay_isolated_by_module_alias(): Assert =

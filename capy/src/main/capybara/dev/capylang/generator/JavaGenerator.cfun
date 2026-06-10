@@ -659,12 +659,25 @@ private fun stdlib_import(modulePath: String): bool =
 
 private fun imported_module_class(module: CompiledModule, modulePath: String): String =
     if java_generator_string_has_prefix(modulePath, "/")
-    then path_to_class(modulePath[1, modulePath.size()])
+    then path_to_class(java_generator_normalize_import_module_path(modulePath))
     else if modulePath ? "/"
-    then path_to_class(modulePath)
+    then path_to_class(java_generator_normalize_import_module_path(modulePath))
     else if module.path.is_empty()
     then modulePath
     else module.path.replace("/", ".") + "." + modulePath
+
+private fun java_generator_normalize_import_module_path(path: String): String =
+    let normalized = if java_generator_string_has_prefix(path, "/") then path[1, path.size()] else path
+    if java_generator_string_has_prefix(normalized, "dev/capylang/capybara/")
+    then java_generator_normalize_capybara_import_suffix(normalized["dev/capylang/capybara/".size(), normalized.size()], "dev/capylang/")
+    else if java_generator_string_has_prefix(normalized, "capybara/")
+    then java_generator_normalize_capybara_import_suffix(normalized["capybara/".size(), normalized.size()], "")
+    else normalized
+
+private fun java_generator_normalize_capybara_import_suffix(suffix: String, prefix: String): String =
+    if java_generator_string_has_prefix(suffix, "test/")
+    then prefix + suffix
+    else prefix + "test/" + suffix
 
 private fun path_to_class(path: String): String =
     path.replace("/", ".")
@@ -1671,7 +1684,7 @@ private fun option_pipe_code(binary: CompiledBinaryExpression, leftType: Compile
 
 private fun option_filter_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
-    let bodyCode = truthy_expression_code(lambda.body, lambdaEnv, module, allModules)
+    let bodyCode = "!(" + truthy_expression_code(lambda.body, lambdaEnv, module, allModules) + ")"
     lambda_code_with_result(lambda.parameters, valueType, bodyCode)
 
 private fun option_flat_map_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -9123,9 +9136,9 @@ private fun qualified_call_member(name: String): String =
 private fun qualified_call_class_name(name: String, module: CompiledModule): String =
     let qualifier = name[0, last_dot_index(name)]
     if java_generator_string_has_prefix(qualifier, "/")
-    then path_to_class(qualifier[1, qualifier.size()])
+    then path_to_class(java_generator_normalize_import_module_path(qualifier))
     else if qualifier ? "/"
-    then path_to_class(qualifier)
+    then path_to_class(java_generator_normalize_import_module_path(qualifier))
     else imported_module_class(module, qualifier)
 
 private fun find_qualified_function(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =

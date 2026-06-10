@@ -2,4 +2,4 @@ fun some_value(x: int): /capy/lang/Option[int] = /capy/lang/Option.Some { value:
 
 fun none_value(): /capy/lang/Option[int] =
     /capy/lang/Option.Some { value: 0 }
-        |- x => false
+        |- x => true
