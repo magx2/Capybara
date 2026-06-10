@@ -1000,14 +1000,14 @@ private fun python_local_function_exists(name: String, functions: List[CompiledF
     case None -> false
 
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
-    python_callable_function_count(name, functions) == 1
+    python_local_function_count(name, functions) == 1
 
-private fun python_callable_function_count(name: String, functions: List[CompiledFunction]): int =
+private fun python_local_function_count(name: String, functions: List[CompiledFunction]): int =
     match functions[0] with
     case None -> 0
     case Some { function } ->
-        let current = if python_callable_function(function) & function.name == name then 1 else 0
-        current + python_callable_function_count(name, functions[1:])
+        let current = if !python_skip_function(function) & function.name == name then 1 else 0
+        current + python_local_function_count(name, functions[1:])
 
 private fun python_imported_function_exists(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_find_function_in_imports(name, imports, module, allModules) with
