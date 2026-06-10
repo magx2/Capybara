@@ -140,7 +140,15 @@ def filter_test_files(files, raw_selectors):
 
     for test_file in files:
         file_name = test_file_name(test_file)
-        for index, selector in enumerate(selectors):
+        file_selectors = [
+            (index, selector)
+            for index, selector in enumerate(selectors)
+            if selector_matches_file(selector, file_name)
+        ]
+        if len(file_selectors) == 0:
+            continue
+
+        for index, selector in file_selectors:
             if selector["test_name"] is None and selector_matches_file(selector, file_name):
                 matched[index] = True
 
@@ -148,7 +156,7 @@ def filter_test_files(files, raw_selectors):
         for test_case in test_cases(test_file):
             test_name = field(test_case, "name")
             include = False
-            for index, selector in enumerate(selectors):
+            for index, selector in file_selectors:
                 if selector_matches(selector, file_name, test_name):
                     matched[index] = True
                     include = True
