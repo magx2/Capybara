@@ -155,7 +155,10 @@ private fun python_parameter_bindings(parameters: List[CompiledFunctionParameter
 
 private fun python_expression_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
-    case CompiledUnsupportedExpression unsupported -> "__capy_unsupported(" + python_string_literal(unsupported.source) + ")"
+    case CompiledUnsupportedExpression unsupported ->
+        if python_compiled_placeholder_source(unsupported.source)
+        then "__capy_not_implemented(" + python_string_literal(python_placeholder_function_name(unsupported.source)) + ")"
+        else "__capy_unsupported(" + python_string_literal(unsupported.source) + ")"
     case CompiledIntLiteral literal -> literal.source
     case CompiledLongLiteral literal -> python_long_literal(literal.source)
     case CompiledFloatLiteral literal -> python_decimal_literal(literal.source)
@@ -185,6 +188,14 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
     case CompiledReduceExpression reduce -> python_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_code(matchExpression, env, module, allModules)
     case CompiledBlockExpression block -> python_block_expression_code(block, env, module, allModules)
+
+private fun python_compiled_placeholder_source(source: String): bool =
+    python_string_has_prefix(source, "__capy_placeholder__|")
+
+private fun python_placeholder_function_name(source: String): String =
+    if python_compiled_placeholder_source(source)
+    then source["__capy_placeholder__|".size().value, source.size().value]
+    else ""
 
 private fun python_variable_code(name: String, env: List[PythonBinding]): String =
     match python_lookup_binding(name, env) with
@@ -890,7 +901,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "import math" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'pure', 'delay', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'pure', 'delay', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
     + "class Effect:" + python_newline()
     + "    def __init__(self, thunk):" + python_newline()
@@ -1086,6 +1097,13 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "def __capy_unsupported(source):" + python_newline()
     + "    raise NotImplementedError('Unsupported CFUN expression: ' + str(source))" + python_newline()
     + python_newline()
+    + "def __capy_not_implemented(function_name):" + python_newline()
+    + "    if function_name:" + python_newline()
+    + "        message = 'the function `' + str(function_name) + '` is not yet implemented'" + python_newline()
+    + "    else:" + python_newline()
+    + "        message = 'placeholder expression is not yet implemented'" + python_newline()
+    + "    raise NotImplementedError(message)" + python_newline()
+    + python_newline()
     + "def __capy_data(type_name, fields):" + python_newline()
     + "    result = dict(fields)" + python_newline()
     + "    result['__type'] = type_name" + python_newline()
@@ -1252,7 +1270,7 @@ private fun python_function_gatherable(function: CompiledFunction, module: Compi
 
 private fun python_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
-    case CompiledUnsupportedExpression _ -> false
+    case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
