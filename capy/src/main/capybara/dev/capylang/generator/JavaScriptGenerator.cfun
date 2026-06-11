@@ -191,7 +191,7 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledDictLiteral literal -> "new Map([" + java_script_dict_entries_code(literal.entries, env, module, allModules) + "])"
     case CompiledTupleLiteral literal -> "[" + java_script_expression_list_code(literal.values, env, module, allModules) + "]"
     case CompiledIndexExpression index -> java_script_index_expression_code(index, env, module, allModules)
-    case CompiledDataLiteral literal -> "__capy_data(" + java_script_string_literal(literal.typeName) + ", {" + java_script_data_fields_code(literal.fields, env, module, allModules) + "})"
+    case CompiledDataLiteral literal -> "__capy_data(" + java_script_string_literal(literal.typeName) + ", {" + java_script_data_fields_code(literal.fields, literal.typeName, env, module, allModules) + "})"
     case CompiledFieldAccessExpression access -> "__capy_get_field(" + java_script_expression_code(access.receiver, env, module, allModules) + ", " + java_script_string_literal(access.name) + ")"
     case CompiledReduceExpression reduce -> java_script_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> java_script_match_expression_code(matchExpression, env, module, allModules)
@@ -416,24 +416,42 @@ private fun java_script_dict_entries_tail_code(entries: List[CompiledDictEntry],
         ", [" + java_script_expression_code(entry.key, env, module, allModules) + ", " + java_script_expression_code(entry.value, env, module, allModules) + "]"
             + java_script_dict_entries_tail_code(entries[1:], env, module, allModules)
 
-private fun java_script_data_fields_code(fields: List[CompiledDataField], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_data_fields_code(fields: List[CompiledDataField], typeName: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> ""
     case Some { field } ->
-        java_script_string_literal(field.name)
+        java_script_string_literal(java_script_data_field_name(field.name, typeName, module, allModules))
             + ": "
             + java_script_expression_code(field.value, env, module, allModules)
-            + java_script_data_fields_tail_code(fields[1:], env, module, allModules)
+            + java_script_data_fields_tail_code(fields[1:], typeName, env, module, allModules)
 
-private fun java_script_data_fields_tail_code(fields: List[CompiledDataField], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_data_fields_tail_code(fields: List[CompiledDataField], typeName: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> ""
     case Some { field } ->
         ", "
-        + java_script_string_literal(field.name)
+        + java_script_string_literal(java_script_data_field_name(field.name, typeName, module, allModules))
         + ": "
         + java_script_expression_code(field.value, env, module, allModules)
-        + java_script_data_fields_tail_code(fields[1:], env, module, allModules)
+        + java_script_data_fields_tail_code(fields[1:], typeName, env, module, allModules)
+
+private fun java_script_data_field_name(name: String, typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_string_has_prefix(name, "$")
+    then java_script_declared_positional_field_name(name, java_script_data_type_fields(java_script_raw_data_literal_type_name(typeName), module, allModules), 0)
+    else name
+
+private fun java_script_raw_data_literal_type_name(typeName: String): String =
+    if java_script_string_has_prefix(typeName, "__capy_raw|")
+    then typeName["__capy_raw|".size().value, typeName.size().value]
+    else typeName
+
+private fun java_script_declared_positional_field_name(name: String, fields: List[String], idx: int): String =
+    match fields[0] with
+    case None -> name
+    case Some { field } ->
+        if name == "$" + idx
+        then java_script_schema_field_name(field)
+        else java_script_declared_positional_field_name(name, fields[1:], idx + 1)
 
 private fun java_script_index_expression_code(index: CompiledIndexExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_index("
@@ -1237,6 +1255,113 @@ private fun java_script_zero_arg_lambda(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression lambda -> lambda.parameters.is_empty()
     case _ -> false
+
+private fun java_script_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    java_script_merge_schema_fields(
+        java_script_data_type_direct_fields(name, module, allModules),
+        java_script_data_type_parent_fields(java_script_data_type_parent_types(name, module, allModules), module, allModules)
+    )
+
+private fun java_script_data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    java_script_data_type_schema_values(name, "__capy_schema_field|", module, allModules)
+
+private fun java_script_data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    java_script_data_type_schema_values(name, "__capy_schema_parent|", module, allModules)
+
+private fun java_script_data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentName = java_script_schema_type_name(parent)
+        java_script_merge_schema_fields(
+            java_script_data_type_fields(parentName, module, allModules),
+            java_script_data_type_parent_fields(parents[1:], module, allModules)
+        )
+
+private fun java_script_data_type_schema_values(name: String, prefix: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    if java_script_schema_type_exists(name, module.functions)
+    then java_script_schema_values(prefix + name + "|", module.functions)
+    else match java_script_data_type_schema_values_in_imports(name, prefix, module.imports, module, allModules) with
+        case Some { value } -> value
+        case None -> java_script_data_type_schema_values_in_modules(name, prefix, allModules)
+
+private fun java_script_data_type_schema_values_in_modules(name: String, prefix: String, modules: List[CompiledModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        if java_script_schema_type_exists(name, module.functions)
+        then java_script_schema_values(prefix + name + "|", module.functions)
+        else java_script_data_type_schema_values_in_modules(name, prefix, modules[1:])
+
+private fun java_script_data_type_schema_values_in_imports(name: String, prefix: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if java_script_data_import_matches(name, declaration)
+        then java_script_data_type_schema_values_in_import(name, prefix, imports[1:], module, allModules, declaration)
+        else java_script_data_type_schema_values_in_imports(name, prefix, imports[1:], module, allModules)
+
+private fun java_script_data_type_schema_values_in_import(name: String, prefix: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if java_script_schema_type_exists(name, importedModule.functions)
+        then /capy/lang/Option.Some { java_script_schema_values(prefix + name + "|", importedModule.functions) }
+        else java_script_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
+    case None -> java_script_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
+
+private fun java_script_data_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !java_script_stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & java_script_import_includes_name(name, declaration)
+
+private fun java_script_merge_schema_fields(first: List[String], second: List[String]): List[String] =
+    first + java_script_schema_fields_not_named(second, first)
+
+private fun java_script_schema_fields_not_named(fields: List[String], existing: List[String]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        if java_script_schema_field_name_exists(java_script_schema_field_name(field), existing)
+        then java_script_schema_fields_not_named(fields[1:], existing)
+        else [field] + java_script_schema_fields_not_named(fields[1:], existing + [field])
+
+private fun java_script_schema_field_name_exists(name: String, fields: List[String]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } -> java_script_schema_field_name(field) == name | java_script_schema_field_name_exists(name, fields[1:])
+
+private fun java_script_schema_type_exists(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        (java_script_compiled_schema(function) & function.name == "__capy_schema_type|" + name)
+            | java_script_schema_type_exists(name, functions[1:])
+
+private fun java_script_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, prefix)
+        then [java_script_schema_value(function)] + java_script_schema_values(prefix, functions[1:])
+        else java_script_schema_values(prefix, functions[1:])
+
+private fun java_script_schema_value(function: CompiledFunction): String =
+    match function.body with
+    case CompiledStringLiteral literal -> literal.value
+    case _ -> ""
+
+private fun java_script_schema_field_name(value: String): String =
+    let separator = java_script_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun java_script_schema_type_name(value: String): String =
+    let trimmed = value.trim()
+    let bracket = java_script_first_index_of(trimmed, "[", 0)
+    if bracket < 0
+    then trimmed
+    else trimmed[0, bracket]
 
 private fun java_script_lookup_binding(name: String, env: List[JavaScriptBinding]): /capy/lang/Option[JavaScriptBinding] =
     match env[0] with
