@@ -319,6 +319,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_effect_method_call_code(call, env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
+    then "__capy_is_empty(" + python_expression_code(call.receiver, env, module, allModules) + ")"
     else if python_seq_as_list_call(call, env, module, allModules)
     then "__capy_as_list(" + python_expression_code(call.receiver, env, module, allModules) + ")"
     else if python_collection_predicate_call(call, env, module, allModules)
@@ -838,6 +840,8 @@ private fun python_runtime_function_type(name: String): String =
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size"
     then python_int_type()
+    else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
+    then python_bool_type()
     else if python_seq_as_list_call(call, env, module, allModules)
     then python_list_type()
     else if python_collection_predicate_call(call, env, module, allModules)
@@ -946,6 +950,11 @@ private fun python_result_pipe_receiver_type(type: String): bool =
 private fun python_seq_as_list_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.name == "as_list"
         & call.arguments.is_empty()
+
+private fun python_list_is_empty_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String): bool =
+    call.name == "is_empty"
+        & call.arguments.is_empty()
+        & receiverType == python_list_type()
 
 private fun python_collection_predicate_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
@@ -1262,7 +1271,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -1570,6 +1579,9 @@ private fun python_value_assert_extra_methods_code(): String =
     + "                result = False" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to be empty', 'Assert.is_empty')" + python_newline()
     + python_newline()
+    + "    def is_zero(self):" + python_newline()
+    + "        return self._append(self.value == 0, 'Expected ' + repr(self.value) + ' to be zero', 'Assert.is_zero')" + python_newline()
+    + python_newline()
     + "    def contains(self, other):" + python_newline()
     + "        if _capy_data_is(self.value, 'Some'):" + python_newline()
     + "            result = _capy_data_value(self.value) == other" + python_newline()
@@ -1632,6 +1644,9 @@ private fun python_test_runtime_collection_basic_code(): String =
     + python_newline()
     + "def __capy_size(value):" + python_newline()
     + "    return len(value)" + python_newline()
+    + python_newline()
+    + "def __capy_is_empty(value):" + python_newline()
+    + "    return len(value) == 0" + python_newline()
     + python_newline()
     + "def __capy_as_iterable(value):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
@@ -1994,6 +2009,8 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then if call.arguments.is_empty()
         then python_expression_gatherable(call.receiver, env, module, allModules)
         else false
+    else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
+    then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_seq_as_list_call(call, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_collection_predicate_call(call, env, module, allModules)
@@ -2188,6 +2205,7 @@ private fun python_assert_method(name: String): bool =
     name == "is_equal_to"
         | name == "is_true"
         | name == "is_false"
+        | name == "is_zero"
         | name == "is_empty"
         | name == "contains"
         | name == "succeeds"
