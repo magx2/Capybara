@@ -38,7 +38,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_import(module: CompiledModule): String =
-    "const { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal } = require("
+    "const { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal } = require("
         + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), "capy/test/CapyTestRuntime"))
         + ");"
         + java_script_newline()
@@ -235,7 +235,9 @@ private fun java_script_variable_code(name: String, env: List[JavaScriptBinding]
 
 private fun java_script_binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
-    match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
+    if java_script_collection_pipe_expression_with_left_type(binary, leftType)
+    then java_script_collection_pipe_code(binary, env, module, allModules)
+    else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> java_script_binary_extension_operator_code(function, binary, env, module, allModules)
     case None ->
         if binary.operator == "+"
@@ -284,6 +286,38 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
             + " "
             + java_script_expression_code(binary.right, env, module, allModules)
             + ")"
+
+private fun java_script_collection_pipe_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_collection_pipe_helper(binary.operator)
+        + "("
+        + java_script_expression_code(binary.left, env, module, allModules)
+        + ", "
+        + java_script_expression_code(binary.right, env, module, allModules)
+        + ")"
+
+private fun java_script_collection_pipe_helper(operator: String): String =
+    if operator == "|-"
+    then "__capy_seq_filter"
+    else if operator == "|*"
+    then "__capy_seq_flat_map"
+    else "__capy_seq_map"
+
+private fun java_script_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    java_script_collection_pipe_operator(binary.operator)
+        & java_script_collection_pipe_receiver_type(leftType)
+        & java_script_callable_expression(binary.right)
+
+private fun java_script_collection_pipe_operator(operator: String): bool =
+    operator == "|" | operator == "|-" | operator == "|*"
+
+private fun java_script_collection_pipe_receiver_type(typeName: String): bool =
+    typeName == "List" | typeName == "Set" | typeName == "String" | typeName == "Seq" | typeName == "Dict"
+
+private fun java_script_callable_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression _ -> true
+    case CompiledFunctionReferenceExpression _ -> true
+    case _ -> false
 
 private fun java_script_binary_runtime_call(name: String, binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     name
@@ -338,6 +372,10 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_seq_as_list_call(call)
+    then "__capy_as_list(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_collection_predicate_call(call, env, module, allModules)
+    then java_script_collection_predicate_call_code(call, env, module, allModules)
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_primitive_conversion_code(call, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
@@ -351,6 +389,36 @@ private fun java_script_raw_method_call_code(call: CompiledMethodCallExpression,
         + "("
         + java_script_expression_list_code(call.arguments, env, module, allModules)
         + ")"
+
+private fun java_script_seq_as_list_call(call: CompiledMethodCallExpression): bool =
+    call.name == "as_list" & call.arguments.is_empty()
+
+private fun java_script_collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    (call.name == "any" | call.name == "all")
+        & java_script_collection_predicate_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        & java_script_single_callable_argument(call.arguments)
+
+private fun java_script_collection_predicate_receiver_type(typeName: String): bool =
+    typeName == "List" | typeName == "Set" | typeName == "String" | typeName == "Seq" | typeName == "Dict"
+
+private fun java_script_single_callable_argument(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> arguments[1:].is_empty() & java_script_callable_expression(argument)
+
+private fun java_script_collection_predicate_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.arguments[0] with
+    case None -> "__capy_unsupported('collection predicate')"
+    case Some { predicate } ->
+        java_script_collection_predicate_helper(call.name)
+            + "("
+            + java_script_expression_code(call.receiver, env, module, allModules)
+            + ", "
+            + java_script_expression_code(predicate, env, module, allModules)
+            + ")"
+
+private fun java_script_collection_predicate_helper(name: String): String =
+    if name == "all" then "__capy_all" else "__capy_any"
 
 private fun java_script_primitive_conversion_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.arguments.is_empty()
@@ -619,7 +687,12 @@ private fun java_script_expression_type(expression: CompiledExpression, env: Lis
     case CompiledStringLiteral _ -> "String"
     case CompiledVariableExpression variable -> java_script_variable_type(variable.name, env)
     case CompiledBinaryExpression binary -> java_script_binary_expression_type(binary, env, module, allModules)
+    case CompiledFunctionCallExpression call -> java_script_function_call_expression_type(call.name, module, allModules)
     case CompiledMethodCallExpression call -> java_script_method_call_expression_type(call, env, module, allModules)
+    case CompiledListLiteral _ -> "List"
+    case CompiledSetLiteral _ -> "Set"
+    case CompiledDictLiteral _ -> "Dict"
+    case CompiledTupleLiteral _ -> "Tuple"
     case CompiledDataLiteral literal -> literal.typeName
     case CompiledReduceExpression reduce -> java_script_expression_type(reduce.initial, env, module, allModules)
     case CompiledBlockExpression block -> java_script_expression_type(block.result, java_script_block_env(block.bindings, env), module, allModules)
@@ -631,7 +704,9 @@ private fun java_script_expression_type(expression: CompiledExpression, env: Lis
 
 private fun java_script_binary_expression_type(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
-    match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
+    if java_script_collection_pipe_expression_with_left_type(binary, leftType)
+    then java_script_collection_pipe_result_type(binary.operator, leftType)
+    else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> function.returnType.name
     case None ->
         if binary.operator == "&" | binary.operator == "|"
@@ -645,11 +720,39 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
 private fun java_script_method_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size"
     then "int"
+    else if java_script_seq_as_list_call(call)
+    then "List"
+    else if java_script_collection_predicate_call(call, env, module, allModules)
+    then "bool"
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_primitive_conversion_result_type(call.name)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
     case Some { function } -> function.returnType.name
     case None -> java_script_unknown_type()
+
+private fun java_script_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_runtime_function(name)
+    then java_script_runtime_function_type(name)
+    else match java_script_find_local_function(name, module.functions) with
+    case Some { function } -> function.returnType.name
+    case None ->
+        match java_script_find_function_definition_in_imports(name, module.imports, module, allModules) with
+        case Some { function } -> function.returnType.name
+        case None -> java_script_unknown_type()
+
+private fun java_script_runtime_function_type(name: String): String =
+    if name == "assert_that" | name == "assert_all"
+    then "Assert"
+    else if name == "test"
+    then "TestCase"
+    else if name == "test_file"
+    then "Effect"
+    else java_script_unknown_type()
+
+private fun java_script_collection_pipe_result_type(operator: String, leftType: String): String =
+    if leftType == "Dict" & operator != "|*"
+    then "Dict"
+    else "Seq"
 
 private fun java_script_primitive_conversion_result_type(name: String): String =
     if name == "to_int" then "int" else "long"
@@ -734,6 +837,25 @@ private fun java_script_find_function_in_imported_module(name: String, declarati
             java_script_import_alias(declaration, module) + "[" + java_script_string_literal(java_script_export_name(function)) + "]"
         }
     case None -> java_script_find_function_in_imports(name, rest, module, allModules)
+
+private fun java_script_find_function_definition_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified | !java_script_import_includes_name(name, declaration)
+        then java_script_find_function_definition_in_imports(name, imports[1:], module, allModules)
+        else java_script_find_function_definition_in_import(name, declaration, imports[1:], module, allModules)
+
+private fun java_script_find_function_definition_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        java_script_find_function_definition_in_imported_module(name, importedModule, rest, module, allModules)
+    case None -> java_script_find_function_definition_in_imports(name, rest, module, allModules)
+
+private fun java_script_find_function_definition_in_imported_module(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match java_script_find_function(name, importedModule.functions) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> java_script_find_function_definition_in_imports(name, rest, module, allModules)
 
 private fun java_script_find_local_extension_method(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
@@ -934,7 +1056,16 @@ private fun java_script_collection_runtime_code(): String =
     + "function digits(number) { if (typeof number === 'bigint') { number = number < 0n ? -number : number; let result = 1; while (number >= 10n) { number = number / 10n; result++; } return result; } number = Math.abs(Math.trunc(number)); let result = 1; while (number >= 10) { number = Math.trunc(number / 10); result++; } return result; }" + java_script_newline()
     + java_script_newline()
     + "function __capy_unsafe_run(value) { while (value && (typeof value.unsafe_run === 'function' || typeof value.unsafeRun === 'function')) value = typeof value.unsafe_run === 'function' ? value.unsafe_run() : value.unsafeRun(); return value; }" + java_script_newline()
-    + "function __capy_as_list(value) { value = __capy_unsafe_run(value); if (value == null) return []; return Array.isArray(value) ? value : [value]; }" + java_script_newline()
+    + "function* __capy_seq_iter(seq) { seq = __capy_unsafe_run(seq); while (seq && seq.__type === 'Cons') { yield __capy_match_binding(seq, 'value', 0); const rest = __capy_match_binding(seq, 'rest', 1); seq = __capy_unsafe_run(typeof rest === 'function' ? rest() : rest); } }" + java_script_newline()
+    + "function __capy_as_iterable(value) { value = __capy_unsafe_run(value); if (value == null) return []; if (value && value.__type === 'End') return []; if (value && value.__type === 'Cons') return __capy_seq_iter(value); if (typeof value === 'string') return Array.from(value); if (value instanceof Map) return value.entries(); if (value && typeof value[Symbol.iterator] === 'function') return value; return [value]; }" + java_script_newline()
+    + "function __capy_as_list(value) { value = __capy_unsafe_run(value); if (Array.isArray(value)) return value; return Array.from(__capy_as_iterable(value)); }" + java_script_newline()
+    + "function __capy_lambda_arity(fn) { return typeof fn === 'function' ? fn.length : 1; }" + java_script_newline()
+    + "function __capy_apply_lambda(fn, item) { const arity = __capy_lambda_arity(fn); if (arity === 0) return fn(); if (arity > 1 && Array.isArray(item)) return fn(...item); return fn(item); }" + java_script_newline()
+    + "function __capy_seq_map(value, mapper) { value = __capy_unsafe_run(value); if (value instanceof Map) { const result = new Map(); for (const [key, item] of value) result.set(key, __capy_apply_lambda(mapper, [key, item])); return result; } const result = []; for (const item of __capy_as_iterable(value)) result.push(__capy_apply_lambda(mapper, item)); return result; }" + java_script_newline()
+    + "function __capy_seq_filter(value, predicate) { value = __capy_unsafe_run(value); if (value instanceof Map) { const result = new Map(); for (const [key, item] of value) if (__capy_truthy(__capy_apply_lambda(predicate, [key, item]))) result.set(key, item); return result; } const result = []; for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) result.push(item); return result; }" + java_script_newline()
+    + "function __capy_seq_flat_map(value, mapper) { const result = []; for (const item of __capy_as_iterable(value)) { const mapped = __capy_unsafe_run(__capy_apply_lambda(mapper, item)); if (mapped == null) continue; if (mapped instanceof Map) result.push(...mapped.entries()); else if (typeof mapped === 'string') result.push(...Array.from(mapped)); else if (mapped && typeof mapped[Symbol.iterator] === 'function') result.push(...mapped); else result.push(mapped); } return result; }" + java_script_newline()
+    + "function __capy_any(value, predicate) { for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) return true; return false; }" + java_script_newline()
+    + "function __capy_all(value, predicate) { for (const item of __capy_as_iterable(value)) if (!__capy_truthy(__capy_apply_lambda(predicate, item))) return false; return true; }" + java_script_newline()
     + "function __capy_gather_module(modulePath) { const module = require(modulePath); return typeof module.tests === 'function' ? __capy_as_list(module.tests()) : []; }" + java_script_newline()
     + java_script_newline()
 
@@ -948,7 +1079,7 @@ private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]):
     + java_script_newline()
 
 private fun java_script_runtime_exports_code(): String =
-    "module.exports = { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
+    "module.exports = { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
 
 private fun java_script_deep_equal_code(): String =
     "function __capy_deep_equal(left, right) {" + java_script_newline()
@@ -1087,16 +1218,35 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
             & java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env), module, allModules)
 
 private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if java_script_binary_operator_gatherable(binary.operator)
+    let leftType = java_script_expression_type(binary.left, env, module, allModules)
+    if java_script_collection_pipe_expression_with_left_type(binary, leftType)
+    then java_script_collection_pipe_gatherable(binary, env, module, allModules)
+    else if java_script_binary_operator_gatherable(binary.operator)
     then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
     else
-        let leftType = java_script_expression_type(binary.left, env, module, allModules)
         match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
         case Some _ ->
             java_script_expression_gatherable(binary.left, env, module, allModules)
                 & java_script_expression_gatherable(binary.right, env, module, allModules)
         case None -> false
+
+private fun java_script_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_expression_gatherable(binary.left, env, module, allModules)
+        & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
+
+private fun java_script_callable_expression_gatherable(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledLambdaExpression lambda -> java_script_expression_gatherable(lambda.body, java_script_lambda_bindings(lambda.parameters) + env, module, allModules)
+    case CompiledFunctionReferenceExpression reference -> java_script_function_reference_gatherable(reference, module, allModules)
+    case _ -> false
+
+private fun java_script_function_reference_gatherable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if java_script_runtime_function(reference.name)
+    then true
+    else if java_script_local_function_unambiguous(reference.name, module.functions)
+    then true
+    else java_script_imported_function_exists(reference.name, module.imports, module, allModules)
 
 private fun java_script_binary_operator_gatherable(operator: String): bool =
     operator == "+"
@@ -1135,6 +1285,10 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if call.name == "size"
     then call.arguments.is_empty() & java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_seq_as_list_call(call)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_collection_predicate_call(call, env, module, allModules)
+    then java_script_collection_predicate_gatherable(call, env, module, allModules)
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
@@ -1142,6 +1296,15 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
             java_script_expression_gatherable(call.receiver, env, module, allModules)
                 & java_script_expressions_gatherable(call.arguments, env, module, allModules)
         case None -> false
+
+private fun java_script_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+
+private fun java_script_single_callable_argument_gatherable(arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> arguments[1:].is_empty() & java_script_callable_expression_gatherable(argument, env, module, allModules)
 
 private fun java_script_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
     java_script_local_function_count(name, functions) == 1
