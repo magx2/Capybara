@@ -669,15 +669,21 @@ private fun python_omitted_slice_bound(literal: CompiledIntLiteral, start: bool)
 
 private fun python_built_in_index_expression(index: CompiledIndexExpression, receiverType: String): bool =
     if index.hasEndIndex
-    then receiverType == python_unknown_type()
-        | receiverType == python_string_type()
-        | receiverType == "Tuple"
-        | receiverType == python_list_type()
-    else receiverType == python_unknown_type()
-        | receiverType == python_string_type()
-        | receiverType == "Tuple"
-        | receiverType == python_list_type()
+    then python_built_in_slice_receiver_type(receiverType)
+    else python_built_in_index_receiver_type(receiverType)
+
+private fun python_built_in_slice_receiver_type(receiverType: String): bool =
+    python_built_in_sequence_receiver_type(receiverType)
+
+private fun python_built_in_index_receiver_type(receiverType: String): bool =
+    python_built_in_sequence_receiver_type(receiverType)
         | receiverType == python_dict_type()
+
+private fun python_built_in_sequence_receiver_type(receiverType: String): bool =
+    receiverType == python_unknown_type()
+        | receiverType == python_string_type()
+        | receiverType == python_tuple_type()
+        | receiverType == python_list_type()
 
 private fun python_user_defined_index_code(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
@@ -1047,6 +1053,7 @@ private fun python_unknown_type(): String = "any"
 private fun python_list_type(): String = "List"
 private fun python_set_type(): String = "Set"
 private fun python_dict_type(): String = "Dict"
+private fun python_tuple_type(): String = "Tuple"
 private fun python_seq_type(): String = "Seq"
 private fun python_effect_type(): String = "Effect"
 private fun python_option_type(): String = "Option"
@@ -1859,6 +1866,8 @@ private fun python_test_runtime_collection_basic_code(): String =
     + "def __capy_string_get(value, index):" + python_newline()
     + "    text = str(value)" + python_newline()
     + "    idx = int(index)" + python_newline()
+    + "    if idx < 0:" + python_newline()
+    + "        idx = len(text) + idx" + python_newline()
     + "    if idx < 0 or idx >= len(text):" + python_newline()
     + "        return __capy_none()" + python_newline()
     + "    return __capy_some(text[idx])" + python_newline()
