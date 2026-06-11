@@ -364,7 +364,9 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
                 + python_first_method_argument_code(call.arguments, env, module, allModules)
                 + ")"
         else if receiverType == python_dict_type()
-        then if call.name == "contains_key"
+        then if call.name == "is_empty"
+            then "__capy_is_empty(" + receiver + ")"
+            else if call.name == "contains_key"
             then "__capy_contains("
                 + receiver
                 + ", "
@@ -553,8 +555,15 @@ private fun python_char_to_string_receiver_type(typeName: String): bool =
     typeName == "char" | typeName == python_unknown_type()
 
 private fun python_string_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_type(call.receiver, env, module, allModules) == python_string_type()
+    python_string_method_receiver_type(call.name, python_expression_type(call.receiver, env, module, allModules))
         & python_string_method_arity(call.name, call.arguments)
+
+private fun python_string_method_receiver_type(name: String, typeName: String): bool =
+    typeName == python_string_type()
+        | (typeName == python_unknown_type() & python_string_only_method(name))
+
+private fun python_string_only_method(name: String): bool =
+    name == "trim" | name == "starts_with" | name == "end_with" | name == "replace"
 
 private fun python_string_method_arity(name: String, arguments: List[CompiledExpression]): bool =
     if name == "trim" | name == "is_empty"
@@ -1112,7 +1121,7 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
         else if receiverType == python_set_type()
         then python_bool_type()
         else if receiverType == python_dict_type()
-        then if call.name == "contains_key" then python_bool_type() else python_option_type()
+        then if call.name == "is_empty" | call.name == "contains_key" then python_bool_type() else python_option_type()
         else python_unknown_type()
     else if python_seq_as_list_call(call, env, module, allModules)
     then python_list_type()
@@ -1268,7 +1277,9 @@ private fun python_list_is_empty_call_with_receiver_type(call: CompiledMethodCal
         then python_one_method_argument(call.arguments)
         else false
     else if receiverType == python_dict_type()
-    then (call.name == "contains_key" | call.name == "get") & python_one_method_argument(call.arguments)
+    then if call.name == "is_empty"
+        then call.arguments.is_empty()
+        else (call.name == "contains_key" | call.name == "get") & python_one_method_argument(call.arguments)
     else if receiverType == python_tuple_type()
     then call.name == "get" & python_one_method_argument(call.arguments)
     else false
@@ -1874,6 +1885,7 @@ private fun python_test_runtime_error_code(): String =
     + "    raise NotImplementedError(message)" + python_newline()
     + python_newline()
     + "def __capy_normalize_type_name(type_name):" + python_newline()
+    + "    type_name = str(type_name or '')" + python_newline()
     + "    if type_name in ('/capy/lang/Program.Success', 'Program.Success'):" + python_newline()
     + "        return 'Success'" + python_newline()
     + "    if type_name in ('/capy/lang/Program.Failed', 'Program.Failed'):" + python_newline()
