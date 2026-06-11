@@ -214,6 +214,8 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
     then python_result_pipe_code(binary, env, module, allModules)
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_code(binary, env, module, allModules)
+    else if python_regex_binary_expression_with_left_type(binary, leftType)
+    then python_regex_binary_code(binary, env, module, allModules)
     else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
     then python_binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
     else if python_set_binary_expression_with_left_type(binary, leftType)
@@ -319,7 +321,9 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
     let receiver = python_expression_code(call.receiver, env, module, allModules)
-    if python_effect_method_call(call, env, module, allModules)
+    if call.name == "__capy_call"
+    then python_callable_call_code(call, env, module, allModules)
+    else if python_effect_method_call(call, env, module, allModules)
     then python_effect_method_call_code(call, env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + receiver + ")"
@@ -331,6 +335,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_string_parse_method_code(call, env, module, allModules)
     else if python_string_method_call(call, env, module, allModules)
     then python_string_method_code(call, env, module, allModules)
+    else if python_regex_method_call(call, receiverType)
+    then python_regex_method_call_code(call, env, module, allModules)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_code(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, receiverType)
@@ -393,6 +399,9 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
         case None ->
             receiver + "." + python_method_name(call.name)
                 + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_callable_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "(" + python_expression_code(call.receiver, env, module, allModules) + ")(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 private fun python_effect_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     (call.name == "map" | call.name == "flat_map")
@@ -499,6 +508,53 @@ private fun python_set_binary_code(binary: CompiledBinaryExpression, env: List[P
     else if binary.operator == "△"
     then "__capy_set_symmetric_difference(" + leftCode + ", " + rightCode + ")"
     else "__capy_set_cartesian_product(" + leftCode + ", " + rightCode + ")"
+
+private fun python_regex_binary_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    python_regex_receiver_type(leftType) & python_regex_binary_operator(binary.operator)
+
+private fun python_regex_binary_operator(operator: String): bool =
+    operator == "?" | operator == "~" | operator == "~~" | operator == "~>" | operator == "/>"
+
+private fun python_regex_binary_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftCode = python_expression_code(binary.left, env, module, allModules)
+    let rightCode = python_expression_code(binary.right, env, module, allModules)
+    if binary.operator == "?"
+    then "__capy_regex_matches(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~"
+    then "__capy_regex_find(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~~"
+    then "__capy_regex_find_all(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~>"
+    then "__capy_regex_replace(" + leftCode + ", " + rightCode + ")"
+    else "__capy_regex_split(" + leftCode + ", " + rightCode + ")"
+
+private fun python_regex_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    python_regex_receiver_type(receiverType) & python_regex_method_arity(call)
+
+private fun python_regex_method_arity(call: CompiledMethodCallExpression): bool =
+    python_regex_method_name(call.name) & python_one_method_argument(call.arguments)
+
+private fun python_regex_method_name(name: String): bool =
+    name == "matches" | name == "find" | name == "find_all" | name == "replace" | name == "split"
+
+private fun python_regex_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverCode = python_expression_code(call.receiver, env, module, allModules)
+    let argumentCode = python_first_method_argument_code(call.arguments, env, module, allModules)
+    if call.name == "matches"
+    then "__capy_regex_matches(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "find"
+    then "__capy_regex_find(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "find_all"
+    then "__capy_regex_find_all(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "replace"
+    then "__capy_regex_replace(" + receiverCode + ", " + argumentCode + ")"
+    else "__capy_regex_split(" + receiverCode + ", " + argumentCode + ")"
+
+private fun python_regex_receiver_type(typeName: String): bool =
+    typeName == python_regex_type()
+        | typeName == "/capy/lang/Regex"
+        | typeName == "capy/lang/Regex"
+        | typeName == "capy.lang.Regex"
 
 private fun python_set_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
     receiverType == python_set_type() & python_set_method_arity(call)
@@ -1099,7 +1155,9 @@ private fun python_runtime_function_type(name: String): String =
 
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
-    if call.name == "size"
+    if call.name == "__capy_call"
+    then python_callable_call_expression_type(call, env, module, allModules)
+    else if call.name == "size"
     then python_int_type()
     else if python_char_to_string_method_call(call, env, module, allModules)
     then python_string_type()
@@ -1109,6 +1167,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_result_type()
     else if python_string_method_call(call, env, module, allModules)
     then python_string_method_return_type(call.name)
+    else if python_regex_method_call(call, receiverType)
+    then python_regex_method_call_type(call.name)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_type(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, receiverType)
@@ -1137,6 +1197,18 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
         case Some { function } -> function.returnType.name
         case None -> python_unknown_type()
 
+private fun python_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    if python_callable_binding_type(receiverType)
+    then python_callable_return_type(receiverType)
+    else python_unknown_type()
+
+private fun python_callable_return_type(typeName: String): String =
+    let arrow = python_first_index_of(typeName, ">", 0)
+    if arrow < 0 | arrow >= typeName.size().value - 1
+    then python_unknown_type()
+    else typeName[arrow + 1, typeName.size().value]
+
 private fun python_string_get_method_return_type(call: CompiledMethodCallExpression): String =
     if python_two_method_arguments(call.arguments)
     then python_string_type()
@@ -1154,6 +1226,8 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     then python_result_type()
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_result_type(binary.operator, leftType)
+    else if python_regex_binary_expression_with_left_type(binary, leftType)
+    then python_regex_binary_expression_type(binary.operator)
     else if python_set_binary_expression_with_left_type(binary, leftType)
     then python_set_binary_expression_type(binary)
     else match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
@@ -1222,6 +1296,30 @@ private fun python_seq_type(): String = "Seq"
 private fun python_effect_type(): String = "Effect"
 private fun python_option_type(): String = "Option"
 private fun python_result_type(): String = "Result"
+private fun python_regex_type(): String = "Regex"
+private fun python_string_to_string_function_type(): String = "String=>String"
+
+private fun python_regex_method_call_type(name: String): String =
+    if name == "matches"
+    then python_bool_type()
+    else if name == "find"
+    then python_option_type()
+    else if name == "find_all"
+    then python_seq_type()
+    else if name == "replace"
+    then python_string_to_string_function_type()
+    else python_list_type()
+
+private fun python_regex_binary_expression_type(operator: String): String =
+    if operator == "?"
+    then python_bool_type()
+    else if operator == "~"
+    then python_option_type()
+    else if operator == "~~"
+    then python_seq_type()
+    else if operator == "~>"
+    then python_string_to_string_function_type()
+    else python_list_type()
 
 private fun python_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     python_collection_pipe_operator(binary.operator)
@@ -1596,10 +1694,11 @@ private fun python_test_runtime_header_code(): String =
     + "import importlib" + python_newline()
     + "import inspect" + python_newline()
     + "import math" + python_newline()
+    + "import re" + python_newline()
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -2237,6 +2336,50 @@ private fun python_test_runtime_collection_basic_code(): String =
     + "def __capy_string_slice(value, start, end):" + python_newline()
     + "    return str(value)[int(start):int(end)]" + python_newline()
     + python_newline()
+    + "def __capy_regex_pattern(regex):" + python_newline()
+    + "    regex = _unsafe_run(regex)" + python_newline()
+    + "    if isinstance(regex, dict):" + python_newline()
+    + "        return str(regex.get('pattern', ''))" + python_newline()
+    + "    return str(regex)" + python_newline()
+    + python_newline()
+    + "def __capy_regex_flags(regex):" + python_newline()
+    + "    regex = _unsafe_run(regex)" + python_newline()
+    + "    if isinstance(regex, dict):" + python_newline()
+    + "        return str(regex.get('flags', ''))" + python_newline()
+    + "    return ''" + python_newline()
+    + python_newline()
+    + "def __capy_regex_compile(regex):" + python_newline()
+    + "    flags_value = __capy_regex_flags(regex)" + python_newline()
+    + "    flags = 0" + python_newline()
+    + "    if 'i' in flags_value:" + python_newline()
+    + "        flags |= re.IGNORECASE" + python_newline()
+    + "    if 'm' in flags_value:" + python_newline()
+    + "        flags |= re.MULTILINE" + python_newline()
+    + "    if 's' in flags_value:" + python_newline()
+    + "        flags |= re.DOTALL" + python_newline()
+    + "    return re.compile(__capy_regex_pattern(regex), flags)" + python_newline()
+    + python_newline()
+    + "def __capy_regex_matches(regex, input):" + python_newline()
+    + "    return __capy_regex_compile(regex).search(str(_unsafe_run(input))) is not None" + python_newline()
+    + python_newline()
+    + "def __capy_regex_find(regex, input):" + python_newline()
+    + "    match = __capy_regex_compile(regex).search(str(_unsafe_run(input)))" + python_newline()
+    + "    if match is None:" + python_newline()
+    + "        return __capy_none()" + python_newline()
+    + "    return __capy_some(__capy_data('Match', dict(group_value=match.group(0))))" + python_newline()
+    + python_newline()
+    + "def __capy_regex_find_all(regex, input):" + python_newline()
+    + "    return [__capy_data('Match', dict(group_value=match.group(0))) for match in __capy_regex_compile(regex).finditer(str(_unsafe_run(input)))]" + python_newline()
+    + python_newline()
+    + "def __capy_regex_replace(regex, replacement, input=None):" + python_newline()
+    + "    if input is None:" + python_newline()
+    + "        return lambda value: __capy_regex_replace(regex, replacement, value)" + python_newline()
+    + "    replacement_value = str(_unsafe_run(replacement))" + python_newline()
+    + "    return __capy_regex_compile(regex).sub(lambda _: replacement_value, str(_unsafe_run(input)))" + python_newline()
+    + python_newline()
+    + "def __capy_regex_split(regex, input):" + python_newline()
+    + "    return __capy_regex_compile(regex).split(str(_unsafe_run(input)))" + python_newline()
+    + python_newline()
     + "def __capy_as_iterable(value):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
     + "    if value is None:" + python_newline()
@@ -2539,6 +2682,9 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
     else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
     then python_expression_gatherable(binary.left, env, module, allModules)
         & python_expression_gatherable(binary.right, env, module, allModules)
+    else if python_regex_binary_expression_with_left_type(binary, leftType)
+    then python_expression_gatherable(binary.left, env, module, allModules)
+        & python_expression_gatherable(binary.right, env, module, allModules)
     else if python_set_binary_expression_with_left_type(binary, leftType)
     then python_expression_gatherable(binary.left, env, module, allModules)
         & python_expression_gatherable(binary.right, env, module, allModules)
@@ -2621,6 +2767,9 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then if python_expression_gatherable(call.receiver, env, module, allModules)
         then python_expressions_gatherable(call.arguments, env, module, allModules)
         else false
+    else if call.name == "__capy_call"
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if call.name == "size"
     then if call.arguments.is_empty()
         then python_expression_gatherable(call.receiver, env, module, allModules)
@@ -2633,6 +2782,9 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     else if python_string_parse_method_call(call, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_string_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
+    else if python_regex_method_call(call, python_expression_type(call.receiver, env, module, allModules))
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_set_method_call(call, python_expression_type(call.receiver, env, module, allModules))
