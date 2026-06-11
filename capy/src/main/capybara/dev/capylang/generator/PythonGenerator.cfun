@@ -216,6 +216,8 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
     then python_collection_pipe_code(binary, env, module, allModules)
     else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
     then python_binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
+    else if python_set_binary_expression_with_left_type(binary, leftType)
+    then python_set_binary_code(binary, env, module, allModules)
     else if binary.operator == ".nand."
     then "(~(" + python_expression_code(binary.left, env, module, allModules)
         + " & "
@@ -329,6 +331,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_string_parse_method_code(call, env, module, allModules)
     else if python_string_method_call(call, env, module, allModules)
     then python_string_method_code(call, env, module, allModules)
+    else if python_set_method_call(call, receiverType)
+    then python_set_method_call_code(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, receiverType)
     then if receiverType == python_list_type()
         then if call.name == "is_empty"
@@ -462,6 +466,83 @@ private fun python_collection_predicate_call_code(call: CompiledMethodCallExpres
 
 private fun python_collection_predicate_helper(name: String): String =
     if name == "all" then "__capy_all" else "__capy_any"
+
+private fun python_set_binary_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    leftType == python_set_type() & python_set_binary_operator(binary.operator)
+
+private fun python_set_binary_operator(operator: String): bool =
+    python_set_predicate_operator(operator) | python_set_algebra_operator(operator)
+
+private fun python_set_predicate_operator(operator: String): bool =
+    operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
+
+private fun python_set_algebra_operator(operator: String): bool =
+    operator == "∪" | operator == "∩" | operator == "△" | operator == "×"
+
+private fun python_set_binary_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftCode = python_expression_code(binary.left, env, module, allModules)
+    let rightCode = python_expression_code(binary.right, env, module, allModules)
+    if binary.operator == "⊆"
+    then "__capy_set_subset(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊂"
+    then "__capy_set_proper_subset(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊇"
+    then "__capy_set_subset(" + rightCode + ", " + leftCode + ")"
+    else if binary.operator == "⊃"
+    then "__capy_set_proper_subset(" + rightCode + ", " + leftCode + ")"
+    else if binary.operator == "∪"
+    then "__capy_set_concat(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "∩"
+    then "__capy_set_intersection(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "△"
+    then "__capy_set_symmetric_difference(" + leftCode + ", " + rightCode + ")"
+    else "__capy_set_cartesian_product(" + leftCode + ", " + rightCode + ")"
+
+private fun python_set_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    receiverType == python_set_type() & python_set_method_arity(call)
+
+private fun python_set_method_arity(call: CompiledMethodCallExpression): bool =
+    if python_set_no_argument_method(call.name)
+    then call.arguments.is_empty()
+    else if python_set_one_argument_method(call.name)
+    then python_one_method_argument(call.arguments)
+    else false
+
+private fun python_set_no_argument_method(name: String): bool =
+    name == "power_set" | name == "℘"
+
+private fun python_set_one_argument_method(name: String): bool =
+    name == "contains"
+        | name == "is_subset_of" | name == "is_proper_subset_of"
+        | name == "is_superset_of" | name == "is_proper_superset_of"
+        | name == "union" | name == "intersection" | name == "difference"
+        | name == "symmetric_difference" | name == "cartesian_product"
+
+private fun python_set_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverCode = python_expression_code(call.receiver, env, module, allModules)
+    if call.name == "power_set" | call.name == "℘"
+    then "__capy_set_power_set(" + receiverCode + ")"
+    else
+        let argumentCode = python_first_method_argument_code(call.arguments, env, module, allModules)
+        if call.name == "contains"
+        then "__capy_contains(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_subset_of"
+        then "__capy_set_subset(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_proper_subset_of"
+        then "__capy_set_proper_subset(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_superset_of"
+        then "__capy_set_subset(" + argumentCode + ", " + receiverCode + ")"
+        else if call.name == "is_proper_superset_of"
+        then "__capy_set_proper_subset(" + argumentCode + ", " + receiverCode + ")"
+        else if call.name == "union"
+        then "__capy_set_concat(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "intersection"
+        then "__capy_set_intersection(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "difference"
+        then "__capy_set_remove_all(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "symmetric_difference"
+        then "__capy_set_symmetric_difference(" + receiverCode + ", " + argumentCode + ")"
+        else "__capy_set_cartesian_product(" + receiverCode + ", " + argumentCode + ")"
 
 private fun python_char_to_string_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.name == "to_string"
@@ -608,9 +689,7 @@ private fun python_expression_list_tail_code(expressions: List[CompiledExpressio
             + python_expression_list_tail_code(expressions[1:], env, module, allModules)
 
 private fun python_set_literal_code(expressions: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if expressions.is_empty()
-    then "set()"
-    else "{" + python_expression_list_code(expressions, env, module, allModules) + "}"
+    "__capy_set([" + python_expression_list_code(expressions, env, module, allModules) + "])"
 
 private fun python_tuple_literal_code(expressions: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expressions[0] with
@@ -1021,6 +1100,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_result_type()
     else if python_string_method_call(call, env, module, allModules)
     then python_string_method_return_type(call.name)
+    else if python_set_method_call(call, receiverType)
+    then python_set_method_call_type(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, receiverType)
     then if receiverType == python_list_type()
         then if call.name == "is_empty" | call.name == "contains"
@@ -1064,6 +1145,8 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     then python_result_type()
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_result_type(binary.operator, leftType)
+    else if python_set_binary_expression_with_left_type(binary, leftType)
+    then python_set_binary_expression_type(binary)
     else match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> function.returnType.name
     case None ->
@@ -1097,6 +1180,21 @@ private fun python_promoted_numeric_type(leftType: String, rightType: String): S
     else if leftType == "long" | rightType == "long"
     then python_long_type()
     else python_int_type()
+
+private fun python_set_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_set_predicate_method(call.name)
+    then python_bool_type()
+    else python_set_type()
+
+private fun python_set_predicate_method(name: String): bool =
+    name == "contains"
+        | name == "is_subset_of" | name == "is_proper_subset_of"
+        | name == "is_superset_of" | name == "is_proper_superset_of"
+
+private fun python_set_binary_expression_type(binary: CompiledBinaryExpression): String =
+    if python_set_predicate_operator(binary.operator)
+    then python_bool_type()
+    else python_set_type()
 
 private fun python_int_type(): String = "int"
 private fun python_long_type(): String = "long"
@@ -1490,7 +1588,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -1550,7 +1648,7 @@ private fun python_test_runtime_assert_code(): String =
     + python_newline()
     + "    def is_equal_to(self, other, tolerance=None):" + python_newline()
     + "        if tolerance is None:" + python_newline()
-    + "            result = self.value == other" + python_newline()
+    + "            result = globals()['__capy_deep_equal'](self.value, other)" + python_newline()
     + "        else:" + python_newline()
     + "            result = abs(self.value - other) <= tolerance" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to be equal to ' + repr(other), 'Assert.is_equal_to')" + python_newline()
@@ -1690,13 +1788,10 @@ private fun python_test_runtime_numeric_code(): String =
     + "def __capy_add(left, right):" + python_newline()
     + "    if isinstance(left, list):" + python_newline()
     + "        return left + (right if isinstance(right, list) else [right])" + python_newline()
-    + "    if isinstance(left, set):" + python_newline()
-    + "        result = set(left)" + python_newline()
-    + "        if isinstance(right, set):" + python_newline()
-    + "            result.update(right)" + python_newline()
-    + "        else:" + python_newline()
-    + "            result.add(right)" + python_newline()
-    + "        return result" + python_newline()
+    + "    if __capy_is_set(left):" + python_newline()
+    + "        if __capy_is_set(right):" + python_newline()
+    + "            return __capy_set_concat(left, right)" + python_newline()
+    + "        return __capy_set_append(left, right)" + python_newline()
     + "    if isinstance(left, dict):" + python_newline()
     + "        result = dict(left)" + python_newline()
     + "        if isinstance(right, dict):" + python_newline()
@@ -1717,13 +1812,10 @@ private fun python_test_runtime_numeric_code(): String =
     + "        if isinstance(right, list):" + python_newline()
     + "            return [item for item in left if item not in right]" + python_newline()
     + "        return [item for item in left if item != right]" + python_newline()
-    + "    if isinstance(left, set):" + python_newline()
-    + "        result = set(left)" + python_newline()
-    + "        if isinstance(right, set):" + python_newline()
-    + "            result.difference_update(right)" + python_newline()
-    + "        else:" + python_newline()
-    + "            result.discard(right)" + python_newline()
-    + "        return result" + python_newline()
+    + "    if __capy_is_set(left):" + python_newline()
+    + "        if __capy_is_set(right):" + python_newline()
+    + "            return __capy_set_remove_all(left, right)" + python_newline()
+    + "        return __capy_set_remove(left, right)" + python_newline()
     + "    if isinstance(left, dict):" + python_newline()
     + "        result = dict(left)" + python_newline()
     + "        if isinstance(right, dict):" + python_newline()
@@ -1858,11 +1950,18 @@ private fun python_value_assert_extra_methods_code(): String =
     + "    def is_zero(self):" + python_newline()
     + "        return self._append(self.value == 0, 'Expected ' + repr(self.value) + ' to be zero', 'Assert.is_zero')" + python_newline()
     + python_newline()
+    + "    def is_one(self):" + python_newline()
+    + "        return self._append(self.value == 1, 'Expected ' + repr(self.value) + ' to be one', 'Assert.is_one')" + python_newline()
+    + python_newline()
+    + "    def has_size(self, expected):" + python_newline()
+    + "        actual = globals()['__capy_size'](self.value)" + python_newline()
+    + "        return self._append(actual == expected, 'Expected ' + repr(self.value) + ' to have size ' + repr(expected), 'Assert.has_size')" + python_newline()
+    + python_newline()
     + "    def contains(self, other):" + python_newline()
     + "        if _capy_data_is(self.value, 'Some'):" + python_newline()
-    + "            result = _capy_data_value(self.value) == other" + python_newline()
+    + "            result = globals()['__capy_deep_equal'](_capy_data_value(self.value), other)" + python_newline()
     + "        else:" + python_newline()
-    + "            result = other in self.value" + python_newline()
+    + "            result = globals()['__capy_contains'](self.value, other)" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to contain ' + repr(other), 'Assert.contains')" + python_newline()
     + python_newline()
     + "    def succeeds(self, expected=None):" + python_newline()
@@ -1874,7 +1973,7 @@ private fun python_value_assert_extra_methods_code(): String =
     + "            return ValueAssert(self.value, self.assertions + getattr(assertion, 'assertions', []))" + python_newline()
     + "        if expected is None:" + python_newline()
     + "            return self._append(True, 'Expected ' + repr(self.value) + ' to succeed', 'Assert.succeeds')" + python_newline()
-    + "        return self._append(success_value == expected, 'Expected ' + repr(self.value) + ' to succeed with ' + repr(expected), 'Assert.succeeds')" + python_newline()
+    + "        return self._append(globals()['__capy_deep_equal'](success_value, expected), 'Expected ' + repr(self.value) + ' to succeed with ' + repr(expected), 'Assert.succeeds')" + python_newline()
     + python_newline()
     + "    def fails(self, expected=None):" + python_newline()
     + "        if not _capy_data_is(self.value, 'Error'):" + python_newline()
@@ -1882,7 +1981,7 @@ private fun python_value_assert_extra_methods_code(): String =
     + "        error_value = _capy_data_value(self.value)" + python_newline()
     + "        if expected is None:" + python_newline()
     + "            return self._append(True, 'Expected ' + repr(self.value) + ' to fail', 'Assert.fails')" + python_newline()
-    + "        return self._append(error_value == expected, 'Expected ' + repr(self.value) + ' to fail with ' + repr(expected), 'Assert.fails')" + python_newline()
+    + "        return self._append(globals()['__capy_deep_equal'](error_value, expected), 'Expected ' + repr(self.value) + ' to fail with ' + repr(expected), 'Assert.fails')" + python_newline()
     + python_newline()
 
 private fun python_runtime_data_helpers_code(): String =
@@ -1915,7 +2014,185 @@ private fun python_test_runtime_collection_helpers_code(): String =
     + python_test_runtime_pattern_helpers_code()
 
 private fun python_test_runtime_collection_basic_code(): String =
-    "def __capy_contains(left, right):" + python_newline()
+    "class CapySet:" + python_newline()
+    + "    def __init__(self, values=None):" + python_newline()
+    + "        self._values = []" + python_newline()
+    + "        if values is not None:" + python_newline()
+    + "            for value in values:" + python_newline()
+    + "                self.add(value)" + python_newline()
+    + python_newline()
+    + "    def __iter__(self):" + python_newline()
+    + "        return iter(self._values)" + python_newline()
+    + python_newline()
+    + "    def __len__(self):" + python_newline()
+    + "        return len(self._values)" + python_newline()
+    + python_newline()
+    + "    def __contains__(self, value):" + python_newline()
+    + "        return any(globals()['__capy_deep_equal'](item, value) for item in self._values)" + python_newline()
+    + python_newline()
+    + "    def __eq__(self, other):" + python_newline()
+    + "        return globals()['__capy_set_equal'](self, other)" + python_newline()
+    + python_newline()
+    + "    def __repr__(self):" + python_newline()
+    + "        if not self._values:" + python_newline()
+    + "            return 'set()'" + python_newline()
+    + "        return chr(123) + ', '.join(repr(value) for value in self._values) + chr(125)" + python_newline()
+    + python_newline()
+    + "    def add(self, value):" + python_newline()
+    + "        if value not in self:" + python_newline()
+    + "            self._values.append(value)" + python_newline()
+    + "        return self" + python_newline()
+    + python_newline()
+    + "    def discard(self, value):" + python_newline()
+    + "        self._values = [item for item in self._values if not globals()['__capy_deep_equal'](item, value)]" + python_newline()
+    + "        return self" + python_newline()
+    + python_newline()
+    + "    def update(self, values):" + python_newline()
+    + "        for value in globals()['__capy_set_values'](values):" + python_newline()
+    + "            self.add(value)" + python_newline()
+    + "        return self" + python_newline()
+    + python_newline()
+    + "    def copy(self):" + python_newline()
+    + "        return CapySet(self._values)" + python_newline()
+    + python_newline()
+    + "    def contains(self, value):" + python_newline()
+    + "        return value in self" + python_newline()
+    + python_newline()
+    + "    def size(self):" + python_newline()
+    + "        return len(self)" + python_newline()
+    + python_newline()
+    + "    def is_empty(self):" + python_newline()
+    + "        return len(self) == 0" + python_newline()
+    + python_newline()
+    + "    def to_list(self):" + python_newline()
+    + "        return list(self._values)" + python_newline()
+    + python_newline()
+    + "    def union(self, other):" + python_newline()
+    + "        return globals()['__capy_set_concat'](self, other)" + python_newline()
+    + python_newline()
+    + "    def intersection(self, other):" + python_newline()
+    + "        return globals()['__capy_set_intersection'](self, other)" + python_newline()
+    + python_newline()
+    + "    def difference(self, other):" + python_newline()
+    + "        return globals()['__capy_set_remove_all'](self, other)" + python_newline()
+    + python_newline()
+    + "    def symmetric_difference(self, other):" + python_newline()
+    + "        return globals()['__capy_set_symmetric_difference'](self, other)" + python_newline()
+    + python_newline()
+    + "    def cartesian_product(self, other):" + python_newline()
+    + "        return globals()['__capy_set_cartesian_product'](self, other)" + python_newline()
+    + python_newline()
+    + "    def power_set(self):" + python_newline()
+    + "        return globals()['__capy_set_power_set'](self)" + python_newline()
+    + python_newline()
+    + "    def _(self):" + python_newline()
+    + "        return self.power_set()" + python_newline()
+    + python_newline()
+    + "    def is_subset_of(self, other):" + python_newline()
+    + "        return globals()['__capy_set_subset'](self, other)" + python_newline()
+    + python_newline()
+    + "    def is_proper_subset_of(self, other):" + python_newline()
+    + "        return globals()['__capy_set_proper_subset'](self, other)" + python_newline()
+    + python_newline()
+    + "    def is_superset_of(self, other):" + python_newline()
+    + "        return globals()['__capy_set_subset'](other, self)" + python_newline()
+    + python_newline()
+    + "    def is_proper_superset_of(self, other):" + python_newline()
+    + "        return globals()['__capy_set_proper_subset'](other, self)" + python_newline()
+    + python_newline()
+    + "def __capy_is_set(value):" + python_newline()
+    + "    return isinstance(value, (CapySet, set))" + python_newline()
+    + python_newline()
+    + "def __capy_set_values(value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if isinstance(value, CapySet):" + python_newline()
+    + "        return list(value._values)" + python_newline()
+    + "    return list(value)" + python_newline()
+    + python_newline()
+    + "def __capy_set(values):" + python_newline()
+    + "    return CapySet(values)" + python_newline()
+    + python_newline()
+    + "def __capy_set_equal(left, right):" + python_newline()
+    + "    if not (__capy_is_set(left) and __capy_is_set(right)):" + python_newline()
+    + "        return False" + python_newline()
+    + "    return len(left) == len(right) and __capy_set_subset(left, right)" + python_newline()
+    + python_newline()
+    + "def __capy_deep_equal(left, right):" + python_newline()
+    + "    if left is right:" + python_newline()
+    + "        return True" + python_newline()
+    + "    if __capy_is_set(left) or __capy_is_set(right):" + python_newline()
+    + "        return __capy_set_equal(left, right)" + python_newline()
+    + "    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):" + python_newline()
+    + "        return len(left) == len(right) and all(__capy_deep_equal(a, b) for a, b in zip(left, right))" + python_newline()
+    + "    if isinstance(left, dict) and isinstance(right, dict):" + python_newline()
+    + "        if set(left.keys()) != set(right.keys()):" + python_newline()
+    + "            return False" + python_newline()
+    + "        return all(__capy_deep_equal(left[key], right[key]) for key in left.keys())" + python_newline()
+    + "    try:" + python_newline()
+    + "        return left == right" + python_newline()
+    + "    except Exception:" + python_newline()
+    + "        return False" + python_newline()
+    + python_newline()
+    + "def __capy_set_append(values, value):" + python_newline()
+    + "    return __capy_set(values).add(value)" + python_newline()
+    + python_newline()
+    + "def __capy_set_concat(left, right):" + python_newline()
+    + "    result = __capy_set(left)" + python_newline()
+    + "    result.update(right)" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_set_remove(values, value):" + python_newline()
+    + "    return __capy_set(values).discard(value)" + python_newline()
+    + python_newline()
+    + "def __capy_set_remove_all(left, right):" + python_newline()
+    + "    result = __capy_set([])" + python_newline()
+    + "    for value in __capy_set_values(left):" + python_newline()
+    + "        if not __capy_contains(right, value):" + python_newline()
+    + "            result.add(value)" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_set_subset(left, right):" + python_newline()
+    + "    return all(__capy_contains(right, value) for value in __capy_set_values(left))" + python_newline()
+    + python_newline()
+    + "def __capy_set_proper_subset(left, right):" + python_newline()
+    + "    return len(left) < len(right) and __capy_set_subset(left, right)" + python_newline()
+    + python_newline()
+    + "def __capy_set_intersection(left, right):" + python_newline()
+    + "    result = __capy_set([])" + python_newline()
+    + "    for value in __capy_set_values(left):" + python_newline()
+    + "        if __capy_contains(right, value):" + python_newline()
+    + "            result.add(value)" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_set_symmetric_difference(left, right):" + python_newline()
+    + "    result = __capy_set_remove_all(left, right)" + python_newline()
+    + "    for value in __capy_set_values(right):" + python_newline()
+    + "        if not __capy_contains(left, value):" + python_newline()
+    + "            result.add(value)" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_set_cartesian_product(left, right):" + python_newline()
+    + "    result = __capy_set([])" + python_newline()
+    + "    for left_value in __capy_set_values(left):" + python_newline()
+    + "        for right_value in __capy_set_values(right):" + python_newline()
+    + "            result.add((left_value, right_value))" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_set_power_set(values):" + python_newline()
+    + "    result = __capy_set([__capy_set([])])" + python_newline()
+    + "    for value in __capy_set_values(values):" + python_newline()
+    + "        additions = __capy_set([])" + python_newline()
+    + "        for subset in list(result):" + python_newline()
+    + "            additions.add(__capy_set_append(subset, value))" + python_newline()
+    + "        result = __capy_set_concat(result, additions)" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_contains(left, right):" + python_newline()
+    + "    left = _unsafe_run(left)" + python_newline()
+    + "    if __capy_is_set(left):" + python_newline()
+    + "        return any(__capy_deep_equal(item, right) for item in __capy_set_values(left))" + python_newline()
+    + "    if isinstance(left, (list, tuple)):" + python_newline()
+    + "        return any(__capy_deep_equal(item, right) for item in left)" + python_newline()
     + "    return right in left" + python_newline()
     + python_newline()
     + "def __capy_size(value):" + python_newline()
@@ -2008,7 +2285,10 @@ private fun python_test_runtime_sequence_helpers_code(): String =
     + "        mapped = _unsafe_run(__capy_apply_lambda(mapper, item))" + python_newline()
     + "        if mapped is None:" + python_newline()
     + "            continue" + python_newline()
-    + "        result.extend(mapped if isinstance(mapped, (list, tuple, set)) else [mapped])" + python_newline()
+    + "        if __capy_is_set(mapped):" + python_newline()
+    + "            result.extend(__capy_set_values(mapped))" + python_newline()
+    + "        else:" + python_newline()
+    + "            result.extend(mapped if isinstance(mapped, (list, tuple)) else [mapped])" + python_newline()
     + "    return result" + python_newline()
     + python_newline()
 
@@ -2094,7 +2374,7 @@ private fun python_test_runtime_type_match_helpers_code(): String =
     + "    if type_name == 'List':" + python_newline()
     + "        return isinstance(value, list)" + python_newline()
     + "    if type_name == 'Set':" + python_newline()
-    + "        return isinstance(value, set)" + python_newline()
+    + "        return __capy_is_set(value)" + python_newline()
     + "    if type_name == 'Dict':" + python_newline()
     + "        return isinstance(value, dict) and '__type' not in value" + python_newline()
     + "    if not isinstance(value, dict):" + python_newline()
@@ -2247,6 +2527,9 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
     else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
     then python_expression_gatherable(binary.left, env, module, allModules)
         & python_expression_gatherable(binary.right, env, module, allModules)
+    else if python_set_binary_expression_with_left_type(binary, leftType)
+    then python_expression_gatherable(binary.left, env, module, allModules)
+        & python_expression_gatherable(binary.right, env, module, allModules)
     else python_binary_operator_gatherable(binary.operator)
         & !python_unsupported_callable_pipe(binary)
         & python_expression_gatherable(binary.left, env, module, allModules)
@@ -2338,6 +2621,9 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     else if python_string_parse_method_call(call, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_string_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
+    else if python_set_method_call(call, python_expression_type(call.receiver, env, module, allModules))
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
@@ -2538,7 +2824,9 @@ private fun python_assert_method(name: String): bool =
         | name == "is_true"
         | name == "is_false"
         | name == "is_zero"
+        | name == "is_one"
         | name == "is_empty"
+        | name == "has_size"
         | name == "contains"
         | name == "succeeds"
         | name == "fails"
