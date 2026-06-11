@@ -13,6 +13,7 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data PythonBinding { name: String, pythonName: String, typeName: String }
 data PythonQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
+data PythonStdlibValue { pythonName: String, typeName: String }
 
 fun python_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
@@ -128,11 +129,11 @@ private fun python_return_statement(expression: CompiledExpression, env: List[Py
         if returnType.name == python_effect_type() & python_effect_block(block)
         then indent + "return Effect.delay(lambda: ("
             + python_block_binding_expressions(block.bindings, env, module, allModules)
-            + "_unsafe_run(" + python_expression_code(block.result, python_block_env(block.bindings, env), module, allModules) + "))[-1])"
+            + "_unsafe_run(" + python_expression_code(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules) + "))[-1])"
             + python_newline()
         else
             python_block_statements(block.bindings, env, module, allModules, indent)
-            + indent + "return " + python_expression_code(block.result, python_block_env(block.bindings, env), module, allModules) + python_newline()
+            + indent + "return " + python_expression_code(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules) + python_newline()
     case _ -> indent + "return " + python_expression_code(expression, env, module, allModules) + python_newline()
 
 private fun python_parameters(parameters: List[CompiledFunctionParameter]): String =
@@ -206,7 +207,10 @@ private fun python_variable_code(name: String, env: List[PythonBinding], module:
     case None ->
         match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
         case Some { binding } -> python_module_import_name(binding.module) + "." + python_identifier(binding.function.name)
-        case None -> python_identifier(name)
+        case None ->
+            match python_imported_stdlib_constant(name, module.imports) with
+            case Some { value } -> value.pythonName
+            case None -> python_identifier(name)
 
 private fun python_binary_expression_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
@@ -337,6 +341,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_string_method_code(call, env, module, allModules)
     else if python_regex_method_call(call, receiverType)
     then python_regex_method_call_code(call, env, module, allModules)
+    else if python_stdlib_date_time_method_call(call, env, module, allModules)
+    then python_stdlib_date_time_method_call_code(call, env, module, allModules)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_code(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, receiverType)
@@ -555,6 +561,75 @@ private fun python_regex_receiver_type(typeName: String): bool =
         | typeName == "/capy/lang/Regex"
         | typeName == "capy/lang/Regex"
         | typeName == "capy.lang.Regex"
+
+private fun python_stdlib_date_time_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_stdlib_date_time_method(python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules)), call.name, call.arguments, env, module, allModules)
+
+private fun python_stdlib_date_time_method(receiver: String, methodName: String, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if receiver == "Date"
+    then if methodName == "add_days"
+        then python_one_method_argument(arguments)
+        else if methodName == "add_years_months"
+        then python_two_method_arguments(arguments)
+        else (methodName == "to_days_since_unix_epoch" | methodName == "to_iso_8601") & arguments.is_empty()
+    else if receiver == "Time"
+    then if methodName == "add_seconds"
+        then python_one_method_argument(arguments)
+        else (methodName == "to_seconds" | methodName == "to_iso_8601") & arguments.is_empty()
+    else if receiver == "DateTime"
+    then if methodName == "plus"
+        then python_one_method_argument(arguments)
+        else if methodName == "minus"
+        then python_one_method_argument(arguments)
+        else (methodName == "to_iso_8601" | methodName == "timestamp") & arguments.is_empty()
+    else if receiver == "Duration" | receiver == "DateDuration" | receiver == "WeekDuration"
+    then if methodName == "to_iso_8601" | methodName == "negate" | methodName == "years" | methodName == "months" | methodName == "days" | methodName == "hours" | methodName == "minutes" | methodName == "seconds"
+        then arguments.is_empty()
+        else false
+    else false
+
+private fun python_stdlib_date_time_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
+    let receiver = python_expression_code(call.receiver, env, module, allModules)
+    if receiverType == "Date"
+    then python_stdlib_date_method_call_code(call, receiver, env, module, allModules)
+    else if receiverType == "Time"
+    then python_stdlib_time_method_call_code(call, receiver, env, module, allModules)
+    else if receiverType == "DateTime"
+    then python_stdlib_date_time_value_method_call_code(call, receiver, env, module, allModules)
+    else python_stdlib_duration_method_call_code(call, receiver)
+
+private fun python_stdlib_date_method_call_code(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "add_days"
+    then "__capy_date_add_days(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "add_years_months"
+    then "__capy_date_add_years_months(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ", " + python_second_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "to_days_since_unix_epoch"
+    then "__capy_date_to_days_since_unix_epoch(" + receiver + ")"
+    else "__capy_date_to_iso_8601(" + receiver + ")"
+
+private fun python_stdlib_time_method_call_code(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "add_seconds"
+    then "__capy_time_add_seconds(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "to_seconds"
+    then "__capy_time_to_seconds(" + receiver + ")"
+    else "__capy_time_to_iso_8601(" + receiver + ")"
+
+private fun python_stdlib_date_time_value_method_call_code(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "plus"
+    then "__capy_date_time_plus(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "minus"
+    then "__capy_date_time_minus(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "timestamp"
+    then "__capy_date_time_timestamp(" + receiver + ")"
+    else "__capy_date_time_to_iso_8601(" + receiver + ")"
+
+private fun python_stdlib_duration_method_call_code(call: CompiledMethodCallExpression, receiver: String): String =
+    if call.name == "to_iso_8601"
+    then "__capy_duration_to_iso_8601(" + receiver + ")"
+    else if call.name == "negate"
+    then "__capy_duration_negate(" + receiver + ")"
+    else "__capy_duration_" + call.name + "(" + receiver + ")"
 
 private fun python_set_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
     receiverType == python_set_type() & python_set_method_arity(call)
@@ -1016,7 +1091,7 @@ private fun python_block_expression_code(block: CompiledBlockExpression, env: Li
     if block.bindings.is_empty()
     then python_expression_code(block.result, env, module, allModules)
     else "(lambda: (" + python_block_binding_expressions(block.bindings, env, module, allModules)
-        + python_expression_code(block.result, python_block_env(block.bindings, env), module, allModules)
+        + python_expression_code(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
         + ")[-1])()"
 
 private fun python_block_binding_expressions(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1024,7 +1099,7 @@ private fun python_block_binding_expressions(bindings: List[CompiledLetBinding],
     case None -> ""
     case Some { binding } ->
         "(" + python_binding_python_name(binding.name) + " := " + python_binding_value_code(binding, env, module, allModules) + "), "
-            + python_block_binding_expressions(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
+            + python_block_binding_expressions(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
 
 private fun python_effect_block(block: CompiledBlockExpression): bool =
     python_effect_bindings(block.bindings)
@@ -1039,29 +1114,29 @@ private fun python_block_statements(bindings: List[CompiledLetBinding], env: Lis
     case None -> ""
     case Some { binding } ->
         indent + python_binding_python_name(binding.name) + " = " + python_binding_value_code(binding, env, module, allModules) + python_newline()
-            + python_block_statements(bindings[1:], [python_let_binding(binding)] + env, module, allModules, indent)
+            + python_block_statements(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules, indent)
 
 private fun python_binding_value_code(binding: CompiledLetBinding, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding.operator == "<-"
     then "__capy_bind_value(" + python_expression_code(binding.value, env, module, allModules) + ")"
     else python_expression_code(binding.value, env, module, allModules)
 
-private fun python_block_env(bindings: List[CompiledLetBinding], env: List[PythonBinding]): List[PythonBinding] =
+private fun python_block_env(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): List[PythonBinding] =
     match bindings[0] with
     case None -> env
     case Some { binding } ->
-        python_block_env(bindings[1:], [python_let_binding(binding)] + env)
+        python_block_env(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
 
-private fun python_let_binding(binding: CompiledLetBinding): PythonBinding =
+private fun python_let_binding(binding: CompiledLetBinding, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): PythonBinding =
     PythonBinding {
         name: binding.name,
         pythonName: python_binding_python_name(binding.name),
-        typeName: python_let_binding_type_name(binding)
+        typeName: python_let_binding_type_name(binding, env, module, allModules)
     }
 
-private fun python_let_binding_type_name(binding: CompiledLetBinding): String =
+private fun python_let_binding_type_name(binding: CompiledLetBinding, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding.typeReference.name.is_empty()
-    then python_unknown_type()
+    then python_expression_type(binding.value, env, module, allModules)
     else binding.typeReference.name
 
 private fun python_binding_python_name(name: String): String =
@@ -1083,7 +1158,7 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
     case CompiledDoubleLiteral _ -> python_double_type()
     case CompiledBoolLiteral _ -> python_bool_type()
     case CompiledStringLiteral _ -> python_string_type()
-    case CompiledVariableExpression variable -> python_variable_type(variable.name, env)
+    case CompiledVariableExpression variable -> python_variable_type(variable.name, env, module, allModules)
     case CompiledUnaryExpression unary -> if unary.operator == "!" then python_bool_type() else python_expression_type(unary.expression, env, module, allModules)
     case CompiledBinaryExpression binary -> python_binary_expression_type(binary, env, module, allModules)
     case CompiledFunctionCallExpression call -> python_function_call_expression_type(call.name, module, allModules)
@@ -1097,13 +1172,41 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
     case CompiledFieldAccessExpression access -> python_field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> python_expression_type(reduce.initial, env, module, allModules)
     case CompiledIfExpression ifExpression -> python_expression_type(ifExpression.thenBranch, env, module, allModules)
-    case CompiledBlockExpression block -> python_expression_type(block.result, python_block_env(block.bindings, env), module, allModules)
+    case CompiledBlockExpression block -> python_expression_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
     case _ -> python_unknown_type()
 
-private fun python_variable_type(name: String, env: List[PythonBinding]): String =
+private fun python_variable_type(name: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.typeName
-    case None -> python_unknown_type()
+    case None ->
+        match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        case Some { binding } -> binding.function.returnType.name
+        case None ->
+            match python_imported_stdlib_constant(name, module.imports) with
+            case Some { value } -> value.typeName
+            case None -> python_unknown_type()
+
+private fun python_imported_stdlib_constant(name: String, imports: List[CompiledImportDeclaration]): /capy/lang/Option[PythonStdlibValue] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & python_import_includes_name(name, declaration)
+        then match python_stdlib_constant(name, declaration.modulePath) with
+            case Some { value } -> /capy/lang/Option.Some { value }
+            case None -> python_imported_stdlib_constant(name, imports[1:])
+        else python_imported_stdlib_constant(name, imports[1:])
+
+private fun python_stdlib_constant(name: String, modulePath: String): /capy/lang/Option[PythonStdlibValue] =
+    let path = python_normalize_import_module_path(modulePath)
+    if path == "capy/date_time/Date" & name == "UNIX_DATE"
+    then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_date_unix_date()", typeName: "Date" } }
+    else if path == "capy/date_time/Time" & name == "MIDNIGHT"
+    then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_time_midnight()", typeName: "Time" } }
+    else if path == "capy/date_time/DateTime" & name == "UNIX_EPOCH"
+    then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_date_time_unix_epoch()", typeName: "DateTime" } }
+    else if path == "capy/date_time/Duration" & name == "ZERO"
+    then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_duration_zero()", typeName: "Duration" } }
+    else /capy/lang/Option.None {}
 
 private fun python_field_access_type(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(access.receiver, env, module, allModules)
@@ -1169,6 +1272,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_string_method_return_type(call.name)
     else if python_regex_method_call(call, receiverType)
     then python_regex_method_call_type(call.name)
+    else if python_stdlib_date_time_method_call(call, env, module, allModules)
+    then python_stdlib_date_time_method_call_type(call, env, module, allModules)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_type(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, receiverType)
@@ -1320,6 +1425,39 @@ private fun python_regex_binary_expression_type(operator: String): String =
     else if operator == "~>"
     then python_string_to_string_function_type()
     else python_list_type()
+
+private fun python_stdlib_date_time_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiver = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
+    if receiver == "Date"
+    then if call.name == "to_days_since_unix_epoch" then python_int_type() else if call.name == "to_iso_8601" then python_string_type() else "Date"
+    else if receiver == "Time"
+    then if call.name == "to_seconds" then python_int_type() else if call.name == "to_iso_8601" then python_string_type() else "Time"
+    else if receiver == "DateTime"
+    then python_stdlib_date_time_value_method_call_type(call, env, module, allModules)
+    else python_stdlib_duration_method_call_type(call.name)
+
+private fun python_stdlib_date_time_value_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "to_iso_8601"
+    then python_string_type()
+    else if call.name == "timestamp"
+    then python_long_type()
+    else if call.name == "plus"
+    then "DateTime"
+    else if call.name == "minus"
+    then
+        match call.arguments[0] with
+        case Some { argument } ->
+            let argumentType = python_type_unqualified_name(python_expression_type(argument, env, module, allModules))
+            if argumentType == "DateTime" then "Duration" else "DateTime"
+        case None -> "DateTime"
+    else "DateTime"
+
+private fun python_stdlib_duration_method_call_type(name: String): String =
+    if name == "to_iso_8601"
+    then python_string_type()
+    else if name == "negate"
+    then "Duration"
+    else python_int_type()
 
 private fun python_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     python_collection_pipe_operator(binary.operator)
@@ -1648,6 +1786,15 @@ private fun python_method_owner_base_name(name: String): String =
     let bracket = python_first_index_of(name, "[", 0)
     if bracket < 0 then name else name[0, bracket]
 
+private fun python_type_unqualified_name(name: String): String =
+    let withoutArguments = python_method_owner_base_name(name)
+    let afterSlash = python_after_last_separator(withoutArguments, "/")
+    python_after_last_separator(afterSlash, ".")
+
+private fun python_after_last_separator(value: String, separator: String): String =
+    let idx = python_last_index_of(value, separator)
+    if idx < 0 then value else value[idx + 1, value.size().value]
+
 private fun python_method_member_name(name: String): String =
     if name.size().value >= 2 & python_string_has_prefix(name, "`")
     then name[1, name.size().value - 1]
@@ -1682,6 +1829,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + python_test_runtime_effect_code()
     + python_test_runtime_assert_code()
     + python_test_runtime_numeric_code()
+    + python_test_runtime_date_time_code()
     + python_test_runtime_collection_helpers_code()
     + python_test_runtime_error_code()
     + python_runtime_data_helpers_code()
@@ -1698,7 +1846,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -1970,6 +2118,230 @@ private fun python_test_runtime_numeric_code(): String =
     + "    for _ in range(exponent):" + python_newline()
     + "        result *= base" + python_newline()
     + "    return result" + python_newline()
+    + python_newline()
+
+private fun python_test_runtime_date_time_code(): String =
+    "def __capy_raw_field(value, name):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if isinstance(value, dict):" + python_newline()
+    + "        return value[name]" + python_newline()
+    + "    return getattr(value, name)" + python_newline()
+    + python_newline()
+    + "def __capy_int_value(value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if isinstance(value, dict):" + python_newline()
+    + "        if 'value' in value:" + python_newline()
+    + "            return int(value['value'])" + python_newline()
+    + "        if '$0' in value:" + python_newline()
+    + "            return int(value['$0'])" + python_newline()
+    + "    return int(value)" + python_newline()
+    + python_newline()
+    + "def __capy_int_field(value, name):" + python_newline()
+    + "    return __capy_int_value(__capy_raw_field(value, name))" + python_newline()
+    + python_newline()
+    + "def __capy_date(day, month, year):" + python_newline()
+    + "    return __capy_data('Date', dict(day=int(day), month=int(month), year=int(year)))" + python_newline()
+    + python_newline()
+    + "def __capy_time(hour, minute, second, offset_minutes=None):" + python_newline()
+    + "    if offset_minutes is None:" + python_newline()
+    + "        offset_minutes = __capy_none()" + python_newline()
+    + "    return __capy_data('Time', dict(hour=int(hour), minute=int(minute), second=int(second), offset_minutes=offset_minutes))" + python_newline()
+    + python_newline()
+    + "def __capy_date_duration(years, months, days, hours, minutes, seconds):" + python_newline()
+    + "    return __capy_data('DateDuration', dict(years=int(years), months=int(months), days=int(days), hours=int(hours), minutes=int(minutes), seconds=int(seconds)))" + python_newline()
+    + python_newline()
+    + "def __capy_date_time(date, time):" + python_newline()
+    + "    return __capy_data('DateTime', dict(date=date, time=time))" + python_newline()
+    + python_newline()
+    + "def __capy_date_unix_date():" + python_newline()
+    + "    return __capy_date(1, 1, 1970)" + python_newline()
+    + python_newline()
+    + "def __capy_time_midnight():" + python_newline()
+    + "    return __capy_time(0, 0, 0)" + python_newline()
+    + python_newline()
+    + "def __capy_date_time_unix_epoch():" + python_newline()
+    + "    return __capy_date_time(__capy_date_unix_date(), __capy_time_midnight())" + python_newline()
+    + python_newline()
+    + "def __capy_duration_zero():" + python_newline()
+    + "    return __capy_date_duration(0, 0, 0, 0, 0, 0)" + python_newline()
+    + python_newline()
+    + "def __capy_leap_year(year):" + python_newline()
+    + "    year = int(year)" + python_newline()
+    + "    return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0" + python_newline()
+    + python_newline()
+    + "def __capy_days_in_month(year, month):" + python_newline()
+    + "    if month in (4, 6, 9, 11):" + python_newline()
+    + "        return 30" + python_newline()
+    + "    if month == 2:" + python_newline()
+    + "        return 29 if __capy_leap_year(year) else 28" + python_newline()
+    + "    return 31" + python_newline()
+    + python_newline()
+    + "def __capy_date_to_days_since_unix_epoch(date):" + python_newline()
+    + "    day = __capy_int_field(date, 'day')" + python_newline()
+    + "    month = __capy_int_field(date, 'month')" + python_newline()
+    + "    year = __capy_int_field(date, 'year')" + python_newline()
+    + "    y = year - 1 if month <= 2 else year" + python_newline()
+    + "    era = y // 400" + python_newline()
+    + "    yoe = y - era * 400" + python_newline()
+    + "    mp = month - 3 if month > 2 else month + 9" + python_newline()
+    + "    doy = (153 * mp + 2) // 5 + day - 1" + python_newline()
+    + "    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy" + python_newline()
+    + "    return era * 146097 + doe - 719468" + python_newline()
+    + python_newline()
+    + "def __capy_date_from_days_since_unix_epoch(days):" + python_newline()
+    + "    z = int(days) + 719468" + python_newline()
+    + "    era = z // 146097" + python_newline()
+    + "    doe = z - era * 146097" + python_newline()
+    + "    yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365" + python_newline()
+    + "    year = yoe + era * 400" + python_newline()
+    + "    doy = doe - (365 * yoe + yoe // 4 - yoe // 100)" + python_newline()
+    + "    mp = (5 * doy + 2) // 153" + python_newline()
+    + "    day = doy - (153 * mp + 2) // 5 + 1" + python_newline()
+    + "    month = mp + 3 if mp < 10 else mp - 9" + python_newline()
+    + "    if month <= 2:" + python_newline()
+    + "        year += 1" + python_newline()
+    + "    return __capy_date(day, month, year)" + python_newline()
+    + python_newline()
+    + "def __capy_date_add_days(date, days):" + python_newline()
+    + "    return __capy_date_from_days_since_unix_epoch(__capy_date_to_days_since_unix_epoch(date) + int(days))" + python_newline()
+    + python_newline()
+    + "def __capy_date_add_years_months(date, years, months):" + python_newline()
+    + "    day = __capy_int_field(date, 'day')" + python_newline()
+    + "    month = __capy_int_field(date, 'month')" + python_newline()
+    + "    year = __capy_int_field(date, 'year')" + python_newline()
+    + "    total_months = (year + int(years)) * 12 + (month + int(months) - 1)" + python_newline()
+    + "    normalized_year = total_months // 12" + python_newline()
+    + "    normalized_month = total_months % 12 + 1" + python_newline()
+    + "    return __capy_date(min(day, __capy_days_in_month(normalized_year, normalized_month)), normalized_month, normalized_year)" + python_newline()
+    + python_newline()
+    + "def __capy_pad_int(value, size):" + python_newline()
+    + "    return str(abs(int(value))).rjust(size, '0')" + python_newline()
+    + python_newline()
+    + "def __capy_date_to_iso_8601(date):" + python_newline()
+    + "    year = __capy_int_field(date, 'year')" + python_newline()
+    + "    if year < 0:" + python_newline()
+    + "        year_text = '-' + __capy_pad_int(year, 4)" + python_newline()
+    + "    elif year > 9999:" + python_newline()
+    + "        year_text = '+' + str(year)" + python_newline()
+    + "    else:" + python_newline()
+    + "        year_text = __capy_pad_int(year, 4)" + python_newline()
+    + "    return year_text + '-' + __capy_pad_int(__capy_int_field(date, 'month'), 2) + '-' + __capy_pad_int(__capy_int_field(date, 'day'), 2)" + python_newline()
+    + python_newline()
+    + "def __capy_time_to_seconds(time):" + python_newline()
+    + "    return __capy_int_field(time, 'hour') * 3600 + __capy_int_field(time, 'minute') * 60 + __capy_int_field(time, 'second')" + python_newline()
+    + python_newline()
+    + "def __capy_time_add_seconds(time, seconds):" + python_newline()
+    + "    total_seconds = (__capy_time_to_seconds(time) + int(seconds)) % 86400" + python_newline()
+    + "    hour = (total_seconds // 3600) % 24" + python_newline()
+    + "    minute = (total_seconds // 60) % 60" + python_newline()
+    + "    second = total_seconds % 60" + python_newline()
+    + "    return __capy_time(hour, minute, second, __capy_raw_field(time, 'offset_minutes'))" + python_newline()
+    + python_newline()
+    + "def __capy_time_to_iso_8601(time):" + python_newline()
+    + "    text = __capy_pad_int(__capy_int_field(time, 'hour'), 2) + ':' + __capy_pad_int(__capy_int_field(time, 'minute'), 2) + ':' + __capy_pad_int(__capy_int_field(time, 'second'), 2)" + python_newline()
+    + "    offset = __capy_raw_field(time, 'offset_minutes')" + python_newline()
+    + "    if _capy_data_is(offset, 'None'):" + python_newline()
+    + "        return text" + python_newline()
+    + "    offset_minutes = __capy_int_value(_capy_data_value(offset))" + python_newline()
+    + "    if offset_minutes == 0:" + python_newline()
+    + "        return text + 'Z'" + python_newline()
+    + "    absolute = abs(offset_minutes)" + python_newline()
+    + "    return text + ('-' if offset_minutes < 0 else '+') + __capy_pad_int(absolute // 60, 2) + ':' + __capy_pad_int(absolute % 60, 2)" + python_newline()
+    + python_newline()
+    + "def __capy_date_time_timestamp(date_time):" + python_newline()
+    + "    return __capy_date_to_days_since_unix_epoch(__capy_raw_field(date_time, 'date')) * 86400 + __capy_time_to_seconds(__capy_raw_field(date_time, 'time'))" + python_newline()
+    + python_newline()
+    + "def __capy_date_time_plus(date_time, duration):" + python_newline()
+    + "    if _capy_data_is(duration, 'WeekDuration'):" + python_newline()
+    + "        duration = __capy_date_duration(0, 0, __capy_int_field(duration, 'weeks') * 7, 0, 0, 0)" + python_newline()
+    + "    date = __capy_raw_field(date_time, 'date')" + python_newline()
+    + "    time = __capy_raw_field(date_time, 'time')" + python_newline()
+    + "    date_with_months = __capy_date_add_years_months(date, __capy_duration_years(duration), __capy_duration_months(duration))" + python_newline()
+    + "    days_from_hours = __capy_duration_hours(duration) // 24" + python_newline()
+    + "    days_from_minutes = __capy_duration_minutes(duration) // 1440" + python_newline()
+    + "    days_from_seconds = __capy_duration_seconds(duration) // 86400" + python_newline()
+    + "    remainder_hours = __capy_duration_hours(duration) % 24" + python_newline()
+    + "    remainder_minutes = __capy_duration_minutes(duration) % 1440" + python_newline()
+    + "    remainder_seconds = __capy_duration_seconds(duration) % 86400" + python_newline()
+    + "    intra_day_seconds = remainder_hours * 3600 + remainder_minutes * 60 + remainder_seconds" + python_newline()
+    + "    extra_days = (__capy_time_to_seconds(time) + intra_day_seconds) // 86400" + python_newline()
+    + "    new_date = __capy_date_add_days(date_with_months, __capy_duration_days(duration) + days_from_hours + days_from_minutes + days_from_seconds + extra_days)" + python_newline()
+    + "    return __capy_date_time(new_date, __capy_time_add_seconds(time, intra_day_seconds))" + python_newline()
+    + python_newline()
+    + "def __capy_date_time_minus(date_time, other):" + python_newline()
+    + "    if _capy_data_is(other, 'DateTime'):" + python_newline()
+    + "        delta = __capy_date_time_timestamp(date_time) - __capy_date_time_timestamp(other)" + python_newline()
+    + "        negative = delta < 0" + python_newline()
+    + "        total_seconds = abs(delta)" + python_newline()
+    + "        days = total_seconds // 86400" + python_newline()
+    + "        remainder = total_seconds % 86400" + python_newline()
+    + "        hours = remainder // 3600" + python_newline()
+    + "        remainder = remainder % 3600" + python_newline()
+    + "        minutes = remainder // 60" + python_newline()
+    + "        seconds = remainder % 60" + python_newline()
+    + "        duration = __capy_date_duration(0, 0, days, hours, minutes, seconds)" + python_newline()
+    + "        return __capy_duration_negate(duration) if negative else duration" + python_newline()
+    + "    return __capy_date_time_plus(date_time, __capy_duration_negate(other))" + python_newline()
+    + python_newline()
+    + "def __capy_date_time_to_iso_8601(date_time):" + python_newline()
+    + "    time = __capy_raw_field(date_time, 'time')" + python_newline()
+    + "    offset = __capy_raw_field(time, 'offset_minutes')" + python_newline()
+    + "    if _capy_data_is(offset, 'Some'):" + python_newline()
+    + "        offset_minutes = __capy_int_value(_capy_data_value(offset))" + python_newline()
+    + "        time = __capy_time(__capy_int_field(time, 'hour'), __capy_int_field(time, 'minute'), __capy_int_field(time, 'second'))" + python_newline()
+    + "        date_time = __capy_date_time_plus(__capy_date_time(__capy_raw_field(date_time, 'date'), time), __capy_date_duration(0, 0, 0, 0, 0 - offset_minutes, 0))" + python_newline()
+    + "    return __capy_date_to_iso_8601(__capy_raw_field(date_time, 'date')) + 'T' + __capy_time_to_iso_8601(__capy_raw_field(date_time, 'time')) + 'Z'" + python_newline()
+    + python_newline()
+    + "def __capy_duration_years(duration):" + python_newline()
+    + "    return __capy_int_field(duration, 'years') if _capy_data_is(duration, 'DateDuration') else 0" + python_newline()
+    + python_newline()
+    + "def __capy_duration_months(duration):" + python_newline()
+    + "    return __capy_int_field(duration, 'months') if _capy_data_is(duration, 'DateDuration') else 0" + python_newline()
+    + python_newline()
+    + "def __capy_duration_days(duration):" + python_newline()
+    + "    return __capy_int_field(duration, 'days') if _capy_data_is(duration, 'DateDuration') else __capy_int_field(duration, 'weeks') * 7" + python_newline()
+    + python_newline()
+    + "def __capy_duration_hours(duration):" + python_newline()
+    + "    return __capy_int_field(duration, 'hours') if _capy_data_is(duration, 'DateDuration') else 0" + python_newline()
+    + python_newline()
+    + "def __capy_duration_minutes(duration):" + python_newline()
+    + "    return __capy_int_field(duration, 'minutes') if _capy_data_is(duration, 'DateDuration') else 0" + python_newline()
+    + python_newline()
+    + "def __capy_duration_seconds(duration):" + python_newline()
+    + "    return __capy_int_field(duration, 'seconds') if _capy_data_is(duration, 'DateDuration') else 0" + python_newline()
+    + python_newline()
+    + "def __capy_duration_negate(duration):" + python_newline()
+    + "    if _capy_data_is(duration, 'WeekDuration'):" + python_newline()
+    + "        return __capy_data('WeekDuration', dict(weeks=0 - __capy_int_field(duration, 'weeks')))" + python_newline()
+    + "    return __capy_date_duration(0 - __capy_duration_years(duration), 0 - __capy_duration_months(duration), 0 - __capy_duration_days(duration), 0 - __capy_duration_hours(duration), 0 - __capy_duration_minutes(duration), 0 - __capy_duration_seconds(duration))" + python_newline()
+    + python_newline()
+    + "def __capy_duration_to_iso_8601(duration):" + python_newline()
+    + "    if _capy_data_is(duration, 'WeekDuration'):" + python_newline()
+    + "        return 'P' + str(__capy_int_field(duration, 'weeks')) + 'W'" + python_newline()
+    + "    years = __capy_duration_years(duration)" + python_newline()
+    + "    months = __capy_duration_months(duration)" + python_newline()
+    + "    days = __capy_duration_days(duration)" + python_newline()
+    + "    hours = __capy_duration_hours(duration)" + python_newline()
+    + "    minutes = __capy_duration_minutes(duration)" + python_newline()
+    + "    seconds = __capy_duration_seconds(duration)" + python_newline()
+    + "    if years == 0 and months == 0 and days == 0 and hours == 0 and minutes == 0 and seconds == 0:" + python_newline()
+    + "        return 'PT0S'" + python_newline()
+    + "    text = 'P'" + python_newline()
+    + "    if years != 0:" + python_newline()
+    + "        text += str(years) + 'Y'" + python_newline()
+    + "    if months != 0:" + python_newline()
+    + "        text += str(months) + 'M'" + python_newline()
+    + "    if days != 0:" + python_newline()
+    + "        text += str(days) + 'D'" + python_newline()
+    + "    if hours != 0 or minutes != 0 or seconds != 0:" + python_newline()
+    + "        text += 'T'" + python_newline()
+    + "    if hours != 0:" + python_newline()
+    + "        text += str(hours) + 'H'" + python_newline()
+    + "    if minutes != 0:" + python_newline()
+    + "        text += str(minutes) + 'M'" + python_newline()
+    + "    if seconds != 0:" + python_newline()
+    + "        text += str(seconds) + 'S'" + python_newline()
+    + "    return text" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_error_code(): String =
@@ -2664,7 +3036,7 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledMatchExpression matchExpression -> python_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
         python_bindings_gatherable(block.bindings, env, module, allModules)
-            & python_expression_gatherable(block.result, python_block_env(block.bindings, env), module, allModules)
+            & python_expression_gatherable(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
 
 private fun python_binary_operator_gatherable(operator: String): bool =
     python_binary_runtime_operator(operator)
@@ -2785,6 +3157,9 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_regex_method_call(call, python_expression_type(call.receiver, env, module, allModules))
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
+    else if python_stdlib_date_time_method_call(call, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_set_method_call(call, python_expression_type(call.receiver, env, module, allModules))
@@ -2919,7 +3294,7 @@ private fun python_bindings_gatherable(bindings: List[CompiledLetBinding], env: 
     case Some { binding } ->
         (binding.operator == "=" | binding.operator == "<-")
             & python_expression_gatherable(binding.value, env, module, allModules)
-            & python_bindings_gatherable(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
+            & python_bindings_gatherable(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
 
 private fun python_test_function_gatherable(function: CompiledFunction): bool =
     match function.body with
@@ -3204,5 +3579,16 @@ private fun python_last_dot_index_from(value: String, idx: int, found: int): int
         case None -> found
         case Some { actual } ->
             python_last_dot_index_from(value, idx + 1, if actual == "." then idx else found)
+
+private fun python_last_index_of(value: String, expected: String): int =
+    python_last_index_of_from(value, expected, 0, -1)
+
+private fun python_last_index_of_from(value: String, expected: String, idx: int, found: int): int =
+    if idx >= value.size().value
+    then found
+    else match value[idx] with
+        case None -> found
+        case Some { actual } ->
+            python_last_index_of_from(value, expected, idx + 1, if actual == expected then idx else found)
 
 private fun python_newline(): String = '\n'
