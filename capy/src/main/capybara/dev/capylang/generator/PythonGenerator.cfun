@@ -135,7 +135,7 @@ private fun python_return_statement(expression: CompiledExpression, env: List[Py
     case CompiledBlockExpression block ->
         if returnType.name == python_effect_type() & python_effect_block(block)
         then indent + "return Effect.delay(lambda: ("
-            + python_effect_block_binding_expressions(block.bindings, env, module, allModules)
+            + python_block_binding_expressions(block.bindings, env, module, allModules)
             + "_unsafe_run(" + python_expression_code(block.result, python_block_env(block.bindings, env), module, allModules) + "))[-1])"
             + python_newline()
         else
@@ -340,7 +340,7 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
 private fun python_effect_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     (call.name == "map" | call.name == "flat_map")
         & python_expression_type(call.receiver, env, module, allModules) == python_effect_type()
-        & python_single_lambda_argument(call.arguments)
+        & python_single_callable_argument(call.arguments)
 
 private fun python_effect_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let methodName = if call.name == "flat_map" then "flat_map" else "map"
@@ -730,13 +730,6 @@ private fun python_effect_bindings(bindings: List[CompiledLetBinding]): bool =
     case None -> false
     case Some { binding } -> binding.operator == "<-" | python_effect_bindings(bindings[1:])
 
-private fun python_effect_block_binding_expressions(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match bindings[0] with
-    case None -> ""
-    case Some { binding } ->
-        "(" + python_binding_python_name(binding.name) + " := " + python_binding_value_code(binding, env, module, allModules) + "), "
-            + python_effect_block_binding_expressions(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
-
 private fun python_block_statements(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match bindings[0] with
     case None -> ""
@@ -924,7 +917,7 @@ private fun python_result_type(): String = "Result"
 private fun python_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     python_collection_pipe_operator(binary.operator)
         & python_collection_pipe_receiver_type(leftType)
-        & python_lambda_expression(binary.right)
+        & python_callable_expression(binary.right)
 
 private fun python_collection_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|-" | operator == "|*"
@@ -945,7 +938,7 @@ private fun python_collection_pipe_result_type(operator: String, leftType: Strin
 private fun python_result_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     python_result_pipe_operator(binary.operator)
         & python_result_pipe_receiver_type(leftType)
-        & python_lambda_expression(binary.right)
+        & python_callable_expression(binary.right)
 
 private fun python_result_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|*"
@@ -963,7 +956,7 @@ private fun python_collection_predicate_call(call: CompiledMethodCallExpression,
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
     if call.name == "any" | call.name == "all"
     then python_collection_predicate_receiver_type(receiverType)
-        & python_single_lambda_argument(call.arguments)
+        & python_single_callable_argument(call.arguments)
     else false
 
 private fun python_collection_predicate_receiver_type(type: String): bool =
@@ -973,15 +966,12 @@ private fun python_collection_predicate_receiver_type(type: String): bool =
         | type == python_seq_type()
         | type == python_dict_type()
 
-private fun python_single_lambda_argument(arguments: List[CompiledExpression]): bool =
+private fun python_single_callable_argument(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case None -> false
     case Some { argument } ->
         arguments[1:].is_empty()
-            & match argument with
-                case CompiledLambdaExpression _ -> true
-                case CompiledFunctionReferenceExpression _ -> true
-                case _ -> false
+            & python_callable_expression(argument)
 
 private fun python_truthy_expression_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "bool(" + python_expression_code(expression, env, module, allModules) + ")"
@@ -1848,30 +1838,26 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
     then python_expression_gatherable(binary.left, env, module, allModules)
         & python_expression_gatherable(binary.right, env, module, allModules)
     else python_binary_operator_gatherable(binary.operator)
-        & !python_unsupported_pipe_lambda(binary)
+        & !python_unsupported_callable_pipe(binary)
         & python_expression_gatherable(binary.left, env, module, allModules)
         & python_expression_gatherable(binary.right, env, module, allModules)
 
 private fun python_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
-        & match binary.right with
-            case CompiledLambdaExpression lambda ->
-                python_collection_lambda_gatherable(lambda, env, module, allModules)
-            case CompiledFunctionReferenceExpression reference ->
-                python_function_reference_gatherable(reference, module, allModules)
-            case _ -> false
+        & python_callable_expression_gatherable(binary.right, env, module, allModules)
 
-private fun python_collection_lambda_gatherable(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_lambda_expression_gatherable(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
 
 private fun python_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
-        & match binary.right with
-            case CompiledLambdaExpression lambda ->
-                python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
-            case CompiledFunctionReferenceExpression reference ->
-                python_function_reference_gatherable(reference, module, allModules)
-            case _ -> false
+        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+
+private fun python_callable_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledLambdaExpression lambda -> python_lambda_expression_gatherable(lambda, env, module, allModules)
+    case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
+    case _ -> false
 
 private fun python_function_reference_gatherable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_runtime_function(reference.name)
@@ -1887,10 +1873,10 @@ private fun python_qualified_function_reference_gatherable(reference: CompiledFu
     case Some { binding } -> python_callable_function(binding.function)
     case None -> false
 
-private fun python_unsupported_pipe_lambda(binary: CompiledBinaryExpression): bool =
-    binary.operator == "|" & python_lambda_expression(binary.right)
+private fun python_unsupported_callable_pipe(binary: CompiledBinaryExpression): bool =
+    binary.operator == "|" & python_callable_expression(binary.right)
 
-private fun python_lambda_expression(expression: CompiledExpression): bool =
+private fun python_callable_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression _ -> true
     case CompiledFunctionReferenceExpression _ -> true
@@ -1940,25 +1926,18 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
 
 private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(call.receiver, env, module, allModules)
-        & match call.arguments[0] with
-            case None -> false
-            case Some { mapper } ->
-                match mapper with
-                case CompiledLambdaExpression lambda -> python_collection_lambda_gatherable(lambda, env, module, allModules)
-                case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
-                case _ -> false
+        & python_single_callable_argument_gatherable(call.arguments, env, module, allModules)
 
 private fun python_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(call.receiver, env, module, allModules)
-        & match call.arguments[0] with
-            case None -> false
-            case Some { predicate } ->
-                match predicate with
-                case CompiledLambdaExpression lambda ->
-                    python_collection_lambda_gatherable(lambda, env, module, allModules)
-                case CompiledFunctionReferenceExpression reference ->
-                    python_function_reference_gatherable(reference, module, allModules)
-                case _ -> false
+        & python_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+
+private fun python_single_callable_argument_gatherable(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } ->
+        arguments[1:].is_empty()
+            & python_callable_expression_gatherable(argument, env, module, allModules)
 
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
     python_local_function_count(name, functions) == 1
