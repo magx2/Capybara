@@ -1652,9 +1652,7 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
     case CompiledSetLiteral literal -> java_script_expressions_gatherable(literal.values, env, module, allModules)
     case CompiledDictLiteral literal -> java_script_dict_entries_gatherable(literal.entries, env, module, allModules)
     case CompiledTupleLiteral literal -> java_script_expressions_gatherable(literal.values, env, module, allModules)
-    case CompiledIndexExpression index ->
-        java_script_expression_gatherable(index.receiver, env, module, allModules)
-            & java_script_expression_gatherable(index.index, env, module, allModules)
+    case CompiledIndexExpression index -> java_script_index_expression_gatherable(index, env, module, allModules)
     case CompiledDataLiteral literal -> java_script_data_fields_gatherable(literal.fields, env, module, allModules)
     case CompiledFieldAccessExpression access -> java_script_expression_gatherable(access.receiver, env, module, allModules)
     case CompiledReduceExpression reduce -> java_script_reduce_expression_gatherable(reduce, env, module, allModules)
@@ -1717,6 +1715,11 @@ private fun java_script_binary_operator_gatherable(operator: String): bool =
 
 private fun java_script_unary_operator_gatherable(operator: String): bool =
     operator == "-" | operator == "!" | operator == ".not."
+
+private fun java_script_index_expression_gatherable(index: CompiledIndexExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_expression_gatherable(index.receiver, env, module, allModules)
+        & java_script_expression_gatherable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | java_script_expression_gatherable(index.endIndex, env, module, allModules))
 
 private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_expressions_gatherable(call.arguments, env, module, allModules)
