@@ -367,6 +367,13 @@ private fun python_collection_pipe_code(binary: CompiledBinaryExpression, env: L
             + ", "
             + python_lambda_expression_code(lambda, env, module, allModules)
             + ")"
+    case CompiledFunctionReferenceExpression reference ->
+        python_collection_pipe_helper(binary.operator)
+            + "("
+            + python_expression_code(binary.left, env, module, allModules)
+            + ", "
+            + python_expression_code(reference, env, module, allModules)
+            + ")"
     case _ -> "__capy_unsupported('collection pipe')"
 
 private fun python_collection_pipe_helper(operator: String): String =
@@ -511,8 +518,11 @@ private fun python_declared_positional_field_name(name: String, fields: List[Str
         else python_declared_positional_field_name(name, fields[1:], idx + 1)
 
 private fun python_index_expression_code(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_expression_type(index.receiver, env, module, allModules)
     let receiver = python_expression_code(index.receiver, env, module, allModules)
-    if index.hasEndIndex
+    if !python_built_in_index_expression(index, receiverType)
+    then python_user_defined_index_code(index, receiverType, env, module, allModules)
+    else if index.hasEndIndex
     then receiver
         + "["
         + python_slice_bound_code(index.index, true, env, module, allModules)
@@ -533,6 +543,36 @@ private fun python_omitted_slice_bound(literal: CompiledIntLiteral, start: bool)
     if start
     then literal.source == "__capy_slice_start__"
     else literal.source == "__capy_slice_end__"
+
+private fun python_built_in_index_expression(index: CompiledIndexExpression, receiverType: String): bool =
+    if index.hasEndIndex
+    then receiverType == python_unknown_type()
+        | receiverType == python_string_type()
+        | receiverType == "Tuple"
+        | receiverType == python_list_type()
+    else receiverType == python_unknown_type()
+        | receiverType == python_string_type()
+        | receiverType == "Tuple"
+        | receiverType == python_list_type()
+        | receiverType == python_dict_type()
+
+private fun python_user_defined_index_code(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
+    case Some { function } ->
+        python_function_name(function)
+            + "("
+            + python_expression_code(index.receiver, env, module, allModules)
+            + python_index_argument_tail(index, env, module, allModules)
+            + ")"
+    case None -> "__capy_unsupported('index get')"
+
+private fun python_index_argument_tail(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if index.hasEndIndex
+    then ", "
+        + python_expression_code(index.index, env, module, allModules)
+        + ", "
+        + python_expression_code(index.endIndex, env, module, allModules)
+    else ", " + python_expression_code(index.index, env, module, allModules)
 
 private fun python_reduce_expression_code(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let reduceEnv = python_reduce_bindings(reduce, env)
@@ -642,7 +682,7 @@ private fun python_block_binding_expressions(bindings: List[CompiledLetBinding],
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        "(" + python_identifier(binding.name) + " := " + python_binding_value_code(binding, env, module, allModules) + "), "
+        "(" + python_binding_python_name(binding.name) + " := " + python_binding_value_code(binding, env, module, allModules) + "), "
             + python_block_binding_expressions(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
 
 private fun python_effect_block(block: CompiledBlockExpression): bool =
@@ -657,19 +697,19 @@ private fun python_effect_block_binding_expressions(bindings: List[CompiledLetBi
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        "(" + python_identifier(binding.name) + " := " + python_binding_value_code(binding, env, module, allModules) + "), "
+        "(" + python_binding_python_name(binding.name) + " := " + python_binding_value_code(binding, env, module, allModules) + "), "
             + python_effect_block_binding_expressions(bindings[1:], [python_let_binding(binding)] + env, module, allModules)
 
 private fun python_block_statements(bindings: List[CompiledLetBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        indent + python_identifier(binding.name) + " = " + python_binding_value_code(binding, env, module, allModules) + python_newline()
+        indent + python_binding_python_name(binding.name) + " = " + python_binding_value_code(binding, env, module, allModules) + python_newline()
             + python_block_statements(bindings[1:], [python_let_binding(binding)] + env, module, allModules, indent)
 
 private fun python_binding_value_code(binding: CompiledLetBinding, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding.operator == "<-"
-    then "_unsafe_run(" + python_expression_code(binding.value, env, module, allModules) + ")"
+    then "__capy_bind_value(" + python_expression_code(binding.value, env, module, allModules) + ")"
     else python_expression_code(binding.value, env, module, allModules)
 
 private fun python_block_env(bindings: List[CompiledLetBinding], env: List[PythonBinding]): List[PythonBinding] =
@@ -679,7 +719,18 @@ private fun python_block_env(bindings: List[CompiledLetBinding], env: List[Pytho
         python_block_env(bindings[1:], [python_let_binding(binding)] + env)
 
 private fun python_let_binding(binding: CompiledLetBinding): PythonBinding =
-    PythonBinding { name: binding.name, pythonName: python_identifier(binding.name), typeName: binding.typeReference.name }
+    PythonBinding { name: binding.name, pythonName: python_binding_python_name(binding.name), typeName: binding.typeReference.name }
+
+private fun python_binding_python_name(name: String): String =
+    if python_reserved_binding_name(name)
+    then "_capy_" + python_identifier(name)
+    else python_identifier(name)
+
+private fun python_reserved_binding_name(name: String): bool =
+    python_runtime_function(name)
+        | name == "Effect"
+        | name == "ValueAssert"
+        | name == "CombinedAssert"
 
 private fun python_expression_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
@@ -698,9 +749,9 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
     case CompiledSetLiteral _ -> python_set_type()
     case CompiledDictLiteral _ -> python_dict_type()
     case CompiledTupleLiteral _ -> python_unknown_type()
-    case CompiledIndexExpression _ -> python_unknown_type()
+    case CompiledIndexExpression index -> python_index_expression_type(index, env, module, allModules)
     case CompiledDataLiteral literal -> literal.typeName
-    case CompiledFieldAccessExpression _ -> python_unknown_type()
+    case CompiledFieldAccessExpression access -> python_field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> python_expression_type(reduce.initial, env, module, allModules)
     case CompiledIfExpression ifExpression -> python_expression_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBlockExpression block -> python_expression_type(block.result, python_block_env(block.bindings, env), module, allModules)
@@ -709,6 +760,31 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
 private fun python_variable_type(name: String, env: List[PythonBinding]): String =
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.typeName
+    case None -> python_unknown_type()
+
+private fun python_field_access_type(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_expression_type(access.receiver, env, module, allModules)
+    if receiverType == python_unknown_type()
+    then python_unknown_type()
+    else python_data_field_type(access.name, python_data_type_fields(receiverType, module, allModules))
+
+private fun python_data_field_type(name: String, fields: List[String]): String =
+    match fields[0] with
+    case None -> python_unknown_type()
+    case Some { field } ->
+        if python_schema_field_name(field) == name
+        then python_schema_field_type_name(field)
+        else python_data_field_type(name, fields[1:])
+
+private fun python_index_expression_type(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_expression_type(index.receiver, env, module, allModules)
+    if !python_built_in_index_expression(index, receiverType)
+    then python_user_defined_index_type(receiverType, module, allModules)
+    else python_unknown_type()
+
+private fun python_user_defined_index_type(receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
+    case Some { function } -> function.returnType.name
     case None -> python_unknown_type()
 
 private fun python_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -814,7 +890,8 @@ private fun python_collection_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|-" | operator == "|*"
 
 private fun python_collection_pipe_receiver_type(type: String): bool =
-    type == python_list_type()
+    type == python_unknown_type()
+        | type == python_list_type()
         | type == python_set_type()
         | type == python_string_type()
         | type == python_seq_type()
@@ -850,6 +927,7 @@ private fun python_single_lambda_argument(arguments: List[CompiledExpression]): 
         arguments[1:].is_empty()
             & match argument with
                 case CompiledLambdaExpression _ -> true
+                case CompiledFunctionReferenceExpression _ -> true
                 case _ -> false
 
 private fun python_truthy_expression_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1094,7 +1172,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
     + "class Effect:" + python_newline()
     + "    def __init__(self, thunk):" + python_newline()
@@ -1161,6 +1239,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "    def is_false(self):" + python_newline()
     + "        return self._append(self.value is False, 'Expected ' + repr(self.value) + ' to be false', 'Assert.is_false')" + python_newline()
     + python_newline()
+    + python_value_assert_extra_methods_code()
     + "class CombinedAssert:" + python_newline()
     + "    def __init__(self, assertions):" + python_newline()
     + "        self.assertions = assertions" + python_newline()
@@ -1228,8 +1307,6 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "    return result" + python_newline()
     + python_newline()
     + "def __capy_add(left, right):" + python_newline()
-    + "    if isinstance(left, str) or isinstance(right, str):" + python_newline()
-    + "        return __capy_str(left) + __capy_str(right)" + python_newline()
     + "    if isinstance(left, list):" + python_newline()
     + "        return left + (right if isinstance(right, list) else [right])" + python_newline()
     + "    if isinstance(left, set):" + python_newline()
@@ -1248,6 +1325,8 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "        else:" + python_newline()
     + "            raise TypeError('Unsupported dict + operand: ' + repr(right))" + python_newline()
     + "        return result" + python_newline()
+    + "    if isinstance(left, str) or isinstance(right, str):" + python_newline()
+    + "        return __capy_str(left) + __capy_str(right)" + python_newline()
     + "    return left + right" + python_newline()
     + python_newline()
     + "def __capy_sub(left, right):" + python_newline()
@@ -1325,6 +1404,14 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "        return 'Success'" + python_newline()
     + "    if type_name in ('/capy/lang/Program.Failed', 'Program.Failed'):" + python_newline()
     + "        return 'Failed'" + python_newline()
+    + "    if type_name in ('/capy/lang/Option.Some', 'Option.Some'):" + python_newline()
+    + "        return 'Some'" + python_newline()
+    + "    if type_name in ('/capy/lang/Option.None', 'Option.None'):" + python_newline()
+    + "        return 'None'" + python_newline()
+    + "    if type_name in ('/capy/lang/Result.Success', 'Result.Success'):" + python_newline()
+    + "        return 'Success'" + python_newline()
+    + "    if type_name in ('/capy/lang/Result.Error', 'Result.Error'):" + python_newline()
+    + "        return 'Error'" + python_newline()
     + "    return type_name" + python_newline()
     + python_newline()
     + "def __capy_data(type_name, fields):" + python_newline()
@@ -1332,11 +1419,18 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "    result['__type'] = __capy_normalize_type_name(type_name)" + python_newline()
     + "    return result" + python_newline()
     + python_newline()
+    + python_runtime_data_helpers_code()
     + "DEFAULT_FAILED_EXIT_CODE = __capy_data('/capy/lang/Program.ExitCode', dict(value=1))" + python_newline()
     + python_newline()
     + "def _unsafe_run(value):" + python_newline()
     + "    while hasattr(value, 'unsafe_run') and callable(value.unsafe_run):" + python_newline()
     + "        value = value.unsafe_run()" + python_newline()
+    + "    return value" + python_newline()
+    + python_newline()
+    + "def __capy_bind_value(value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Success', 'Some'):" + python_newline()
+    + "        return _capy_data_value(value)" + python_newline()
     + "    return value" + python_newline()
     + python_newline()
     + "def _as_list(value):" + python_newline()
@@ -1358,6 +1452,56 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "    files = []" + python_newline()
     + python_test_gather_calls(modules, modules)
     + "    return files" + python_newline()
+
+private fun python_value_assert_extra_methods_code(): String =
+    "    def is_empty(self):" + python_newline()
+    + "        if _capy_data_is(self.value, 'None'):" + python_newline()
+    + "            result = True" + python_newline()
+    + "        else:" + python_newline()
+    + "            try:" + python_newline()
+    + "                result = len(self.value) == 0" + python_newline()
+    + "            except TypeError:" + python_newline()
+    + "                result = False" + python_newline()
+    + "        return self._append(result, 'Expected ' + repr(self.value) + ' to be empty', 'Assert.is_empty')" + python_newline()
+    + python_newline()
+    + "    def contains(self, other):" + python_newline()
+    + "        if _capy_data_is(self.value, 'Some'):" + python_newline()
+    + "            result = _capy_data_value(self.value) == other" + python_newline()
+    + "        else:" + python_newline()
+    + "            result = other in self.value" + python_newline()
+    + "        return self._append(result, 'Expected ' + repr(self.value) + ' to contain ' + repr(other), 'Assert.contains')" + python_newline()
+    + python_newline()
+    + "    def succeeds(self, expected=None):" + python_newline()
+    + "        if not _capy_data_is(self.value, 'Success'):" + python_newline()
+    + "            return self._append(False, 'Expected ' + repr(self.value) + ' to succeed', 'Assert.succeeds')" + python_newline()
+    + "        success_value = _capy_data_value(self.value)" + python_newline()
+    + "        if callable(expected):" + python_newline()
+    + "            assertion = expected(success_value)" + python_newline()
+    + "            return ValueAssert(self.value, self.assertions + getattr(assertion, 'assertions', []))" + python_newline()
+    + "        if expected is None:" + python_newline()
+    + "            return self._append(True, 'Expected ' + repr(self.value) + ' to succeed', 'Assert.succeeds')" + python_newline()
+    + "        return self._append(success_value == expected, 'Expected ' + repr(self.value) + ' to succeed with ' + repr(expected), 'Assert.succeeds')" + python_newline()
+    + python_newline()
+
+private fun python_runtime_data_helpers_code(): String =
+    "def _capy_data_is(value, *type_names):" + python_newline()
+    + "    if not isinstance(value, dict):" + python_newline()
+    + "        return False" + python_newline()
+    + "    actual = __capy_normalize_type_name(value.get('__type'))" + python_newline()
+    + "    return any(actual == __capy_normalize_type_name(type_name) for type_name in type_names)" + python_newline()
+    + python_newline()
+    + "def _capy_data_value(value):" + python_newline()
+    + "    if not isinstance(value, dict):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if 'value' in value:" + python_newline()
+    + "        return value['value']" + python_newline()
+    + "    if '$0' in value:" + python_newline()
+    + "        return value['$0']" + python_newline()
+    + "    fields = [key for key in value.keys() if key != '__type']" + python_newline()
+    + "    if fields:" + python_newline()
+    + "        return value[fields[0]]" + python_newline()
+    + "    return value" + python_newline()
+    + python_newline()
 
 private fun python_test_runtime_collection_helpers_code(): String =
     "def __capy_contains(left, right):" + python_newline()
@@ -1587,7 +1731,7 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
             & python_expression_gatherable(unary.expression, env, module, allModules)
     case CompiledFunctionCallExpression call ->
         python_function_call_gatherable(call, env, module, allModules)
-    case CompiledFunctionReferenceExpression _ -> false
+    case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
     case CompiledMethodCallExpression call ->
         python_method_call_gatherable(call, env, module, allModules)
     case CompiledWithExpression _ -> false
@@ -1597,10 +1741,7 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledSetLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
     case CompiledDictLiteral literal -> python_dict_entries_gatherable(literal.entries, env, module, allModules)
     case CompiledTupleLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
-    case CompiledIndexExpression index ->
-        python_expression_gatherable(index.receiver, env, module, allModules)
-            & python_expression_gatherable(index.index, env, module, allModules)
-            & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+    case CompiledIndexExpression index -> python_index_expression_gatherable(index, env, module, allModules)
     case CompiledDataLiteral literal -> python_data_fields_gatherable(literal.fields, env, module, allModules)
     case CompiledFieldAccessExpression access -> python_expression_gatherable(access.receiver, env, module, allModules)
     case CompiledReduceExpression reduce -> python_reduce_expression_gatherable(reduce, env, module, allModules)
@@ -1633,10 +1774,26 @@ private fun python_collection_pipe_gatherable(binary: CompiledBinaryExpression, 
         & match binary.right with
             case CompiledLambdaExpression lambda ->
                 python_collection_lambda_gatherable(lambda, env, module, allModules)
+            case CompiledFunctionReferenceExpression reference ->
+                python_function_reference_gatherable(reference, module, allModules)
             case _ -> false
 
 private fun python_collection_lambda_gatherable(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
+
+private fun python_function_reference_gatherable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if python_runtime_function(reference.name)
+    then true
+    else if python_qualified_name(reference.name)
+    then python_qualified_function_reference_gatherable(reference, module, allModules)
+    else if python_local_function_unambiguous(reference.name, module.functions)
+    then true
+    else python_imported_function_exists(reference.name, module.imports, module, allModules)
+
+private fun python_qualified_function_reference_gatherable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match python_find_qualified_function_binding(reference.name, module, allModules) with
+    case Some { binding } -> python_callable_function(binding.function)
+    case None -> false
 
 private fun python_unsupported_pipe_lambda(binary: CompiledBinaryExpression): bool =
     binary.operator == "|" & python_lambda_expression(binary.right)
@@ -1644,6 +1801,7 @@ private fun python_unsupported_pipe_lambda(binary: CompiledBinaryExpression): bo
 private fun python_lambda_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression _ -> true
+    case CompiledFunctionReferenceExpression _ -> true
     case _ -> false
 
 private fun python_unary_operator_gatherable(operator: String): bool =
@@ -1695,6 +1853,7 @@ private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, 
             case Some { mapper } ->
                 match mapper with
                 case CompiledLambdaExpression lambda -> python_collection_lambda_gatherable(lambda, env, module, allModules)
+                case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
                 case _ -> false
 
 private fun python_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1705,6 +1864,8 @@ private fun python_collection_predicate_gatherable(call: CompiledMethodCallExpre
                 match predicate with
                 case CompiledLambdaExpression lambda ->
                     python_collection_lambda_gatherable(lambda, env, module, allModules)
+                case CompiledFunctionReferenceExpression reference ->
+                    python_function_reference_gatherable(reference, module, allModules)
                 case _ -> false
 
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
@@ -1736,6 +1897,22 @@ private fun python_dict_entries_gatherable(entries: List[CompiledDictEntry], env
         python_expression_gatherable(entry.key, env, module, allModules)
             & python_expression_gatherable(entry.value, env, module, allModules)
             & python_dict_entries_gatherable(entries[1:], env, module, allModules)
+
+private fun python_index_expression_gatherable(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = python_expression_type(index.receiver, env, module, allModules)
+    if !python_built_in_index_expression(index, receiverType)
+    then python_user_defined_index_gatherable(index, receiverType, env, module, allModules)
+    else python_expression_gatherable(index.receiver, env, module, allModules)
+        & python_expression_gatherable(index.index, env, module, allModules)
+        & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+
+private fun python_user_defined_index_gatherable(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
+    case Some _ ->
+        python_expression_gatherable(index.receiver, env, module, allModules)
+            & python_expression_gatherable(index.index, env, module, allModules)
+            & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+    case None -> false
 
 private fun python_data_fields_gatherable(fields: List[CompiledDataField], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match fields[0] with
@@ -1853,7 +2030,12 @@ private fun python_zero_arg_lambda(expression: CompiledExpression): bool =
     case _ -> false
 
 private fun python_assert_method(name: String): bool =
-    name == "is_equal_to" | name == "is_true" | name == "is_false"
+    name == "is_equal_to"
+        | name == "is_true"
+        | name == "is_false"
+        | name == "is_empty"
+        | name == "contains"
+        | name == "succeeds"
 
 private fun python_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     python_merge_schema_fields(
@@ -1979,6 +2161,12 @@ private fun python_schema_field_name(value: String): String =
     if separator < 0
     then value
     else value[0, separator]
+
+private fun python_schema_field_type_name(value: String): String =
+    let separator = python_first_index_of(value, "|", 0)
+    if separator < 0
+    then python_unknown_type()
+    else python_schema_type_name(value[separator + 1, value.size().value])
 
 private fun python_schema_type_name(value: String): String =
     let trimmed = value.trim()
