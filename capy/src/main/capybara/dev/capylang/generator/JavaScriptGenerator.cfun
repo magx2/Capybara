@@ -38,7 +38,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_import(module: CompiledModule): String =
-    "const { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_data } = require("
+    "const { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_data, __capy_deep_equal } = require("
         + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), "capy/test/CapyTestRuntime"))
         + ");"
         + java_script_newline()
@@ -115,7 +115,7 @@ private fun java_script_function(function: CompiledFunction, module: CompiledMod
     "function "
         + java_script_function_name(function)
         + "("
-        + java_script_parameters(function.parameters)
+        + java_script_function_parameters(function)
         + ") {"
         + java_script_newline()
         + "    return "
@@ -124,6 +124,16 @@ private fun java_script_function(function: CompiledFunction, module: CompiledMod
         + java_script_newline()
         + "}"
         + java_script_newline()
+
+private fun java_script_function_parameters(function: CompiledFunction): String =
+    if java_script_extension_method_function(function)
+    then java_script_identifier("this") + java_script_method_parameter_tail(function.parameters)
+    else java_script_parameters(function.parameters)
+
+private fun java_script_method_parameter_tail(parameters: List[CompiledFunctionParameter]): String =
+    if parameters.is_empty()
+    then ""
+    else ", " + java_script_parameters(parameters)
 
 private fun java_script_parameters(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
@@ -136,7 +146,13 @@ private fun java_script_parameter_tail(parameters: List[CompiledFunctionParamete
     case Some { parameter } -> ", " + java_script_identifier(parameter.name) + java_script_parameter_tail(parameters[1:])
 
 private fun java_script_function_bindings(function: CompiledFunction): List[JavaScriptBinding] =
-    java_script_parameter_bindings(function.parameters)
+    if java_script_extension_method_function(function)
+    then [JavaScriptBinding {
+            name: "this",
+            jsName: java_script_identifier("this"),
+            typeName: java_script_method_owner_name(function.name)
+        }] + java_script_parameter_bindings(function.parameters)
+    else java_script_parameter_bindings(function.parameters)
 
 private fun java_script_parameter_bindings(parameters: List[CompiledFunctionParameter]): List[JavaScriptBinding] =
     match parameters[0] with
@@ -157,7 +173,7 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledVariableExpression variable -> java_script_variable_code(variable.name, env, module, allModules)
     case CompiledIfExpression ifExpression ->
         "("
-            + java_script_expression_code(ifExpression.condition, env, module, allModules)
+            + java_script_truthy_expression_code(ifExpression.condition, env, module, allModules)
             + " ? "
             + java_script_expression_code(ifExpression.thenBranch, env, module, allModules)
             + " : "
@@ -193,7 +209,10 @@ private fun java_script_variable_code(name: String, env: List[JavaScriptBinding]
             case None -> java_script_identifier(name)
 
 private fun java_script_binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if binary.operator == "+"
+    let leftType = java_script_expression_type(binary.left, env, module, allModules)
+    if java_script_binary_extension_operator_expression_with_left_type(binary, leftType, module.functions)
+    then java_script_binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
+    else if binary.operator == "+"
     then java_script_binary_runtime_call("__capy_add", binary, env, module, allModules)
     else if binary.operator == "-"
     then java_script_binary_runtime_call("__capy_sub", binary, env, module, allModules)
@@ -207,6 +226,10 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_binary_runtime_call("__capy_pow", binary, env, module, allModules)
     else if binary.operator == "?"
     then java_script_binary_runtime_call("__capy_contains", binary, env, module, allModules)
+    else if binary.operator == "=="
+    then java_script_binary_runtime_call("__capy_deep_equal", binary, env, module, allModules)
+    else if binary.operator == "!="
+    then "(!" + java_script_binary_runtime_call("__capy_deep_equal", binary, env, module, allModules) + ")"
     else if binary.operator == ".nand."
     then "(~(" + java_script_expression_code(binary.left, env, module, allModules)
         + " & "
@@ -243,6 +266,21 @@ private fun java_script_binary_runtime_call(name: String, binary: CompiledBinary
         + ", "
         + java_script_expression_code(binary.right, env, module, allModules)
         + ")"
+
+private fun java_script_binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String, functions: List[CompiledFunction]): bool =
+    match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, functions) with
+    case Some _ -> true
+    case None -> false
+
+private fun java_script_binary_extension_operator_code_with_left_type(binary: CompiledBinaryExpression, leftType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
+    case Some { function } ->
+        java_script_function_name(function)
+            + "("
+            + java_script_expression_code(binary.left, env, module, allModules)
+            + java_script_extension_method_argument_tail([binary.right], env, module, allModules)
+            + ")"
+    case None -> "__capy_unsupported('extension operator')"
 
 private fun java_script_binary_operator(operator: String): String =
     if operator == "!="
@@ -284,7 +322,12 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then "__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_primitive_conversion_code(call, env, module, allModules)
-    else java_script_expression_code(call.receiver, env, module, allModules)
+    else match java_script_find_local_extension_method(call, env, module, allModules) with
+        case Some { function } -> java_script_extension_method_call_code(function, call, env, module, allModules)
+        case None -> java_script_raw_method_call_code(call, env, module, allModules)
+
+private fun java_script_raw_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_expression_code(call.receiver, env, module, allModules)
         + "."
         + java_script_method_name(call.name)
         + "("
@@ -310,6 +353,18 @@ private fun java_script_primitive_conversion_code(call: CompiledMethodCallExpres
     if call.name == "to_int"
     then "__capy_to_int(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else "__capy_to_long(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+
+private fun java_script_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_function_name(function)
+        + "("
+        + java_script_expression_code(call.receiver, env, module, allModules)
+        + java_script_extension_method_argument_tail(call.arguments, env, module, allModules)
+        + ")"
+
+private fun java_script_extension_method_argument_tail(arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if arguments.is_empty()
+    then ""
+    else ", " + java_script_expression_list_code(arguments, env, module, allModules)
 
 private fun java_script_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = java_script_lambda_bindings(lambda.parameters) + env
@@ -513,7 +568,15 @@ private fun java_script_let_binding(binding: CompiledLetBinding): JavaScriptBind
     JavaScriptBinding { name: binding.name, jsName: java_script_identifier(binding.name), typeName: binding.typeReference.name }
 
 private fun java_script_truthy_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    "Boolean(" + java_script_expression_code(expression, env, module, allModules) + ")"
+    java_script_truthy_code(java_script_expression_code(expression, env, module, allModules))
+
+private fun java_script_truthy_code(code: String): String =
+    "((value) => { "
+        + "if (value == null) return false; "
+        + "if (Array.isArray(value) || typeof value === 'string') return value.length > 0; "
+        + "if (value instanceof Set || value instanceof Map) return value.size > 0; "
+        + "return Boolean(value); "
+        + "})(" + code + ")"
 
 private fun java_script_expression_type(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
@@ -524,18 +587,38 @@ private fun java_script_expression_type(expression: CompiledExpression, env: Lis
     case CompiledBoolLiteral _ -> "bool"
     case CompiledStringLiteral _ -> "String"
     case CompiledVariableExpression variable -> java_script_variable_type(variable.name, env)
-    case CompiledMethodCallExpression call ->
-        if call.name == "size"
-        then "int"
-        else if java_script_primitive_conversion_call(call, env, module, allModules)
-        then java_script_primitive_conversion_result_type(call.name)
-        else java_script_unknown_type()
+    case CompiledBinaryExpression binary -> java_script_binary_expression_type(binary, env, module, allModules)
+    case CompiledMethodCallExpression call -> java_script_method_call_expression_type(call, env, module, allModules)
+    case CompiledDataLiteral literal -> literal.typeName
+    case CompiledReduceExpression reduce -> java_script_expression_type(reduce.initial, env, module, allModules)
     case CompiledBlockExpression block -> java_script_expression_type(block.result, java_script_block_env(block.bindings, env), module, allModules)
     case CompiledIfExpression ifExpression ->
         let thenType = java_script_expression_type(ifExpression.thenBranch, env, module, allModules)
         let elseType = java_script_expression_type(ifExpression.elseBranch, env, module, allModules)
         if thenType == elseType then thenType else java_script_unknown_type()
     case _ -> java_script_unknown_type()
+
+private fun java_script_binary_expression_type(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftType = java_script_expression_type(binary.left, env, module, allModules)
+    match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
+    case Some { function } -> function.returnType.name
+    case None ->
+        if binary.operator == "&" | binary.operator == "|"
+            | binary.operator == "==" | binary.operator == "!="
+            | binary.operator == ">" | binary.operator == "<"
+            | binary.operator == ">=" | binary.operator == "<="
+            | binary.operator == "?"
+        then "bool"
+        else java_script_unknown_type()
+
+private fun java_script_method_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "size"
+    then "int"
+    else if java_script_primitive_conversion_call(call, env, module, allModules)
+    then java_script_primitive_conversion_result_type(call.name)
+    else match java_script_find_local_extension_method(call, env, module, allModules) with
+    case Some { function } -> function.returnType.name
+    case None -> java_script_unknown_type()
 
 private fun java_script_primitive_conversion_result_type(name: String): String =
     if name == "to_int" then "int" else "long"
@@ -620,6 +703,35 @@ private fun java_script_find_function_in_imported_module(name: String, declarati
             java_script_import_alias(declaration, module) + "[" + java_script_string_literal(java_script_export_name(function)) + "]"
         }
     case None -> java_script_find_function_in_imports(name, rest, module, allModules)
+
+private fun java_script_find_local_extension_method(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    if receiverType == java_script_unknown_type()
+    then /capy/lang/Option.None {}
+    else java_script_find_local_method_function(receiverType, call.name, module.functions)
+
+private fun java_script_find_local_binary_extension_operator_with_left_type(binary: CompiledBinaryExpression, leftType: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    if leftType == java_script_unknown_type()
+    then /capy/lang/Option.None {}
+    else java_script_find_local_method_function(leftType, binary.operator, functions)
+
+private fun java_script_find_local_method_function(receiverType: String, methodName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if java_script_method_function_matches(receiverType, methodName, function)
+        then /capy/lang/Option.Some { function }
+        else java_script_find_local_method_function(receiverType, methodName, functions[1:])
+
+private fun java_script_method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
+    if java_script_skip_function(function)
+    then false
+    else
+        let idx = java_script_last_dot_index(function.name)
+        if idx < 0
+        then false
+        else java_script_method_owner_base_name(function.name[0, idx]) == java_script_method_owner_base_name(ownerName)
+            & java_script_method_member_name(function.name[idx + 1, function.name.size().value]) == java_script_method_member_name(methodName)
 
 private fun java_script_find_constant_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     match imports[0] with
@@ -713,7 +825,16 @@ private fun java_script_test_runtime_modules(modules: List[CompiledModule]): Lis
 private fun java_script_test_runtime_code(modules: List[CompiledModule]): String =
     "'use strict';" + java_script_newline()
     + java_script_newline()
-    + "class Effect {" + java_script_newline()
+    + java_script_effect_runtime_code()
+    + java_script_assert_runtime_code()
+    + java_script_numeric_runtime_code()
+    + java_script_collection_runtime_code()
+    + java_script_deep_equal_code()
+    + java_script_test_gather_runtime_code(modules)
+    + java_script_runtime_exports_code()
+
+private fun java_script_effect_runtime_code(): String =
+    "class Effect {" + java_script_newline()
     + "    constructor(thunk) { this._thunk = thunk; }" + java_script_newline()
     + "    unsafe_run() { return this._thunk(); }" + java_script_newline()
     + "    unsafeRun() { return this.unsafe_run(); }" + java_script_newline()
@@ -727,7 +848,9 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + "function pure(value) { return Effect.pure(value); }" + java_script_newline()
     + "function delay(thunk) { return Effect.delay(thunk); }" + java_script_newline()
     + java_script_newline()
-    + "class ValueAssert {" + java_script_newline()
+
+private fun java_script_assert_runtime_code(): String =
+    "class ValueAssert {" + java_script_newline()
     + "    constructor(value, assertions = []) { this.value = value; this.assertions = assertions; }" + java_script_newline()
     + "    _append(result, message, type) { return new ValueAssert(this.value, this.assertions.concat([() => ({ result: Boolean(result), message: String(message), type })])); }" + java_script_newline()
     + "    is_equal_to(other, tolerance = null) { const result = tolerance == null ? __capy_deep_equal(this.value, other) : Math.abs(Number(this.value) - Number(other)) <= Number(tolerance); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to equal ' + __capy_display(other), 'Assert.is_equal_to'); }" + java_script_newline()
@@ -747,7 +870,9 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + "function test(name, body) { return { name, body, assert_supplier: body }; }" + java_script_newline()
     + "function test_file(file_name, test_cases) { return Effect.delay(() => ({ file_name, fileName: file_name, path: file_name, test_cases, testCases: test_cases, timestamp_millis: Date.now() })); }" + java_script_newline()
     + java_script_newline()
-    + "function __capy_has_bigint(left, right) { return typeof left === 'bigint' || typeof right === 'bigint'; }" + java_script_newline()
+
+private fun java_script_numeric_runtime_code(): String =
+    "function __capy_has_bigint(left, right) { return typeof left === 'bigint' || typeof right === 'bigint'; }" + java_script_newline()
     + "function __capy_has_fractional_number(left, right) { return (typeof left === 'number' && !Number.isInteger(left)) || (typeof right === 'number' && !Number.isInteger(right)); }" + java_script_newline()
     + "function __capy_bigint(value) { return typeof value === 'bigint' ? value : BigInt(Math.trunc(value)); }" + java_script_newline()
     + "function __capy_long(value) { return BigInt.asIntN(64, value); }" + java_script_newline()
@@ -761,7 +886,9 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + "function __capy_div(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
     + "function __capy_mod(left, right) { if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) % __capy_number(right) : __capy_long(__capy_bigint(left) % __capy_bigint(right)); return left % right; }" + java_script_newline()
     + "function __capy_pow(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) { if (__capy_has_fractional_number(left, right)) return Math.pow(__capy_number(left), __capy_number(right)); let exponent = __capy_bigint(right); if (exponent <= 0n) return 1n; let result = 1n; const base = __capy_bigint(left); while (exponent > 0n) { result = __capy_long(result * base); exponent--; } return result; } if (Number.isInteger(left) && Number.isInteger(right)) { if (right <= 0) return 1; let result = 1; for (let index = 0; index < right; index++) result *= left; return result; } return Math.pow(left, right); }" + java_script_newline()
-    + "function __capy_contains(left, right) { if (typeof left === 'string') return left.includes(right); if (Array.isArray(left)) return left.includes(right); if (left instanceof Set) return left.has(right); if (left instanceof Map) return left.has(right); return right in left; }" + java_script_newline()
+
+private fun java_script_collection_runtime_code(): String =
+    "function __capy_contains(left, right) { if (typeof left === 'string') return left.includes(right); if (Array.isArray(left)) return left.includes(right); if (left instanceof Set) return left.has(right); if (left instanceof Map) return left.has(right); return right in left; }" + java_script_newline()
     + "function __capy_size(value) { return value == null ? 0 : value.size != null ? value.size : value.length; }" + java_script_newline()
     + "function __capy_index(value, index) { if (value instanceof Map) return value.get(index); return value[index]; }" + java_script_newline()
     + "function __capy_get_field(value, name) { return value == null ? undefined : value[name]; }" + java_script_newline()
@@ -777,15 +904,18 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + "function __capy_as_list(value) { value = __capy_unsafe_run(value); if (value == null) return []; return Array.isArray(value) ? value : [value]; }" + java_script_newline()
     + "function __capy_gather_module(modulePath) { const module = require(modulePath); return typeof module.tests === 'function' ? __capy_as_list(module.tests()) : []; }" + java_script_newline()
     + java_script_newline()
-    + java_script_deep_equal_code()
-    + java_script_newline()
+
+private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]): String =
+    java_script_newline()
     + "function gatherTests() {" + java_script_newline()
     + "    const files = [];" + java_script_newline()
     + java_script_test_gather_calls(modules, modules)
     + "    return files;" + java_script_newline()
     + "}" + java_script_newline()
     + java_script_newline()
-    + "module.exports = { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_data, gatherTests };" + java_script_newline()
+
+private fun java_script_runtime_exports_code(): String =
+    "module.exports = { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
 
 private fun java_script_deep_equal_code(): String =
     "function __capy_deep_equal(left, right) {" + java_script_newline()
@@ -917,9 +1047,16 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
             & java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env), module, allModules)
 
 private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_binary_operator_gatherable(binary.operator)
-        & java_script_expression_gatherable(binary.left, env, module, allModules)
+    if java_script_binary_operator_gatherable(binary.operator)
+    then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
+    else
+        let leftType = java_script_expression_type(binary.left, env, module, allModules)
+        match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
+        case Some _ ->
+            java_script_expression_gatherable(binary.left, env, module, allModules)
+                & java_script_expression_gatherable(binary.right, env, module, allModules)
+        case None -> false
 
 private fun java_script_binary_operator_gatherable(operator: String): bool =
     operator == "+"
@@ -960,7 +1097,11 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then call.arguments.is_empty() & java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
-    else false
+    else match java_script_find_local_extension_method(call, env, module, allModules) with
+        case Some _ ->
+            java_script_expression_gatherable(call.receiver, env, module, allModules)
+                & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+        case None -> false
 
 private fun java_script_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
     java_script_local_function_count(name, functions) == 1
@@ -1134,6 +1275,22 @@ private fun java_script_module_path(module: CompiledModule): String =
     then module.name
     else module.path + "/" + module.name
 
+private fun java_script_extension_method_function(function: CompiledFunction): bool =
+    java_script_last_dot_index(function.name) >= 0
+
+private fun java_script_method_owner_name(name: String): String =
+    let idx = java_script_last_dot_index(name)
+    if idx < 0 then "" else name[0, idx]
+
+private fun java_script_method_owner_base_name(name: String): String =
+    let bracket = java_script_first_index_of(name, "[", 0)
+    if bracket < 0 then name else name[0, bracket]
+
+private fun java_script_method_member_name(name: String): String =
+    if name.size().value >= 2 & java_script_string_has_prefix(name, "`")
+    then name[1, name.size().value - 1]
+    else name
+
 private fun java_script_module_relative_path(module: CompiledModule, extension: String): String =
     java_script_module_path(module) + extension
 
@@ -1248,6 +1405,18 @@ private fun java_script_string_has_suffix(value: String, suffix: String): bool =
     if suffix.size().value > value.size().value
     then false
     else value[value.size().value - suffix.size().value, value.size().value] == suffix
+
+private fun java_script_first_index_of(value: String, expected: String, idx: int): int =
+    if idx >= value.size().value
+    then -1
+    else
+        let actual = value[idx, idx + 1]
+        if actual == expected
+        then idx
+        else java_script_first_index_of(value, expected, idx + 1)
+
+private fun java_script_last_dot_index(value: String): int =
+    java_script_last_index_of(value, ".", 0, -1)
 
 private fun java_script_last_index_of(value: String, needle: String, idx: int, found: int): int =
     if idx >= value.size().value
