@@ -248,6 +248,8 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_option_pipe_code(binary, env, module, allModules)
     else if java_script_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_code(binary, env, module, allModules)
+    else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
+    then java_script_collection_pipe_code(binary, env, module, allModules)
     else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> java_script_binary_extension_operator_code(function, binary, env, module, allModules)
     case None ->
@@ -381,6 +383,11 @@ private fun java_script_stdlib_data_constructor_name(typeName: String, family: S
 private fun java_script_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     java_script_collection_pipe_operator(binary.operator)
         & java_script_collection_pipe_receiver_type(leftType)
+        & java_script_callable_expression(binary.right)
+
+private fun java_script_unknown_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    leftType == java_script_unknown_type()
+        & java_script_collection_pipe_operator(binary.operator)
         & java_script_callable_expression(binary.right)
 
 private fun java_script_collection_pipe_operator(operator: String): bool =
@@ -797,7 +804,7 @@ private fun java_script_match_case_guard_code(matchCase: CompiledMatchCase, env:
     then guard
     else "((" + java_script_match_case_parameters(matchCase.bindings) + ") => "
         + guard
-        + ")(" + java_script_match_case_arguments(matchCase.bindings, 0) + ")"
+        + ")(" + java_script_match_case_arguments(matchCase) + ")"
 
 private fun java_script_match_case_body_code(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let caseEnv = java_script_match_case_env(matchCase, env)
@@ -805,7 +812,7 @@ private fun java_script_match_case_body_code(matchCase: CompiledMatchCase, env: 
     then java_script_expression_code(matchCase.body, caseEnv, module, allModules)
     else "((" + java_script_match_case_parameters(matchCase.bindings) + ") => "
         + java_script_expression_code(matchCase.body, caseEnv, module, allModules)
-        + ")(" + java_script_match_case_arguments(matchCase.bindings, 0) + ")"
+        + ")(" + java_script_match_case_arguments(matchCase) + ")"
 
 private fun java_script_match_case_parameters(bindings: List[String]): String =
     match bindings[0] with
@@ -817,17 +824,22 @@ private fun java_script_match_case_parameter_tail(bindings: List[String]): Strin
     case None -> ""
     case Some { binding } -> ", " + java_script_identifier(binding) + java_script_match_case_parameter_tail(bindings[1:])
 
-private fun java_script_match_case_arguments(bindings: List[String], idx: int): String =
+private fun java_script_match_case_arguments(matchCase: CompiledMatchCase): String =
+    java_script_match_case_binding_arguments(matchCase.bindings, 0, matchCase.bindsWholeValue)
+
+private fun java_script_match_case_binding_arguments(bindings: List[String], idx: int, bindsWholeValue: bool): String =
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        "__capy_match_binding(__capy_match_value, " + java_script_string_literal(binding) + ", " + idx + ")"
-            + java_script_match_case_argument_tail(bindings[1:], idx + 1)
+        if bindsWholeValue
+        then "__capy_match_value" + java_script_match_case_argument_tail(bindings[1:], idx + 1, bindsWholeValue)
+        else "__capy_match_binding(__capy_match_value, " + java_script_string_literal(binding) + ", " + idx + ")"
+            + java_script_match_case_argument_tail(bindings[1:], idx + 1, bindsWholeValue)
 
-private fun java_script_match_case_argument_tail(bindings: List[String], idx: int): String =
+private fun java_script_match_case_argument_tail(bindings: List[String], idx: int, bindsWholeValue: bool): String =
     match bindings[0] with
     case None -> ""
-    case Some _ -> ", " + java_script_match_case_arguments(bindings, idx)
+    case Some _ -> ", " + java_script_match_case_binding_arguments(bindings, idx, bindsWholeValue)
 
 private fun java_script_match_case_env(matchCase: CompiledMatchCase, env: List[JavaScriptBinding]): List[JavaScriptBinding] =
     java_script_match_case_bindings(matchCase.bindings) + env
@@ -970,6 +982,8 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
     then "Option"
     else if java_script_collection_pipe_expression_with_left_type(binary, leftType)
+    then java_script_collection_pipe_result_type(binary.operator, leftType)
+    else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_result_type(binary.operator, leftType)
     else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> function.returnType.name
@@ -1425,6 +1439,7 @@ private fun java_script_assert_runtime_code(): String =
     + "    is_empty() { const value = __capy_unsafe_run(this.value); const result = __capy_data_is(value, 'None') || (Array.isArray(value) || typeof value === 'string' ? value.length === 0 : (value instanceof Set || value instanceof Map ? value.size === 0 : false)); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to be empty', 'Assert.is_empty'); }" + java_script_newline()
     + "    contains(other) { const value = __capy_unsafe_run(this.value); let result = false; if (__capy_data_is(value, 'Some')) result = __capy_deep_equal(__capy_match_binding(value, 'value', 0), other); else if (typeof value === 'string') result = value.includes(other); else if (Array.isArray(value)) result = value.some(item => __capy_deep_equal(item, other)); else if (value instanceof Set) result = [...value].some(item => __capy_deep_equal(item, other)); else if (value instanceof Map) result = [...value.values()].some(item => __capy_deep_equal(item, other)); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to contain ' + __capy_display(other), 'Assert.contains'); }" + java_script_newline()
     + "    succeeds(expected = undefined) { const value = __capy_unsafe_run(this.value); const ok = __capy_data_is(value, 'Success'); if (arguments.length === 0) return this._append(ok, 'Expected ' + __capy_display(this.value) + ' to succeed', 'Assert.succeeds'); if (!ok) return this._append(false, 'Expected ' + __capy_display(this.value) + ' to succeed', 'Assert.succeeds'); const actual = __capy_match_binding(value, 'value', 0); if (typeof expected === 'function') { const nested = expected(actual); const assertions = nested && Array.isArray(nested.assertions) ? nested.assertions : []; return new ValueAssert(this.value, this.assertions.concat(assertions)); } return this._append(__capy_deep_equal(actual, expected), 'Expected ' + __capy_display(this.value) + ' to succeed with ' + __capy_display(expected), 'Assert.succeeds'); }" + java_script_newline()
+    + "    fails(expected = undefined) { const value = __capy_unsafe_run(this.value); const ok = __capy_data_is(value, 'Error'); if (arguments.length === 0) return this._append(ok, 'Expected ' + __capy_display(this.value) + ' to fail', 'Assert.fails'); if (!ok) return this._append(false, 'Expected ' + __capy_display(this.value) + ' to fail', 'Assert.fails'); const actual = __capy_match_binding(value, 'message', 0); return this._append(__capy_deep_equal(actual, expected), 'Expected ' + __capy_display(this.value) + ' to fail with ' + __capy_display(expected), 'Assert.fails'); }" + java_script_newline()
     + "}" + java_script_newline()
     + java_script_newline()
     + "function assert_that(value) { return new ValueAssert(value); }" + java_script_newline()
@@ -1451,7 +1466,7 @@ private fun java_script_numeric_runtime_code(): String =
     + "function __capy_to_long(value) { if (typeof value === 'bigint') return __capy_long(value); if (Number.isNaN(value)) return 0n; if (value >= 9223372036854775807) return 9223372036854775807n; if (value <= -9223372036854775808) return -9223372036854775808n; return BigInt(Math.trunc(value)); }" + java_script_newline()
     + "function __capy_str(value) { if (value === true) return 'true'; if (value === false) return 'false'; if (value == null) return 'null'; return String(value); }" + java_script_newline()
     + "function __capy_add(left, right) { if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return new Set([...(left || []), ...((right instanceof Set) ? right : [right])]); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) + __capy_number(right) : __capy_long(__capy_bigint(left) + __capy_bigint(right)); return left + right; }" + java_script_newline()
-    + "function __capy_sub(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
+    + "function __capy_sub(left, right) { if (Array.isArray(left)) { const remove = Array.isArray(right) ? right : [right]; return left.filter(item => !remove.some(other => __capy_deep_equal(item, other))); } if (left instanceof Set) { const remove = right instanceof Set ? [...right] : [right]; return new Set([...left].filter(item => !remove.some(other => __capy_deep_equal(item, other)))); } if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const key of right.keys()) result.delete(key); else result.delete(right); return result; } if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
     + "function __capy_mul(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) * __capy_number(right) : __capy_long(__capy_bigint(left) * __capy_bigint(right)); return left * right; }" + java_script_newline()
     + "function __capy_div(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
     + "function __capy_mod(left, right) { if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) % __capy_number(right) : __capy_long(__capy_bigint(left) % __capy_bigint(right)); return left % right; }" + java_script_newline()
@@ -1652,6 +1667,8 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
     if java_script_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
+    else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
+    then java_script_collection_pipe_gatherable(binary, env, module, allModules)
     else if java_script_binary_operator_gatherable(binary.operator)
     then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
@@ -1716,10 +1733,13 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
 
 private fun java_script_method_call_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
-        | call.name == "is_empty" | call.name == "contains" | call.name == "succeeds"
+        | call.name == "is_empty" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_effect_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+    else if java_script_runtime_data_method_call(call)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
     else if call.name == "size"
@@ -1735,6 +1755,9 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
             java_script_expression_gatherable(call.receiver, env, module, allModules)
                 & java_script_expressions_gatherable(call.arguments, env, module, allModules)
         case None -> false
+
+private fun java_script_runtime_data_method_call(call: CompiledMethodCallExpression): bool =
+    call.name == "map" | call.name == "filter" | call.name == "flat_map" | call.name == "flatMap"
 
 private fun java_script_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     java_script_expression_gatherable(call.receiver, env, module, allModules)
