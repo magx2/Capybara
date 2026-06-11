@@ -207,6 +207,19 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_binary_runtime_call("__capy_pow", binary, env, module, allModules)
     else if binary.operator == "?"
     then java_script_binary_runtime_call("__capy_contains", binary, env, module, allModules)
+    else if binary.operator == ".nand."
+    then "(~(" + java_script_expression_code(binary.left, env, module, allModules)
+        + " & "
+        + java_script_expression_code(binary.right, env, module, allModules)
+        + "))"
+    else if java_script_bitwise_binary_operator(binary.operator)
+    then "("
+        + java_script_expression_code(binary.left, env, module, allModules)
+        + " "
+        + java_script_bitwise_operator(binary.operator)
+        + " "
+        + java_script_expression_code(binary.right, env, module, allModules)
+        + ")"
     else if binary.operator == "&" | binary.operator == "|"
     then "("
         + java_script_truthy_expression_code(binary.left, env, module, allModules)
@@ -241,9 +254,23 @@ private fun java_script_binary_operator(operator: String): String =
 private fun java_script_boolean_operator(operator: String): String =
     if operator == "&" then "&&" else "||"
 
+private fun java_script_bitwise_binary_operator(operator: String): bool =
+    operator == ".and." | operator == ".or." | operator == ".xor."
+
+private fun java_script_bitwise_operator(operator: String): String =
+    if operator == ".and."
+    then "&"
+    else if operator == ".or."
+    then "|"
+    else if operator == ".xor."
+    then "^"
+    else operator
+
 private fun java_script_unary_expression_code(unary: CompiledUnaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if unary.operator == "!"
     then "(!" + java_script_truthy_expression_code(unary.expression, env, module, allModules) + ")"
+    else if unary.operator == ".not."
+    then "(~" + java_script_expression_code(unary.expression, env, module, allModules) + ")"
     else "(" + unary.operator + java_script_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun java_script_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -848,9 +875,11 @@ private fun java_script_binary_operator_gatherable(operator: String): bool =
         | operator == "?"
         | operator == "&"
         | operator == "|"
+        | java_script_bitwise_binary_operator(operator)
+        | operator == ".nand."
 
 private fun java_script_unary_operator_gatherable(operator: String): bool =
-    operator == "-" | operator == "!"
+    operator == "-" | operator == "!" | operator == ".not."
 
 private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_expressions_gatherable(call.arguments, env, module, allModules)
