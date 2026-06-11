@@ -216,6 +216,8 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
     let leftType = python_expression_type(binary.left, env, module, allModules)
     if python_result_pipe_expression_with_left_type(binary, leftType)
     then python_result_pipe_code(binary, env, module, allModules)
+    else if python_option_pipe_expression_with_left_type(binary, leftType)
+    then python_option_pipe_code(binary, env, module, allModules)
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_code(binary, env, module, allModules)
     else if python_regex_binary_expression_with_left_type(binary, leftType)
@@ -431,6 +433,21 @@ private fun python_extension_method_argument_tail(arguments: List[CompiledExpres
     if arguments.is_empty()
     then ""
     else ", " + python_expression_list_code(arguments, env, module, allModules)
+
+private fun python_option_pipe_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_option_pipe_helper(binary.operator)
+        + "("
+        + python_expression_code(binary.left, env, module, allModules)
+        + ", "
+        + python_expression_code(binary.right, env, module, allModules)
+        + ")"
+
+private fun python_option_pipe_helper(operator: String): String =
+    if operator == "|-"
+    then "__capy_option_filter"
+    else if operator == "|*"
+    then "__capy_option_flat_map"
+    else "__capy_option_map"
 
 private fun python_collection_pipe_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match binary.right with
@@ -1329,6 +1346,8 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     let rightType = python_expression_type(binary.right, env, module, allModules)
     if python_result_pipe_expression_with_left_type(binary, leftType)
     then python_result_type()
+    else if python_option_pipe_expression_with_left_type(binary, leftType)
+    then python_option_type()
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_result_type(binary.operator, leftType)
     else if python_regex_binary_expression_with_left_type(binary, leftType)
@@ -1425,6 +1444,29 @@ private fun python_regex_binary_expression_type(operator: String): String =
     else if operator == "~>"
     then python_string_to_string_function_type()
     else python_list_type()
+
+private fun python_option_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    python_option_pipe_operator(binary.operator)
+        & python_option_pipe_receiver_type(leftType)
+        & python_callable_expression(binary.right)
+
+private fun python_option_pipe_operator(operator: String): bool =
+    operator == "|" | operator == "|-" | operator == "|*"
+
+private fun python_option_pipe_receiver_type(typeName: String): bool =
+    typeName == python_option_type()
+        | python_option_constructor_type(typeName)
+
+private fun python_option_constructor_type(typeName: String): bool =
+    python_stdlib_data_constructor_type(typeName, "Option", "Some")
+        | python_stdlib_data_constructor_type(typeName, "Option", "None")
+
+private fun python_stdlib_data_constructor_type(typeName: String, family: String, ctor: String): bool =
+    typeName == ctor
+        | typeName == family + "." + ctor
+        | typeName == "/capy/lang/" + family + "." + ctor
+        | typeName == "capy/lang/" + family + "." + ctor
+        | typeName == "capy.lang." + family + "." + ctor
 
 private fun python_stdlib_date_time_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiver = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
@@ -1846,7 +1888,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -2490,6 +2532,7 @@ private fun python_runtime_data_helpers_code(): String =
 private fun python_test_runtime_collection_helpers_code(): String =
     python_test_runtime_collection_basic_code()
     + python_test_runtime_sequence_helpers_code()
+    + python_test_runtime_option_helpers_code()
     + python_test_runtime_result_helpers_code()
     + python_test_runtime_lambda_predicate_code()
     + python_test_runtime_lookup_helpers_code()
@@ -2819,6 +2862,36 @@ private fun python_test_runtime_sequence_helpers_code(): String =
     + "    return result" + python_newline()
     + python_newline()
 
+private fun python_test_runtime_option_helpers_code(): String =
+    "def __capy_option_map(value, mapper):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'None'):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Some'):" + python_newline()
+    + "        return __capy_data('Some', dict(value=_unsafe_run(__capy_apply_lambda(mapper, _capy_data_value(value)))))" + python_newline()
+    + "    return __capy_unsupported('option map')" + python_newline()
+    + python_newline()
+    + "def __capy_option_filter(value, predicate):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'None'):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Some'):" + python_newline()
+    + "        inner = _capy_data_value(value)" + python_newline()
+    + "        return __capy_data('None', dict()) if _unsafe_run(__capy_apply_lambda(predicate, inner)) else value" + python_newline()
+    + "    return __capy_unsupported('option filter')" + python_newline()
+    + python_newline()
+    + "def __capy_option_flat_map(value, mapper):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'None'):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Some'):" + python_newline()
+    + "        mapped = _unsafe_run(__capy_apply_lambda(mapper, _capy_data_value(value)))" + python_newline()
+    + "        if _capy_data_is(mapped, 'Some', 'None'):" + python_newline()
+    + "            return mapped" + python_newline()
+    + "        return __capy_data('Some', dict(value=mapped))" + python_newline()
+    + "    return __capy_unsupported('option flat_map')" + python_newline()
+    + python_newline()
+
 private fun python_test_runtime_result_helpers_code(): String =
     "def __capy_result_map(value, mapper):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
@@ -3049,6 +3122,8 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
     let leftType = python_expression_type(binary.left, env, module, allModules)
     if python_result_pipe_expression_with_left_type(binary, leftType)
     then python_result_pipe_gatherable(binary, env, module, allModules)
+    else if python_option_pipe_expression_with_left_type(binary, leftType)
+    then python_option_pipe_gatherable(binary, env, module, allModules)
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_gatherable(binary, env, module, allModules)
     else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
@@ -3073,6 +3148,10 @@ private fun python_lambda_expression_gatherable(lambda: CompiledLambdaExpression
     python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
 
 private fun python_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_gatherable(binary.left, env, module, allModules)
+        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+
+private fun python_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
         & python_callable_expression_gatherable(binary.right, env, module, allModules)
 
