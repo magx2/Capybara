@@ -746,7 +746,16 @@ private fun python_block_env(bindings: List[CompiledLetBinding], env: List[Pytho
         python_block_env(bindings[1:], [python_let_binding(binding)] + env)
 
 private fun python_let_binding(binding: CompiledLetBinding): PythonBinding =
-    PythonBinding { name: binding.name, pythonName: python_binding_python_name(binding.name), typeName: binding.typeReference.name }
+    PythonBinding {
+        name: binding.name,
+        pythonName: python_binding_python_name(binding.name),
+        typeName: python_let_binding_type_name(binding)
+    }
+
+private fun python_let_binding_type_name(binding: CompiledLetBinding): String =
+    if binding.typeReference.name.is_empty()
+    then python_unknown_type()
+    else binding.typeReference.name
 
 private fun python_binding_python_name(name: String): String =
     if python_reserved_binding_name(name)
@@ -1990,6 +1999,8 @@ private fun python_function_call_gatherable(call: CompiledFunctionCallExpression
         then true
         else if python_qualified_name(call.name)
         then python_qualified_function_call_gatherable(call, module, allModules)
+        else if python_callable_binding_exists(call.name, env)
+        then true
         else if python_local_function_unambiguous(call.name, module.functions)
         then true
         else python_imported_function_exists(call.name, module.imports, module, allModules)
@@ -1999,6 +2010,14 @@ private fun python_qualified_function_call_gatherable(call: CompiledFunctionCall
     match python_find_qualified_function_binding(call.name, module, allModules) with
     case Some { binding } -> python_callable_function(binding.function)
     case None -> false
+
+private fun python_callable_binding_exists(name: String, env: List[PythonBinding]): bool =
+    match python_lookup_binding(name, env) with
+    case Some { binding } -> python_callable_binding_type(binding.typeName)
+    case None -> false
+
+private fun python_callable_binding_type(typeName: String): bool =
+    typeName ? "=>"
 
 private fun python_method_call_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_assert_method(call.name)
