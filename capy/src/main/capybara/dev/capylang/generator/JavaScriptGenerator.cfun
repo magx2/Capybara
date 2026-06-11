@@ -12,6 +12,7 @@ from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data JavaScriptBinding { name: String, jsName: String, typeName: String }
+private data JavaScriptQualifiedFunctionBinding { function: CompiledFunction, binding: String }
 
 fun java_script_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
@@ -1124,76 +1125,69 @@ private fun java_script_callable_function(function: CompiledFunction): bool =
     !java_script_skip_function(function) & function.visibility != "private" & function.visibility != "const:private"
 
 private fun java_script_find_qualified_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
-    match java_script_find_qualified_function_call_in_imports(qualifier, member, module.imports, module, allModules) with
-    case Some { binding } -> /capy/lang/Option.Some { binding }
-    case None -> java_script_find_qualified_function_call_in_modules(qualifier, member, module, allModules)
+    match java_script_find_qualified_function_binding(name, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.binding }
+    case None -> /capy/lang/Option.None {}
 
 private fun java_script_find_qualified_function_definition(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match java_script_find_qualified_function_binding(name, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_find_qualified_function_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
     let qualifier = java_script_qualified_call_qualifier(name)
     let member = java_script_qualified_call_member(name)
-    match java_script_find_qualified_function_definition_in_imports(qualifier, member, module.imports, module, allModules) with
-    case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> java_script_find_qualified_function_definition_in_modules(qualifier, member, module, allModules)
+    match java_script_find_qualified_function_binding_in_imports(qualifier, member, module.imports, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> java_script_find_qualified_function_binding_in_modules(qualifier, member, module, allModules)
 
-private fun java_script_find_qualified_function_call_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+private fun java_script_find_qualified_function_binding_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
-        then java_script_find_qualified_function_call_in_import(qualifier, member, declaration, imports[1:], module, allModules)
-        else java_script_find_qualified_function_call_in_imports(qualifier, member, imports[1:], module, allModules)
+        then java_script_find_qualified_function_binding_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else java_script_find_qualified_function_binding_in_imports(qualifier, member, imports[1:], module, allModules)
 
-private fun java_script_find_qualified_function_call_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+private fun java_script_find_qualified_function_binding_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
     match java_script_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } -> {
         match java_script_find_function(member, importedModule.functions) with
         case Some { function } ->
             /capy/lang/Option.Some {
-                java_script_import_alias(declaration, module) + "[" + java_script_string_literal(java_script_export_name(function)) + "]"
+                JavaScriptQualifiedFunctionBinding {
+                    function: function,
+                    binding: java_script_imported_function_binding(declaration, function, module)
+                }
             }
-        case None -> java_script_find_qualified_function_call_in_imports(qualifier, member, rest, module, allModules)
+        case None -> java_script_find_qualified_function_binding_in_imports(qualifier, member, rest, module, allModules)
     }
-    case _ -> java_script_find_qualified_function_call_in_imports(qualifier, member, rest, module, allModules)
+    case _ -> java_script_find_qualified_function_binding_in_imports(qualifier, member, rest, module, allModules)
 
-private fun java_script_find_qualified_function_call_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+private fun java_script_find_qualified_function_binding_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
     match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
     case Some { targetModule } -> {
         match java_script_find_function(member, targetModule.functions) with
         case Some { function } ->
             /capy/lang/Option.Some {
-                "require("
-                    + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), java_script_module_path(targetModule)))
-                    + ")["
-                    + java_script_string_literal(java_script_export_name(function))
-                    + "]"
+                JavaScriptQualifiedFunctionBinding {
+                    function: function,
+                    binding: java_script_module_function_binding(targetModule, function, module)
+                }
             }
         case None -> /capy/lang/Option.None {}
     }
     case _ -> /capy/lang/Option.None {}
 
-private fun java_script_find_qualified_function_definition_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match imports[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { declaration } ->
-        if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
-        then java_script_find_qualified_function_definition_in_import(qualifier, member, declaration, imports[1:], module, allModules)
-        else java_script_find_qualified_function_definition_in_imports(qualifier, member, imports[1:], module, allModules)
+private fun java_script_imported_function_binding(declaration: CompiledImportDeclaration, function: CompiledFunction, module: CompiledModule): String =
+    java_script_import_alias(declaration, module) + "[" + java_script_string_literal(java_script_export_name(function)) + "]"
 
-private fun java_script_find_qualified_function_definition_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match java_script_find_imported_module(declaration, module, allModules) with
-    case Some { importedModule } -> {
-        match java_script_find_function(member, importedModule.functions) with
-        case Some { function } -> /capy/lang/Option.Some { function }
-        case None -> java_script_find_qualified_function_definition_in_imports(qualifier, member, rest, module, allModules)
-    }
-    case _ -> java_script_find_qualified_function_definition_in_imports(qualifier, member, rest, module, allModules)
-
-private fun java_script_find_qualified_function_definition_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
-    case Some { targetModule } -> java_script_find_function(member, targetModule.functions)
-    case None -> /capy/lang/Option.None {}
+private fun java_script_module_function_binding(targetModule: CompiledModule, function: CompiledFunction, module: CompiledModule): String =
+    "require("
+        + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), java_script_module_path(targetModule)))
+        + ")["
+        + java_script_string_literal(java_script_export_name(function))
+        + "]"
 
 private fun java_script_qualified_import_matches(qualifier: String, declaration: CompiledImportDeclaration, module: CompiledModule): bool =
     let importPath = java_script_import_module_path(declaration.modulePath, module)

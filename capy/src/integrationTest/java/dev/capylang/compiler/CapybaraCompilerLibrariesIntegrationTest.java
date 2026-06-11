@@ -135,6 +135,37 @@ class CapybaraCompilerLibrariesIntegrationTest {
         assertThat(runtime.code()).doesNotContain("SliceEndPlaceholder");
     }
 
+    @Test
+    void shouldGenerateJavaScriptQualifiedImportCalls() {
+        var moduleA = """
+                fun foo(x: int): int = x + 1
+                """;
+        var moduleB = """
+                fun foo(x: int): int = x - 1
+                """;
+        var consumerSource = """
+                import /foo/app/A
+
+                fun alias_call(x: int): int = A.foo(x)
+                fun absolute_call(x: int): int = /foo/app/B.foo(x)
+                """;
+        var generated = JavaScriptGenerator.javaScriptGenerator(compileProgram(List.of(
+                rawModule("A", "/foo/app", moduleA),
+                rawModule("B", "/foo/app", moduleB),
+                rawModule("Consumer", "/foo/app", consumerSource)
+        ), new LinkedHashSet<>()));
+
+        var consumer = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.js"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumer.code()).contains("const __capy_import_foo_app_A = require(");
+        assertThat(consumer.code()).contains("__capy_import_foo_app_A[");
+        assertThat(consumer.code()).contains("require(\"../../foo/app/B\")[");
+        assertThat(consumer.code()).doesNotContain("__capy_import_foo_app_B");
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> rawModules, Set<CompiledModule> libraries) {
         var result = CapybaraCompiler.compile(rawModules, libraries, emptyNativeProviders(), emptyNativeProviders()).unsafeRun();
         if (result instanceof Either.Right<?, ?> error) {
