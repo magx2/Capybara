@@ -1203,9 +1203,9 @@ private fun java_script_qualified_import_matches(qualifier: String, declaration:
 
 private fun java_script_qualified_module_path(qualifier: String, module: CompiledModule): String =
     if java_script_string_has_prefix(qualifier, "/")
-    then java_script_normalize_module_path(qualifier)
+    then java_script_normalize_import_module_path(qualifier)
     else if qualifier ? "/"
-    then java_script_normalize_module_path(qualifier)
+    then java_script_normalize_import_module_path(qualifier)
     else if module.path.is_empty()
     then qualifier
     else module.path + "/" + qualifier
@@ -2062,9 +2062,9 @@ private fun java_script_import_alias(declaration: CompiledImportDeclaration, mod
 
 private fun java_script_import_module_path(modulePath: String, module: CompiledModule): String =
     if java_script_string_has_prefix(modulePath, "/")
-    then java_script_normalize_module_path(modulePath)
+    then java_script_normalize_import_module_path(modulePath)
     else if modulePath ? "/"
-    then java_script_normalize_module_path(modulePath)
+    then java_script_normalize_import_module_path(modulePath)
     else if module.path.is_empty()
     then modulePath
     else module.path + "/" + modulePath
@@ -2110,6 +2110,19 @@ private fun java_script_normalize_module_path(path: String): String =
     if java_script_string_has_prefix(path, "/")
     then java_script_normalize_module_path(path[1, path.size().value])
     else path
+
+private fun java_script_normalize_import_module_path(path: String): String =
+    let normalized = java_script_normalize_module_path(path)
+    if java_script_string_has_prefix(normalized, "dev/capylang/capybara/")
+    then java_script_normalize_capybara_import_suffix(normalized["dev/capylang/capybara/".size(), normalized.size().value], "dev/capylang/")
+    else if java_script_string_has_prefix(normalized, "capybara/")
+    then java_script_normalize_capybara_import_suffix(normalized["capybara/".size(), normalized.size().value], "")
+    else normalized
+
+private fun java_script_normalize_capybara_import_suffix(suffix: String, prefix: String): String =
+    if java_script_string_has_prefix(suffix, "test/")
+    then prefix + suffix
+    else prefix + "test/" + suffix
 
 private fun java_script_relative_require_path(fromModulePath: String, toModulePath: String): String =
     java_script_parent_prefix(java_script_module_directory(fromModulePath)) + toModulePath
