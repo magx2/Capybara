@@ -315,22 +315,69 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     python_function_call_name(call.name, module, allModules) + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    let receiver = python_expression_code(call.receiver, env, module, allModules)
     if python_effect_method_call(call, env, module, allModules)
     then python_effect_method_call_code(call, env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
-    then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    then "__capy_size(" + receiver + ")"
     else if python_char_to_string_method_call(call, env, module, allModules)
-    then "__capy_to_string(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    then "__capy_to_string(" + receiver + ")"
     else if python_string_get_method_call(call, env, module, allModules)
     then python_string_get_method_code(call, env, module, allModules)
     else if python_string_parse_method_call(call, env, module, allModules)
     then python_string_parse_method_code(call, env, module, allModules)
     else if python_string_method_call(call, env, module, allModules)
     then python_string_method_code(call, env, module, allModules)
-    else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
-    then "__capy_is_empty(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else if python_list_is_empty_call_with_receiver_type(call, receiverType)
+    then if receiverType == python_list_type()
+        then if call.name == "is_empty"
+            then "__capy_is_empty(" + receiver + ")"
+            else if call.name == "contains"
+            then "__capy_contains("
+                + receiver
+                + ", "
+                + python_first_method_argument_code(call.arguments, env, module, allModules)
+                + ")"
+            else if python_two_method_arguments(call.arguments)
+            then receiver
+                + "["
+                + python_first_method_argument_code(call.arguments, env, module, allModules)
+                + ":"
+                + python_second_method_argument_code(call.arguments, env, module, allModules)
+                + "]"
+            else "__capy_index("
+                + receiver
+                + ", "
+                + python_first_method_argument_code(call.arguments, env, module, allModules)
+                + ")"
+        else if receiverType == python_set_type()
+        then if call.name == "is_empty"
+            then "__capy_is_empty(" + receiver + ")"
+            else "__capy_contains("
+                + receiver
+                + ", "
+                + python_first_method_argument_code(call.arguments, env, module, allModules)
+                + ")"
+        else if receiverType == python_dict_type()
+        then if call.name == "contains_key"
+            then "__capy_contains("
+                + receiver
+                + ", "
+                + python_first_method_argument_code(call.arguments, env, module, allModules)
+                + ")"
+            else "__capy_index("
+                + receiver
+                + ", "
+                + python_first_method_argument_code(call.arguments, env, module, allModules)
+                + ")"
+        else "__capy_index("
+            + receiver
+            + ", "
+            + python_first_method_argument_code(call.arguments, env, module, allModules)
+            + ")"
     else if python_seq_as_list_call(call, env, module, allModules)
-    then "__capy_as_list(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    then "__capy_as_list(" + receiver + ")"
     else if python_collection_predicate_call(call, env, module, allModules)
     then python_collection_predicate_call_code(call, env, module, allModules)
     else if python_primitive_conversion_method_call(call, env, module, allModules)
@@ -338,8 +385,7 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     else match python_find_extension_method(call, env, module, allModules) with
         case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
         case None ->
-            python_expression_code(call.receiver, env, module, allModules)
-                + "." + python_method_name(call.name)
+            receiver + "." + python_method_name(call.name)
                 + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 private fun python_effect_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -964,6 +1010,7 @@ private fun python_runtime_function_type(name: String): String =
     else python_unknown_type()
 
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_expression_type(call.receiver, env, module, allModules)
     if call.name == "size"
     then python_int_type()
     else if python_char_to_string_method_call(call, env, module, allModules)
@@ -974,8 +1021,18 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_result_type()
     else if python_string_method_call(call, env, module, allModules)
     then python_string_method_return_type(call.name)
-    else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
-    then python_bool_type()
+    else if python_list_is_empty_call_with_receiver_type(call, receiverType)
+    then if receiverType == python_list_type()
+        then if call.name == "is_empty" | call.name == "contains"
+            then python_bool_type()
+            else if python_two_method_arguments(call.arguments)
+            then python_list_type()
+            else python_option_type()
+        else if receiverType == python_set_type()
+        then python_bool_type()
+        else if receiverType == python_dict_type()
+        then if call.name == "contains_key" then python_bool_type() else python_option_type()
+        else python_unknown_type()
     else if python_seq_as_list_call(call, env, module, allModules)
     then python_list_type()
     else if python_collection_predicate_call(call, env, module, allModules)
@@ -1098,9 +1155,25 @@ private fun python_seq_as_list_call(call: CompiledMethodCallExpression, env: Lis
         & call.arguments.is_empty()
 
 private fun python_list_is_empty_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String): bool =
-    call.name == "is_empty"
-        & call.arguments.is_empty()
-        & receiverType == python_list_type()
+    if receiverType == python_list_type()
+    then if call.name == "is_empty"
+        then call.arguments.is_empty()
+        else if call.name == "contains"
+        then python_one_method_argument(call.arguments)
+        else if call.name == "get"
+        then python_one_method_argument(call.arguments) | python_two_method_arguments(call.arguments)
+        else false
+    else if receiverType == python_set_type()
+    then if call.name == "is_empty"
+        then call.arguments.is_empty()
+        else if call.name == "contains"
+        then python_one_method_argument(call.arguments)
+        else false
+    else if receiverType == python_dict_type()
+    then (call.name == "contains_key" | call.name == "get") & python_one_method_argument(call.arguments)
+    else if receiverType == python_tuple_type()
+    then call.name == "get" & python_one_method_argument(call.arguments)
+    else false
 
 private fun python_collection_predicate_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
@@ -2269,6 +2342,7 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
     then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_seq_as_list_call(call, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_collection_predicate_call(call, env, module, allModules)
