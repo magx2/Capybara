@@ -1015,7 +1015,8 @@ private fun python_find_qualified_function_in_module(name: String, module: Compi
     case None -> /capy/lang/Option.None {}
 
 private fun python_qualified_name(name: String): bool =
-    python_last_dot_index(name) >= 0
+    let idx = python_last_dot_index(name)
+    idx > 0 & idx < name.size().value - 1
 
 private fun python_qualified_call_member(name: String): String =
     let idx = python_last_dot_index(name)
@@ -1064,22 +1065,7 @@ private fun python_find_function_in_imports(name: String, imports: List[Compiled
     case None -> /capy/lang/Option.None {}
 
 private fun python_find_constant_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
-    match imports[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { declaration } ->
-        if declaration.qualified | !python_import_includes_name(name, declaration)
-        then python_find_constant_binding_in_imports(name, imports[1:], module, allModules)
-        else python_find_constant_binding_in_import(name, declaration, imports[1:], module, allModules)
-
-private fun python_find_constant_binding_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
-    match python_find_imported_module(declaration, module, allModules) with
-    case Some { importedModule } -> python_find_imported_constant_binding_or_rest(name, importedModule, rest, module, allModules)
-    case None -> python_find_constant_binding_in_imports(name, rest, module, allModules)
-
-private fun python_find_imported_constant_binding_or_rest(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
-    match python_find_constant(name, importedModule.functions) with
-    case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: importedModule, function: function } }
-    case None -> python_find_constant_binding_in_imports(name, rest, module, allModules)
+    python_find_binding_in_imports(name, imports, module, allModules, true)
 
 private fun python_find_constant(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
@@ -1090,22 +1076,30 @@ private fun python_find_constant(name: String, functions: List[CompiledFunction]
         else python_find_constant(name, functions[1:])
 
 private fun python_find_function_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    python_find_binding_in_imports(name, imports, module, allModules, false)
+
+private fun python_find_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], constant: bool): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.qualified | !python_import_includes_name(name, declaration)
-        then python_find_function_binding_in_imports(name, imports[1:], module, allModules)
-        else python_find_function_binding_in_import(name, declaration, imports[1:], module, allModules)
+        then python_find_binding_in_imports(name, imports[1:], module, allModules, constant)
+        else python_find_binding_in_import(name, declaration, imports[1:], module, allModules, constant)
 
-private fun python_find_function_binding_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+private fun python_find_binding_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], constant: bool): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match python_find_imported_module(declaration, module, allModules) with
-    case Some { importedModule } -> python_find_imported_function_binding_or_rest(name, importedModule, rest, module, allModules)
-    case None -> python_find_function_binding_in_imports(name, rest, module, allModules)
+    case Some { importedModule } -> python_find_imported_binding_or_rest(name, importedModule, rest, module, allModules, constant)
+    case None -> python_find_binding_in_imports(name, rest, module, allModules, constant)
 
-private fun python_find_imported_function_binding_or_rest(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
-    match python_find_function(name, importedModule.functions) with
+private fun python_find_imported_binding_or_rest(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], constant: bool): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_imported_binding(name, importedModule.functions, constant) with
     case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: importedModule, function: function } }
-    case None -> python_find_function_binding_in_imports(name, rest, module, allModules)
+    case None -> python_find_binding_in_imports(name, rest, module, allModules, constant)
+
+private fun python_find_imported_binding(name: String, functions: List[CompiledFunction], constant: bool): /capy/lang/Option[CompiledFunction] =
+    if constant
+    then python_find_constant(name, functions)
+    else python_find_function(name, functions)
 
 private fun python_find_imported_module(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     python_find_module_by_path(python_import_module_path(declaration.modulePath, module), allModules)
@@ -2164,18 +2158,10 @@ private fun python_data_type_fields(name: String, module: CompiledModule, allMod
     )
 
 private fun python_data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if python_schema_type_exists(name, module.functions)
-    then python_schema_values("__capy_schema_field|" + name + "|", module.functions)
-    else match python_data_type_fields_in_imports(name, module.imports, module, allModules) with
-        case Some { value } -> value
-        case None -> python_data_type_fields_in_modules(name, allModules)
+    python_data_type_schema_values(name, "__capy_schema_field|", module, allModules)
 
 private fun python_data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if python_schema_type_exists(name, module.functions)
-    then python_schema_values("__capy_schema_parent|" + name + "|", module.functions)
-    else match python_data_type_parent_types_in_imports(name, module.imports, module, allModules) with
-        case Some { value } -> value
-        case None -> python_data_type_parent_types_in_modules(name, allModules)
+    python_data_type_schema_values(name, "__capy_schema_parent|", module, allModules)
 
 private fun python_data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match parents[0] with
@@ -2187,53 +2173,36 @@ private fun python_data_type_parent_fields(parents: List[String], module: Compil
             python_data_type_parent_fields(parents[1:], module, allModules)
         )
 
-private fun python_data_type_fields_in_modules(name: String, modules: List[CompiledModule]): List[String] =
+private fun python_data_type_schema_values(name: String, prefix: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    if python_schema_type_exists(name, module.functions)
+    then python_schema_values(prefix + name + "|", module.functions)
+    else match python_data_type_schema_values_in_imports(name, prefix, module.imports, module, allModules) with
+        case Some { value } -> value
+        case None -> python_data_type_schema_values_in_modules(name, prefix, allModules)
+
+private fun python_data_type_schema_values_in_modules(name: String, prefix: String, modules: List[CompiledModule]): List[String] =
     match modules[0] with
     case None -> []
     case Some { module } ->
         if python_schema_type_exists(name, module.functions)
-        then python_schema_values("__capy_schema_field|" + name + "|", module.functions)
-        else python_data_type_fields_in_modules(name, modules[1:])
+        then python_schema_values(prefix + name + "|", module.functions)
+        else python_data_type_schema_values_in_modules(name, prefix, modules[1:])
 
-private fun python_data_type_fields_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
+private fun python_data_type_schema_values_in_imports(name: String, prefix: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if python_data_import_matches(name, declaration)
-        then python_data_type_fields_in_import(name, imports[1:], module, allModules, declaration)
-        else python_data_type_fields_in_imports(name, imports[1:], module, allModules)
+        then python_data_type_schema_values_in_import(name, prefix, imports[1:], module, allModules, declaration)
+        else python_data_type_schema_values_in_imports(name, prefix, imports[1:], module, allModules)
 
-private fun python_data_type_fields_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
+private fun python_data_type_schema_values_in_import(name: String, prefix: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
     match python_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } ->
         if python_schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { python_schema_values("__capy_schema_field|" + name + "|", importedModule.functions) }
-        else python_data_type_fields_in_imports(name, rest, module, allModules)
-    case _ -> python_data_type_fields_in_imports(name, rest, module, allModules)
-
-private fun python_data_type_parent_types_in_modules(name: String, modules: List[CompiledModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        if python_schema_type_exists(name, module.functions)
-        then python_schema_values("__capy_schema_parent|" + name + "|", module.functions)
-        else python_data_type_parent_types_in_modules(name, modules[1:])
-
-private fun python_data_type_parent_types_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
-    match imports[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { declaration } ->
-        if python_data_import_matches(name, declaration)
-        then python_data_type_parent_types_in_import(name, imports[1:], module, allModules, declaration)
-        else python_data_type_parent_types_in_imports(name, imports[1:], module, allModules)
-
-private fun python_data_type_parent_types_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
-    match python_find_imported_module(declaration, module, allModules) with
-    case Some { importedModule } ->
-        if python_schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { python_schema_values("__capy_schema_parent|" + name + "|", importedModule.functions) }
-        else python_data_type_parent_types_in_imports(name, rest, module, allModules)
-    case _ -> python_data_type_parent_types_in_imports(name, rest, module, allModules)
+        then /capy/lang/Option.Some { python_schema_values(prefix + name + "|", importedModule.functions) }
+        else python_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
+    case _ -> python_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
 
 private fun python_data_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
     !python_stdlib_import(declaration.modulePath)
