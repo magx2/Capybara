@@ -3,6 +3,7 @@ package dev.capylang.compiler;
 import org.junit.jupiter.api.Test;
 import dev.capylang.generator.GeneratedModule;
 import dev.capylang.generator.JavaGenerator;
+import dev.capylang.generator.JavaScriptGenerator;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Either;
@@ -105,6 +106,33 @@ class CapybaraCompilerLibrariesIntegrationTest {
         assertThat(module.code()).contains("__capy_regex_matches(__capy_data(");
         assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \"\\\\d+\")");
         assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \",\")");
+    }
+
+    @Test
+    void shouldNotGatherJavaScriptTestsWhenSliceEndIsUnsupported() {
+        var source = """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /capy/lang/Effect import { * }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/foo/app/SliceEndPlaceholder.cfun", [
+                        test("unsupported slice end stays ungathered", () => assert_that(slice_with_placeholder("capy")).is_equal_to("c")),
+                    ])
+
+                private fun slice_with_placeholder(value: String): String =
+                    value[0, ???]
+                """;
+        var generated = JavaScriptGenerator.javaScriptGenerator(compileProgram(List.of(rawModule("SliceEndPlaceholder", "/foo/app", source)), new LinkedHashSet<>()));
+
+        assertThat(generated.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains("foo/app/SliceEndPlaceholder.js", "capy/test/CapyTestRuntime.js");
+        var runtime = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.js"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(runtime.code()).doesNotContain("SliceEndPlaceholder");
     }
 
     private static CompiledProgram compileProgram(List<RawModule> rawModules, Set<CompiledModule> libraries) {
