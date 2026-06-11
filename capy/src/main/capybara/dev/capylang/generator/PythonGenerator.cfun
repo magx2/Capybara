@@ -186,7 +186,7 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
     case CompiledDictLiteral literal -> "{" + python_dict_entries_code(literal.entries, env, module, allModules) + "}"
     case CompiledTupleLiteral literal -> python_tuple_literal_code(literal.values, env, module, allModules)
     case CompiledIndexExpression index -> python_index_expression_code(index, env, module, allModules)
-    case CompiledDataLiteral literal -> "__capy_data(" + python_string_literal(literal.typeName) + ", {" + python_data_fields_code(literal.fields, literal.typeName, env, module, allModules) + "})"
+    case CompiledDataLiteral literal -> python_data_literal_code(literal, env, module, allModules)
     case CompiledFieldAccessExpression access -> "__capy_get_field(" + python_expression_code(access.receiver, env, module, allModules) + ", " + python_string_literal(access.name) + ")"
     case CompiledReduceExpression reduce -> python_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_code(matchExpression, env, module, allModules)
@@ -319,6 +319,14 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_effect_method_call_code(call, env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else if python_char_to_string_method_call(call, env, module, allModules)
+    then "__capy_to_string(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else if python_string_get_method_call(call, env, module, allModules)
+    then python_string_get_method_code(call, env, module, allModules)
+    else if python_string_parse_method_call(call, env, module, allModules)
+    then python_string_parse_method_code(call, env, module, allModules)
+    else if python_string_method_call(call, env, module, allModules)
+    then python_string_method_code(call, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
     then "__capy_is_empty(" + python_expression_code(call.receiver, env, module, allModules) + ")"
     else if python_seq_as_list_call(call, env, module, allModules)
@@ -408,6 +416,99 @@ private fun python_collection_predicate_call_code(call: CompiledMethodCallExpres
 
 private fun python_collection_predicate_helper(name: String): String =
     if name == "all" then "__capy_all" else "__capy_any"
+
+private fun python_char_to_string_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "to_string"
+        & call.arguments.is_empty()
+        & python_char_to_string_receiver_type(python_expression_type(call.receiver, env, module, allModules))
+
+private fun python_char_to_string_receiver_type(typeName: String): bool =
+    typeName == "char" | typeName == python_unknown_type()
+
+private fun python_string_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_type(call.receiver, env, module, allModules) == python_string_type()
+        & python_string_method_arity(call.name, call.arguments)
+
+private fun python_string_method_arity(name: String, arguments: List[CompiledExpression]): bool =
+    if name == "trim" | name == "is_empty"
+    then arguments.is_empty()
+    else if name == "contains" | name == "starts_with" | name == "end_with"
+    then python_one_method_argument(arguments)
+    else if name == "replace"
+    then python_two_method_arguments(arguments)
+    else false
+
+private fun python_string_method_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiver = python_expression_code(call.receiver, env, module, allModules)
+    if call.name == "trim"
+    then "__capy_string_trim(" + receiver + ")"
+    else if call.name == "is_empty"
+    then "__capy_is_empty(" + receiver + ")"
+    else if call.name == "contains"
+    then "__capy_contains(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "starts_with"
+    then "__capy_string_starts_with(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "end_with"
+    then "__capy_string_end_with(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "replace"
+    then "__capy_string_replace(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ", " + python_second_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else "__capy_unsupported('string method')"
+
+private fun python_string_get_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "get"
+        & python_expression_type(call.receiver, env, module, allModules) == python_string_type()
+        & (python_one_method_argument(call.arguments) | python_two_method_arguments(call.arguments))
+
+private fun python_string_get_method_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiver = python_expression_code(call.receiver, env, module, allModules)
+    if python_two_method_arguments(call.arguments)
+    then "__capy_string_slice(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ", " + python_second_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else "__capy_string_get(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_string_parse_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.arguments.is_empty()
+        & python_expression_type(call.receiver, env, module, allModules) == python_string_type()
+        & python_string_parse_method_name(call.name)
+
+private fun python_string_parse_method_name(name: String): bool =
+    name == "to_int" | name == "to_long" | name == "to_double" | name == "to_float" | name == "to_bool"
+
+private fun python_string_parse_method_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_string_parse_helper(call.name) + "(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+
+private fun python_string_parse_helper(name: String): String =
+    if name == "to_int"
+    then "__capy_parse_int"
+    else if name == "to_long"
+    then "__capy_parse_long"
+    else if name == "to_double"
+    then "__capy_parse_double"
+    else if name == "to_float"
+    then "__capy_parse_float"
+    else "__capy_parse_bool"
+
+private fun python_one_method_argument(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some _ -> arguments[1:].is_empty()
+
+private fun python_two_method_arguments(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some _ ->
+        match arguments[1] with
+        case None -> false
+        case Some _ -> arguments[2:].is_empty()
+
+private fun python_first_method_argument_code(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> python_expression_code(argument, env, module, allModules)
+
+private fun python_second_method_argument_code(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[1] with
+    case None -> ""
+    case Some { argument } -> python_expression_code(argument, env, module, allModules)
 
 private fun python_primitive_conversion_method_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let helper = if call.name == "to_int" then "__capy_to_int" else "__capy_to_long"
@@ -515,6 +616,16 @@ private fun python_data_field_name(name: String, typeName: String, module: Compi
     if python_string_has_prefix(name, "$")
     then python_declared_positional_field_name(name, python_data_type_fields(python_raw_data_literal_type_name(typeName), module, allModules), 0)
     else name
+
+private fun python_data_literal_code(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if literal.typeName == "char"
+    then python_char_constructor_code(literal.fields, env, module, allModules)
+    else "__capy_data(" + python_string_literal(literal.typeName) + ", {" + python_data_fields_code(literal.fields, literal.typeName, env, module, allModules) + "})"
+
+private fun python_char_constructor_code(fields: List[CompiledDataField], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> "__capy_char(\"\")"
+    case Some { field } -> "__capy_char(" + python_expression_code(field.value, env, module, allModules) + ")"
 
 private fun python_raw_data_literal_type_name(typeName: String): String =
     if python_string_has_prefix(typeName, "__capy_raw|")
@@ -849,6 +960,14 @@ private fun python_runtime_function_type(name: String): String =
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size"
     then python_int_type()
+    else if python_char_to_string_method_call(call, env, module, allModules)
+    then python_string_type()
+    else if python_string_get_method_call(call, env, module, allModules)
+    then python_string_get_method_return_type(call)
+    else if python_string_parse_method_call(call, env, module, allModules)
+    then python_result_type()
+    else if python_string_method_call(call, env, module, allModules)
+    then python_string_method_return_type(call.name)
     else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
     then python_bool_type()
     else if python_seq_as_list_call(call, env, module, allModules)
@@ -864,6 +983,16 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     else match python_find_extension_method(call, env, module, allModules) with
         case Some { function } -> function.returnType.name
         case None -> python_unknown_type()
+
+private fun python_string_get_method_return_type(call: CompiledMethodCallExpression): String =
+    if python_two_method_arguments(call.arguments)
+    then python_string_type()
+    else python_option_type()
+
+private fun python_string_method_return_type(name: String): String =
+    if name == "trim" | name == "replace"
+    then python_string_type()
+    else python_bool_type()
 
 private fun python_binary_expression_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
@@ -920,6 +1049,7 @@ private fun python_set_type(): String = "Set"
 private fun python_dict_type(): String = "Dict"
 private fun python_seq_type(): String = "Seq"
 private fun python_effect_type(): String = "Effect"
+private fun python_option_type(): String = "Option"
 private fun python_result_type(): String = "Result"
 
 private fun python_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
@@ -1280,7 +1410,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -1408,6 +1538,63 @@ private fun python_test_runtime_numeric_code(): String =
     + "            return -9223372036854775808" + python_newline()
     + "        return int(value)" + python_newline()
     + "    return __capy_long(value)" + python_newline()
+    + python_newline()
+    + "def __capy_success(value):" + python_newline()
+    + "    return __capy_data('Success', dict(value=value))" + python_newline()
+    + python_newline()
+    + "def __capy_error(message):" + python_newline()
+    + "    return __capy_data('Error', dict(message=message))" + python_newline()
+    + python_newline()
+    + "def __capy_parse_integral(value, label, minimum, maximum):" + python_newline()
+    + "    text = str(value)" + python_newline()
+    + "    digits = text[1:] if text.startswith(('+', '-')) else text" + python_newline()
+    + "    try:" + python_newline()
+    + "        if not digits or not all('0' <= char <= '9' for char in digits):" + python_newline()
+    + "            raise ValueError()" + python_newline()
+    + "        parsed = int(text)" + python_newline()
+    + "        if parsed < minimum or parsed > maximum:" + python_newline()
+    + "            raise ValueError()" + python_newline()
+    + "        return __capy_success(parsed)" + python_newline()
+    + "    except (TypeError, ValueError):" + python_newline()
+    + "        return __capy_error('Cannot parse string to ' + label + ': ' + text)" + python_newline()
+    + python_newline()
+    + "def __capy_parse_int(value):" + python_newline()
+    + "    return __capy_parse_integral(value, 'int', -2147483648, 2147483647)" + python_newline()
+    + python_newline()
+    + "def __capy_parse_long(value):" + python_newline()
+    + "    return __capy_parse_integral(value, 'long', -9223372036854775808, 9223372036854775807)" + python_newline()
+    + python_newline()
+    + "def __capy_parse_decimal(value, label):" + python_newline()
+    + "    text = str(value)" + python_newline()
+    + "    try:" + python_newline()
+    + "        return __capy_success(float(text))" + python_newline()
+    + "    except (TypeError, ValueError):" + python_newline()
+    + "        return __capy_error('Cannot parse string to ' + label + ': ' + text)" + python_newline()
+    + python_newline()
+    + "def __capy_parse_double(value):" + python_newline()
+    + "    return __capy_parse_decimal(value, 'double')" + python_newline()
+    + python_newline()
+    + "def __capy_parse_float(value):" + python_newline()
+    + "    return __capy_parse_decimal(value, 'float')" + python_newline()
+    + python_newline()
+    + "def __capy_parse_bool(value):" + python_newline()
+    + "    text = str(value)" + python_newline()
+    + "    if text == 'true':" + python_newline()
+    + "        return __capy_success(True)" + python_newline()
+    + "    if text == 'false':" + python_newline()
+    + "        return __capy_success(False)" + python_newline()
+    + "    return __capy_error('Cannot parse string to bool: ' + text)" + python_newline()
+    + python_newline()
+    + "def __capy_char(value):" + python_newline()
+    + "    text = str(value)" + python_newline()
+    + "    if len(text) == 1:" + python_newline()
+    + "        return __capy_success(text)" + python_newline()
+    + "    return __capy_error('char must contain exactly one character')" + python_newline()
+    + python_newline()
+    + "def __capy_to_string(value):" + python_newline()
+    + "    if _capy_data_is(value, 'char'):" + python_newline()
+    + "        return __capy_str(_capy_data_value(value))" + python_newline()
+    + "    return __capy_str(value)" + python_newline()
     + python_newline()
     + "def digits(number):" + python_newline()
     + "    number = int(number)" + python_newline()
@@ -1657,6 +1844,28 @@ private fun python_test_runtime_collection_basic_code(): String =
     + "def __capy_is_empty(value):" + python_newline()
     + "    return len(value) == 0" + python_newline()
     + python_newline()
+    + "def __capy_string_trim(value):" + python_newline()
+    + "    return str(value).strip()" + python_newline()
+    + python_newline()
+    + "def __capy_string_replace(value, old, new):" + python_newline()
+    + "    return str(value).replace(str(old), str(new))" + python_newline()
+    + python_newline()
+    + "def __capy_string_starts_with(value, prefix):" + python_newline()
+    + "    return str(value).startswith(str(prefix))" + python_newline()
+    + python_newline()
+    + "def __capy_string_end_with(value, suffix):" + python_newline()
+    + "    return str(value).endswith(str(suffix))" + python_newline()
+    + python_newline()
+    + "def __capy_string_get(value, index):" + python_newline()
+    + "    text = str(value)" + python_newline()
+    + "    idx = int(index)" + python_newline()
+    + "    if idx < 0 or idx >= len(text):" + python_newline()
+    + "        return __capy_none()" + python_newline()
+    + "    return __capy_some(text[idx])" + python_newline()
+    + python_newline()
+    + "def __capy_string_slice(value, start, end):" + python_newline()
+    + "    return str(value)[int(start):int(end)]" + python_newline()
+    + python_newline()
     + "def __capy_as_iterable(value):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
     + "    if value is None:" + python_newline()
@@ -1792,6 +2001,8 @@ private fun python_test_runtime_type_match_helpers_code(): String =
     "def __capy_type_matches(value, type_name):" + python_newline()
     + "    if type_name == 'String':" + python_newline()
     + "        return isinstance(value, str)" + python_newline()
+    + "    if type_name == 'char':" + python_newline()
+    + "        return isinstance(value, str) and len(value) == 1" + python_newline()
     + "    if type_name == 'bool':" + python_newline()
     + "        return isinstance(value, bool)" + python_newline()
     + "    if type_name in ('byte', 'int', 'long'):" + python_newline()
@@ -1859,7 +2070,8 @@ private fun python_test_gather_call_for_function(function: CompiledFunction, mod
     else ""
 
 private fun python_module_gatherable(module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_module_imports_gatherable(module.imports, module, allModules)
+    !python_module_has_primitive_backed_type(module.functions)
+        & python_module_imports_gatherable(module.imports, module, allModules)
         & python_module_functions_gatherable(module.functions, module, allModules)
 
 private fun python_module_imports_gatherable(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1870,9 +2082,17 @@ private fun python_module_imports_gatherable(imports: List[CompiledImportDeclara
         then python_module_imports_gatherable(imports[1:], module, allModules)
         else match python_find_imported_module(declaration, module, allModules) with
             case Some { importedModule } ->
-                python_module_functions_gatherable(importedModule.functions, importedModule, allModules)
+                !python_module_has_primitive_backed_type(importedModule.functions)
+                    & python_module_functions_gatherable(importedModule.functions, importedModule, allModules)
                     & python_module_imports_gatherable(imports[1:], module, allModules)
             case None -> false
+
+private fun python_module_has_primitive_backed_type(functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        (python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_schema_primitive|"))
+            | python_module_has_primitive_backed_type(functions[1:])
 
 private fun python_module_functions_gatherable(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match functions[0] with
@@ -2028,6 +2248,16 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then if call.arguments.is_empty()
         then python_expression_gatherable(call.receiver, env, module, allModules)
         else false
+    else if python_char_to_string_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+    else if python_string_get_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
+    else if python_string_parse_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+    else if python_string_method_call(call, env, module, allModules)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_list_is_empty_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules))
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_seq_as_list_call(call, env, module, allModules)

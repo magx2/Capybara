@@ -1714,10 +1714,32 @@ private fun compile_method_call_on_field_access(call: MethodCallExpression, acce
     case _ -> compiled_method_call(call, functionName)
 
 private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
+    let receiver = compile_expression_in_function(call.receiver, functionName)
+    let arguments = compile_expressions(call.arguments, functionName)
+    compiled_method_call_with_receiver(call, receiver, arguments)
+
+private fun compiled_method_call_with_receiver(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
+    match receiver with
+    case CompiledUnaryExpression { operator, expression, location } ->
+        if operator == "!"
+        then CompiledUnaryExpression {
+            operator: operator,
+            expression: CompiledMethodCallExpression {
+                receiver: expression,
+                name: call.name,
+                arguments: arguments,
+                location: compile_location(call.location)
+            },
+            location: location
+        }
+        else compiled_method_call_expression(call, receiver, arguments)
+    case _ -> compiled_method_call_expression(call, receiver, arguments)
+
+private fun compiled_method_call_expression(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
     CompiledMethodCallExpression {
-        receiver: compile_expression_in_function(call.receiver, functionName),
+        receiver: receiver,
         name: call.name,
-        arguments: compile_expressions(call.arguments, functionName),
+        arguments: arguments,
         location: compile_location(call.location)
     }
 
