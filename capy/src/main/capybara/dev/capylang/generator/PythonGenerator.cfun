@@ -48,18 +48,10 @@ private fun python_imports(imports: List[CompiledImportDeclaration], module: Com
 
 private fun python_import(declaration: CompiledImportDeclaration, module: CompiledModule): String =
     let modulePath = python_import_module_name(declaration.modulePath, module)
-    if declaration.qualified
-    then "import " + modulePath + python_newline()
-    else "from " + modulePath + " import *" + python_newline()
+    "import " + modulePath + python_newline()
 
 private fun python_import_module_name(modulePath: String, module: CompiledModule): String =
-    if python_string_has_prefix(modulePath, "/")
-    then modulePath[1, modulePath.size().value].replace("/", ".")
-    else if modulePath ? "/"
-    then modulePath.replace("/", ".")
-    else if module.path.is_empty()
-    then modulePath
-    else module.path.replace("/", ".") + "." + modulePath
+    python_import_module_path(modulePath, module).replace("/", ".")
 
 private fun python_stdlib_import(modulePath: String): bool =
     python_string_has_prefix(modulePath, "/capy/") | python_string_has_prefix(modulePath, "capy/")
@@ -176,7 +168,7 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
     case CompiledDoubleLiteral literal -> python_decimal_literal(literal.source)
     case CompiledBoolLiteral literal -> if literal.value then "True" else "False"
     case CompiledStringLiteral literal -> python_string_literal(literal.value)
-    case CompiledVariableExpression variable -> python_variable_code(variable.name, env)
+    case CompiledVariableExpression variable -> python_variable_code(variable.name, env, module, allModules)
     case CompiledIfExpression ifExpression ->
         "(" + python_expression_code(ifExpression.thenBranch, env, module, allModules)
         + " if " + python_truthy_expression_code(ifExpression.condition, env, module, allModules)
@@ -208,10 +200,13 @@ private fun python_placeholder_function_name(source: String): String =
     then source["__capy_placeholder__|".size().value, source.size().value]
     else ""
 
-private fun python_variable_code(name: String, env: List[PythonBinding]): String =
+private fun python_variable_code(name: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.pythonName
-    case None -> python_identifier(name)
+    case None ->
+        match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        case Some { binding } -> python_module_import_name(binding.module) + "." + python_identifier(binding.function.name)
+        case None -> python_identifier(name)
 
 private fun python_binary_expression_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
@@ -984,8 +979,8 @@ private fun python_function_call_name(name: String, module: CompiledModule, allM
     else match python_find_local_function(name, module.functions) with
     case Some { function } -> python_function_name(function)
     case None ->
-        match python_find_function_in_imports(name, module.imports, module, allModules) with
-        case Some { function } -> python_function_name(function)
+        match python_find_function_binding_in_imports(name, module.imports, module, allModules) with
+        case Some { binding } -> python_module_import_name(binding.module) + "." + python_function_name(binding.function)
         case None -> python_identifier(name)
 
 private fun python_runtime_function(name: String): bool =
@@ -1003,8 +998,11 @@ private fun python_console_function(name: String): bool =
 
 private fun python_qualified_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_qualified_function_binding(name, module, allModules) with
-    case Some { binding } -> python_module_import_name(binding.module) + "." + python_function_name(binding.function)
+    case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
     case None -> python_identifier(name)
+
+private fun python_module_import_expression(module: CompiledModule): String =
+    "__import__(" + python_string_literal(python_module_import_name(module)) + ", fromlist=['*'])"
 
 private fun python_find_qualified_function_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
@@ -1032,9 +1030,9 @@ private fun python_qualified_call_class_name(name: String): String =
 
 private fun python_qualified_module_path(name: String, module: CompiledModule): String =
     if python_string_has_prefix(name, "/")
-    then name[1, name.size().value].replace(".", "/")
+    then python_normalize_import_module_path(name).replace(".", "/")
     else if name ? "/"
-    then name
+    then python_normalize_import_module_path(name)
     else if name ? "."
     then name.replace(".", "/")
     else if module.path.is_empty()
@@ -1061,22 +1059,53 @@ private fun python_find_local_function(name: String, functions: List[CompiledFun
         else python_find_local_function(name, functions[1:])
 
 private fun python_find_function_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_function_binding_in_imports(name, imports, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+private fun python_find_constant_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.qualified | !python_import_includes_name(name, declaration)
-        then python_find_function_in_imports(name, imports[1:], module, allModules)
-        else python_find_function_in_import(name, declaration, imports[1:], module, allModules)
+        then python_find_constant_binding_in_imports(name, imports[1:], module, allModules)
+        else python_find_constant_binding_in_import(name, declaration, imports[1:], module, allModules)
 
-private fun python_find_function_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+private fun python_find_constant_binding_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match python_find_imported_module(declaration, module, allModules) with
-    case Some { importedModule } -> python_find_imported_function_or_rest(name, importedModule, rest, module, allModules)
-    case None -> python_find_function_in_imports(name, rest, module, allModules)
+    case Some { importedModule } -> python_find_imported_constant_binding_or_rest(name, importedModule, rest, module, allModules)
+    case None -> python_find_constant_binding_in_imports(name, rest, module, allModules)
 
-private fun python_find_imported_function_or_rest(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+private fun python_find_imported_constant_binding_or_rest(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_constant(name, importedModule.functions) with
+    case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: importedModule, function: function } }
+    case None -> python_find_constant_binding_in_imports(name, rest, module, allModules)
+
+private fun python_find_constant(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if python_emitted_constant(function) & function.visibility != "const:private" & function.name == name
+        then /capy/lang/Option.Some { function }
+        else python_find_constant(name, functions[1:])
+
+private fun python_find_function_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified | !python_import_includes_name(name, declaration)
+        then python_find_function_binding_in_imports(name, imports[1:], module, allModules)
+        else python_find_function_binding_in_import(name, declaration, imports[1:], module, allModules)
+
+private fun python_find_function_binding_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> python_find_imported_function_binding_or_rest(name, importedModule, rest, module, allModules)
+    case None -> python_find_function_binding_in_imports(name, rest, module, allModules)
+
+private fun python_find_imported_function_binding_or_rest(name: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match python_find_function(name, importedModule.functions) with
-    case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> python_find_function_in_imports(name, rest, module, allModules)
+    case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: importedModule, function: function } }
+    case None -> python_find_function_binding_in_imports(name, rest, module, allModules)
 
 private fun python_find_imported_module(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     python_find_module_by_path(python_import_module_path(declaration.modulePath, module), allModules)
@@ -1136,12 +1165,25 @@ private fun python_find_extension_method_in_import(ownerName: String, methodName
 
 private fun python_import_module_path(modulePath: String, module: CompiledModule): String =
     if python_string_has_prefix(modulePath, "/")
-    then modulePath[1, modulePath.size().value]
+    then python_normalize_import_module_path(modulePath)
     else if modulePath ? "/"
-    then modulePath
+    then python_normalize_import_module_path(modulePath)
     else if module.path.is_empty()
     then modulePath
     else module.path + "/" + modulePath
+
+private fun python_normalize_import_module_path(path: String): String =
+    let normalized = if python_string_has_prefix(path, "/") then path[1, path.size().value] else path
+    if python_string_has_prefix(normalized, "dev/capylang/capybara/")
+    then python_normalize_capybara_import_suffix(normalized["dev/capylang/capybara/".size().value, normalized.size().value], "dev/capylang/")
+    else if python_string_has_prefix(normalized, "capybara/")
+    then python_normalize_capybara_import_suffix(normalized["capybara/".size().value, normalized.size().value], "")
+    else normalized
+
+private fun python_normalize_capybara_import_suffix(suffix: String, prefix: String): String =
+    if python_string_has_prefix(suffix, "test/")
+    then prefix + suffix
+    else prefix + "test/" + suffix
 
 private fun python_find_module_by_path(modulePath: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     match modules[0] with
@@ -1455,6 +1497,12 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + "        return 'Success'" + python_newline()
     + "    if type_name in ('/capy/lang/Result.Error', 'Result.Error'):" + python_newline()
     + "        return 'Error'" + python_newline()
+    + "    if type_name.startswith('__capy_raw|'):" + python_newline()
+    + "        return '__capy_raw|' + __capy_normalize_type_name(type_name[len('__capy_raw|'):])" + python_newline()
+    + "    if '/' in type_name:" + python_newline()
+    + "        type_name = type_name.rsplit('/', 1)[1]" + python_newline()
+    + "    if '.' in type_name:" + python_newline()
+    + "        type_name = type_name.rsplit('.', 1)[1]" + python_newline()
     + "    return type_name" + python_newline()
     + python_newline()
     + "def __capy_data(type_name, fields):" + python_newline()
