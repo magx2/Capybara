@@ -38,7 +38,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_import(module: CompiledModule): String =
-    "const { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_data, __capy_deep_equal } = require("
+    "const { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal } = require("
         + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), "capy/test/CapyTestRuntime"))
         + ");"
         + java_script_newline()
@@ -163,7 +163,10 @@ private fun java_script_parameter_bindings(parameters: List[CompiledFunctionPara
 
 private fun java_script_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
-    case CompiledUnsupportedExpression unsupported -> "__capy_unsupported(" + java_script_string_literal(unsupported.source) + ")"
+    case CompiledUnsupportedExpression unsupported ->
+        if java_script_compiled_placeholder_source(unsupported.source)
+        then java_script_placeholder_code(unsupported, module)
+        else "__capy_unsupported(" + java_script_string_literal(unsupported.source) + ")"
     case CompiledIntLiteral literal -> literal.source
     case CompiledLongLiteral literal -> java_script_integer_literal(literal.source)
     case CompiledFloatLiteral literal -> java_script_decimal_literal(literal.source)
@@ -196,6 +199,28 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledReduceExpression reduce -> java_script_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> java_script_match_expression_code(matchExpression, env, module, allModules)
     case CompiledBlockExpression block -> java_script_block_expression_code(block, env, module, allModules)
+
+private fun java_script_placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
+    "__capy_not_implemented(" + java_script_string_literal(java_script_placeholder_message(placeholder, module)) + ")"
+
+private fun java_script_placeholder_message(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
+    let functionName = java_script_placeholder_function_name(placeholder.source)
+    if functionName.is_empty()
+    then "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + java_script_module_source_file(module) + ": placeholder expression is not yet implemented"
+    else "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + java_script_module_source_file(module) + ": the function `" + functionName + "` is not yet implemented"
+
+private fun java_script_compiled_placeholder_source(source: String): bool =
+    java_script_string_has_prefix(source, "__capy_placeholder__|")
+
+private fun java_script_placeholder_function_name(source: String): String =
+    if java_script_compiled_placeholder_source(source)
+    then source["__capy_placeholder__|".size().value, source.size().value]
+    else ""
+
+private fun java_script_module_source_file(module: CompiledModule): String =
+    if module.path.is_empty()
+    then "/" + module.name + ".cfun"
+    else "/" + module.path + "/" + module.name + ".cfun"
 
 private fun java_script_variable_code(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match java_script_lookup_binding(name, env) with
@@ -905,6 +930,7 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_no_match(value) { throw new Error('No Capybara match case for ' + __capy_display(value)); }" + java_script_newline()
     + "function __capy_data(typeName, fields) { return Object.assign({ __type: typeName }, fields); }" + java_script_newline()
     + "function __capy_unsupported(source) { throw new Error('Unsupported CFUN expression: ' + source); }" + java_script_newline()
+    + "function __capy_not_implemented(message) { throw new Error(String(message)); }" + java_script_newline()
     + "function digits(number) { if (typeof number === 'bigint') { number = number < 0n ? -number : number; let result = 1; while (number >= 10n) { number = number / 10n; result++; } return result; } number = Math.abs(Math.trunc(number)); let result = 1; while (number >= 10) { number = Math.trunc(number / 10); result++; } return result; }" + java_script_newline()
     + java_script_newline()
     + "function __capy_unsafe_run(value) { while (value && (typeof value.unsafe_run === 'function' || typeof value.unsafeRun === 'function')) value = typeof value.unsafe_run === 'function' ? value.unsafe_run() : value.unsafeRun(); return value; }" + java_script_newline()
@@ -922,7 +948,7 @@ private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]):
     + java_script_newline()
 
 private fun java_script_runtime_exports_code(): String =
-    "module.exports = { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
+    "module.exports = { Effect, pure, delay, assert_all, assert_that, test, test_file, digits, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_index, __capy_get_field, __capy_reduce, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
 
 private fun java_script_deep_equal_code(): String =
     "function __capy_deep_equal(left, right) {" + java_script_newline()
@@ -1012,7 +1038,14 @@ private fun java_script_function_gatherable(function: CompiledFunction, module: 
     then true
     else if java_script_compiled_constant(function)
     then java_script_expression_gatherable(function.body, [], module, allModules)
+    else if java_script_placeholder_function_body(function)
+    then true
     else java_script_expression_gatherable(function.body, java_script_function_bindings(function), module, allModules)
+
+private fun java_script_placeholder_function_body(function: CompiledFunction): bool =
+    match function.body with
+    case CompiledUnsupportedExpression unsupported -> java_script_compiled_placeholder_source(unsupported.source)
+    case _ -> false
 
 private fun java_script_expression_gatherable(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
