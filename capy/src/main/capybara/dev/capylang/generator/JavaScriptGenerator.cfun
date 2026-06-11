@@ -695,24 +695,29 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + "function test(name, body) { return { name, body, assert_supplier: body }; }" + java_script_newline()
     + "function test_file(file_name, test_cases) { return Effect.delay(() => ({ file_name, fileName: file_name, path: file_name, test_cases, testCases: test_cases, timestamp_millis: Date.now() })); }" + java_script_newline()
     + java_script_newline()
+    + "function __capy_has_bigint(left, right) { return typeof left === 'bigint' || typeof right === 'bigint'; }" + java_script_newline()
+    + "function __capy_has_fractional_number(left, right) { return (typeof left === 'number' && !Number.isInteger(left)) || (typeof right === 'number' && !Number.isInteger(right)); }" + java_script_newline()
+    + "function __capy_bigint(value) { return typeof value === 'bigint' ? value : BigInt(Math.trunc(value)); }" + java_script_newline()
+    + "function __capy_long(value) { return BigInt.asIntN(64, value); }" + java_script_newline()
+    + "function __capy_number(value) { return typeof value === 'bigint' ? Number(value) : value; }" + java_script_newline()
     + "function __capy_str(value) { if (value === true) return 'true'; if (value === false) return 'false'; if (value == null) return 'null'; return String(value); }" + java_script_newline()
-    + "function __capy_add(left, right) { if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return new Set([...(left || []), ...((right instanceof Set) ? right : [right])]); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } return left + right; }" + java_script_newline()
-    + "function __capy_sub(left, right) { return left - right; }" + java_script_newline()
-    + "function __capy_mul(left, right) { return left * right; }" + java_script_newline()
-    + "function __capy_div(left, right) { const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
-    + "function __capy_mod(left, right) { return left % right; }" + java_script_newline()
-    + "function __capy_pow(left, right) { if (Number.isInteger(left) && Number.isInteger(right)) { if (right <= 0) return 1; let result = 1; for (let index = 0; index < right; index++) result *= left; return result; } return Math.pow(left, right); }" + java_script_newline()
+    + "function __capy_add(left, right) { if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return new Set([...(left || []), ...((right instanceof Set) ? right : [right])]); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) + __capy_number(right) : __capy_long(__capy_bigint(left) + __capy_bigint(right)); return left + right; }" + java_script_newline()
+    + "function __capy_sub(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
+    + "function __capy_mul(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) * __capy_number(right) : __capy_long(__capy_bigint(left) * __capy_bigint(right)); return left * right; }" + java_script_newline()
+    + "function __capy_div(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
+    + "function __capy_mod(left, right) { if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) % __capy_number(right) : __capy_long(__capy_bigint(left) % __capy_bigint(right)); return left % right; }" + java_script_newline()
+    + "function __capy_pow(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) { if (__capy_has_fractional_number(left, right)) return Math.pow(__capy_number(left), __capy_number(right)); let exponent = __capy_bigint(right); if (exponent <= 0n) return 1n; let result = 1n; const base = __capy_bigint(left); while (exponent > 0n) { result = __capy_long(result * base); exponent--; } return result; } if (Number.isInteger(left) && Number.isInteger(right)) { if (right <= 0) return 1; let result = 1; for (let index = 0; index < right; index++) result *= left; return result; } return Math.pow(left, right); }" + java_script_newline()
     + "function __capy_contains(left, right) { if (typeof left === 'string') return left.includes(right); if (Array.isArray(left)) return left.includes(right); if (left instanceof Set) return left.has(right); if (left instanceof Map) return left.has(right); return right in left; }" + java_script_newline()
     + "function __capy_size(value) { return value == null ? 0 : value.size != null ? value.size : value.length; }" + java_script_newline()
     + "function __capy_index(value, index) { if (value instanceof Map) return value.get(index); return value[index]; }" + java_script_newline()
     + "function __capy_get_field(value, name) { return value == null ? undefined : value[name]; }" + java_script_newline()
     + "function __capy_reduce(value, initial, keyed, reducer) { let result = initial; if (value instanceof Map) { for (const [key, item] of value) result = keyed ? reducer(result, key, item) : reducer(result, item); return result; } if (value && typeof value[Symbol.iterator] === 'function') { for (const item of value) result = reducer(result, item); } return result; }" + java_script_newline()
-    + "function __capy_type_matches(value, typeName) { if (typeName === 'String') return typeof value === 'string'; if (typeName === 'bool') return typeof value === 'boolean'; if (typeName === 'byte' || typeName === 'int' || typeName === 'long') return Number.isInteger(value); if (typeName === 'float' || typeName === 'double') return typeof value === 'number'; if (typeName === 'List') return Array.isArray(value); if (typeName === 'Set') return value instanceof Set; if (typeName === 'Dict') return value instanceof Map; if (value == null || typeof value !== 'object') return false; const actual = value.__type; return actual === typeName || actual === '__capy_raw|' + typeName; }" + java_script_newline()
+    + "function __capy_type_matches(value, typeName) { if (typeName === 'String') return typeof value === 'string'; if (typeName === 'bool') return typeof value === 'boolean'; if (typeName === 'long') return typeof value === 'bigint' || Number.isInteger(value); if (typeName === 'byte' || typeName === 'int') return Number.isInteger(value); if (typeName === 'float' || typeName === 'double') return typeof value === 'number'; if (typeName === 'List') return Array.isArray(value); if (typeName === 'Set') return value instanceof Set; if (typeName === 'Dict') return value instanceof Map; if (value == null || typeof value !== 'object') return false; const actual = value.__type; return actual === typeName || actual === '__capy_raw|' + typeName; }" + java_script_newline()
     + "function __capy_match_binding(value, name, index) { if (value == null) return undefined; if (Object.prototype.hasOwnProperty.call(value, name)) return value[name]; const positional = '$' + index; if (Object.prototype.hasOwnProperty.call(value, positional)) return value[positional]; const fields = Object.keys(value).filter(key => key !== '__type'); if (index < fields.length) return value[fields[index]]; return value[name]; }" + java_script_newline()
     + "function __capy_no_match(value) { throw new Error('No Capybara match case for ' + __capy_display(value)); }" + java_script_newline()
     + "function __capy_data(typeName, fields) { return Object.assign({ __type: typeName }, fields); }" + java_script_newline()
     + "function __capy_unsupported(source) { throw new Error('Unsupported CFUN expression: ' + source); }" + java_script_newline()
-    + "function digits(number) { number = Math.abs(Math.trunc(number)); let result = 1; while (number >= 10) { number = Math.trunc(number / 10); result++; } return result; }" + java_script_newline()
+    + "function digits(number) { if (typeof number === 'bigint') { number = number < 0n ? -number : number; let result = 1; while (number >= 10n) { number = number / 10n; result++; } return result; } number = Math.abs(Math.trunc(number)); let result = 1; while (number >= 10) { number = Math.trunc(number / 10); result++; } return result; }" + java_script_newline()
     + java_script_newline()
     + "function __capy_unsafe_run(value) { while (value && (typeof value.unsafe_run === 'function' || typeof value.unsafeRun === 'function')) value = typeof value.unsafe_run === 'function' ? value.unsafe_run() : value.unsafeRun(); return value; }" + java_script_newline()
     + "function __capy_as_list(value) { value = __capy_unsafe_run(value); if (value == null) return []; return Array.isArray(value) ? value : [value]; }" + java_script_newline()
@@ -731,6 +736,8 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
 private fun java_script_deep_equal_code(): String =
     "function __capy_deep_equal(left, right) {" + java_script_newline()
     + "    if (Object.is(left, right)) return true;" + java_script_newline()
+    + "    if (typeof left === 'bigint' && typeof right === 'number' && Number.isFinite(right) && Number.isInteger(right)) return left === BigInt(right);" + java_script_newline()
+    + "    if (typeof right === 'bigint' && typeof left === 'number' && Number.isFinite(left) && Number.isInteger(left)) return BigInt(left) === right;" + java_script_newline()
     + "    if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((item, index) => __capy_deep_equal(item, right[index]));" + java_script_newline()
     + "    if (left instanceof Set && right instanceof Set) {" + java_script_newline()
     + "        if (left.size !== right.size) return false;" + java_script_newline()
@@ -750,6 +757,7 @@ private fun java_script_deep_equal_code(): String =
     + "    return false;" + java_script_newline()
     + "}" + java_script_newline()
     + "function __capy_display(value) {" + java_script_newline()
+    + "    if (typeof value === 'bigint') return value.toString();" + java_script_newline()
     + "    if (value instanceof Map) return JSON.stringify(Object.fromEntries(value));" + java_script_newline()
     + "    if (value instanceof Set) return JSON.stringify([...value]);" + java_script_newline()
     + "    return JSON.stringify(value);" + java_script_newline()
@@ -1158,7 +1166,7 @@ private fun java_script_escape_string(value: String): String =
 
 private fun java_script_integer_literal(source: String): String =
     if java_script_string_has_suffix(source, "L") | java_script_string_has_suffix(source, "l")
-    then source[0, source.size().value - 1]
+    then source[0, source.size().value - 1] + "n"
     else source
 
 private fun java_script_decimal_literal(source: String): String =
