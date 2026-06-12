@@ -456,6 +456,8 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_collection_is_empty_call(call, env, module, allModules)
+    then "(__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ") === 0)"
     else if java_script_seq_as_list_call(call)
     then "__capy_as_list(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_collection_predicate_call(call, env, module, allModules)
@@ -477,6 +479,11 @@ private fun java_script_raw_method_call_code(call: CompiledMethodCallExpression,
 private fun java_script_seq_as_list_call(call: CompiledMethodCallExpression): bool =
     call.name == "as_list" & call.arguments.is_empty()
 
+private fun java_script_collection_is_empty_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "is_empty"
+        & call.arguments.is_empty()
+        & java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+
 private fun java_script_effect_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     (call.name == "map" | call.name == "flat_map" | call.name == "flatMap")
         & java_script_expression_type(call.receiver, env, module, allModules) == "Effect"
@@ -489,6 +496,9 @@ private fun java_script_collection_predicate_call(call: CompiledMethodCallExpres
 
 private fun java_script_collection_predicate_receiver_type(typeName: String): bool =
     typeName == "List" | typeName == "Set" | typeName == "String" | typeName == "Seq" | typeName == "Dict"
+
+private fun java_script_collection_receiver_type(typeName: String): bool =
+    java_script_collection_predicate_receiver_type(typeName)
 
 private fun java_script_single_callable_argument(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
@@ -1028,6 +1038,8 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then "int"
     else if java_script_effect_method_call(call, env, module, allModules)
     then "Effect"
+    else if java_script_collection_is_empty_call(call, env, module, allModules)
+    then "bool"
     else if java_script_seq_as_list_call(call)
     then "List"
     else if java_script_collection_predicate_call(call, env, module, allModules)
@@ -1430,6 +1442,7 @@ private fun java_script_assert_runtime_code(): String =
     + "    is_equal_to(other, tolerance = null) { const result = tolerance == null ? __capy_deep_equal(this.value, other) : Math.abs(Number(this.value) - Number(other)) <= Number(tolerance); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to equal ' + __capy_display(other), 'Assert.is_equal_to'); }" + java_script_newline()
     + "    is_true() { return this._append(this.value === true, 'Expected ' + __capy_display(this.value) + ' to be true', 'Assert.is_true'); }" + java_script_newline()
     + "    is_false() { return this._append(this.value === false, 'Expected ' + __capy_display(this.value) + ' to be false', 'Assert.is_false'); }" + java_script_newline()
+    + "    is_zero() { return this._append(this.value === 0 || this.value === 0n, 'Expected ' + __capy_display(this.value) + ' to be zero', 'Assert.is_zero'); }" + java_script_newline()
     + "    is_empty() { const value = __capy_unsafe_run(this.value); const result = __capy_data_is(value, 'None') || (Array.isArray(value) || typeof value === 'string' ? value.length === 0 : (value instanceof Set || value instanceof Map ? value.size === 0 : false)); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to be empty', 'Assert.is_empty'); }" + java_script_newline()
     + "    contains(other) { const value = __capy_unsafe_run(this.value); let result = false; if (__capy_data_is(value, 'Some')) result = __capy_deep_equal(__capy_match_binding(value, 'value', 0), other); else if (typeof value === 'string') result = value.includes(other); else if (Array.isArray(value)) result = value.some(item => __capy_deep_equal(item, other)); else if (value instanceof Set) result = [...value].some(item => __capy_deep_equal(item, other)); else if (value instanceof Map) result = [...value.values()].some(item => __capy_deep_equal(item, other)); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to contain ' + __capy_display(other), 'Assert.contains'); }" + java_script_newline()
     + "    succeeds(expected = undefined) { const value = __capy_unsafe_run(this.value); const ok = __capy_data_is(value, 'Success'); if (arguments.length === 0) return this._append(ok, 'Expected ' + __capy_display(this.value) + ' to succeed', 'Assert.succeeds'); if (!ok) return this._append(false, 'Expected ' + __capy_display(this.value) + ' to succeed', 'Assert.succeeds'); const actual = __capy_match_binding(value, 'value', 0); if (typeof expected === 'function') { const nested = expected(actual); const assertions = nested && Array.isArray(nested.assertions) ? nested.assertions : []; return new ValueAssert(this.value, this.assertions.concat(assertions)); } return this._append(__capy_deep_equal(actual, expected), 'Expected ' + __capy_display(this.value) + ' to succeed with ' + __capy_display(expected), 'Assert.succeeds'); }" + java_script_newline()
@@ -1730,7 +1743,7 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
 
 private fun java_script_method_call_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
-        | call.name == "is_empty" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
+        | call.name == "is_zero" | call.name == "is_empty" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_effect_method_call(call, env, module, allModules)
@@ -1741,6 +1754,8 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
     else if call.name == "size"
     then call.arguments.is_empty() & java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_collection_is_empty_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_seq_as_list_call(call)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_collection_predicate_call(call, env, module, allModules)
