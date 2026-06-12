@@ -197,36 +197,6 @@ def load_linked_modules(generated_dir):
     return modules
 
 
-def capy_data_fields(value):
-    value = unsafe_run(value)
-    if isinstance(value, dict):
-        return {key: field for key, field in value.items() if key != "__type"}
-    if hasattr(value, "__dict__"):
-        return dict(value.__dict__)
-    try:
-        return dict(value)
-    except (TypeError, ValueError):
-        return {}
-
-
-def patch_runtime_data_spread(runtime):
-    original = getattr(runtime, "__capy_data", None)
-    if not callable(original) or getattr(runtime, "_capy_runner_data_spread_patch", False):
-        return
-
-    def capy_data(type_name, fields):
-        expanded = {}
-        for key, value in dict(fields or {}).items():
-            if key == "":
-                expanded.update(capy_data_fields(value))
-            else:
-                expanded[key] = value
-        return original(type_name, expanded)
-
-    setattr(runtime, "__capy_data", capy_data)
-    setattr(runtime, "_capy_runner_data_spread_patch", True)
-
-
 def patch_runtime_math_exports(runtime):
     if not hasattr(runtime, "sqrt"):
         setattr(runtime, "sqrt", math.sqrt)
@@ -630,7 +600,6 @@ def main(argv):
     sys.path.insert(0, str(generated_dir))
     runtime = importlib.import_module("capy.test.CapyTestRuntime")
     patch_runtime_math_exports(runtime)
-    patch_runtime_data_spread(runtime)
     files = flatten_test_values(runtime.gatherTests())
     if args.tests:
         files = merge_test_files(files, gather_selected_test_files(args.tests))
