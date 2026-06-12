@@ -2268,6 +2268,8 @@ private fun java_script_assert_runtime_code(): String =
     "class ValueAssert {" + java_script_newline()
     + "    constructor(value, assertions = []) { this.value = value; this.assertions = assertions; }" + java_script_newline()
     + "    _append(result, message, type) { return new ValueAssert(this.value, this.assertions.concat([() => ({ result: Boolean(result), message: String(message), type })])); }" + java_script_newline()
+    + "    failed() { return this.assertions.some(assertion => !Boolean(assertion().result)); }" + java_script_newline()
+    + "    succeeded() { return !this.failed(); }" + java_script_newline()
     + "    is_equal_to(other, tolerance = null) { const result = tolerance == null ? __capy_deep_equal(this.value, other) : Math.abs(Number(this.value) - Number(other)) <= Number(tolerance); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to equal ' + __capy_display(other), 'Assert.is_equal_to'); }" + java_script_newline()
     + "    is_true() { return this._append(this.value === true, 'Expected ' + __capy_display(this.value) + ' to be true', 'Assert.is_true'); }" + java_script_newline()
     + "    is_false() { return this._append(this.value === false, 'Expected ' + __capy_display(this.value) + ' to be false', 'Assert.is_false'); }" + java_script_newline()
@@ -2711,6 +2713,7 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
         | call.name == "is_zero" | call.name == "is_one" | call.name == "is_empty"
         | call.name == "has_size" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
+        | call.name == "failed" | call.name == "succeeded"
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if call.name == "__capy_call"
