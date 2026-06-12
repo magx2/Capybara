@@ -312,12 +312,7 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
             + ")"
 
 private fun java_script_collection_pipe_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_collection_pipe_helper(binary.operator)
-        + "("
-        + java_script_expression_code(binary.left, env, module, allModules)
-        + ", "
-        + java_script_expression_code(binary.right, env, module, allModules)
-        + ")"
+    java_script_pipe_code(java_script_collection_pipe_helper(binary.operator), binary, env, module, allModules)
 
 private fun java_script_collection_pipe_helper(operator: String): String =
     if operator == "|-"
@@ -327,12 +322,7 @@ private fun java_script_collection_pipe_helper(operator: String): String =
     else "__capy_seq_map"
 
 private fun java_script_option_pipe_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_option_pipe_helper(binary.operator)
-        + "("
-        + java_script_expression_code(binary.left, env, module, allModules)
-        + ", "
-        + java_script_expression_code(binary.right, env, module, allModules)
-        + ")"
+    java_script_pipe_code(java_script_option_pipe_helper(binary.operator), binary, env, module, allModules)
 
 private fun java_script_option_pipe_helper(operator: String): String =
     if operator == "|-"
@@ -342,12 +332,10 @@ private fun java_script_option_pipe_helper(operator: String): String =
     else "__capy_option_map"
 
 private fun java_script_result_pipe_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_result_pipe_helper(binary.operator)
-        + "("
-        + java_script_expression_code(binary.left, env, module, allModules)
-        + ", "
-        + java_script_expression_code(binary.right, env, module, allModules)
-        + ")"
+    java_script_pipe_code(java_script_result_pipe_helper(binary.operator), binary, env, module, allModules)
+
+private fun java_script_pipe_code(helper: String, binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_binary_runtime_call(helper, binary, env, module, allModules)
 
 private fun java_script_result_pipe_helper(operator: String): String =
     if operator == "|*"
@@ -363,8 +351,9 @@ private fun java_script_result_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|*"
 
 private fun java_script_result_pipe_receiver_type(typeName: String): bool =
-    typeName == "Result"
-        | java_script_result_constructor_type(typeName)
+    let baseType = java_script_type_unqualified_name(typeName)
+    baseType == "Result"
+        | java_script_result_constructor_type(baseType)
 
 private fun java_script_option_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     java_script_option_pipe_operator(binary.operator)
@@ -375,8 +364,9 @@ private fun java_script_option_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|-" | operator == "|*"
 
 private fun java_script_option_pipe_receiver_type(typeName: String): bool =
-    typeName == "Option"
-        | java_script_option_constructor_type(typeName)
+    let baseType = java_script_type_unqualified_name(typeName)
+    baseType == "Option"
+        | java_script_option_constructor_type(baseType)
 
 private fun java_script_option_constructor_type(typeName: String): bool =
     java_script_stdlib_data_constructor_name(typeName, "Option", "Some")
@@ -408,7 +398,7 @@ private fun java_script_collection_pipe_receiver_type(typeName: String): bool =
     java_script_collection_receiver_type(typeName)
 
 private fun java_script_set_binary_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
-    leftType == "Set" & java_script_set_binary_operator(binary.operator)
+    java_script_type_unqualified_name(leftType) == "Set" & java_script_set_binary_operator(binary.operator)
 
 private fun java_script_set_binary_operator(operator: String): bool =
     java_script_set_predicate_operator(operator) | java_script_set_algebra_operator(operator)
@@ -422,19 +412,26 @@ private fun java_script_set_algebra_operator(operator: String): bool =
 private fun java_script_set_binary_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftCode = java_script_expression_code(binary.left, env, module, allModules)
     let rightCode = java_script_expression_code(binary.right, env, module, allModules)
-    if binary.operator == "⊆"
+    java_script_set_operation_code(binary.operator, leftCode, rightCode)
+
+private fun java_script_set_operation_code(operator: String, leftCode: String, rightCode: String): String =
+    if operator == "?"
+    then "__capy_contains(" + leftCode + ", " + rightCode + ")"
+    else if operator == "⊆"
     then "__capy_set_subset(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "⊂"
+    else if operator == "⊂"
     then "__capy_set_proper_subset(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "⊇"
+    else if operator == "⊇"
     then "__capy_set_subset(" + rightCode + ", " + leftCode + ")"
-    else if binary.operator == "⊃"
+    else if operator == "⊃"
     then "__capy_set_proper_subset(" + rightCode + ", " + leftCode + ")"
-    else if binary.operator == "∪"
+    else if operator == "∪"
     then "__capy_set_concat(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "∩"
+    else if operator == "∩"
     then "__capy_set_intersection(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "△"
+    else if operator == "-"
+    then "__capy_set_remove_all(" + leftCode + ", " + rightCode + ")"
+    else if operator == "△"
     then "__capy_set_symmetric_difference(" + leftCode + ", " + rightCode + ")"
     else "__capy_set_cartesian_product(" + leftCode + ", " + rightCode + ")"
 
@@ -447,15 +444,18 @@ private fun java_script_regex_binary_operator(operator: String): bool =
 private fun java_script_regex_binary_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftCode = java_script_expression_code(binary.left, env, module, allModules)
     let rightCode = java_script_expression_code(binary.right, env, module, allModules)
-    if binary.operator == "?"
-    then "__capy_regex_matches(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "~"
-    then "__capy_regex_find(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "~~"
-    then "__capy_regex_find_all(" + leftCode + ", " + rightCode + ")"
-    else if binary.operator == "~>"
-    then "__capy_regex_replace(" + leftCode + ", " + rightCode + ")"
-    else "__capy_regex_split(" + leftCode + ", " + rightCode + ")"
+    java_script_regex_operation_code(binary.operator, leftCode, rightCode)
+
+private fun java_script_regex_operation_code(operator: String, receiverCode: String, argumentCode: String): String =
+    if operator == "?"
+    then "__capy_regex_matches(" + receiverCode + ", " + argumentCode + ")"
+    else if operator == "~"
+    then "__capy_regex_find(" + receiverCode + ", " + argumentCode + ")"
+    else if operator == "~~"
+    then "__capy_regex_find_all(" + receiverCode + ", " + argumentCode + ")"
+    else if operator == "~>"
+    then "__capy_regex_replace(" + receiverCode + ", " + argumentCode + ")"
+    else "__capy_regex_split(" + receiverCode + ", " + argumentCode + ")"
 
 private fun java_script_callable_expression(expression: CompiledExpression): bool =
     match expression with
@@ -617,12 +617,13 @@ private fun java_script_collection_predicate_call(call: CompiledMethodCallExpres
     else false
 
 private fun java_script_collection_receiver_type(typeName: String): bool =
-    typeName == "List" | typeName == "Set" | typeName == "String" | typeName == "Seq" | typeName == "Dict"
+    let baseType = java_script_type_unqualified_name(typeName)
+    baseType == "List" | baseType == "Set" | baseType == "String" | baseType == "Seq" | baseType == "Dict"
 
 private fun java_script_collection_get_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "get"
     then
-        let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+        let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
         if java_script_collection_get_receiver_type(receiverType)
         then java_script_collection_get_arity(receiverType, call.arguments)
         else false
@@ -637,7 +638,7 @@ private fun java_script_collection_get_arity(typeName: String, arguments: List[C
     else java_script_one_method_argument(arguments)
 
 private fun java_script_collection_get_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
     let receiver = java_script_expression_code(call.receiver, env, module, allModules)
     if receiverType == "List" & java_script_two_method_arguments(call.arguments)
     then "__capy_slice(" + receiver + ", "
@@ -653,10 +654,11 @@ private fun java_script_collection_get_call_code(call: CompiledMethodCallExpress
 private fun java_script_collection_contains_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_one_method_argument(call.arguments)
     then
+        let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
         if call.name == "contains"
-        then java_script_collection_contains_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        then java_script_collection_contains_receiver_type(receiverType)
         else if call.name == "contains_key"
-        then java_script_expression_type(call.receiver, env, module, allModules) == "Dict"
+        then receiverType == "Dict"
         else false
     else false
 
@@ -672,7 +674,7 @@ private fun java_script_collection_contains_call_code(call: CompiledMethodCallEx
 
 private fun java_script_set_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_set_method_arity(call)
-    then java_script_expression_type(call.receiver, env, module, allModules) == "Set"
+    then java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)) == "Set"
     else false
 
 private fun java_script_set_method_arity(call: CompiledMethodCallExpression): bool =
@@ -698,25 +700,28 @@ private fun java_script_set_method_call_code(call: CompiledMethodCallExpression,
     then "__capy_set_power_set(" + receiverCode + ")"
     else
         let argumentCode = java_script_first_method_argument_code(call.arguments, env, module, allModules)
-        if call.name == "contains"
-        then "__capy_contains(" + receiverCode + ", " + argumentCode + ")"
-        else if call.name == "is_subset_of"
-        then "__capy_set_subset(" + receiverCode + ", " + argumentCode + ")"
-        else if call.name == "is_proper_subset_of"
-        then "__capy_set_proper_subset(" + receiverCode + ", " + argumentCode + ")"
-        else if call.name == "is_superset_of"
-        then "__capy_set_subset(" + argumentCode + ", " + receiverCode + ")"
-        else if call.name == "is_proper_superset_of"
-        then "__capy_set_proper_subset(" + argumentCode + ", " + receiverCode + ")"
-        else if call.name == "union"
-        then "__capy_set_concat(" + receiverCode + ", " + argumentCode + ")"
-        else if call.name == "intersection"
-        then "__capy_set_intersection(" + receiverCode + ", " + argumentCode + ")"
-        else if call.name == "difference"
-        then "__capy_set_remove_all(" + receiverCode + ", " + argumentCode + ")"
-        else if call.name == "symmetric_difference"
-        then "__capy_set_symmetric_difference(" + receiverCode + ", " + argumentCode + ")"
-        else "__capy_set_cartesian_product(" + receiverCode + ", " + argumentCode + ")"
+        java_script_set_operation_code(java_script_set_method_operator(call.name), receiverCode, argumentCode)
+
+private fun java_script_set_method_operator(name: String): String =
+    if name == "contains"
+    then "?"
+    else if name == "is_subset_of"
+    then "⊆"
+    else if name == "is_proper_subset_of"
+    then "⊂"
+    else if name == "is_superset_of"
+    then "⊇"
+    else if name == "is_proper_superset_of"
+    then "⊃"
+    else if name == "union"
+    then "∪"
+    else if name == "intersection"
+    then "∩"
+    else if name == "difference"
+    then "-"
+    else if name == "symmetric_difference"
+    then "△"
+    else "×"
 
 private fun java_script_single_callable_argument(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
@@ -746,7 +751,8 @@ private fun java_script_char_to_string_method_call(call: CompiledMethodCallExpre
     else false
 
 private fun java_script_char_to_string_receiver_type(typeName: String): bool =
-    typeName == "char" | typeName == java_script_unknown_type()
+    let baseType = java_script_type_unqualified_name(typeName)
+    baseType == "char" | baseType == java_script_unknown_type()
 
 private fun java_script_string_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_string_method_arity(call.name, call.arguments)
@@ -754,8 +760,9 @@ private fun java_script_string_method_call(call: CompiledMethodCallExpression, e
     else false
 
 private fun java_script_string_method_receiver_type(name: String, typeName: String): bool =
-    typeName == "String"
-        | (typeName == java_script_unknown_type() & java_script_string_only_method(name))
+    let baseType = java_script_type_unqualified_name(typeName)
+    baseType == "String"
+        | (baseType == java_script_unknown_type() & java_script_string_only_method(name))
 
 private fun java_script_string_only_method(name: String): bool =
     name == "trim" | name == "starts_with" | name == "end_with" | name == "replace"
@@ -798,21 +805,21 @@ private fun java_script_regex_method_name(name: String): bool =
 private fun java_script_regex_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverCode = java_script_expression_code(call.receiver, env, module, allModules)
     let argumentCode = java_script_first_method_argument_code(call.arguments, env, module, allModules)
-    if call.name == "matches"
-    then "__capy_regex_matches(" + receiverCode + ", " + argumentCode + ")"
-    else if call.name == "find"
-    then "__capy_regex_find(" + receiverCode + ", " + argumentCode + ")"
-    else if call.name == "find_all"
-    then "__capy_regex_find_all(" + receiverCode + ", " + argumentCode + ")"
-    else if call.name == "replace"
-    then "__capy_regex_replace(" + receiverCode + ", " + argumentCode + ")"
-    else "__capy_regex_split(" + receiverCode + ", " + argumentCode + ")"
+    java_script_regex_operation_code(java_script_regex_method_operator(call.name), receiverCode, argumentCode)
+
+private fun java_script_regex_method_operator(name: String): String =
+    if name == "matches"
+    then "?"
+    else if name == "find"
+    then "~"
+    else if name == "find_all"
+    then "~~"
+    else if name == "replace"
+    then "~>"
+    else "/>"
 
 private fun java_script_regex_receiver_type(typeName: String): bool =
-    typeName == java_script_regex_type()
-        | typeName == "/capy/lang/Regex"
-        | typeName == "capy/lang/Regex"
-        | typeName == "capy.lang.Regex"
+    java_script_type_unqualified_name(typeName) == java_script_regex_type()
 
 private fun java_script_date_time_method_call(receiver: String, methodName: String, emptyArguments: bool, oneArgument: bool, twoArguments: bool): bool =
     java_script_stdlib_date_time_method(receiver, methodName, emptyArguments, oneArgument, twoArguments)
@@ -929,7 +936,8 @@ private fun java_script_string_parse_method_call(call: CompiledMethodCallExpress
     else false
 
 private fun java_script_string_parse_receiver_type(receiverType: String): bool =
-    receiverType == "String" | receiverType == java_script_unknown_type()
+    let baseType = java_script_type_unqualified_name(receiverType)
+    baseType == "String" | baseType == java_script_unknown_type()
 
 private fun java_script_string_parse_method_name(name: String): bool =
     name == "to_int" | name == "to_long" | name == "to_double" | name == "to_float" | name == "to_bool"
@@ -983,10 +991,11 @@ private fun java_script_primitive_conversion_method(name: String): bool =
     name == "to_int" | name == "to_long"
 
 private fun java_script_primitive_conversion_receiver(name: String, receiverType: String): bool =
+    let baseType = java_script_type_unqualified_name(receiverType)
     if name == "to_int"
-    then receiverType == "long" | receiverType == "float" | receiverType == "double"
+    then baseType == "long" | baseType == "float" | baseType == "double"
     else if name == "to_long"
-    then receiverType == "float" | receiverType == "double"
+    then baseType == "float" | baseType == "double"
     else false
 
 private fun java_script_primitive_conversion_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1247,14 +1256,16 @@ private fun java_script_built_in_slice_receiver_type(receiverType: String): bool
     java_script_built_in_sequence_receiver_type(receiverType)
 
 private fun java_script_built_in_index_receiver_type(receiverType: String): bool =
-    java_script_built_in_sequence_receiver_type(receiverType)
-        | receiverType == "Dict"
+    let baseType = java_script_type_unqualified_name(receiverType)
+    java_script_built_in_sequence_receiver_type(baseType)
+        | baseType == "Dict"
 
 private fun java_script_built_in_sequence_receiver_type(receiverType: String): bool =
-    receiverType == java_script_unknown_type()
-        | receiverType == "String"
-        | receiverType == "Tuple"
-        | receiverType == "List"
+    let baseType = java_script_type_unqualified_name(receiverType)
+    baseType == java_script_unknown_type()
+        | baseType == "String"
+        | baseType == "Tuple"
+        | baseType == "List"
 
 private fun java_script_user_defined_index_code(index: CompiledIndexExpression, receiverType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match java_script_find_local_method_function(receiverType, "get", module.functions) with
@@ -1643,7 +1654,7 @@ private fun java_script_regex_binary_expression_type(operator: String): String =
     else "List"
 
 private fun java_script_index_expression_type(index: CompiledIndexExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = java_script_expression_type(index.receiver, env, module, allModules)
+    let receiverType = java_script_type_unqualified_name(java_script_expression_type(index.receiver, env, module, allModules))
     if !java_script_built_in_index_expression(index, receiverType)
     then match java_script_find_local_method_function(receiverType, "get", module.functions) with
         case Some { function } -> function.returnType.name
@@ -1738,7 +1749,7 @@ private fun java_script_set_method_return_type(name: String): String =
     else "Set"
 
 private fun java_script_collection_get_return_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
     if receiverType == "List" & java_script_two_method_arguments(call.arguments)
     then "List"
     else if receiverType == "Tuple"
@@ -1832,7 +1843,7 @@ private fun java_script_runtime_function_type(name: String): String =
     else java_script_unknown_type()
 
 private fun java_script_collection_pipe_result_type(operator: String, leftType: String): String =
-    if leftType == "Dict" & operator != "|*"
+    if java_script_type_unqualified_name(leftType) == "Dict" & operator != "|*"
     then "Dict"
     else "Seq"
 
