@@ -352,13 +352,23 @@ def capyResourcesDir = layout.buildDirectory.dir('resources/main')
 def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraMainNativePythonSourceDir = layout.projectDirectory.dir('src/main/capybara/native/py')
+def capybaraMainNativeJavaScriptSourceDir = layout.projectDirectory.dir('src/main/capybara/native/js')
 def capybaraGeneratedCompilerPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/compiler')
 def capybaraLinkedCompilerPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/compiler')
+def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript/compiler')
+def capybaraRuntimeCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-runtime/compiler')
+def capybaraLinkedCompilerJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/compiler')
 def pythonAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/python-grammars')
 def pythonAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/python/main')
 def pythonAntlrRuntimeDir = layout.buildDirectory.dir('python/antlr4-runtime')
+def javascriptAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/javascript-grammars')
+def javascriptAntlrEsmGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/javascript-esm/main')
+def javascriptAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/javascript/main')
+def javascriptAntlrRuntimeDir = layout.buildDirectory.dir('javascript/antlr4-runtime')
 def pythonNativeParserSmokeScript = layout.projectDirectory.file('src/test/py/native_parser_smoke.py')
+def javascriptNativeParserSmokeScript = layout.projectDirectory.file('src/test/js/native_parser_smoke.js')
 def pythonNativeParserSmokeResultsDir = layout.buildDirectory.dir('test-results/python-native-parser-smoke')
+def javascriptNativeParserSmokeResultsDir = layout.buildDirectory.dir('test-results/javascript-native-parser-smoke')
 def functionalGrammarFile = layout.projectDirectory.file('src/main/antlr/Functional.g4')
 def objectOrientedGrammarFile = layout.projectDirectory.file('src/main/antlr/ObjectOriented.g4')
 def antlrToolVersion = antlrVersion.toString()
@@ -503,6 +513,120 @@ tasks.register('generatePythonAntlr', JavaExec) {
     }
 }
 
+tasks.register('prepareJavaScriptAntlrGrammars') {
+    group = 'build'
+    description = 'Prepares JavaScript-target ANTLR grammar overlays.'
+
+    inputs.file(functionalGrammarFile)
+            .withPropertyName('functionalGrammar')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(objectOrientedGrammarFile)
+            .withPropertyName('objectOrientedGrammar')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptAntlrGrammarDir)
+
+    doLast {
+        def outputDir = javascriptAntlrGrammarDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+
+        def functionalSource = functionalGrammarFile.asFile.text
+        def programStart = functionalSource.indexOf('program :')
+        if (programStart < 0) {
+            throw new GradleException('Unable to locate Functional.g4 program rule.')
+        }
+        def functionalPrefix = functionalSource.substring(0, functionalSource.indexOf('@header')).trim() + System.lineSeparator() + System.lineSeparator()
+        def javascriptLexerMembers = '''@lexer::members {
+this.lineStart = true;
+this.containsNewline = function(text) {
+    return text.indexOf('\\n') >= 0 || text.indexOf('\\r') >= 0;
+};
+this.emit = function() {
+    this.lineStart = false;
+    return antlr4.Lexer.prototype.emit.call(this);
+};
+}
+
+'''
+        def functionalJavaScript = functionalPrefix + javascriptLexerMembers + functionalSource.substring(programStart)
+        functionalJavaScript = functionalJavaScript
+                .replace('{ "multiple".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "multiple"}?')
+                .replace('{ "annotation".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "annotation"}?')
+                .replace('{ "on".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "on"}?')
+                .replace('{ "method".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "method"}?')
+                .replace('{ "class".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "class"}?')
+                .replace('{ "interface".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "interface"}?')
+                .replace('{ "trait".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "trait"}?')
+                .replace('{ "field".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "field"}?')
+                .replace('{ "init".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "init"}?')
+                .replace('{ "String".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "String"}?')
+                .replace('{lineStart}?', '{this.lineStart}?')
+                .replace('{ if (containsNewline(getText())) lineStart = true; }', '{ this.lineStart = this.lineStart || this.containsNewline(this.text); }')
+        new File(outputDir, 'Functional.g4').text = functionalJavaScript
+
+        def objectSource = objectOrientedGrammarFile.asFile.text
+        def objectJavaScript = objectSource.replaceFirst(/(?s)\n@header\s*\{.*?\}\s*/, System.lineSeparator())
+        new File(outputDir, 'ObjectOriented.g4').text = objectJavaScript
+    }
+}
+
+tasks.register('generateJavaScriptAntlrEsm', JavaExec) {
+    group = 'build'
+    description = 'Generates JavaScript ANTLR parser sources in ANTLR ESM format.'
+    dependsOn tasks.named('prepareJavaScriptAntlrGrammars')
+
+    inputs.dir(javascriptAntlrGrammarDir)
+            .withPropertyName('javascriptAntlrGrammars')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptAntlrEsmGeneratedDir)
+
+    classpath = configurations.antlr
+    mainClass = 'org.antlr.v4.Tool'
+
+    doFirst {
+        def outputDir = javascriptAntlrEsmGeneratedDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+        workingDir = javascriptAntlrGrammarDir.get().asFile
+        setArgs(['-Dlanguage=JavaScript', '-o', outputDir.absolutePath, 'Functional.g4', 'ObjectOriented.g4'])
+    }
+}
+
+tasks.register('generateJavaScriptAntlr') {
+    group = 'build'
+    description = 'Converts ANTLR JavaScript parser sources to CommonJS for the Capybara JavaScript backend.'
+    dependsOn tasks.named('generateJavaScriptAntlrEsm')
+
+    inputs.dir(javascriptAntlrEsmGeneratedDir)
+            .withPropertyName('javascriptAntlrEsmSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptAntlrGeneratedDir)
+
+    doLast {
+        def inputDir = javascriptAntlrEsmGeneratedDir.get().asFile
+        def outputDir = javascriptAntlrGeneratedDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+        inputDir.eachFile { sourceFile ->
+            def targetFile = new File(outputDir, sourceFile.name)
+            if (!sourceFile.name.endsWith('.js')) {
+                targetFile.bytes = sourceFile.bytes
+                return
+            }
+            def source = sourceFile.text
+            source = source.replace("import antlr4 from 'antlr4';", "const antlr4 = require('antlr4').default;")
+            source = source.replaceAll(/import (\w+) from '\.\/(\w+)\.js';/, "const \$1 = require('./\$2.js');")
+            def matcher = source =~ /export default class (\w+)/
+            if (matcher.find()) {
+                def className = matcher.group(1)
+                source = source.replace("export default class ${className}", "class ${className}")
+                source += System.lineSeparator() + "module.exports = ${className};" + System.lineSeparator()
+            }
+            targetFile.text = source
+        }
+    }
+}
+
 tasks.register('installPythonAntlrRuntime', Exec) {
     group = 'build'
     description = 'Installs the Python ANTLR runtime matching the ANTLR tool version.'
@@ -546,6 +670,20 @@ with zipfile.ZipFile(io.BytesIO(wheel)) as archive:
     archive.extractall(target)
 '''
         commandLine systemPythonExecutable(), '-c', installer, antlrToolVersion, outputDir.absolutePath
+    }
+}
+
+tasks.register('installJavaScriptAntlrRuntime', Exec) {
+    group = 'build'
+    description = 'Installs the JavaScript ANTLR runtime matching the ANTLR tool version.'
+
+    inputs.property('antlrVersion', antlrToolVersion)
+    outputs.dir(javascriptAntlrRuntimeDir)
+
+    doFirst {
+        def outputDir = javascriptAntlrRuntimeDir.get().asFile
+        outputDir.mkdirs()
+        commandLine 'npm', 'install', '--prefix', outputDir.absolutePath, "antlr4@${antlrToolVersion}"
     }
 }
 
@@ -652,6 +790,32 @@ generatePythonCompiler.configure {
     dependsOn tasks.named('generatePythonAntlr')
 }
 
+def generateJavaScriptCompiler = registerCapybaraE2eGenerationTask(
+        'generateJavaScriptCompiler',
+        'Compiles the Capybara compiler sources and generates JavaScript.',
+        'JAVASCRIPT',
+        capybaraMainSourceDir,
+        capybaraLinkedCompilerJavaScriptOutputDir,
+        capybaraGeneratedCompilerJavaScriptDir
+)
+generateJavaScriptCompiler.configure {
+    dependsOn tasks.named('generateJavaScriptAntlr')
+}
+
+def prepareJavaScriptCompilerRuntime = tasks.register('prepareJavaScriptCompilerRuntime', Sync) {
+    description = 'Prepares generated JavaScript compiler output with JavaScript native provider shims.'
+    group = 'build'
+    dependsOn generateJavaScriptCompiler
+
+    from(capybaraGeneratedCompilerJavaScriptDir) {
+        exclude 'dev/capylang/compiler/parser/CapybaraParserProvider.js'
+    }
+    from(capybaraMainNativeJavaScriptSourceDir) {
+        include 'dev/**'
+    }
+    into capybaraRuntimeCompilerJavaScriptDir
+}
+
 tasks.register('pythonNativeParserSmoke', Exec) {
     description = 'Runs the generated Python compiler parser through the Python native parser implementation.'
     group = 'verification'
@@ -692,6 +856,45 @@ tasks.register('pythonNativeParserSmoke', Exec) {
         commandLine systemPythonExecutable(), pythonNativeParserSmokeScript.asFile.absolutePath
         environment 'PYTHONPATH', pythonPathEntries.join(File.pathSeparator)
         environment 'PYTHON_NATIVE_PARSER_SMOKE_OUTPUT', outputDir.absolutePath
+    }
+}
+
+tasks.register('javascriptNativeParserSmoke', Exec) {
+    description = 'Runs the generated JavaScript compiler parser through the JavaScript native parser implementation.'
+    group = 'verification'
+    dependsOn prepareJavaScriptCompilerRuntime
+    dependsOn tasks.named('generateJavaScriptAntlr')
+    dependsOn tasks.named('installJavaScriptAntlrRuntime')
+
+    inputs.file(javascriptNativeParserSmokeScript)
+            .withPropertyName('javascriptNativeParserSmokeScript')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(capybaraRuntimeCompilerJavaScriptDir)
+            .withPropertyName('runtimeJavaScriptCompiler')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(javascriptAntlrGeneratedDir)
+            .withPropertyName('javascriptAntlrGeneratedSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(javascriptAntlrRuntimeDir)
+            .withPropertyName('javascriptAntlrRuntime')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptNativeParserSmokeResultsDir)
+
+    doFirst {
+        def outputDir = javascriptNativeParserSmokeResultsDir.get().asFile
+        outputDir.mkdirs()
+        def nodePathEntries = [
+                capybaraRuntimeCompilerJavaScriptDir.get().asFile.absolutePath,
+                javascriptAntlrGeneratedDir.get().asFile.absolutePath,
+                new File(javascriptAntlrRuntimeDir.get().asFile, 'node_modules').absolutePath
+        ]
+        def existingNodePath = System.getenv('NODE_PATH')
+        if (existingNodePath != null && !existingNodePath.isBlank()) {
+            nodePathEntries.add(existingNodePath)
+        }
+        commandLine 'node', javascriptNativeParserSmokeScript.asFile.absolutePath
+        environment 'NODE_PATH', nodePathEntries.join(File.pathSeparator)
+        environment 'JAVASCRIPT_NATIVE_PARSER_SMOKE_OUTPUT', outputDir.absolutePath
     }
 }
 
