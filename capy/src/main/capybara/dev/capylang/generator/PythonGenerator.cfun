@@ -328,7 +328,13 @@ private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: Li
     else "(" + unary.operator + python_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_enum_parse_call(call, module, allModules)
+    if python_partial_function_call(call)
+    then
+        let names = python_partial_placeholder_names(call.arguments, env)
+        "lambda " + python_lambda_parameters(names) + ": "
+            + python_function_call_name(call.name, module, allModules)
+            + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+    else if python_enum_parse_call(call, module, allModules)
     then python_enum_parse_call_code(call, env, module, allModules)
     else python_function_call_name(call.name, module, allModules) + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
@@ -340,7 +346,12 @@ private fun python_field_access_code(access: CompiledFieldAccessExpression, env:
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
     let receiver = python_expression_code(call.receiver, env, module, allModules)
-    if call.name == "__capy_call"
+    if python_partial_method_call(call)
+    then
+        let names = python_partial_placeholder_names(call.arguments, env)
+        "lambda " + python_lambda_parameters(names) + ": "
+            + python_partial_method_call_body_code(call, receiver, names, env, module, allModules)
+    else if call.name == "__capy_call"
     then python_callable_call_code(call, env, module, allModules)
     else if python_effect_method_call(call, env, module, allModules)
     then python_effect_method_call_code(call, env, module, allModules)
@@ -380,6 +391,100 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
 
 private fun python_callable_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "(" + python_expression_code(call.receiver, env, module, allModules) + ")(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_partial_function_call(call: CompiledFunctionCallExpression): bool =
+    python_arguments_contain_placeholder(call.arguments)
+
+private fun python_partial_method_call(call: CompiledMethodCallExpression): bool =
+    python_arguments_contain_placeholder(call.arguments)
+
+private fun python_arguments_contain_placeholder(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { expression } -> python_partial_placeholder_expression(expression) | python_arguments_contain_placeholder(arguments[1:])
+
+private fun python_partial_placeholder_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
+    case _ -> false
+
+private fun python_partial_method_call_body_code(call: CompiledMethodCallExpression, receiver: String, names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "__capy_call"
+    then "(" + receiver + ")(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+    else if python_string_method_call(call, env, module, allModules)
+    then python_partial_string_method_call_body_code(call, receiver, names, env, module, allModules)
+    else receiver + "." + python_method_name(call.name)
+        + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+
+private fun python_partial_string_method_call_body_code(call: CompiledMethodCallExpression, receiver: String, names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "trim"
+    then "__capy_string_trim(" + receiver + ")"
+    else if call.name == "is_empty"
+    then "__capy_is_empty(" + receiver + ")"
+    else if call.name == "contains"
+    then "__capy_contains(" + receiver + ", " + python_partial_first_method_argument_code(call.arguments, names, env, module, allModules) + ")"
+    else if call.name == "starts_with"
+    then "__capy_string_starts_with(" + receiver + ", " + python_partial_first_method_argument_code(call.arguments, names, env, module, allModules) + ")"
+    else if call.name == "end_with"
+    then "__capy_string_end_with(" + receiver + ", " + python_partial_first_method_argument_code(call.arguments, names, env, module, allModules) + ")"
+    else if call.name == "replace"
+    then "__capy_string_replace(" + receiver + ", " + python_partial_first_method_argument_code(call.arguments, names, env, module, allModules) + ", " + python_partial_second_method_argument_code(call.arguments, names, env, module, allModules) + ")"
+    else "__capy_unsupported('string method')"
+
+private fun python_partial_first_method_argument_code(arguments: List[CompiledExpression], names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_partial_expression_at_code(arguments, 0, names, env, module, allModules)
+
+private fun python_partial_second_method_argument_code(arguments: List[CompiledExpression], names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_partial_expression_at_code(arguments, 1, names, env, module, allModules)
+
+private fun python_partial_expression_at_code(expressions: List[CompiledExpression], target: int, names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        let nextNames = if python_partial_placeholder_expression(expression) then names[1:] else names
+        if target == 0
+        then if python_partial_placeholder_expression(expression) then python_partial_argument_name(names) else python_expression_code(expression, env, module, allModules)
+        else python_partial_expression_at_code(expressions[1:], target - 1, nextNames, env, module, allModules)
+
+private fun python_partial_expression_list_code(expressions: List[CompiledExpression], names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        if python_partial_placeholder_expression(expression)
+        then python_partial_argument_name(names) + python_partial_expression_list_tail_code(expressions[1:], names[1:], env, module, allModules)
+        else python_expression_code(expression, env, module, allModules) + python_partial_expression_list_tail_code(expressions[1:], names, env, module, allModules)
+
+private fun python_partial_expression_list_tail_code(expressions: List[CompiledExpression], names: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        if python_partial_placeholder_expression(expression)
+        then ", " + python_partial_argument_name(names) + python_partial_expression_list_tail_code(expressions[1:], names[1:], env, module, allModules)
+        else ", " + python_expression_code(expression, env, module, allModules) + python_partial_expression_list_tail_code(expressions[1:], names, env, module, allModules)
+
+private fun python_partial_argument_name(names: List[String]): String =
+    match names[0] with
+    case Some { name } -> python_identifier(name)
+    case None -> "__capy_missing_partial"
+
+private fun python_partial_placeholder_names(arguments: List[CompiledExpression], env: List[PythonBinding]): List[String] =
+    python_partial_placeholder_names_with_used(arguments, env, [])
+
+private fun python_partial_placeholder_names_with_used(arguments: List[CompiledExpression], env: List[PythonBinding], used: List[String]): List[String] =
+    match arguments[0] with
+    case None -> []
+    case Some { expression } ->
+        if python_partial_placeholder_expression(expression)
+        then
+            let name = python_available_partial_parameter_name(used, env, 1)
+            [name] + python_partial_placeholder_names_with_used(arguments[1:], env, [name] + used)
+        else python_partial_placeholder_names_with_used(arguments[1:], env, used)
+
+private fun python_available_partial_parameter_name(used: List[String], env: List[PythonBinding], idx: int): String =
+    let name = "capybaraPartial" + idx
+    if python_binding_exists(name, env) | python_string_list_contains(name, used)
+    then python_available_partial_parameter_name(used, env, idx + 1)
+    else name
 
 private fun python_enum_name_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
