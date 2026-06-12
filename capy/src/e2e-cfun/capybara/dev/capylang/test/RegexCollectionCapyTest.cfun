@@ -46,6 +46,8 @@ private fun replace_functions_replace_all_matches(): Assert =
     assert_all([
         assert_that(replace_named("a1b11")).is_equal_to("a#b##"),
         assert_that(replace_alias("a1b11")).is_equal_to("a#b##"),
+        assert_that(replace_named_literal_dollar("a1b1")).is_equal_to("a$&b$&"),
+        assert_that(replace_alias_literal_dollar("a1b1")).is_equal_to("a$&b$&"),
     ])
 
 private fun split_functions_split_into_list_values(): Assert =
