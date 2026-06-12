@@ -914,9 +914,12 @@ private fun java_script_string_parse_method_call(call: CompiledMethodCallExpress
     if java_script_string_parse_method_name(call.name)
     then
         if call.arguments.is_empty()
-        then java_script_expression_type(call.receiver, env, module, allModules) == "String"
+        then java_script_string_parse_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
         else false
     else false
+
+private fun java_script_string_parse_receiver_type(receiverType: String): bool =
+    receiverType == "String" | receiverType == java_script_unknown_type()
 
 private fun java_script_string_parse_method_name(name: String): bool =
     name == "to_int" | name == "to_long" | name == "to_double" | name == "to_float" | name == "to_bool"
@@ -2163,7 +2166,7 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_normalized_index(length, index) { index = Number(index); if (!Number.isFinite(index)) return -1; index = Math.trunc(index); return index < 0 ? length + index : index; }" + java_script_newline()
     + "function __capy_index(value, index, typeName = '') { value = __capy_unsafe_run(value); if (typeName === 'Tuple' || (Array.isArray(value) && value.__capy_tuple === true)) { const idx = __capy_normalized_index(value.length, index); return value[idx]; } if (typeName === 'List' || Array.isArray(value)) { const idx = __capy_normalized_index(value.length, index); return __capy_option(value[idx], idx >= 0 && idx < value.length); } if (typeName === 'String' || typeof value === 'string') { const chars = Array.from(value); const idx = __capy_normalized_index(chars.length, index); return __capy_option(chars[idx], idx >= 0 && idx < chars.length); } if (typeName === 'Dict' || value instanceof Map) return __capy_option(value.get(index), value instanceof Map && value.has(index)); return value == null ? undefined : value[index]; }" + java_script_newline()
     + "function __capy_slice(value, start, end, typeName = '') { value = __capy_unsafe_run(value); if (typeof value === 'string') return Array.from(value).slice(Number(start), end === undefined ? undefined : Number(end)).join(''); if (Array.isArray(value)) { const sliced = value.slice(start, end); return typeName === 'Tuple' || value.__capy_tuple === true ? __capy_tuple(sliced) : sliced; } if (value && typeof value.slice === 'function') return value.slice(start, end); return value; }" + java_script_newline()
-    + "function __capy_get_field(value, name) { return value == null ? undefined : value[name]; }" + java_script_newline()
+    + "function __capy_get_field(value, name) { value = __capy_unsafe_run(value); if (name === 'value' && (value == null || typeof value !== 'object')) return value; return value == null ? undefined : value[name]; }" + java_script_newline()
     + "function __capy_reduce(value, initial, keyed, reducer) { let result = initial; if (value instanceof Map) { for (const [key, item] of value) result = keyed ? reducer(result, key, item) : reducer(result, item); return result; } if (value && typeof value[Symbol.iterator] === 'function') { for (const item of value) result = reducer(result, item); } return result; }" + java_script_newline()
     + "function __capy_type_matches(value, typeName) { if (typeName === 'String') return typeof value === 'string'; if (typeName === 'char') return typeof value === 'string' && Array.from(value).length === 1; if (typeName === 'bool') return typeof value === 'boolean'; if (typeName === 'long') return typeof value === 'bigint' || Number.isInteger(value); if (typeName === 'byte' || typeName === 'int') return Number.isInteger(value); if (typeName === 'float' || typeName === 'double') return typeof value === 'number'; if (typeName === 'List') return Array.isArray(value); if (typeName === 'Set') return value instanceof Set; if (typeName === 'Dict') return value instanceof Map; if (value == null || typeof value !== 'object') return false; const actual = __capy_normalize_type_name(value.__type); const expected = __capy_normalize_type_name(typeName); return actual === expected || actual === '__capy_raw|' + expected; }" + java_script_newline()
     + "function __capy_match_binding(value, name, index) { if (value == null) return undefined; if (Object.prototype.hasOwnProperty.call(value, name)) return value[name]; const positional = '$' + index; if (Object.prototype.hasOwnProperty.call(value, positional)) return value[positional]; const fields = Object.keys(value).filter(key => key !== '__type'); if (index < fields.length) return value[fields[index]]; return value[name]; }" + java_script_newline()
@@ -2403,7 +2406,9 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
 
 private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
-    if java_script_collection_pipe_expression_with_left_type(binary, leftType)
+    if java_script_result_pipe_expression_with_left_type(binary, leftType)
+    then java_script_result_pipe_gatherable(binary, env, module, allModules)
+    else if java_script_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
     then java_script_option_pipe_gatherable(binary, env, module, allModules)
@@ -2430,6 +2435,10 @@ private fun java_script_collection_pipe_gatherable(binary: CompiledBinaryExpress
         & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
 
 private fun java_script_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_expression_gatherable(binary.left, env, module, allModules)
+        & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
+
+private fun java_script_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
 
