@@ -39,7 +39,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -256,6 +256,8 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_collection_pipe_code(binary, env, module, allModules)
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
     then java_script_set_binary_code(binary, env, module, allModules)
+    else if java_script_regex_binary_expression_with_left_type(binary, leftType)
+    then java_script_regex_binary_code(binary, env, module, allModules)
     else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> java_script_binary_extension_operator_code(function, binary, env, module, allModules)
     case None ->
@@ -433,6 +435,25 @@ private fun java_script_set_binary_code(binary: CompiledBinaryExpression, env: L
     then "__capy_set_symmetric_difference(" + leftCode + ", " + rightCode + ")"
     else "__capy_set_cartesian_product(" + leftCode + ", " + rightCode + ")"
 
+private fun java_script_regex_binary_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    java_script_regex_receiver_type(leftType) & java_script_regex_binary_operator(binary.operator)
+
+private fun java_script_regex_binary_operator(operator: String): bool =
+    operator == "?" | operator == "~" | operator == "~~" | operator == "~>" | operator == "/>"
+
+private fun java_script_regex_binary_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftCode = java_script_expression_code(binary.left, env, module, allModules)
+    let rightCode = java_script_expression_code(binary.right, env, module, allModules)
+    if binary.operator == "?"
+    then "__capy_regex_matches(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~"
+    then "__capy_regex_find(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~~"
+    then "__capy_regex_find_all(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "~>"
+    then "__capy_regex_replace(" + leftCode + ", " + rightCode + ")"
+    else "__capy_regex_split(" + leftCode + ", " + rightCode + ")"
+
 private fun java_script_callable_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression _ -> true
@@ -493,7 +514,9 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
         + ")"
 
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_size_method_call(call)
+    if call.name == "__capy_call"
+    then java_script_callable_call_code(call, env, module, allModules)
+    else if java_script_size_method_call(call)
     then "__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_char_to_string_method_call(call, env, module, allModules)
     then "__capy_to_string(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
@@ -503,6 +526,8 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_string_parse_method_code(call, env, module, allModules)
     else if java_script_string_method_call(call, env, module, allModules)
     then java_script_string_method_code(call, env, module, allModules)
+    else if java_script_regex_method_call(call, env, module, allModules)
+    then java_script_regex_method_call_code(call, env, module, allModules)
     else if java_script_collection_is_empty_call(call, env, module, allModules)
     then "(__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ") === 0)"
     else if java_script_collection_get_call(call, env, module, allModules)
@@ -520,6 +545,11 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     else match java_script_find_local_extension_method(call, env, module, allModules) with
         case Some { function } -> java_script_extension_method_call_code(function, call, env, module, allModules)
         case None -> java_script_raw_method_call_code(call, env, module, allModules)
+
+private fun java_script_callable_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "(" + java_script_expression_code(call.receiver, env, module, allModules) + ")("
+        + java_script_expression_list_code(call.arguments, env, module, allModules)
+        + ")"
 
 private fun java_script_raw_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_expression_code(call.receiver, env, module, allModules)
@@ -727,6 +757,35 @@ private fun java_script_string_method_code(call: CompiledMethodCallExpression, e
     else if call.name == "replace"
     then "__capy_string_replace(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ", " + java_script_second_method_argument_code(call.arguments, env, module, allModules) + ")"
     else "__capy_unsupported('string method')"
+
+private fun java_script_regex_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_regex_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        & java_script_regex_method_arity(call)
+
+private fun java_script_regex_method_arity(call: CompiledMethodCallExpression): bool =
+    java_script_regex_method_name(call.name) & java_script_one_method_argument(call.arguments)
+
+private fun java_script_regex_method_name(name: String): bool =
+    name == "matches" | name == "find" | name == "find_all" | name == "replace" | name == "split"
+
+private fun java_script_regex_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverCode = java_script_expression_code(call.receiver, env, module, allModules)
+    let argumentCode = java_script_first_method_argument_code(call.arguments, env, module, allModules)
+    if call.name == "matches"
+    then "__capy_regex_matches(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "find"
+    then "__capy_regex_find(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "find_all"
+    then "__capy_regex_find_all(" + receiverCode + ", " + argumentCode + ")"
+    else if call.name == "replace"
+    then "__capy_regex_replace(" + receiverCode + ", " + argumentCode + ")"
+    else "__capy_regex_split(" + receiverCode + ", " + argumentCode + ")"
+
+private fun java_script_regex_receiver_type(typeName: String): bool =
+    typeName == java_script_regex_type()
+        | typeName == "/capy/lang/Regex"
+        | typeName == "capy/lang/Regex"
+        | typeName == "capy.lang.Regex"
 
 private fun java_script_string_get_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "get"
@@ -1280,6 +1339,8 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
     then java_script_collection_pipe_result_type(binary.operator, leftType)
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
     then java_script_set_binary_expression_type(binary.operator)
+    else if java_script_regex_binary_expression_with_left_type(binary, leftType)
+    then java_script_regex_binary_expression_type(binary.operator)
     else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> function.returnType.name
     case None ->
@@ -1295,6 +1356,17 @@ private fun java_script_set_binary_expression_type(operator: String): String =
     if java_script_set_predicate_operator(operator)
     then "bool"
     else "Set"
+
+private fun java_script_regex_binary_expression_type(operator: String): String =
+    if operator == "?"
+    then "bool"
+    else if operator == "~"
+    then "Option"
+    else if operator == "~~"
+    then "Seq"
+    else if operator == "~>"
+    then java_script_string_to_string_function_type()
+    else "List"
 
 private fun java_script_index_expression_type(index: CompiledIndexExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_expression_type(index.receiver, env, module, allModules)
@@ -1323,7 +1395,9 @@ private fun java_script_data_field_type(name: String, fields: List[String]): Str
         else java_script_data_field_type(name, fields[1:])
 
 private fun java_script_method_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_size_method_call(call)
+    if call.name == "__capy_call"
+    then java_script_callable_call_expression_type(call, env, module, allModules)
+    else if java_script_size_method_call(call)
     then "int"
     else if java_script_char_to_string_method_call(call, env, module, allModules)
     then "String"
@@ -1333,6 +1407,8 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then "Result"
     else if java_script_string_method_call(call, env, module, allModules)
     then java_script_string_method_return_type(call.name)
+    else if java_script_regex_method_call(call, env, module, allModules)
+    then java_script_regex_method_call_type(call.name)
     else if java_script_effect_method_call(call, env, module, allModules)
     then "Effect"
     else if java_script_collection_is_empty_call(call, env, module, allModules)
@@ -1352,6 +1428,18 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     else match java_script_find_local_extension_method(call, env, module, allModules) with
     case Some { function } -> function.returnType.name
     case None -> java_script_unknown_type()
+
+private fun java_script_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    if java_script_callable_binding_type(receiverType)
+    then java_script_callable_return_type(receiverType)
+    else java_script_unknown_type()
+
+private fun java_script_callable_return_type(typeName: String): String =
+    let arrow = java_script_first_index_of(typeName, ">", 0)
+    if arrow < 0 | arrow >= typeName.size().value - 1
+    then java_script_unknown_type()
+    else typeName[arrow + 1, typeName.size().value]
 
 private fun java_script_string_get_method_return_type(call: CompiledMethodCallExpression): String =
     if java_script_two_method_arguments(call.arguments)
@@ -1377,6 +1465,17 @@ private fun java_script_string_method_return_type(name: String): String =
     if name == "trim" | name == "replace"
     then "String"
     else "bool"
+
+private fun java_script_regex_method_call_type(name: String): String =
+    if name == "matches"
+    then "bool"
+    else if name == "find"
+    then "Option"
+    else if name == "find_all"
+    then "Seq"
+    else if name == "replace"
+    then java_script_string_to_string_function_type()
+    else "List"
 
 private fun java_script_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_runtime_function(name)
@@ -1412,6 +1511,9 @@ private fun java_script_collection_pipe_result_type(operator: String, leftType: 
 
 private fun java_script_primitive_conversion_result_type(name: String): String =
     if name == "to_int" then "int" else "long"
+
+private fun java_script_regex_type(): String = "Regex"
+private fun java_script_string_to_string_function_type(): String = "String=>String"
 
 private fun java_script_variable_type(name: String, env: List[JavaScriptBinding]): String =
     match java_script_lookup_binding(name, env) with
@@ -1740,6 +1842,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + java_script_assert_runtime_code()
     + java_script_numeric_runtime_code()
     + java_script_collection_runtime_code()
+    + java_script_regex_runtime_code()
     + java_script_deep_equal_code()
     + java_script_test_gather_runtime_code(modules)
     + java_script_runtime_exports_code()
@@ -1881,6 +1984,18 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_any(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return true; return false; } for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) return true; return false; }" + java_script_newline()
     + "function __capy_all(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (!__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return false; return true; } for (const item of __capy_as_iterable(value)) if (!__capy_truthy(__capy_apply_lambda(predicate, item))) return false; return true; }" + java_script_newline()
     + "function __capy_gather_module(modulePath) { const module = require(modulePath); return typeof module.tests === 'function' ? __capy_as_list(module.tests()) : []; }" + java_script_newline()
+    + java_script_newline()
+
+private fun java_script_regex_runtime_code(): String =
+    "function __capy_regex_pattern(regex) { regex = __capy_unsafe_run(regex); if (regex && typeof regex === 'object') return String(regex.pattern || ''); return String(regex); }" + java_script_newline()
+    + "function __capy_regex_flags(regex) { regex = __capy_unsafe_run(regex); if (regex && typeof regex === 'object') return String(regex.flags || ''); return ''; }" + java_script_newline()
+    + "function __capy_regex_compile(regex, global = false) { let flags = __capy_regex_flags(regex).split('').filter((flag, index, flags) => 'ims'.includes(flag) && flags.indexOf(flag) === index).join(''); if (global && !flags.includes('g')) flags += 'g'; return new RegExp(__capy_regex_pattern(regex), flags); }" + java_script_newline()
+    + "function __capy_regex_matches(regex, input) { return __capy_regex_compile(regex).test(String(__capy_unsafe_run(input))); }" + java_script_newline()
+    + "function __capy_regex_match_data(match) { return __capy_data('Match', Object.fromEntries([['group_value', match[0]]])) }" + java_script_newline()
+    + "function __capy_regex_find(regex, input) { const match = __capy_regex_compile(regex).exec(String(__capy_unsafe_run(input))); return __capy_option(match ? __capy_regex_match_data(match) : undefined, match != null); }" + java_script_newline()
+    + "function __capy_regex_find_all(regex, input) { const result = []; for (const match of String(__capy_unsafe_run(input)).matchAll(__capy_regex_compile(regex, true))) result.push(__capy_regex_match_data(match)); return result; }" + java_script_newline()
+    + "function __capy_regex_replace(regex, replacement, input = undefined) { if (input === undefined) return value => __capy_regex_replace(regex, replacement, value); const replacementValue = String(__capy_unsafe_run(replacement)); return String(__capy_unsafe_run(input)).replace(__capy_regex_compile(regex, true), () => replacementValue); }" + java_script_newline()
+    + "function __capy_regex_split(regex, input) { return String(__capy_unsafe_run(input)).split(__capy_regex_compile(regex)); }" + java_script_newline()
     + java_script_newline()
 
 private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]): String =
@@ -2040,6 +2155,9 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
     then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
+    else if java_script_regex_binary_expression_with_left_type(binary, leftType)
+    then java_script_expression_gatherable(binary.left, env, module, allModules)
+        & java_script_expression_gatherable(binary.right, env, module, allModules)
     else if java_script_binary_operator_gatherable(binary.operator)
     then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
@@ -2115,6 +2233,9 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         | call.name == "has_size" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if call.name == "__capy_call"
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_effect_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
@@ -2129,6 +2250,9 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     else if java_script_string_parse_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_string_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_regex_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_size_method_call(call)
