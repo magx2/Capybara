@@ -39,7 +39,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_import(module: CompiledModule): String =
-    "const { Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_tuple, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal } = require("
+    "const { Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_tuple, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal } = require("
         + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), "capy/test/CapyTestRuntime"))
         + ");"
         + java_script_newline()
@@ -459,6 +459,14 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_char_to_string_method_call(call, env, module, allModules)
+    then "__capy_to_string(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_string_get_method_call(call, env, module, allModules)
+    then java_script_string_get_method_code(call, env, module, allModules)
+    else if java_script_string_parse_method_call(call, env, module, allModules)
+    then java_script_string_parse_method_code(call, env, module, allModules)
+    else if java_script_string_method_call(call, env, module, allModules)
+    then java_script_string_method_code(call, env, module, allModules)
     else if java_script_collection_is_empty_call(call, env, module, allModules)
     then "(__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ") === 0)"
     else if java_script_seq_as_list_call(call)
@@ -521,6 +529,106 @@ private fun java_script_collection_predicate_call_code(call: CompiledMethodCallE
 
 private fun java_script_collection_predicate_helper(name: String): String =
     if name == "all" then "__capy_all" else "__capy_any"
+
+private fun java_script_char_to_string_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "to_string"
+        & call.arguments.is_empty()
+        & java_script_char_to_string_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+
+private fun java_script_char_to_string_receiver_type(typeName: String): bool =
+    typeName == "char" | typeName == java_script_unknown_type()
+
+private fun java_script_string_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_string_method_receiver_type(call.name, java_script_expression_type(call.receiver, env, module, allModules))
+        & java_script_string_method_arity(call.name, call.arguments)
+
+private fun java_script_string_method_receiver_type(name: String, typeName: String): bool =
+    typeName == "String"
+        | (typeName == java_script_unknown_type() & java_script_string_only_method(name))
+
+private fun java_script_string_only_method(name: String): bool =
+    name == "trim" | name == "starts_with" | name == "end_with" | name == "replace"
+
+private fun java_script_string_method_arity(name: String, arguments: List[CompiledExpression]): bool =
+    if name == "trim" | name == "is_empty"
+    then arguments.is_empty()
+    else if name == "contains" | name == "starts_with" | name == "end_with"
+    then java_script_one_method_argument(arguments)
+    else if name == "replace"
+    then java_script_two_method_arguments(arguments)
+    else false
+
+private fun java_script_string_method_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiver = java_script_expression_code(call.receiver, env, module, allModules)
+    if call.name == "trim"
+    then "__capy_string_trim(" + receiver + ")"
+    else if call.name == "is_empty"
+    then "(__capy_size(" + receiver + ") === 0)"
+    else if call.name == "contains"
+    then "__capy_contains(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "starts_with"
+    then "__capy_string_starts_with(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "end_with"
+    then "__capy_string_end_with(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "replace"
+    then "__capy_string_replace(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ", " + java_script_second_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else "__capy_unsupported('string method')"
+
+private fun java_script_string_get_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "get"
+        & java_script_expression_type(call.receiver, env, module, allModules) == "String"
+        & (java_script_one_method_argument(call.arguments) | java_script_two_method_arguments(call.arguments))
+
+private fun java_script_string_get_method_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiver = java_script_expression_code(call.receiver, env, module, allModules)
+    if java_script_two_method_arguments(call.arguments)
+    then "__capy_string_slice(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ", " + java_script_second_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else "__capy_string_get(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+
+private fun java_script_string_parse_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.arguments.is_empty()
+        & java_script_expression_type(call.receiver, env, module, allModules) == "String"
+        & java_script_string_parse_method_name(call.name)
+
+private fun java_script_string_parse_method_name(name: String): bool =
+    name == "to_int" | name == "to_long" | name == "to_double" | name == "to_float" | name == "to_bool"
+
+private fun java_script_string_parse_method_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_string_parse_helper(call.name) + "(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+
+private fun java_script_string_parse_helper(name: String): String =
+    if name == "to_int"
+    then "__capy_parse_int"
+    else if name == "to_long"
+    then "__capy_parse_long"
+    else if name == "to_double"
+    then "__capy_parse_double"
+    else if name == "to_float"
+    then "__capy_parse_float"
+    else "__capy_parse_bool"
+
+private fun java_script_one_method_argument(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some _ -> arguments[1:].is_empty()
+
+private fun java_script_two_method_arguments(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some _ ->
+        match arguments[1] with
+        case None -> false
+        case Some _ -> arguments[2:].is_empty()
+
+private fun java_script_first_method_argument_code(arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> "undefined"
+    case Some { argument } -> java_script_expression_code(argument, env, module, allModules)
+
+private fun java_script_second_method_argument_code(arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[1] with
+    case None -> "undefined"
+    case Some { argument } -> java_script_expression_code(argument, env, module, allModules)
 
 private fun java_script_primitive_conversion_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.arguments.is_empty()
@@ -624,12 +732,20 @@ private fun java_script_data_fields_tail_code(fields: List[CompiledDataField], t
         + java_script_data_fields_tail_code(fields[1:], typeName, env, module, allModules)
 
 private fun java_script_data_literal_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let typeName = java_script_data_literal_type_name(literal.typeName, module.imports)
-    "__capy_data("
-        + java_script_string_literal(typeName)
-        + ", {"
-        + java_script_data_fields_code(literal.fields, literal.typeName, env, module, allModules)
-        + "})"
+    if literal.typeName == "char"
+    then java_script_char_constructor_code(literal.fields, env, module, allModules)
+    else
+        let typeName = java_script_data_literal_type_name(literal.typeName, module.imports)
+        "__capy_data("
+            + java_script_string_literal(typeName)
+            + ", {"
+            + java_script_data_fields_code(literal.fields, literal.typeName, env, module, allModules)
+            + "})"
+
+private fun java_script_char_constructor_code(fields: List[CompiledDataField], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> "__capy_char(\"\")"
+    case Some { field } -> "__capy_char(" + java_script_expression_code(field.value, env, module, allModules) + ")"
 
 private fun java_script_data_literal_type_name(typeName: String, imports: List[CompiledImportDeclaration]): String =
     if java_script_program_success_literal(typeName, imports)
@@ -1039,6 +1155,14 @@ private fun java_script_data_field_type(name: String, fields: List[String]): Str
 private fun java_script_method_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "size"
     then "int"
+    else if java_script_char_to_string_method_call(call, env, module, allModules)
+    then "String"
+    else if java_script_string_get_method_call(call, env, module, allModules)
+    then java_script_string_get_method_return_type(call)
+    else if java_script_string_parse_method_call(call, env, module, allModules)
+    then "Result"
+    else if java_script_string_method_call(call, env, module, allModules)
+    then java_script_string_method_return_type(call.name)
     else if java_script_effect_method_call(call, env, module, allModules)
     then "Effect"
     else if java_script_collection_is_empty_call(call, env, module, allModules)
@@ -1052,6 +1176,16 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     else match java_script_find_local_extension_method(call, env, module, allModules) with
     case Some { function } -> function.returnType.name
     case None -> java_script_unknown_type()
+
+private fun java_script_string_get_method_return_type(call: CompiledMethodCallExpression): String =
+    if java_script_two_method_arguments(call.arguments)
+    then "String"
+    else "Option"
+
+private fun java_script_string_method_return_type(name: String): String =
+    if name == "trim" | name == "replace"
+    then "String"
+    else "bool"
 
 private fun java_script_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_runtime_function(name)
@@ -1476,6 +1610,17 @@ private fun java_script_numeric_runtime_code(): String =
     + "function __capy_number(value) { return typeof value === 'bigint' ? Number(value) : value; }" + java_script_newline()
     + "function __capy_to_int(value) { if (typeof value === 'bigint') return Number(BigInt.asIntN(32, value)); if (Number.isNaN(value)) return 0; if (value >= 2147483647) return 2147483647; if (value <= -2147483648) return -2147483648; return Math.trunc(value); }" + java_script_newline()
     + "function __capy_to_long(value) { if (typeof value === 'bigint') return __capy_long(value); if (Number.isNaN(value)) return 0n; if (value >= 9223372036854775807) return 9223372036854775807n; if (value <= -9223372036854775808) return -9223372036854775808n; return BigInt(Math.trunc(value)); }" + java_script_newline()
+    + "function __capy_success(value) { return __capy_data('Success', Object.fromEntries([['value', value]])); }" + java_script_newline()
+    + "function __capy_error(message) { return __capy_data('Error', Object.fromEntries([['message', message]])); }" + java_script_newline()
+    + "function __capy_parse_integral(value, label, minimum, maximum) { const text = String(value); try { if (!/^[+-]?\\d+$/.test(text)) throw new Error(); const parsed = BigInt(text); if (parsed < minimum || parsed > maximum) throw new Error(); return __capy_success(label === 'long' ? parsed : Number(parsed)); } catch (_) { return __capy_error('Cannot parse string to ' + label + ': ' + text); } }" + java_script_newline()
+    + "function __capy_parse_int(value) { return __capy_parse_integral(value, 'int', -2147483648n, 2147483647n); }" + java_script_newline()
+    + "function __capy_parse_long(value) { return __capy_parse_integral(value, 'long', -9223372036854775808n, 9223372036854775807n); }" + java_script_newline()
+    + "function __capy_parse_decimal(value, label) { const text = String(value); const parsed = Number(text); if (text.trim() === '' || Number.isNaN(parsed)) return __capy_error('Cannot parse string to ' + label + ': ' + text); return __capy_success(parsed); }" + java_script_newline()
+    + "function __capy_parse_double(value) { return __capy_parse_decimal(value, 'double'); }" + java_script_newline()
+    + "function __capy_parse_float(value) { return __capy_parse_decimal(value, 'float'); }" + java_script_newline()
+    + "function __capy_parse_bool(value) { const text = String(value); if (text === 'true') return __capy_success(true); if (text === 'false') return __capy_success(false); return __capy_error('Cannot parse string to bool: ' + text); }" + java_script_newline()
+    + "function __capy_char(value) { const text = String(value); return Array.from(text).length === 1 ? __capy_success(text) : __capy_error('char must contain exactly one character'); }" + java_script_newline()
+    + "function __capy_to_string(value) { if (__capy_data_is(value, 'char')) return __capy_str(__capy_match_binding(value, 'value', 0)); return __capy_str(value); }" + java_script_newline()
     + "function __capy_str(value) { if (value === true) return 'true'; if (value === false) return 'false'; if (value == null) return 'null'; return String(value); }" + java_script_newline()
     + "function __capy_add(left, right) { if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return new Set([...(left || []), ...((right instanceof Set) ? right : [right])]); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) + __capy_number(right) : __capy_long(__capy_bigint(left) + __capy_bigint(right)); return left + right; }" + java_script_newline()
     + "function __capy_sub(left, right) { if (Array.isArray(left)) { const remove = Array.isArray(right) ? right : [right]; return left.filter(item => !remove.some(other => __capy_deep_equal(item, other))); } if (left instanceof Set) { const remove = right instanceof Set ? [...right] : [right]; return new Set([...left].filter(item => !remove.some(other => __capy_deep_equal(item, other)))); } if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const key of right.keys()) result.delete(key); else result.delete(right); return result; } if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
@@ -1488,6 +1633,12 @@ private fun java_script_collection_runtime_code(): String =
     "function __capy_truthy(value) { if (value == null) return false; if (Array.isArray(value) || typeof value === 'string') return value.length > 0; if (value instanceof Set || value instanceof Map) return value.size > 0; return Boolean(value); }" + java_script_newline()
     + "function __capy_contains(left, right) { if (typeof left === 'string') return left.includes(right); if (Array.isArray(left)) return left.includes(right); if (left instanceof Set) return left.has(right); if (left instanceof Map) return left.has(right); return right in left; }" + java_script_newline()
     + "function __capy_size(value) { return value == null ? 0 : value.size != null ? value.size : value.length; }" + java_script_newline()
+    + "function __capy_string_trim(value) { return String(value).trim(); }" + java_script_newline()
+    + "function __capy_string_replace(value, oldValue, newValue) { return String(value).split(String(oldValue)).join(String(newValue)); }" + java_script_newline()
+    + "function __capy_string_starts_with(value, prefix) { return String(value).startsWith(String(prefix)); }" + java_script_newline()
+    + "function __capy_string_end_with(value, suffix) { return String(value).endsWith(String(suffix)); }" + java_script_newline()
+    + "function __capy_string_get(value, index) { const chars = Array.from(String(value)); const idx = __capy_normalized_index(chars.length, index); return __capy_option(chars[idx], idx >= 0 && idx < chars.length); }" + java_script_newline()
+    + "function __capy_string_slice(value, start, end) { return Array.from(String(value)).slice(Number(start), Number(end)).join(''); }" + java_script_newline()
     + "function __capy_normalize_type_name(typeName) { typeName = String(typeName || ''); if (typeName === '/capy/lang/Program.Success' || typeName === 'Program.Success') return 'Success'; if (typeName === '/capy/lang/Program.Failed' || typeName === 'Program.Failed') return 'Failed'; if (typeName === '/capy/lang/Option.Some' || typeName === 'Option.Some') return 'Some'; if (typeName === '/capy/lang/Option.None' || typeName === 'Option.None') return 'None'; if (typeName === '/capy/lang/Result.Success' || typeName === 'Result.Success') return 'Success'; if (typeName === '/capy/lang/Result.Error' || typeName === 'Result.Error') return 'Error'; if (typeName.startsWith('__capy_raw|')) return '__capy_raw|' + __capy_normalize_type_name(typeName.slice('__capy_raw|'.length)); if (typeName.includes('/')) typeName = typeName.slice(typeName.lastIndexOf('/') + 1); if (typeName.includes('.')) typeName = typeName.slice(typeName.lastIndexOf('.') + 1); return typeName; }" + java_script_newline()
     + "function __capy_data_is(value, typeName) { return value != null && typeof value === 'object' && __capy_normalize_type_name(value.__type) === __capy_normalize_type_name(typeName); }" + java_script_newline()
     + "function __capy_option(value, present) { return present ? __capy_data('Some', Object.fromEntries([['value', value]])) : __capy_data('None', Object.fromEntries([])); }" + java_script_newline()
@@ -1497,7 +1648,7 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_slice(value, start, end, typeName = '') { value = __capy_unsafe_run(value); if (typeof value === 'string') return value.slice(start, end); if (Array.isArray(value)) { const sliced = value.slice(start, end); return typeName === 'Tuple' || value.__capy_tuple === true ? __capy_tuple(sliced) : sliced; } if (value && typeof value.slice === 'function') return value.slice(start, end); return value; }" + java_script_newline()
     + "function __capy_get_field(value, name) { return value == null ? undefined : value[name]; }" + java_script_newline()
     + "function __capy_reduce(value, initial, keyed, reducer) { let result = initial; if (value instanceof Map) { for (const [key, item] of value) result = keyed ? reducer(result, key, item) : reducer(result, item); return result; } if (value && typeof value[Symbol.iterator] === 'function') { for (const item of value) result = reducer(result, item); } return result; }" + java_script_newline()
-    + "function __capy_type_matches(value, typeName) { if (typeName === 'String') return typeof value === 'string'; if (typeName === 'bool') return typeof value === 'boolean'; if (typeName === 'long') return typeof value === 'bigint' || Number.isInteger(value); if (typeName === 'byte' || typeName === 'int') return Number.isInteger(value); if (typeName === 'float' || typeName === 'double') return typeof value === 'number'; if (typeName === 'List') return Array.isArray(value); if (typeName === 'Set') return value instanceof Set; if (typeName === 'Dict') return value instanceof Map; if (value == null || typeof value !== 'object') return false; const actual = __capy_normalize_type_name(value.__type); const expected = __capy_normalize_type_name(typeName); return actual === expected || actual === '__capy_raw|' + expected; }" + java_script_newline()
+    + "function __capy_type_matches(value, typeName) { if (typeName === 'String') return typeof value === 'string'; if (typeName === 'char') return typeof value === 'string' && Array.from(value).length === 1; if (typeName === 'bool') return typeof value === 'boolean'; if (typeName === 'long') return typeof value === 'bigint' || Number.isInteger(value); if (typeName === 'byte' || typeName === 'int') return Number.isInteger(value); if (typeName === 'float' || typeName === 'double') return typeof value === 'number'; if (typeName === 'List') return Array.isArray(value); if (typeName === 'Set') return value instanceof Set; if (typeName === 'Dict') return value instanceof Map; if (value == null || typeof value !== 'object') return false; const actual = __capy_normalize_type_name(value.__type); const expected = __capy_normalize_type_name(typeName); return actual === expected || actual === '__capy_raw|' + expected; }" + java_script_newline()
     + "function __capy_match_binding(value, name, index) { if (value == null) return undefined; if (Object.prototype.hasOwnProperty.call(value, name)) return value[name]; const positional = '$' + index; if (Object.prototype.hasOwnProperty.call(value, positional)) return value[positional]; const fields = Object.keys(value).filter(key => key !== '__type'); if (index < fields.length) return value[fields[index]]; return value[name]; }" + java_script_newline()
     + "function __capy_no_match(value) { throw new Error('No Capybara match case for ' + __capy_display(value)); }" + java_script_newline()
     + "function __capy_option_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'None')) return value; if (__capy_data_is(value, 'Some')) return __capy_data('Some', Object.fromEntries([['value', __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0)))]])); return __capy_unsupported('option map'); }" + java_script_newline()
@@ -1521,8 +1672,8 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_seq_map(value, mapper) { value = __capy_unsafe_run(value); if (value instanceof Map) { const result = new Map(); for (const [key, item] of value) result.set(key, __capy_apply_lambda(mapper, [key, item])); return result; } const result = []; for (const item of __capy_as_iterable(value)) result.push(__capy_apply_lambda(mapper, item)); return result; }" + java_script_newline()
     + "function __capy_seq_filter(value, predicate) { value = __capy_unsafe_run(value); if (value instanceof Map) { const result = new Map(); for (const [key, item] of value) if (__capy_truthy(__capy_apply_lambda(predicate, [key, item]))) result.set(key, item); return result; } const result = []; for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) result.push(item); return result; }" + java_script_newline()
     + "function __capy_seq_flat_map(value, mapper) { const result = []; for (const item of __capy_as_iterable(value)) { const mapped = __capy_unsafe_run(__capy_apply_lambda(mapper, item)); if (mapped == null) continue; if (mapped instanceof Map) result.push(...mapped.entries()); else if (typeof mapped === 'string') result.push(...Array.from(mapped)); else if (mapped && typeof mapped[Symbol.iterator] === 'function') result.push(...mapped); else result.push(mapped); } return result; }" + java_script_newline()
-    + "function __capy_any(value, predicate) { for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) return true; return false; }" + java_script_newline()
-    + "function __capy_all(value, predicate) { for (const item of __capy_as_iterable(value)) if (!__capy_truthy(__capy_apply_lambda(predicate, item))) return false; return true; }" + java_script_newline()
+    + "function __capy_any(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return true; return false; } for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) return true; return false; }" + java_script_newline()
+    + "function __capy_all(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (!__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return false; return true; } for (const item of __capy_as_iterable(value)) if (!__capy_truthy(__capy_apply_lambda(predicate, item))) return false; return true; }" + java_script_newline()
     + "function __capy_gather_module(modulePath) { const module = require(modulePath); return typeof module.tests === 'function' ? __capy_as_list(module.tests()) : []; }" + java_script_newline()
     + java_script_newline()
 
@@ -1537,7 +1688,7 @@ private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]):
 
 private fun java_script_runtime_exports_code(): String =
     "const DEFAULT_FAILED_EXIT_CODE = __capy_data('/capy/lang/Program.failed_exit_code', { value: 1 });" + java_script_newline()
-    + "module.exports = { Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_tuple, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
+    + "module.exports = { Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_tuple, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal, gatherTests };" + java_script_newline()
 
 private fun java_script_deep_equal_code(): String =
     "function __capy_deep_equal(left, right) {" + java_script_newline()
@@ -1564,9 +1715,10 @@ private fun java_script_deep_equal_code(): String =
     + "}" + java_script_newline()
     + "function __capy_display(value) {" + java_script_newline()
     + "    if (typeof value === 'bigint') return value.toString();" + java_script_newline()
-    + "    if (value instanceof Map) return JSON.stringify(Object.fromEntries(value));" + java_script_newline()
-    + "    if (value instanceof Set) return JSON.stringify([...value]);" + java_script_newline()
-    + "    return JSON.stringify(value);" + java_script_newline()
+    + "    const replacer = (_key, item) => typeof item === 'bigint' ? item.toString() : item;" + java_script_newline()
+    + "    if (value instanceof Map) return JSON.stringify(Object.fromEntries(value), replacer);" + java_script_newline()
+    + "    if (value instanceof Set) return JSON.stringify([...value], replacer);" + java_script_newline()
+    + "    return JSON.stringify(value, replacer);" + java_script_newline()
     + "}" + java_script_newline()
 
 private fun java_script_test_gather_calls(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
@@ -1759,6 +1911,16 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     else if java_script_runtime_data_method_call(call)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+    else if java_script_char_to_string_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_string_get_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_string_parse_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_string_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if call.name == "size"
     then call.arguments.is_empty() & java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_collection_is_empty_call(call, env, module, allModules)
