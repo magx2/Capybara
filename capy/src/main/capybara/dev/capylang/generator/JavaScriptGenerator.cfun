@@ -2405,6 +2405,8 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
     if java_script_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
+    else if java_script_option_pipe_expression_with_left_type(binary, leftType)
+    then java_script_option_pipe_gatherable(binary, env, module, allModules)
     else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
@@ -2424,6 +2426,10 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
         case None -> false
 
 private fun java_script_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_expression_gatherable(binary.left, env, module, allModules)
+        & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
+
+private fun java_script_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
 
