@@ -2214,6 +2214,12 @@ private fun python_test_runtime_assert_code(): String =
     + "        self.value = value" + python_newline()
     + "        self.assertions = list(assertions or [])" + python_newline()
     + python_newline()
+    + "    def failed(self):" + python_newline()
+    + "        return any(not bool(assertion().get('result', False)) for assertion in self.assertions)" + python_newline()
+    + python_newline()
+    + "    def succeeded(self):" + python_newline()
+    + "        return not self.failed()" + python_newline()
+    + python_newline()
     + "    def _append(self, result, message, assertion_type):" + python_newline()
     + "        return ValueAssert(self.value, self.assertions + [lambda: dict(result=bool(result), message=str(message), type=assertion_type)])" + python_newline()
     + python_newline()
@@ -2234,6 +2240,12 @@ private fun python_test_runtime_assert_code(): String =
     + "class CombinedAssert:" + python_newline()
     + "    def __init__(self, assertions):" + python_newline()
     + "        self.assertions = assertions" + python_newline()
+    + python_newline()
+    + "    def failed(self):" + python_newline()
+    + "        return any(not bool(assertion().get('result', False)) for assertion in self.assertions)" + python_newline()
+    + python_newline()
+    + "    def succeeded(self):" + python_newline()
+    + "        return not self.failed()" + python_newline()
     + python_newline()
     + "def assert_that(value):" + python_newline()
     + "    return ValueAssert(value)" + python_newline()
@@ -3840,6 +3852,8 @@ private fun python_assert_method(name: String): bool =
         | name == "contains"
         | name == "succeeds"
         | name == "fails"
+        | name == "failed"
+        | name == "succeeded"
 
 private fun python_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     python_merge_schema_fields(
