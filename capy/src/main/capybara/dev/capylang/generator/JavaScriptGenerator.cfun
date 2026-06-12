@@ -39,7 +39,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_tuple, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -201,7 +201,7 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledWithExpression _ -> "__capy_unsupported('with')"
     case CompiledLambdaExpression lambda -> java_script_lambda_expression_code(lambda, env, module, allModules)
     case CompiledListLiteral literal -> "[" + java_script_expression_list_code(literal.values, env, module, allModules) + "]"
-    case CompiledSetLiteral literal -> "new Set([" + java_script_expression_list_code(literal.values, env, module, allModules) + "])"
+    case CompiledSetLiteral literal -> "__capy_set([" + java_script_expression_list_code(literal.values, env, module, allModules) + "])"
     case CompiledDictLiteral literal -> "new Map([" + java_script_dict_entries_code(literal.entries, env, module, allModules) + "])"
     case CompiledTupleLiteral literal -> "__capy_tuple([" + java_script_expression_list_code(literal.values, env, module, allModules) + "])"
     case CompiledIndexExpression index -> java_script_index_expression_code(index, env, module, allModules)
@@ -254,6 +254,8 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_collection_pipe_code(binary, env, module, allModules)
     else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_code(binary, env, module, allModules)
+    else if java_script_set_binary_expression_with_left_type(binary, leftType)
+    then java_script_set_binary_code(binary, env, module, allModules)
     else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> java_script_binary_extension_operator_code(function, binary, env, module, allModules)
     case None ->
@@ -400,6 +402,37 @@ private fun java_script_collection_pipe_operator(operator: String): bool =
 private fun java_script_collection_pipe_receiver_type(typeName: String): bool =
     java_script_collection_receiver_type(typeName)
 
+private fun java_script_set_binary_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    leftType == "Set" & java_script_set_binary_operator(binary.operator)
+
+private fun java_script_set_binary_operator(operator: String): bool =
+    java_script_set_predicate_operator(operator) | java_script_set_algebra_operator(operator)
+
+private fun java_script_set_predicate_operator(operator: String): bool =
+    operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
+
+private fun java_script_set_algebra_operator(operator: String): bool =
+    operator == "∪" | operator == "∩" | operator == "△" | operator == "×"
+
+private fun java_script_set_binary_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftCode = java_script_expression_code(binary.left, env, module, allModules)
+    let rightCode = java_script_expression_code(binary.right, env, module, allModules)
+    if binary.operator == "⊆"
+    then "__capy_set_subset(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊂"
+    then "__capy_set_proper_subset(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊇"
+    then "__capy_set_subset(" + rightCode + ", " + leftCode + ")"
+    else if binary.operator == "⊃"
+    then "__capy_set_proper_subset(" + rightCode + ", " + leftCode + ")"
+    else if binary.operator == "∪"
+    then "__capy_set_concat(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "∩"
+    then "__capy_set_intersection(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "△"
+    then "__capy_set_symmetric_difference(" + leftCode + ", " + rightCode + ")"
+    else "__capy_set_cartesian_product(" + leftCode + ", " + rightCode + ")"
+
 private fun java_script_callable_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression _ -> true
@@ -476,6 +509,8 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_collection_get_call_code(call, env, module, allModules)
     else if java_script_collection_contains_call(call, env, module, allModules)
     then java_script_collection_contains_call_code(call, env, module, allModules)
+    else if java_script_set_method_call(call, env, module, allModules)
+    then java_script_set_method_call_code(call, env, module, allModules)
     else if java_script_seq_as_list_call(call)
     then "__capy_as_list(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_collection_predicate_call(call, env, module, allModules)
@@ -501,28 +536,40 @@ private fun java_script_size_method_call(call: CompiledMethodCallExpression): bo
     call.name == "size" & call.arguments.is_empty()
 
 private fun java_script_collection_is_empty_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    call.name == "is_empty"
-        & call.arguments.is_empty()
-        & java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+    if call.name == "is_empty"
+    then
+        if call.arguments.is_empty()
+        then java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
 
 private fun java_script_effect_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    (call.name == "map" | call.name == "flat_map" | call.name == "flatMap")
-        & java_script_expression_type(call.receiver, env, module, allModules) == "Effect"
-        & java_script_single_callable_argument(call.arguments)
+    if call.name == "map" | call.name == "flat_map" | call.name == "flatMap"
+    then
+        if java_script_single_callable_argument(call.arguments)
+        then java_script_expression_type(call.receiver, env, module, allModules) == "Effect"
+        else false
+    else false
 
 private fun java_script_collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    (call.name == "any" | call.name == "all")
-        & java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
-        & java_script_single_callable_argument(call.arguments)
+    if call.name == "any" | call.name == "all"
+    then
+        if java_script_single_callable_argument(call.arguments)
+        then java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
 
 private fun java_script_collection_receiver_type(typeName: String): bool =
     typeName == "List" | typeName == "Set" | typeName == "String" | typeName == "Seq" | typeName == "Dict"
 
 private fun java_script_collection_get_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
-    call.name == "get"
-        & java_script_collection_get_receiver_type(receiverType)
-        & java_script_collection_get_arity(receiverType, call.arguments)
+    if call.name == "get"
+    then
+        let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+        if java_script_collection_get_receiver_type(receiverType)
+        then java_script_collection_get_arity(receiverType, call.arguments)
+        else false
+    else false
 
 private fun java_script_collection_get_receiver_type(typeName: String): bool =
     typeName == "List" | typeName == "Dict" | typeName == "Tuple"
@@ -547,10 +594,14 @@ private fun java_script_collection_get_call_code(call: CompiledMethodCallExpress
         + ")"
 
 private fun java_script_collection_contains_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
-    java_script_one_method_argument(call.arguments)
-        & ((call.name == "contains" & java_script_collection_contains_receiver_type(receiverType))
-            | (call.name == "contains_key" & receiverType == "Dict"))
+    if java_script_one_method_argument(call.arguments)
+    then
+        if call.name == "contains"
+        then java_script_collection_contains_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else if call.name == "contains_key"
+        then java_script_expression_type(call.receiver, env, module, allModules) == "Dict"
+        else false
+    else false
 
 private fun java_script_collection_contains_receiver_type(typeName: String): bool =
     typeName == "List" | typeName == "Set"
@@ -561,6 +612,54 @@ private fun java_script_collection_contains_call_code(call: CompiledMethodCallEx
         + ", "
         + java_script_first_method_argument_code(call.arguments, env, module, allModules)
         + ")"
+
+private fun java_script_set_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if java_script_set_method_arity(call)
+    then java_script_expression_type(call.receiver, env, module, allModules) == "Set"
+    else false
+
+private fun java_script_set_method_arity(call: CompiledMethodCallExpression): bool =
+    if java_script_set_no_argument_method(call.name)
+    then call.arguments.is_empty()
+    else if java_script_set_one_argument_method(call.name)
+    then java_script_one_method_argument(call.arguments)
+    else false
+
+private fun java_script_set_no_argument_method(name: String): bool =
+    name == "power_set" | name == "℘"
+
+private fun java_script_set_one_argument_method(name: String): bool =
+    name == "contains"
+        | name == "is_subset_of" | name == "is_proper_subset_of"
+        | name == "is_superset_of" | name == "is_proper_superset_of"
+        | name == "union" | name == "intersection" | name == "difference"
+        | name == "symmetric_difference" | name == "cartesian_product"
+
+private fun java_script_set_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverCode = java_script_expression_code(call.receiver, env, module, allModules)
+    if call.name == "power_set" | call.name == "℘"
+    then "__capy_set_power_set(" + receiverCode + ")"
+    else
+        let argumentCode = java_script_first_method_argument_code(call.arguments, env, module, allModules)
+        if call.name == "contains"
+        then "__capy_contains(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_subset_of"
+        then "__capy_set_subset(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_proper_subset_of"
+        then "__capy_set_proper_subset(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "is_superset_of"
+        then "__capy_set_subset(" + argumentCode + ", " + receiverCode + ")"
+        else if call.name == "is_proper_superset_of"
+        then "__capy_set_proper_subset(" + argumentCode + ", " + receiverCode + ")"
+        else if call.name == "union"
+        then "__capy_set_concat(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "intersection"
+        then "__capy_set_intersection(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "difference"
+        then "__capy_set_remove_all(" + receiverCode + ", " + argumentCode + ")"
+        else if call.name == "symmetric_difference"
+        then "__capy_set_symmetric_difference(" + receiverCode + ", " + argumentCode + ")"
+        else "__capy_set_cartesian_product(" + receiverCode + ", " + argumentCode + ")"
 
 private fun java_script_single_callable_argument(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
@@ -582,16 +681,20 @@ private fun java_script_collection_predicate_helper(name: String): String =
     if name == "all" then "__capy_all" else "__capy_any"
 
 private fun java_script_char_to_string_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    call.name == "to_string"
-        & call.arguments.is_empty()
-        & java_script_char_to_string_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+    if call.name == "to_string"
+    then
+        if call.arguments.is_empty()
+        then java_script_char_to_string_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
 
 private fun java_script_char_to_string_receiver_type(typeName: String): bool =
     typeName == "char" | typeName == java_script_unknown_type()
 
 private fun java_script_string_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_string_method_receiver_type(call.name, java_script_expression_type(call.receiver, env, module, allModules))
-        & java_script_string_method_arity(call.name, call.arguments)
+    if java_script_string_method_arity(call.name, call.arguments)
+    then java_script_string_method_receiver_type(call.name, java_script_expression_type(call.receiver, env, module, allModules))
+    else false
 
 private fun java_script_string_method_receiver_type(name: String, typeName: String): bool =
     typeName == "String"
@@ -626,9 +729,12 @@ private fun java_script_string_method_code(call: CompiledMethodCallExpression, e
     else "__capy_unsupported('string method')"
 
 private fun java_script_string_get_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    call.name == "get"
-        & java_script_expression_type(call.receiver, env, module, allModules) == "String"
-        & (java_script_one_method_argument(call.arguments) | java_script_two_method_arguments(call.arguments))
+    if call.name == "get"
+    then
+        if java_script_one_method_argument(call.arguments) | java_script_two_method_arguments(call.arguments)
+        then java_script_expression_type(call.receiver, env, module, allModules) == "String"
+        else false
+    else false
 
 private fun java_script_string_get_method_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiver = java_script_expression_code(call.receiver, env, module, allModules)
@@ -637,9 +743,12 @@ private fun java_script_string_get_method_code(call: CompiledMethodCallExpressio
     else "__capy_string_get(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
 
 private fun java_script_string_parse_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    call.arguments.is_empty()
-        & java_script_expression_type(call.receiver, env, module, allModules) == "String"
-        & java_script_string_parse_method_name(call.name)
+    if java_script_string_parse_method_name(call.name)
+    then
+        if call.arguments.is_empty()
+        then java_script_expression_type(call.receiver, env, module, allModules) == "String"
+        else false
+    else false
 
 private fun java_script_string_parse_method_name(name: String): bool =
     name == "to_int" | name == "to_long" | name == "to_double" | name == "to_float" | name == "to_bool"
@@ -682,9 +791,12 @@ private fun java_script_second_method_argument_code(arguments: List[CompiledExpr
     case Some { argument } -> java_script_expression_code(argument, env, module, allModules)
 
 private fun java_script_primitive_conversion_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    call.arguments.is_empty()
-        & java_script_primitive_conversion_method(call.name)
-        & java_script_primitive_conversion_receiver(call.name, java_script_expression_type(call.receiver, env, module, allModules))
+    if java_script_primitive_conversion_method(call.name)
+    then
+        if call.arguments.is_empty()
+        then java_script_primitive_conversion_receiver(call.name, java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
 
 private fun java_script_primitive_conversion_method(name: String): bool =
     name == "to_int" | name == "to_long"
@@ -1166,6 +1278,8 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
     then java_script_collection_pipe_result_type(binary.operator, leftType)
     else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_result_type(binary.operator, leftType)
+    else if java_script_set_binary_expression_with_left_type(binary, leftType)
+    then java_script_set_binary_expression_type(binary.operator)
     else match java_script_find_local_binary_extension_operator_with_left_type(binary, leftType, module.functions) with
     case Some { function } -> function.returnType.name
     case None ->
@@ -1176,6 +1290,11 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
             | binary.operator == "?"
         then "bool"
         else java_script_unknown_type()
+
+private fun java_script_set_binary_expression_type(operator: String): String =
+    if java_script_set_predicate_operator(operator)
+    then "bool"
+    else "Set"
 
 private fun java_script_index_expression_type(index: CompiledIndexExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_expression_type(index.receiver, env, module, allModules)
@@ -1222,6 +1341,8 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then java_script_collection_get_return_type(call, env, module, allModules)
     else if java_script_collection_contains_call(call, env, module, allModules)
     then "bool"
+    else if java_script_set_method_call(call, env, module, allModules)
+    then java_script_set_method_return_type(call.name)
     else if java_script_seq_as_list_call(call)
     then "List"
     else if java_script_collection_predicate_call(call, env, module, allModules)
@@ -1236,6 +1357,13 @@ private fun java_script_string_get_method_return_type(call: CompiledMethodCallEx
     if java_script_two_method_arguments(call.arguments)
     then "String"
     else "Option"
+
+private fun java_script_set_method_return_type(name: String): String =
+    if name == "contains"
+        | name == "is_subset_of" | name == "is_proper_subset_of"
+        | name == "is_superset_of" | name == "is_proper_superset_of"
+    then "bool"
+    else "Set"
 
 private fun java_script_collection_get_return_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
@@ -1645,7 +1773,9 @@ private fun java_script_assert_runtime_code(): String =
     + "    is_true() { return this._append(this.value === true, 'Expected ' + __capy_display(this.value) + ' to be true', 'Assert.is_true'); }" + java_script_newline()
     + "    is_false() { return this._append(this.value === false, 'Expected ' + __capy_display(this.value) + ' to be false', 'Assert.is_false'); }" + java_script_newline()
     + "    is_zero() { return this._append(this.value === 0 || this.value === 0n, 'Expected ' + __capy_display(this.value) + ' to be zero', 'Assert.is_zero'); }" + java_script_newline()
+    + "    is_one() { return this._append(this.value === 1 || this.value === 1n, 'Expected ' + __capy_display(this.value) + ' to be one', 'Assert.is_one'); }" + java_script_newline()
     + "    is_empty() { const value = __capy_unsafe_run(this.value); const result = __capy_data_is(value, 'None') || (Array.isArray(value) || typeof value === 'string' ? value.length === 0 : (value instanceof Set || value instanceof Map ? value.size === 0 : false)); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to be empty', 'Assert.is_empty'); }" + java_script_newline()
+    + "    has_size(expected) { const actual = __capy_size(__capy_unsafe_run(this.value)); return this._append(actual === Number(expected), 'Expected ' + __capy_display(this.value) + ' to have size ' + __capy_display(expected), 'Assert.has_size'); }" + java_script_newline()
     + "    contains(other) { const value = __capy_unsafe_run(this.value); let result = false; if (__capy_data_is(value, 'Some')) result = __capy_deep_equal(__capy_match_binding(value, 'value', 0), other); else if (typeof value === 'string') result = value.includes(other); else if (Array.isArray(value)) result = value.some(item => __capy_deep_equal(item, other)); else if (value instanceof Set) result = [...value].some(item => __capy_deep_equal(item, other)); else if (value instanceof Map) result = [...value.values()].some(item => __capy_deep_equal(item, other)); return this._append(result, 'Expected ' + __capy_display(this.value) + ' to contain ' + __capy_display(other), 'Assert.contains'); }" + java_script_newline()
     + "    succeeds(expected = undefined) { const value = __capy_unsafe_run(this.value); const ok = __capy_data_is(value, 'Success'); if (arguments.length === 0) return this._append(ok, 'Expected ' + __capy_display(this.value) + ' to succeed', 'Assert.succeeds'); if (!ok) return this._append(false, 'Expected ' + __capy_display(this.value) + ' to succeed', 'Assert.succeeds'); const actual = __capy_match_binding(value, 'value', 0); if (typeof expected === 'function') { const nested = expected(actual); const assertions = nested && Array.isArray(nested.assertions) ? nested.assertions : []; return new ValueAssert(this.value, this.assertions.concat(assertions)); } return this._append(__capy_deep_equal(actual, expected), 'Expected ' + __capy_display(this.value) + ' to succeed with ' + __capy_display(expected), 'Assert.succeeds'); }" + java_script_newline()
     + "    fails(expected = undefined) { const value = __capy_unsafe_run(this.value); const ok = __capy_data_is(value, 'Error'); if (arguments.length === 0) return this._append(ok, 'Expected ' + __capy_display(this.value) + ' to fail', 'Assert.fails'); if (!ok) return this._append(false, 'Expected ' + __capy_display(this.value) + ' to fail', 'Assert.fails'); const actual = __capy_match_binding(value, 'message', 0); return this._append(__capy_deep_equal(actual, expected), 'Expected ' + __capy_display(this.value) + ' to fail with ' + __capy_display(expected), 'Assert.fails'); }" + java_script_newline()
@@ -1685,8 +1815,8 @@ private fun java_script_numeric_runtime_code(): String =
     + "function __capy_char(value) { const text = String(value); return Array.from(text).length === 1 ? __capy_success(text) : __capy_error('char must contain exactly one character'); }" + java_script_newline()
     + "function __capy_to_string(value) { if (__capy_data_is(value, 'char')) return __capy_str(__capy_match_binding(value, 'value', 0)); return __capy_str(value); }" + java_script_newline()
     + "function __capy_str(value) { if (value === true) return 'true'; if (value === false) return 'false'; if (value == null) return 'null'; return String(value); }" + java_script_newline()
-    + "function __capy_add(left, right) { if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return new Set([...(left || []), ...((right instanceof Set) ? right : [right])]); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) + __capy_number(right) : __capy_long(__capy_bigint(left) + __capy_bigint(right)); return left + right; }" + java_script_newline()
-    + "function __capy_sub(left, right) { if (Array.isArray(left)) { const remove = Array.isArray(right) ? right : [right]; return left.filter(item => !remove.some(other => __capy_deep_equal(item, other))); } if (left instanceof Set) { const remove = right instanceof Set ? [...right] : [right]; return new Set([...left].filter(item => !remove.some(other => __capy_deep_equal(item, other)))); } if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const key of right.keys()) result.delete(key); else result.delete(right); return result; } if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
+    + "function __capy_add(left, right) { if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return right instanceof Set ? __capy_set_concat(left, right) : __capy_set_append(left, right); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) + __capy_number(right) : __capy_long(__capy_bigint(left) + __capy_bigint(right)); return left + right; }" + java_script_newline()
+    + "function __capy_sub(left, right) { if (Array.isArray(left)) { const remove = Array.isArray(right) ? right : [right]; return left.filter(item => !remove.some(other => __capy_deep_equal(item, other))); } if (left instanceof Set) return right instanceof Set ? __capy_set_remove_all(left, right) : __capy_set_remove(left, right); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const key of right.keys()) result.delete(key); else result.delete(right); return result; } if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
     + "function __capy_mul(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) * __capy_number(right) : __capy_long(__capy_bigint(left) * __capy_bigint(right)); return left * right; }" + java_script_newline()
     + "function __capy_div(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
     + "function __capy_mod(left, right) { if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) % __capy_number(right) : __capy_long(__capy_bigint(left) % __capy_bigint(right)); return left % right; }" + java_script_newline()
@@ -1694,8 +1824,21 @@ private fun java_script_numeric_runtime_code(): String =
 
 private fun java_script_collection_runtime_code(): String =
     "function __capy_truthy(value) { if (value == null) return false; if (Array.isArray(value) || typeof value === 'string') return value.length > 0; if (value instanceof Set || value instanceof Map) return value.size > 0; return Boolean(value); }" + java_script_newline()
-    + "function __capy_contains(left, right) { if (typeof left === 'string') return left.includes(right); if (Array.isArray(left)) return left.includes(right); if (left instanceof Set) return left.has(right); if (left instanceof Map) return left.has(right); return right in left; }" + java_script_newline()
+    + "function __capy_contains(left, right) { left = __capy_unsafe_run(left); if (typeof left === 'string') return left.includes(right); if (Array.isArray(left)) return left.some(item => __capy_deep_equal(item, right)); if (left instanceof Set) return __capy_set_values(left).some(item => __capy_deep_equal(item, right)); if (left instanceof Map) return [...left.keys()].some(key => __capy_deep_equal(key, right)); return right in left; }" + java_script_newline()
     + "function __capy_size(value) { if (value == null) return 0; if (typeof value === 'string') return Array.from(value).length; return value.size != null ? value.size : value.length; }" + java_script_newline()
+    + "function __capy_set(values) { const result = new Set(); for (const value of __capy_as_iterable(values)) __capy_set_add(result, value); return result; }" + java_script_newline()
+    + "function __capy_set_values(values) { values = __capy_unsafe_run(values); return values instanceof Set ? [...values] : __capy_as_list(values); }" + java_script_newline()
+    + "function __capy_set_add(values, value) { if (!__capy_contains(values, value)) values.add(value); return values; }" + java_script_newline()
+    + "function __capy_set_append(values, value) { return __capy_set_add(__capy_set(values), value); }" + java_script_newline()
+    + "function __capy_set_concat(left, right) { const result = __capy_set(left); for (const value of __capy_set_values(right)) __capy_set_add(result, value); return result; }" + java_script_newline()
+    + "function __capy_set_remove(values, value) { const result = new Set(); for (const item of __capy_set_values(values)) if (!__capy_deep_equal(item, value)) __capy_set_add(result, item); return result; }" + java_script_newline()
+    + "function __capy_set_remove_all(left, right) { const result = new Set(); for (const value of __capy_set_values(left)) if (!__capy_contains(right, value)) __capy_set_add(result, value); return result; }" + java_script_newline()
+    + "function __capy_set_subset(left, right) { for (const value of __capy_set_values(left)) if (!__capy_contains(right, value)) return false; return true; }" + java_script_newline()
+    + "function __capy_set_proper_subset(left, right) { return __capy_size(left) < __capy_size(right) && __capy_set_subset(left, right); }" + java_script_newline()
+    + "function __capy_set_intersection(left, right) { const result = new Set(); for (const value of __capy_set_values(left)) if (__capy_contains(right, value)) __capy_set_add(result, value); return result; }" + java_script_newline()
+    + "function __capy_set_symmetric_difference(left, right) { const result = __capy_set_remove_all(left, right); for (const value of __capy_set_values(right)) if (!__capy_contains(left, value)) __capy_set_add(result, value); return result; }" + java_script_newline()
+    + "function __capy_set_cartesian_product(left, right) { const result = new Set(); for (const leftValue of __capy_set_values(left)) for (const rightValue of __capy_set_values(right)) __capy_set_add(result, __capy_tuple([leftValue, rightValue])); return result; }" + java_script_newline()
+    + "function __capy_set_power_set(values) { let result = __capy_set([__capy_set([])]); for (const value of __capy_set_values(values)) { const additions = __capy_set([]); for (const subset of __capy_set_values(result)) __capy_set_add(additions, __capy_set_append(subset, value)); result = __capy_set_concat(result, additions); } return result; }" + java_script_newline()
     + "function __capy_string_trim(value) { return String(value).trim(); }" + java_script_newline()
     + "function __capy_string_replace(value, oldValue, newValue) { return String(value).split(String(oldValue)).join(String(newValue)); }" + java_script_newline()
     + "function __capy_string_starts_with(value, prefix) { return String(value).startsWith(String(prefix)); }" + java_script_newline()
@@ -1894,6 +2037,9 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
     else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
+    else if java_script_set_binary_expression_with_left_type(binary, leftType)
+    then java_script_expression_gatherable(binary.left, env, module, allModules)
+        & java_script_expression_gatherable(binary.right, env, module, allModules)
     else if java_script_binary_operator_gatherable(binary.operator)
     then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
@@ -1965,7 +2111,8 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
 
 private fun java_script_method_call_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
-        | call.name == "is_zero" | call.name == "is_empty" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
+        | call.name == "is_zero" | call.name == "is_one" | call.name == "is_empty"
+        | call.name == "has_size" | call.name == "contains" | call.name == "succeeds" | call.name == "fails"
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_effect_method_call(call, env, module, allModules)
@@ -1992,6 +2139,9 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_collection_contains_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_set_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_seq_as_list_call(call)
