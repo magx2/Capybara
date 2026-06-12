@@ -472,6 +472,10 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_string_method_code(call, env, module, allModules)
     else if java_script_collection_is_empty_call(call, env, module, allModules)
     then "(__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ") === 0)"
+    else if java_script_collection_get_call(call, env, module, allModules)
+    then java_script_collection_get_call_code(call, env, module, allModules)
+    else if java_script_collection_contains_call(call, env, module, allModules)
+    then java_script_collection_contains_call_code(call, env, module, allModules)
     else if java_script_seq_as_list_call(call)
     then "__capy_as_list(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_collection_predicate_call(call, env, module, allModules)
@@ -513,6 +517,50 @@ private fun java_script_collection_predicate_call(call: CompiledMethodCallExpres
 
 private fun java_script_collection_receiver_type(typeName: String): bool =
     typeName == "List" | typeName == "Set" | typeName == "String" | typeName == "Seq" | typeName == "Dict"
+
+private fun java_script_collection_get_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    call.name == "get"
+        & java_script_collection_get_receiver_type(receiverType)
+        & java_script_collection_get_arity(receiverType, call.arguments)
+
+private fun java_script_collection_get_receiver_type(typeName: String): bool =
+    typeName == "List" | typeName == "Dict" | typeName == "Tuple"
+
+private fun java_script_collection_get_arity(typeName: String, arguments: List[CompiledExpression]): bool =
+    if typeName == "List"
+    then java_script_one_method_argument(arguments) | java_script_two_method_arguments(arguments)
+    else java_script_one_method_argument(arguments)
+
+private fun java_script_collection_get_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    let receiver = java_script_expression_code(call.receiver, env, module, allModules)
+    if receiverType == "List" & java_script_two_method_arguments(call.arguments)
+    then "__capy_slice(" + receiver + ", "
+        + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ", "
+        + java_script_second_method_argument_code(call.arguments, env, module, allModules) + ", "
+        + java_script_string_literal(receiverType)
+        + ")"
+    else "__capy_index(" + receiver + ", "
+        + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ", "
+        + java_script_string_literal(receiverType)
+        + ")"
+
+private fun java_script_collection_contains_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    java_script_one_method_argument(call.arguments)
+        & ((call.name == "contains" & java_script_collection_contains_receiver_type(receiverType))
+            | (call.name == "contains_key" & receiverType == "Dict"))
+
+private fun java_script_collection_contains_receiver_type(typeName: String): bool =
+    typeName == "List" | typeName == "Set"
+
+private fun java_script_collection_contains_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_contains("
+        + java_script_expression_code(call.receiver, env, module, allModules)
+        + ", "
+        + java_script_first_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
 
 private fun java_script_single_callable_argument(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
@@ -1170,6 +1218,10 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then "Effect"
     else if java_script_collection_is_empty_call(call, env, module, allModules)
     then "bool"
+    else if java_script_collection_get_call(call, env, module, allModules)
+    then java_script_collection_get_return_type(call, env, module, allModules)
+    else if java_script_collection_contains_call(call, env, module, allModules)
+    then "bool"
     else if java_script_seq_as_list_call(call)
     then "List"
     else if java_script_collection_predicate_call(call, env, module, allModules)
@@ -1183,6 +1235,14 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
 private fun java_script_string_get_method_return_type(call: CompiledMethodCallExpression): String =
     if java_script_two_method_arguments(call.arguments)
     then "String"
+    else "Option"
+
+private fun java_script_collection_get_return_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    if receiverType == "List" & java_script_two_method_arguments(call.arguments)
+    then "List"
+    else if receiverType == "Tuple"
+    then java_script_unknown_type()
     else "Option"
 
 private fun java_script_string_method_return_type(name: String): String =
@@ -1928,6 +1988,12 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_collection_is_empty_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_collection_get_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_collection_contains_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_seq_as_list_call(call)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_collection_predicate_call(call, env, module, allModules)
