@@ -100,6 +100,40 @@ data CompileGenerateOptions {
     log_level: LogLevel
 }
 
+fun compile_options(input: String, output: String, compile_tests: bool): CompileOptions =
+    CompileOptions {
+        input: input,
+        output: output,
+        libs: None {},
+        native_wiring: None {},
+        compile_tests: compile_tests,
+        log_level: WARN
+    }
+
+fun compile_generate_options(
+    output_type: OutputType,
+    input: String,
+    output: String,
+    linked_output: Option[String],
+    test_input: Option[String],
+    test_output: Option[String],
+    compile_tests: bool,
+    include_java_lib_resources: bool
+): CompileGenerateOptions =
+    CompileGenerateOptions {
+        output_type: output_type,
+        input: input,
+        output: output,
+        linked_output: linked_output,
+        test_input: test_input,
+        test_output: test_output,
+        libs: None {},
+        native_wiring: None {},
+        compile_tests: compile_tests,
+        include_java_lib_resources: include_java_lib_resources,
+        log_level: WARN
+    }
+
 data PackageOptions {
     compiled_input: Option[String],
     input: Option[String],
