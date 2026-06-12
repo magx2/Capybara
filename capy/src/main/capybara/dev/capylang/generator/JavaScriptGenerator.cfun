@@ -39,7 +39,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -511,10 +511,18 @@ private fun java_script_unary_expression_code(unary: CompiledUnaryExpression, en
     else "(" + unary.operator + java_script_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun java_script_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_function_call_name(call.name, env, module, allModules)
-        + "("
-        + java_script_expression_list_code(call.arguments, env, module, allModules)
-        + ")"
+    let functionName = java_script_function_call_name(call.name, env, module, allModules)
+    match java_script_function_call_definition(call.name, env, module, allModules) with
+    case Some { function } ->
+        functionName
+            + "("
+            + java_script_function_call_arguments(function.parameters, call.arguments, env, module, allModules)
+            + ")"
+    case None ->
+        functionName
+            + "("
+            + java_script_expression_list_code(call.arguments, env, module, allModules)
+            + ")"
 
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "__capy_call"
@@ -559,6 +567,8 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_collection_predicate_call_code(call, env, module, allModules)
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_primitive_conversion_code(call, env, module, allModules)
+    else if java_script_result_reduce_method_call(call, env, module, allModules)
+    then java_script_result_reduce_method_call_code(call, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
         case Some { function } -> java_script_extension_method_call_code(function, call, env, module, allModules)
         case None -> java_script_raw_method_call_code(call, env, module, allModules)
@@ -984,6 +994,23 @@ private fun java_script_primitive_conversion_code(call: CompiledMethodCallExpres
     then "__capy_to_int(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else "__capy_to_long(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
 
+private fun java_script_result_reduce_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "reduce" | call.name == "reduce_left"
+    then
+        if java_script_two_method_arguments(call.arguments)
+        then java_script_result_pipe_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
+
+private fun java_script_result_reduce_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_result_reduce("
+        + java_script_expression_code(call.receiver, env, module, allModules)
+        + ", "
+        + java_script_first_method_argument_code(call.arguments, env, module, allModules)
+        + ", "
+        + java_script_second_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
+
 private fun java_script_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_function_name(function)
         + "("
@@ -1032,6 +1059,40 @@ private fun java_script_expression_list_tail_code(expressions: List[CompiledExpr
         ", " + java_script_expression_code(expression, env, module, allModules)
             + java_script_expression_list_tail_code(expressions[1:], env, module, allModules)
 
+private fun java_script_function_call_arguments(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } ->
+        match parameters[0] with
+        case None ->
+            java_script_expression_code(argument, env, module, allModules)
+                + java_script_function_call_arguments_tail(parameters, arguments[1:], env, module, allModules)
+        case Some { parameter } ->
+            java_script_argument_code(parameter, argument, env, module, allModules)
+                + java_script_function_call_arguments_tail(parameters[1:], arguments[1:], env, module, allModules)
+
+private fun java_script_function_call_arguments_tail(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_function_call_arguments(parameters, arguments, env, module, allModules)
+
+private fun java_script_argument_code(parameter: CompiledFunctionParameter, argument: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_value_conversion_code(
+        java_script_expression_code(argument, env, module, allModules),
+        java_script_expression_type(argument, env, module, allModules),
+        parameter.typeReference.name,
+        module,
+        allModules
+    )
+
+private fun java_script_value_conversion_code(code: String, sourceType: String, expectedType: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match java_script_primitive_backed_backing_type(sourceType, module, allModules) with
+    case Some { backingType } ->
+        if expectedType == backingType
+        then "__capy_get_field(" + code + ", " + java_script_string_literal("value") + ")"
+        else code
+    case None -> code
+
 private fun java_script_dict_entries_code(entries: List[CompiledDictEntry], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match entries[0] with
     case None -> ""
@@ -1068,13 +1129,51 @@ private fun java_script_data_fields_tail_code(fields: List[CompiledDataField], t
 private fun java_script_data_literal_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if literal.typeName == "char"
     then java_script_char_constructor_code(literal.fields, env, module, allModules)
-    else
-        let typeName = java_script_data_literal_type_name(literal.typeName, module.imports)
+    else match java_script_data_constructor_function(literal.typeName, module) with
+    case Some { function } -> java_script_data_constructor_call_code(function, literal, env, module, allModules)
+    case None -> java_script_raw_data_literal_code(literal, env, module, allModules)
+
+private fun java_script_raw_data_literal_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = java_script_data_literal_type_name(literal.typeName, module.imports)
         "__capy_data("
             + java_script_string_literal(typeName)
             + ", {"
             + java_script_data_fields_code(literal.fields, literal.typeName, env, module, allModules)
             + "})"
+
+private fun java_script_data_constructor_function(typeName: String, module: CompiledModule): /capy/lang/Option[CompiledFunction] =
+    if java_script_string_has_prefix(typeName, "__capy_raw|")
+    then /capy/lang/Option.None {}
+    else java_script_find_local_function("__capy_constructor|" + java_script_raw_data_literal_type_name(typeName), module.functions)
+
+private fun java_script_data_constructor_call_code(function: CompiledFunction, literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_constructor_result("
+        + java_script_string_literal(java_script_raw_data_literal_type_name(literal.typeName))
+        + ", "
+        + java_script_function_name(function)
+        + "("
+        + java_script_data_constructor_call_arguments(function.parameters, literal.fields, 0, env, module, allModules)
+        + "))"
+
+private fun java_script_data_constructor_call_arguments(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], idx: int, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        java_script_data_constructor_argument_code(fields, parameter.name, "$" + idx, env, module, allModules)
+            + java_script_data_constructor_call_argument_tail(parameters[1:], fields, idx + 1, env, module, allModules)
+
+private fun java_script_data_constructor_call_argument_tail(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], idx: int, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_data_constructor_call_arguments(parameters, fields, idx, env, module, allModules)
+
+private fun java_script_data_constructor_argument_code(fields: List[CompiledDataField], name: String, positionalName: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> "undefined"
+    case Some { field } ->
+        if field.name == name | field.name == positionalName
+        then java_script_expression_code(field.value, env, module, allModules)
+        else java_script_data_constructor_argument_code(fields[1:], name, positionalName, env, module, allModules)
 
 private fun java_script_char_constructor_code(fields: List[CompiledDataField], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
@@ -1316,7 +1415,9 @@ private fun java_script_match_case_bindings(bindings: List[String]): List[JavaSc
             + java_script_match_case_bindings(bindings[1:])
 
 private fun java_script_block_expression_code(block: CompiledBlockExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_block_has_effect_binding(block.bindings)
+    if java_script_block_has_result_binding(block.bindings, env, module, allModules)
+    then java_script_result_block_expression_code(block.bindings, block.result, env, module, allModules)
+    else if java_script_block_has_effect_binding(block.bindings)
     then java_script_effect_block_expression_code(block.bindings, block.result, env, module, allModules)
     else java_script_plain_block_expression_code(block.bindings, block.result, env, module, allModules)
 
@@ -1377,6 +1478,67 @@ private fun java_script_block_has_effect_binding(bindings: List[CompiledLetBindi
     match bindings[0] with
     case None -> false
     case Some { binding } -> binding.operator == "<-" | java_script_block_has_effect_binding(bindings[1:])
+
+private fun java_script_block_has_result_binding(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match bindings[0] with
+    case None -> false
+    case Some { binding } ->
+        let jsBinding = java_script_let_binding(binding)
+        if binding.operator == "<-" & java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
+        then true
+        else java_script_block_has_result_binding(bindings[1:], [jsBinding] + env, module, allModules)
+
+private fun java_script_result_block_expression_code(bindings: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultEnv = java_script_block_env(bindings, env)
+    "(() => { "
+        + java_script_result_block_binding_statements(bindings, env, module, allModules)
+        + "return "
+        + java_script_result_block_result_code(result, resultEnv, module, allModules)
+        + "; })()"
+
+private fun java_script_result_block_binding_statements(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match bindings[0] with
+    case None -> ""
+    case Some { binding } ->
+        let jsBinding = java_script_let_binding(binding)
+        java_script_result_block_binding_statement(binding, jsBinding, env, module, allModules)
+            + java_script_result_block_binding_statements(bindings[1:], [jsBinding] + env, module, allModules)
+
+private fun java_script_result_block_binding_statement(binding: CompiledLetBinding, jsBinding: JavaScriptBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if binding.operator == "<-" & java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
+    then java_script_result_bind_statement(binding, jsBinding, env, module, allModules)
+    else "const "
+        + jsBinding.jsName
+        + " = "
+        + java_script_expression_code(binding.value, env, module, allModules)
+        + "; "
+
+private fun java_script_result_bind_statement(binding: CompiledLetBinding, jsBinding: JavaScriptBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let bindName = "__capy_bind_" + jsBinding.jsName
+    "const "
+        + bindName
+        + " = "
+        + java_script_expression_code(binding.value, env, module, allModules)
+        + "; if (!__capy_type_matches("
+        + bindName
+        + ", "
+        + java_script_string_literal("Success")
+        + ")) return "
+        + bindName
+        + "; const "
+        + jsBinding.jsName
+        + " = __capy_match_binding("
+        + bindName
+        + ", "
+        + java_script_string_literal("value")
+        + ", 0); "
+
+private fun java_script_result_block_result_code(result: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let resultType = java_script_expression_type(result, env, module, allModules)
+    let resultCode = java_script_expression_code(result, env, module, allModules)
+    if java_script_result_pipe_receiver_type(resultType)
+    then resultCode
+    else "__capy_data(" + java_script_string_literal("Success") + ", {" + java_script_string_literal("value") + ": " + resultCode + "})"
 
 private fun java_script_block_binding_statements(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match bindings[0] with
@@ -1545,6 +1707,8 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then "bool"
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_primitive_conversion_result_type(call.name)
+    else if java_script_result_reduce_method_call(call, env, module, allModules)
+    then java_script_unknown_type()
     else match java_script_find_local_extension_method(call, env, module, allModules) with
     case Some { function } -> function.returnType.name
     case None -> java_script_unknown_type()
@@ -1701,6 +1865,15 @@ private fun java_script_function_call_name(name: String, env: List[JavaScriptBin
         match java_script_find_function_in_imports(name, module.imports, module, allModules) with
         case Some { binding } -> binding
         case None -> java_script_identifier(name)
+
+private fun java_script_function_call_definition(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    if java_script_callable_binding_type(java_script_variable_type(name, env, module)) | java_script_runtime_function(name)
+    then /capy/lang/Option.None {}
+    else if java_script_qualified_call_name(name)
+    then java_script_find_qualified_function_definition(name, module, allModules)
+    else match java_script_find_local_function(name, module.functions) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> java_script_find_function_definition_in_imports(name, module.imports, module, allModules)
 
 private fun java_script_runtime_function(name: String): bool =
     name == "assert_all"
@@ -2052,6 +2225,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + java_script_assert_runtime_code()
     + java_script_numeric_runtime_code()
     + java_script_collection_runtime_code()
+    + java_script_constructor_runtime_code()
     + java_script_regex_runtime_code()
     + java_script_date_time_runtime_code()
     + java_script_deep_equal_code()
@@ -2176,8 +2350,9 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_option_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'None')) return value; if (__capy_data_is(value, 'Some')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); return (__capy_data_is(mapped, 'Some') || __capy_data_is(mapped, 'None')) ? mapped : __capy_data('Some', Object.fromEntries([['value', mapped]])); } return __capy_unsupported('option flat_map'); }" + java_script_newline()
     + "function __capy_result_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); return __capy_unsupported('result map'); }" + java_script_newline()
     + "function __capy_result_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(mapped, 'Error')) return mapped; if (__capy_data_is(mapped, 'Success')) return __capy_match_binding(mapped, 'value', 0); return mapped; } return __capy_unsupported('result flat_map'); }" + java_script_newline()
+    + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(__capy_match_binding(value, 'message', 0))); return __capy_unsupported('result reduce'); }" + java_script_newline()
     + "function __capy_define_method(data, name, fn) { Object.defineProperty(data, name, { value: fn, enumerable: false, configurable: true }); }" + java_script_newline()
-    + "function __capy_attach_standard_methods(data, typeName) { typeName = __capy_normalize_type_name(typeName); if (typeName === 'Some' || typeName === 'None') { __capy_define_method(data, 'map', (mapper) => __capy_option_map(data, mapper)); __capy_define_method(data, 'filter', (predicate) => __capy_option_filter(data, predicate)); __capy_define_method(data, 'flat_map', (mapper) => __capy_option_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); } if (typeName === 'Success' || typeName === 'Error') { __capy_define_method(data, 'map', (mapper) => __capy_result_map(data, mapper)); __capy_define_method(data, 'flat_map', (mapper) => __capy_result_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); } return data; }" + java_script_newline()
+    + "function __capy_attach_standard_methods(data, typeName) { typeName = __capy_normalize_type_name(typeName); if (typeName === 'Some' || typeName === 'None') { __capy_define_method(data, 'map', (mapper) => __capy_option_map(data, mapper)); __capy_define_method(data, 'filter', (predicate) => __capy_option_filter(data, predicate)); __capy_define_method(data, 'flat_map', (mapper) => __capy_option_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); } if (typeName === 'Success' || typeName === 'Error') { __capy_define_method(data, 'map', (mapper) => __capy_result_map(data, mapper)); __capy_define_method(data, 'flat_map', (mapper) => __capy_result_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); __capy_define_method(data, 'reduce', (on_success, on_error) => __capy_result_reduce(data, on_success, on_error)); __capy_define_method(data, 'reduce_left', data.reduce); } return data; }" + java_script_newline()
     + "function __capy_data(typeName, fields) { const normalized = __capy_normalize_type_name(typeName); return __capy_attach_standard_methods(Object.assign({ __type: normalized }, fields), normalized); }" + java_script_newline()
     + "function __capy_unsupported(source) { throw new Error('Unsupported CFUN expression: ' + source); }" + java_script_newline()
     + "function __capy_not_implemented(message) { throw new Error(String(message)); }" + java_script_newline()
@@ -2195,6 +2370,28 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_any(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return true; return false; } for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) return true; return false; }" + java_script_newline()
     + "function __capy_all(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (!__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return false; return true; } for (const item of __capy_as_iterable(value)) if (!__capy_truthy(__capy_apply_lambda(predicate, item))) return false; return true; }" + java_script_newline()
     + "function __capy_gather_module(modulePath) { const module = require(modulePath); return typeof module.tests === 'function' ? __capy_as_list(module.tests()) : []; }" + java_script_newline()
+    + java_script_newline()
+
+private fun java_script_constructor_runtime_code(): String =
+    "function __capy_constructor_value(typeName, value) {" + java_script_newline()
+    + "    value = __capy_unsafe_run(value);" + java_script_newline()
+    + "    if (value != null && typeof value === 'object') {" + java_script_newline()
+    + "        const actual = __capy_normalize_type_name(value.__type);" + java_script_newline()
+    + "        const expected = __capy_normalize_type_name(typeName);" + java_script_newline()
+    + "        if (actual === expected || actual === '__capy_raw|' + expected) {" + java_script_newline()
+    + "            const fields = Object.create(null);" + java_script_newline()
+    + "            for (const key of Object.keys(value)) if (key !== '__type') fields[key] = value[key];" + java_script_newline()
+    + "            return __capy_data(typeName, fields);" + java_script_newline()
+    + "        }" + java_script_newline()
+    + "    }" + java_script_newline()
+    + "    return __capy_data(typeName, { value });" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_constructor_result(typeName, value) {" + java_script_newline()
+    + "    value = __capy_unsafe_run(value);" + java_script_newline()
+    + "    if (__capy_data_is(value, 'Error')) return value;" + java_script_newline()
+    + "    if (__capy_data_is(value, 'Success')) return __capy_data('Success', { value: __capy_constructor_value(typeName, __capy_match_binding(value, 'value', 0)) });" + java_script_newline()
+    + "    return __capy_constructor_value(typeName, value);" + java_script_newline()
+    + "}" + java_script_newline()
     + java_script_newline()
 
 private fun java_script_regex_runtime_code(): String =
@@ -2553,6 +2750,9 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then java_script_collection_predicate_gatherable(call, env, module, allModules)
     else if java_script_primitive_conversion_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_result_reduce_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
         case Some _ ->
             java_script_expression_gatherable(call.receiver, env, module, allModules)
@@ -2650,9 +2850,11 @@ private fun java_script_bindings_gatherable(bindings: List[CompiledLetBinding], 
     match bindings[0] with
     case None -> true
     case Some { binding } ->
-        (binding.operator == "=" | binding.operator == "<-")
-            & java_script_expression_gatherable(binding.value, env, module, allModules)
-            & java_script_bindings_gatherable(bindings[1:], [java_script_let_binding(binding)] + env, module, allModules)
+        let jsBinding = java_script_let_binding(binding)
+        if binding.operator == "=" | binding.operator == "<-"
+        then java_script_expression_gatherable(binding.value, env, module, allModules)
+            & java_script_bindings_gatherable(bindings[1:], [jsBinding] + env, module, allModules)
+        else false
 
 private fun java_script_test_function_gatherable(function: CompiledFunction): bool =
     match function.body with
@@ -2782,6 +2984,51 @@ private fun java_script_data_import_matches(name: String, declaration: CompiledI
         & !declaration.qualified
         & java_script_import_includes_name(name, declaration)
 
+private fun java_script_primitive_backed_backing_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    if java_script_qualified_call_name(name)
+    then java_script_primitive_backed_backing_type_in_qualified_name(name, module, allModules)
+    else match java_script_primitive_backed_backing_type_in_functions(name, module.functions) with
+    case Some { backingType } -> /capy/lang/Option.Some { backingType }
+    case None ->
+        match java_script_primitive_backed_backing_type_in_imports(name, module.imports, module, allModules) with
+        case Some { backingType } -> /capy/lang/Option.Some { backingType }
+        case None -> java_script_primitive_backed_backing_type_in_modules(name, allModules)
+
+private fun java_script_primitive_backed_backing_type_in_qualified_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_module_by_path(java_script_qualified_module_path(java_script_qualified_call_qualifier(name), module), allModules) with
+    case Some { targetModule } -> java_script_primitive_backed_backing_type_in_functions(java_script_qualified_call_member(name), targetModule.functions)
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_primitive_backed_backing_type_in_functions(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
+    match java_script_schema_value_named("__capy_schema_primitive|" + name, functions) with
+    case Some { value } -> /capy/lang/Option.Some { java_script_schema_type_name(value) }
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_primitive_backed_backing_type_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if java_script_data_import_matches(name, declaration)
+        then java_script_primitive_backed_backing_type_in_import(name, imports[1:], module, allModules, declaration)
+        else java_script_primitive_backed_backing_type_in_imports(name, imports[1:], module, allModules)
+
+private fun java_script_primitive_backed_backing_type_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> {
+        match java_script_primitive_backed_backing_type_in_functions(name, importedModule.functions) with
+        case Some { backingType } -> /capy/lang/Option.Some { backingType }
+        case None -> java_script_primitive_backed_backing_type_in_imports(name, rest, module, allModules)
+    }
+    case None -> java_script_primitive_backed_backing_type_in_imports(name, rest, module, allModules)
+
+private fun java_script_primitive_backed_backing_type_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[String] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        match java_script_primitive_backed_backing_type_in_functions(name, module.functions) with
+        case Some { backingType } -> /capy/lang/Option.Some { backingType }
+        case None -> java_script_primitive_backed_backing_type_in_modules(name, modules[1:])
+
 private fun java_script_merge_schema_fields(first: List[String], second: List[String]): List[String] =
     first + java_script_schema_fields_not_named(second, first)
 
@@ -2812,6 +3059,14 @@ private fun java_script_schema_values(prefix: String, functions: List[CompiledFu
         if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, prefix)
         then [java_script_schema_value(function)] + java_script_schema_values(prefix, functions[1:])
         else java_script_schema_values(prefix, functions[1:])
+
+private fun java_script_schema_value_named(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if java_script_compiled_schema(function) & function.name == name
+        then /capy/lang/Option.Some { java_script_schema_value(function) }
+        else java_script_schema_value_named(name, functions[1:])
 
 private fun java_script_schema_value(function: CompiledFunction): String =
     match function.body with
