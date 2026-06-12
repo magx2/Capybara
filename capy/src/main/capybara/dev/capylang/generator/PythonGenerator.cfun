@@ -2276,6 +2276,10 @@ private fun python_test_runtime_numeric_value_code(): String =
     + "        return 'false'" + python_newline()
     + "    if value is None:" + python_newline()
     + "        return 'null'" + python_newline()
+    + "    if isinstance(value, dict) and '__type' in value:" + python_newline()
+    + "        fields = [(key, field) for key, field in value.items() if key != '__type']" + python_newline()
+    + "        rendered = ', '.join(str(key) + ': ' + __capy_str(field) for key, field in fields)" + python_newline()
+    + "        return str(value.get('__type')) + ' ' + chr(123) + rendered + chr(125)" + python_newline()
     + "    return str(value)" + python_newline()
     + python_newline()
     + "def __capy_long(value):" + python_newline()
@@ -2388,6 +2392,8 @@ private fun python_test_runtime_numeric_add_sub_code(): String =
     + "        if __capy_is_set(right):" + python_newline()
     + "            return __capy_set_concat(left, right)" + python_newline()
     + "        return __capy_set_append(left, right)" + python_newline()
+    + "    if isinstance(left, str) or isinstance(right, str):" + python_newline()
+    + "        return __capy_str(left) + __capy_str(right)" + python_newline()
     + "    if isinstance(left, dict):" + python_newline()
     + "        result = dict(left)" + python_newline()
     + "        if isinstance(right, dict):" + python_newline()
@@ -2397,8 +2403,6 @@ private fun python_test_runtime_numeric_add_sub_code(): String =
     + "        else:" + python_newline()
     + "            raise TypeError('Unsupported dict + operand: ' + repr(right))" + python_newline()
     + "        return result" + python_newline()
-    + "    if isinstance(left, str) or isinstance(right, str):" + python_newline()
-    + "        return __capy_str(left) + __capy_str(right)" + python_newline()
     + "    return left + right" + python_newline()
     + python_newline()
     + "def __capy_sub(left, right):" + python_newline()
@@ -2807,6 +2811,10 @@ private fun python_value_assert_extra_methods_code(): String =
     + "        else:" + python_newline()
     + "            result = globals()['__capy_contains'](self.value, other)" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to contain ' + repr(other), 'Assert.contains')" + python_newline()
+    + python_newline()
+    + "    def starts_with(self, other):" + python_newline()
+    + "        result = str(self.value).startswith(str(other))" + python_newline()
+    + "        return self._append(result, 'Expected ' + repr(self.value) + ' to start with ' + repr(other), 'Assert.starts_with')" + python_newline()
     + python_newline()
     + "    def succeeds(self, expected=None):" + python_newline()
     + "        if not _capy_data_is(self.value, 'Success'):" + python_newline()
@@ -3850,6 +3858,7 @@ private fun python_assert_method(name: String): bool =
         | name == "is_empty"
         | name == "has_size"
         | name == "contains"
+        | name == "starts_with"
         | name == "succeeds"
         | name == "fails"
         | name == "failed"
