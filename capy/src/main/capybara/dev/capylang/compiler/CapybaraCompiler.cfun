@@ -1614,7 +1614,7 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         name: name,
         location: compile_location(location)
     }
-    case MethodCallExpression call -> compile_method_call(call, functionName)
+    case MethodCallExpression call -> compiled_method_call(call, functionName)
     case WithExpression { receiver, fields, location } -> CompiledWithExpression {
         receiver: compile_expression_in_function(receiver, functionName),
         fields: compile_expression_data_fields(fields, functionName),
@@ -1673,45 +1673,6 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         result: compile_expression_in_function(result, functionName),
         location: compile_location(location)
     }
-
-private fun compile_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
-    match call.receiver with
-    case UnaryExpression { operator, expression, location } ->
-        if operator == "!"
-        then CompiledUnaryExpression {
-            operator: operator,
-            expression: CompiledMethodCallExpression {
-                receiver: compile_expression_in_function(expression, functionName),
-                name: call.name,
-                arguments: compile_expressions(call.arguments, functionName),
-                location: compile_location(call.location)
-            },
-            location: compile_location(location)
-        }
-        else compiled_method_call(call, functionName)
-    case FieldAccessExpression access -> compile_method_call_on_field_access(call, access, functionName)
-    case _ -> compiled_method_call(call, functionName)
-
-private fun compile_method_call_on_field_access(call: MethodCallExpression, access: FieldAccessExpression, functionName: String): CompiledExpression =
-    match access.receiver with
-    case UnaryExpression { operator, expression, location } ->
-        if operator == "!"
-        then CompiledUnaryExpression {
-            operator: operator,
-            expression: CompiledMethodCallExpression {
-                receiver: CompiledFieldAccessExpression {
-                    receiver: compile_expression_in_function(expression, functionName),
-                    name: access.name,
-                    location: compile_location(access.location)
-                },
-                name: call.name,
-                arguments: compile_expressions(call.arguments, functionName),
-                location: compile_location(call.location)
-            },
-            location: compile_location(location)
-        }
-        else compiled_method_call(call, functionName)
-    case _ -> compiled_method_call(call, functionName)
 
 private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
     let receiver = compile_expression_in_function(call.receiver, functionName)

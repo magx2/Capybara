@@ -16,6 +16,9 @@ fun parse_state(input: String): Result[ParseState] =
 fun parse_and_add_rest_size(input: String): Result[long] =
     parse_state(input) | parse => (parse.value.to_long() | number => Success { value: number + parse.parsing_string.size().value })
 
+fun qualified_success_pipe(): Result[int] =
+    /capy/lang/Result.Success { value: 3 } | value => Success { value: value + 4 }
+
 fun map_untyped_result(): Result[String] =
     let result: Result = Success { "success_value" }
     result | value => Success { "mapped_" + value }
