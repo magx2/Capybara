@@ -383,13 +383,28 @@ private fun python_result_method_call(call: CompiledMethodCallExpression, env: L
     if call.name == "map" | call.name == "flat_map"
     then python_result_pipe_receiver_type(python_expression_type(call.receiver, env, module, allModules))
         & python_single_callable_argument(call.arguments)
+    else if call.name == "or" | call.name == "or_else"
+    then python_result_pipe_receiver_type(python_expression_type(call.receiver, env, module, allModules))
+        & python_one_method_argument(call.arguments)
     else if call.name == "reduce" | call.name == "reduce_left"
     then python_result_pipe_receiver_type(python_expression_type(call.receiver, env, module, allModules))
         & python_two_callable_arguments(call.arguments)
     else false
 
 private fun python_result_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if call.name == "reduce" | call.name == "reduce_left"
+    if call.name == "or"
+    then "__capy_result_or("
+        + python_expression_code(call.receiver, env, module, allModules)
+        + ", "
+        + python_first_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
+    else if call.name == "or_else"
+    then "__capy_result_or_else("
+        + python_expression_code(call.receiver, env, module, allModules)
+        + ", "
+        + python_first_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
+    else if call.name == "reduce" | call.name == "reduce_left"
     then "__capy_result_reduce("
         + python_expression_code(call.receiver, env, module, allModules)
         + ", "
@@ -1435,17 +1450,24 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     else if python_effect_method_call(call, env, module, allModules)
     then python_effect_type()
     else if python_result_method_call(call, env, module, allModules)
-    then python_result_method_call_type(call)
+    then python_result_method_call_type(call, env, module, allModules)
     else if python_assert_method(call.name)
     then python_assert_type()
     else match python_find_extension_method(call, env, module, allModules) with
         case Some { function } -> function.returnType.name
         case None -> python_unknown_type()
 
-private fun python_result_method_call_type(call: CompiledMethodCallExpression): String =
-    if call.name == "reduce" | call.name == "reduce_left"
+private fun python_result_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "or_else"
+    then python_first_method_argument_type(call.arguments, env, module, allModules)
+    else if call.name == "reduce" | call.name == "reduce_left"
     then python_unknown_type()
     else python_result_type()
+
+private fun python_first_method_argument_type(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> python_unknown_type()
+    case Some { argument } -> python_expression_type(argument, env, module, allModules)
 
 private fun python_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
@@ -2137,7 +2159,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -3213,6 +3235,22 @@ private fun python_test_runtime_result_helpers_code(): String =
     + "            return _capy_data_value(mapped)" + python_newline()
     + "    return __capy_unsupported('result flat_map')" + python_newline()
     + python_newline()
+    + "def __capy_result_or(value, fallback):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Success'):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Error'):" + python_newline()
+    + "        return _unsafe_run(fallback)" + python_newline()
+    + "    return __capy_unsupported('result or')" + python_newline()
+    + python_newline()
+    + "def __capy_result_or_else(value, fallback):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Success'):" + python_newline()
+    + "        return _capy_data_value(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Error'):" + python_newline()
+    + "        return _unsafe_run(fallback)" + python_newline()
+    + "    return __capy_unsupported('result or_else')" + python_newline()
+    + python_newline()
     + "def __capy_result_reduce(value, success_mapper, error_mapper):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
     + "    if _capy_data_is(value, 'Success'):" + python_newline()
@@ -3579,7 +3617,10 @@ private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, 
         & python_single_callable_argument_gatherable(call.arguments, env, module, allModules)
 
 private fun python_result_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if call.name == "reduce" | call.name == "reduce_left"
+    if call.name == "or" | call.name == "or_else"
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
+    else if call.name == "reduce" | call.name == "reduce_left"
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_result_reduce_arguments_gatherable(call.receiver, call.arguments, env, module, allModules)
     else python_expression_gatherable(call.receiver, env, module, allModules)
