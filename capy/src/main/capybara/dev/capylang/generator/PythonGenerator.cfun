@@ -216,7 +216,9 @@ private fun python_variable_code(name: String, env: List[PythonBinding], module:
 
 private fun python_binary_expression_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
-    if python_result_pipe_expression_with_left_type(binary, leftType)
+    if python_result_reduce_operator_expression_with_left_type(binary, leftType)
+    then python_result_reduce_operator_code(binary, env, module, allModules)
+    else if python_result_pipe_expression_with_left_type(binary, leftType)
     then python_result_pipe_code(binary, env, module, allModules)
     else if python_option_pipe_expression_with_left_type(binary, leftType)
     then python_option_pipe_code(binary, env, module, allModules)
@@ -505,6 +507,18 @@ private fun python_result_pipe_code(binary: CompiledBinaryExpression, env: List[
         + ", "
         + python_result_callable_code(binary.left, binary.right, env, module, allModules)
         + ")"
+
+private fun python_result_reduce_operator_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match binary.right with
+    case CompiledTupleLiteral literal ->
+        "__capy_result_reduce("
+            + python_expression_code(binary.left, env, module, allModules)
+            + ", "
+            + python_result_reduce_success_callable_code(binary.left, literal.values, env, module, allModules)
+            + ", "
+            + python_result_reduce_error_callable_code(literal.values, env, module, allModules)
+            + ")"
+    case _ -> "__capy_unsupported('result reduce')"
 
 private fun python_result_pipe_helper(operator: String): String =
     if operator == "|*"
@@ -1688,12 +1702,31 @@ private fun python_callable_return_type(typeName: String): String =
 
 private fun python_result_payload_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
+    case CompiledBinaryExpression binary -> python_result_payload_type_from_binary(binary, env, module, allModules)
     case CompiledFunctionCallExpression call -> python_result_payload_type_from_function_call(call.name, module, allModules)
     case CompiledMethodCallExpression call -> python_result_payload_type_from_method_call(call, env, module, allModules)
+    case CompiledWithExpression withExpression -> python_result_payload_type_from_with_expression(withExpression, env, module, allModules)
     case CompiledDataLiteral literal -> python_result_payload_type_from_data_literal(literal, env, module, allModules)
     case CompiledIfExpression ifExpression -> python_result_payload_type(ifExpression.thenBranch, env, module, allModules)
     case CompiledBlockExpression block -> python_result_payload_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledReduceExpression reduce -> python_result_payload_type(reduce.initial, env, module, allModules)
+    case _ -> python_unknown_type()
+
+private fun python_result_payload_type_from_binary(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let leftType = python_expression_type(binary.left, env, module, allModules)
+    if python_result_pipe_expression_with_left_type(binary, leftType)
+    then python_result_pipe_payload_type(binary, env, module, allModules)
+    else python_unknown_type()
+
+private fun python_result_pipe_payload_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match binary.right with
+    case CompiledLambdaExpression lambda ->
+        let lambdaEnv = python_lambda_bindings_with_single_type(lambda.parameters, python_result_payload_type(binary.left, env, module, allModules)) + env
+        let bodyType = python_expression_type(lambda.body, lambdaEnv, module, allModules)
+        if python_result_pipe_receiver_type(bodyType)
+        then python_result_payload_type(lambda.body, lambdaEnv, module, allModules)
+        else bodyType
+    case CompiledFunctionReferenceExpression reference -> python_result_payload_type_from_function_call(reference.name, module, allModules)
     case _ -> python_unknown_type()
 
 private fun python_result_payload_type_from_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1713,6 +1746,13 @@ private fun python_result_payload_type_from_method_call(call: CompiledMethodCall
     then python_string_parse_payload_type(call.name)
     else python_unknown_type()
 
+private fun python_result_payload_type_from_with_expression(withExpression: CompiledWithExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = python_with_expression_receiver_type(withExpression, env, module, allModules)
+    let constructorTypes = python_with_constructor_type_names(receiverType, module, allModules)
+    if python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+    then receiverType
+    else python_unknown_type()
+
 private fun python_string_parse_payload_type(name: String): String =
     if name == "to_int"
     then python_int_type()
@@ -1727,7 +1767,12 @@ private fun python_string_parse_payload_type(name: String): String =
 private fun python_result_payload_type_from_data_literal(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_type_unqualified_name(literal.typeName) == "Success"
     then python_success_literal_payload_type(literal.fields, env, module, allModules)
-    else python_unknown_type()
+    else
+        let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
+        let constructorTypes = python_data_parent_constructor_type_names(declaredTypeName, module, allModules) + python_data_own_constructor_type_names(declaredTypeName, module)
+        if !python_raw_data_literal(literal.typeName) & python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+        then declaredTypeName
+        else python_unknown_type()
 
 private fun python_success_literal_payload_type(fields: List[CompiledDataField], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
@@ -1760,7 +1805,9 @@ private fun python_string_method_return_type(name: String): String =
 private fun python_binary_expression_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
     let rightType = python_expression_type(binary.right, env, module, allModules)
-    if python_result_pipe_expression_with_left_type(binary, leftType)
+    if python_result_reduce_operator_expression_with_left_type(binary, leftType)
+    then python_result_reduce_operator_type(binary, env, module, allModules)
+    else if python_result_pipe_expression_with_left_type(binary, leftType)
     then python_result_type()
     else if python_option_pipe_expression_with_left_type(binary, leftType)
     then python_option_type()
@@ -1945,6 +1992,36 @@ private fun python_result_pipe_expression_with_left_type(binary: CompiledBinaryE
     python_result_pipe_operator(binary.operator)
         & python_result_pipe_receiver_type(leftType)
         & python_callable_expression(binary.right)
+
+private fun python_result_reduce_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    binary.operator == "|>"
+        & python_result_pipe_receiver_type(leftType)
+        & python_result_reduce_operator_arguments_shape(binary.right)
+
+private fun python_result_reduce_operator_arguments_shape(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledTupleLiteral literal -> python_two_callable_arguments(literal.values)
+    case _ -> false
+
+private fun python_result_reduce_operator_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match binary.right with
+    case CompiledTupleLiteral literal -> python_result_reduce_success_type(binary.left, literal.values, env, module, allModules)
+    case _ -> python_unknown_type()
+
+private fun python_result_reduce_success_type(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> python_unknown_type()
+    case Some { argument } ->
+        match argument with
+        case CompiledLambdaExpression lambda ->
+            python_expression_type(
+                lambda.body,
+                python_lambda_bindings_with_single_type(lambda.parameters, python_result_payload_type(receiver, env, module, allModules)) + env,
+                module,
+                allModules
+            )
+        case CompiledFunctionReferenceExpression reference -> python_function_call_expression_type(reference.name, module, allModules)
+        case _ -> python_unknown_type()
 
 private fun python_result_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|*"
@@ -3746,7 +3823,9 @@ private fun python_binary_operator_gatherable(operator: String): bool =
 
 private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = python_expression_type(binary.left, env, module, allModules)
-    if python_result_pipe_expression_with_left_type(binary, leftType)
+    if python_result_reduce_operator_expression_with_left_type(binary, leftType)
+    then python_result_reduce_operator_gatherable(binary, env, module, allModules)
+    else if python_result_pipe_expression_with_left_type(binary, leftType)
     then python_result_pipe_gatherable(binary, env, module, allModules)
     else if python_option_pipe_expression_with_left_type(binary, leftType)
     then python_option_pipe_gatherable(binary, env, module, allModules)
@@ -3779,6 +3858,13 @@ private fun python_lambda_expression_gatherable_with_bindings(lambda: CompiledLa
 private fun python_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
         & python_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+
+private fun python_result_reduce_operator_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match binary.right with
+    case CompiledTupleLiteral literal ->
+        python_expression_gatherable(binary.left, env, module, allModules)
+            & python_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+    case _ -> false
 
 private fun python_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
