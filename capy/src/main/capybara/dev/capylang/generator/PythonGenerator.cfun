@@ -331,6 +331,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_callable_call_code(call, env, module, allModules)
     else if python_effect_method_call(call, env, module, allModules)
     then python_effect_method_call_code(call, env, module, allModules)
+    else if python_result_method_call(call, env, module, allModules)
+    then python_result_method_call_code(call, env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + receiver + ")"
     else if python_char_to_string_method_call(call, env, module, allModules)
@@ -422,6 +424,24 @@ private fun python_effect_method_call_code(call: CompiledMethodCallExpression, e
         + "." + methodName
         + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
+private fun python_result_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    (call.name == "map" | call.name == "flat_map")
+        & python_result_pipe_receiver_type(python_expression_type(call.receiver, env, module, allModules))
+        & python_single_callable_argument(call.arguments)
+
+private fun python_result_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_result_method_helper(call.name)
+        + "("
+        + python_expression_code(call.receiver, env, module, allModules)
+        + ", "
+        + python_result_callable_argument_code(call.receiver, call.arguments, env, module, allModules)
+        + ")"
+
+private fun python_result_method_helper(name: String): String =
+    if name == "flat_map"
+    then "__capy_result_flat_map"
+    else "__capy_result_map"
+
 private fun python_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     python_function_name(function)
         + "("
@@ -479,13 +499,30 @@ private fun python_result_pipe_code(binary: CompiledBinaryExpression, env: List[
         + "("
         + python_expression_code(binary.left, env, module, allModules)
         + ", "
-        + python_expression_code(binary.right, env, module, allModules)
+        + python_result_callable_code(binary.left, binary.right, env, module, allModules)
         + ")"
 
 private fun python_result_pipe_helper(operator: String): String =
     if operator == "|*"
     then "__capy_result_flat_map"
     else "__capy_result_map"
+
+private fun python_result_callable_argument_code(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> python_result_callable_code(receiver, argument, env, module, allModules)
+
+private fun python_result_callable_code(receiver: CompiledExpression, mapper: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match mapper with
+    case CompiledLambdaExpression lambda ->
+        python_lambda_expression_code_with_bindings(
+            lambda,
+            python_lambda_bindings_with_single_type(lambda.parameters, python_result_payload_type(receiver, env, module, allModules)),
+            env,
+            module,
+            allModules
+        )
+    case _ -> python_expression_code(mapper, env, module, allModules)
 
 private fun python_collection_predicate_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match call.arguments[0] with
@@ -814,6 +851,9 @@ private fun python_lambda_expression_code(lambda: CompiledLambdaExpression, env:
     let lambdaEnv = python_lambda_bindings(lambda.parameters) + env
     "lambda " + python_lambda_parameters(lambda.parameters) + ": " + python_expression_code(lambda.body, lambdaEnv, module, allModules)
 
+private fun python_lambda_expression_code_with_bindings(lambda: CompiledLambdaExpression, bindings: List[PythonBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "lambda " + python_lambda_parameters(lambda.parameters) + ": " + python_expression_code(lambda.body, bindings + env, module, allModules)
+
 private fun python_lambda_parameters(parameters: List[String]): String =
     match parameters[0] with
     case None -> ""
@@ -829,6 +869,13 @@ private fun python_lambda_bindings(parameters: List[String]): List[PythonBinding
     case None -> []
     case Some { parameter } ->
         [PythonBinding { name: parameter, pythonName: python_identifier(parameter), typeName: python_unknown_type() }]
+            + python_lambda_bindings(parameters[1:])
+
+private fun python_lambda_bindings_with_single_type(parameters: List[String], typeName: String): List[PythonBinding] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [PythonBinding { name: parameter, pythonName: python_identifier(parameter), typeName: typeName }]
             + python_lambda_bindings(parameters[1:])
 
 private fun python_expression_list_code(expressions: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1313,6 +1360,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then if call.name == "to_int" then python_int_type() else python_long_type()
     else if python_effect_method_call(call, env, module, allModules)
     then python_effect_type()
+    else if python_result_method_call(call, env, module, allModules)
+    then python_result_type()
     else if python_assert_method(call.name)
     then python_assert_type()
     else match python_find_extension_method(call, env, module, allModules) with
@@ -1330,6 +1379,67 @@ private fun python_callable_return_type(typeName: String): String =
     if arrow < 0 | arrow >= typeName.size().value - 1
     then python_unknown_type()
     else typeName[arrow + 1, typeName.size().value]
+
+private fun python_result_payload_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledFunctionCallExpression call -> python_result_payload_type_from_function_call(call.name, module, allModules)
+    case CompiledMethodCallExpression call -> python_result_payload_type_from_method_call(call, env, module, allModules)
+    case CompiledDataLiteral literal -> python_result_payload_type_from_data_literal(literal, env, module, allModules)
+    case CompiledIfExpression ifExpression -> python_result_payload_type(ifExpression.thenBranch, env, module, allModules)
+    case CompiledBlockExpression block -> python_result_payload_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+    case CompiledReduceExpression reduce -> python_result_payload_type(reduce.initial, env, module, allModules)
+    case _ -> python_unknown_type()
+
+private fun python_result_payload_type_from_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_qualified_name(name)
+    then match python_find_qualified_function_binding(name, module, allModules) with
+        case Some { binding } -> python_result_payload_type_from_type_reference(binding.function.returnType)
+        case None -> python_unknown_type()
+    else match python_find_local_function(name, module.functions) with
+    case Some { function } -> python_result_payload_type_from_type_reference(function.returnType)
+    case None ->
+        match python_find_function_in_imports(name, module.imports, module, allModules) with
+        case Some { function } -> python_result_payload_type_from_type_reference(function.returnType)
+        case None -> python_unknown_type()
+
+private fun python_result_payload_type_from_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_string_parse_method_call(call, env, module, allModules)
+    then python_string_parse_payload_type(call.name)
+    else python_unknown_type()
+
+private fun python_string_parse_payload_type(name: String): String =
+    if name == "to_int"
+    then python_int_type()
+    else if name == "to_long"
+    then python_long_type()
+    else if name == "to_double"
+    then python_double_type()
+    else if name == "to_float"
+    then python_float_type()
+    else python_bool_type()
+
+private fun python_result_payload_type_from_data_literal(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_type_unqualified_name(literal.typeName) == "Success"
+    then python_success_literal_payload_type(literal.fields, env, module, allModules)
+    else python_unknown_type()
+
+private fun python_success_literal_payload_type(fields: List[CompiledDataField], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> python_unknown_type()
+    case Some { field } ->
+        if field.name == "value" | field.name == "$0"
+        then python_expression_type(field.value, env, module, allModules)
+        else python_success_literal_payload_type(fields[1:], env, module, allModules)
+
+private fun python_result_payload_type_from_type_reference(typeReference: CompiledTypeReference): String =
+    if python_result_pipe_receiver_type(typeReference.name)
+    then python_first_type_argument_name(typeReference.arguments)
+    else python_unknown_type()
+
+private fun python_first_type_argument_name(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> python_unknown_type()
+    case Some { argument } -> argument.name
 
 private fun python_string_get_method_return_type(call: CompiledMethodCallExpression): String =
     if python_two_method_arguments(call.arguments)
@@ -3147,9 +3257,12 @@ private fun python_collection_pipe_gatherable(binary: CompiledBinaryExpression, 
 private fun python_lambda_expression_gatherable(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
 
+private fun python_lambda_expression_gatherable_with_bindings(lambda: CompiledLambdaExpression, bindings: List[PythonBinding], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_gatherable(lambda.body, bindings + env, module, allModules)
+
 private fun python_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
-        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+        & python_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
 
 private fun python_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(binary.left, env, module, allModules)
@@ -3255,6 +3368,8 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_effect_method_call(call, env, module, allModules)
     then python_effect_method_gatherable(call, env, module, allModules)
+    else if python_result_method_call(call, env, module, allModules)
+    then python_result_method_gatherable(call, env, module, allModules)
     else match python_find_extension_method(call, env, module, allModules) with
         case Some _ ->
             python_expression_gatherable(call.receiver, env, module, allModules)
@@ -3264,6 +3379,10 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
 private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(call.receiver, env, module, allModules)
         & python_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+
+private fun python_result_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_result_single_callable_argument_gatherable(call.receiver, call.arguments, env, module, allModules)
 
 private fun python_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(call.receiver, env, module, allModules)
@@ -3275,6 +3394,26 @@ private fun python_single_callable_argument_gatherable(arguments: List[CompiledE
     case Some { argument } ->
         arguments[1:].is_empty()
             & python_callable_expression_gatherable(argument, env, module, allModules)
+
+private fun python_result_single_callable_argument_gatherable(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } ->
+        arguments[1:].is_empty()
+            & python_result_callable_expression_gatherable(receiver, argument, env, module, allModules)
+
+private fun python_result_callable_expression_gatherable(receiver: CompiledExpression, mapper: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match mapper with
+    case CompiledLambdaExpression lambda ->
+        python_lambda_expression_gatherable_with_bindings(
+            lambda,
+            python_lambda_bindings_with_single_type(lambda.parameters, python_result_payload_type(receiver, env, module, allModules)),
+            env,
+            module,
+            allModules
+        )
+    case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
+    case _ -> false
 
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
     python_local_function_count(name, functions) == 1
