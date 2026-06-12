@@ -39,7 +39,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_as_list, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -242,7 +242,10 @@ private fun java_script_variable_code(name: String, env: List[JavaScriptBinding]
         case None ->
             match java_script_find_constant_in_imports(name, module.imports, module, allModules) with
             case Some { binding } -> binding
-            case None -> java_script_identifier(name)
+            case None ->
+                match java_script_imported_stdlib_constant_code(name, module.imports) with
+                case Some { binding } -> binding
+                case None -> java_script_identifier(name)
 
 private fun java_script_binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
@@ -528,6 +531,20 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_string_method_code(call, env, module, allModules)
     else if java_script_regex_method_call(call, env, module, allModules)
     then java_script_regex_method_call_code(call, env, module, allModules)
+    else if java_script_date_time_method_call(
+        java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)),
+        call.name,
+        call.arguments.is_empty(),
+        java_script_one_method_argument(call.arguments),
+        java_script_two_method_arguments(call.arguments)
+    )
+    then java_script_date_time_method_call_code(
+        java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)),
+        call.name,
+        java_script_expression_code(call.receiver, env, module, allModules),
+        java_script_first_method_argument_code(call.arguments, env, module, allModules),
+        java_script_second_method_argument_code(call.arguments, env, module, allModules)
+    )
     else if java_script_collection_is_empty_call(call, env, module, allModules)
     then "(__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ") === 0)"
     else if java_script_collection_get_call(call, env, module, allModules)
@@ -786,6 +803,98 @@ private fun java_script_regex_receiver_type(typeName: String): bool =
         | typeName == "/capy/lang/Regex"
         | typeName == "capy/lang/Regex"
         | typeName == "capy.lang.Regex"
+
+private fun java_script_date_time_method_call(receiver: String, methodName: String, emptyArguments: bool, oneArgument: bool, twoArguments: bool): bool =
+    java_script_stdlib_date_time_method(receiver, methodName, emptyArguments, oneArgument, twoArguments)
+        | (receiver == java_script_unknown_type() & java_script_unknown_date_time_method(methodName, oneArgument, twoArguments))
+
+private fun java_script_unknown_date_time_method(methodName: String, oneArgument: bool, twoArguments: bool): bool =
+    if methodName == "add_days" | methodName == "add_seconds" | methodName == "plus" | methodName == "minus"
+    then oneArgument
+    else methodName == "add_years_months" & twoArguments
+
+private fun java_script_stdlib_date_time_method(receiver: String, methodName: String, emptyArguments: bool, oneArgument: bool, twoArguments: bool): bool =
+    if receiver == "Date"
+    then if methodName == "add_days"
+        then oneArgument
+        else if methodName == "add_years_months"
+        then twoArguments
+        else (methodName == "to_days_since_unix_epoch" | methodName == "to_iso_8601") & emptyArguments
+    else if receiver == "Time"
+    then if methodName == "add_seconds"
+        then oneArgument
+        else (methodName == "to_seconds" | methodName == "to_iso_8601") & emptyArguments
+    else if receiver == "DateTime"
+    then if methodName == "plus" | methodName == "minus"
+        then oneArgument
+        else (methodName == "to_iso_8601" | methodName == "timestamp") & emptyArguments
+    else if receiver == "Duration" | receiver == "DateDuration" | receiver == "WeekDuration"
+    then java_script_duration_method_name(methodName) & emptyArguments
+    else false
+
+private fun java_script_duration_method_name(methodName: String): bool =
+    methodName == "to_iso_8601"
+        | methodName == "negate"
+        | methodName == "years"
+        | methodName == "months"
+        | methodName == "days"
+        | methodName == "hours"
+        | methodName == "minutes"
+        | methodName == "seconds"
+
+private fun java_script_date_time_method_call_code(receiverType: String, methodName: String, receiver: String, firstArgument: String, secondArgument: String): String =
+    if receiverType == "Date"
+    then java_script_date_method_call_code(methodName, receiver, firstArgument, secondArgument)
+    else if receiverType == "Time"
+    then java_script_time_method_call_code(methodName, receiver, firstArgument)
+    else if receiverType == "DateTime"
+    then java_script_date_time_value_method_call_code(methodName, receiver, firstArgument)
+    else if receiverType == java_script_unknown_type()
+    then java_script_unknown_date_time_method_call_code(methodName, receiver, firstArgument, secondArgument)
+    else java_script_duration_method_call_code(methodName, receiver)
+
+private fun java_script_date_method_call_code(methodName: String, receiver: String, firstArgument: String, secondArgument: String): String =
+    if methodName == "add_days"
+    then "__capy_date_add_days(" + receiver + ", " + firstArgument + ")"
+    else if methodName == "add_years_months"
+    then "__capy_date_add_years_months(" + receiver + ", " + firstArgument + ", " + secondArgument + ")"
+    else if methodName == "to_days_since_unix_epoch"
+    then "__capy_date_to_days_since_unix_epoch(" + receiver + ")"
+    else "__capy_date_to_iso_8601(" + receiver + ")"
+
+private fun java_script_time_method_call_code(methodName: String, receiver: String, firstArgument: String): String =
+    if methodName == "add_seconds"
+    then "__capy_time_add_seconds(" + receiver + ", " + firstArgument + ")"
+    else if methodName == "to_seconds"
+    then "__capy_time_to_seconds(" + receiver + ")"
+    else "__capy_time_to_iso_8601(" + receiver + ")"
+
+private fun java_script_date_time_value_method_call_code(methodName: String, receiver: String, firstArgument: String): String =
+    if methodName == "plus"
+    then "__capy_date_time_plus(" + receiver + ", " + firstArgument + ")"
+    else if methodName == "minus"
+    then "__capy_date_time_minus(" + receiver + ", " + firstArgument + ")"
+    else if methodName == "timestamp"
+    then "__capy_date_time_timestamp(" + receiver + ")"
+    else "__capy_date_time_to_iso_8601(" + receiver + ")"
+
+private fun java_script_unknown_date_time_method_call_code(methodName: String, receiver: String, firstArgument: String, secondArgument: String): String =
+    if methodName == "add_days"
+    then "__capy_date_add_days(" + receiver + ", " + firstArgument + ")"
+    else if methodName == "add_years_months"
+    then "__capy_date_add_years_months(" + receiver + ", " + firstArgument + ", " + secondArgument + ")"
+    else if methodName == "add_seconds"
+    then "__capy_time_add_seconds(" + receiver + ", " + firstArgument + ")"
+    else if methodName == "plus"
+    then "__capy_date_time_plus(" + receiver + ", " + firstArgument + ")"
+    else "__capy_date_time_minus(" + receiver + ", " + firstArgument + ")"
+
+private fun java_script_duration_method_call_code(methodName: String, receiver: String): String =
+    if methodName == "to_iso_8601"
+    then "__capy_duration_to_iso_8601(" + receiver + ")"
+    else if methodName == "negate"
+    then "__capy_duration_negate(" + receiver + ")"
+    else "__capy_duration_" + methodName + "(" + receiver + ")"
 
 private fun java_script_string_get_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "get"
@@ -1308,7 +1417,7 @@ private fun java_script_expression_type(expression: CompiledExpression, env: Lis
     case CompiledDoubleLiteral _ -> "double"
     case CompiledBoolLiteral _ -> "bool"
     case CompiledStringLiteral _ -> "String"
-    case CompiledVariableExpression variable -> java_script_variable_type(variable.name, env)
+    case CompiledVariableExpression variable -> java_script_variable_type(variable.name, env, module)
     case CompiledBinaryExpression binary -> java_script_binary_expression_type(binary, env, module, allModules)
     case CompiledFunctionCallExpression call -> java_script_function_call_expression_type(call.name, module, allModules)
     case CompiledMethodCallExpression call -> java_script_method_call_expression_type(call, env, module, allModules)
@@ -1409,6 +1518,14 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then java_script_string_method_return_type(call.name)
     else if java_script_regex_method_call(call, env, module, allModules)
     then java_script_regex_method_call_type(call.name)
+    else if java_script_date_time_method_call(
+        java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)),
+        call.name,
+        call.arguments.is_empty(),
+        java_script_one_method_argument(call.arguments),
+        java_script_two_method_arguments(call.arguments)
+    )
+    then java_script_date_time_method_call_type(java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)), call.name)
     else if java_script_effect_method_call(call, env, module, allModules)
     then "Effect"
     else if java_script_collection_is_empty_call(call, env, module, allModules)
@@ -1477,6 +1594,49 @@ private fun java_script_regex_method_call_type(name: String): String =
     then java_script_string_to_string_function_type()
     else "List"
 
+private fun java_script_date_time_method_call_type(receiver: String, methodName: String): String =
+    if receiver == java_script_unknown_type()
+    then java_script_unknown_date_time_method_return_type(methodName)
+    else java_script_stdlib_date_time_method_return_type(receiver, methodName)
+
+private fun java_script_unknown_date_time_method_return_type(name: String): String =
+    if name == "add_days" | name == "add_years_months"
+    then "Date"
+    else if name == "add_seconds"
+    then "Time"
+    else if name == "plus"
+    then "DateTime"
+    else if name == "minus"
+    then "Duration"
+    else java_script_unknown_type()
+
+private fun java_script_stdlib_date_time_method_return_type(receiver: String, name: String): String =
+    if receiver == "Date"
+    then if name == "to_days_since_unix_epoch" then "int" else if name == "to_iso_8601" then "String" else "Date"
+    else if receiver == "Time"
+    then if name == "to_seconds" then "int" else if name == "to_iso_8601" then "String" else "Time"
+    else if receiver == "DateTime"
+    then java_script_stdlib_date_time_value_method_return_type(name)
+    else java_script_stdlib_duration_method_call_type(name)
+
+private fun java_script_stdlib_date_time_value_method_return_type(name: String): String =
+    if name == "to_iso_8601"
+    then "String"
+    else if name == "timestamp"
+    then "long"
+    else if name == "plus"
+    then "DateTime"
+    else if name == "minus"
+    then "Duration"
+    else "DateTime"
+
+private fun java_script_stdlib_duration_method_call_type(name: String): String =
+    if name == "to_iso_8601"
+    then "String"
+    else if name == "negate"
+    then "Duration"
+    else "int"
+
 private fun java_script_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_runtime_function(name)
     then java_script_runtime_function_type(name)
@@ -1515,13 +1675,16 @@ private fun java_script_primitive_conversion_result_type(name: String): String =
 private fun java_script_regex_type(): String = "Regex"
 private fun java_script_string_to_string_function_type(): String = "String=>String"
 
-private fun java_script_variable_type(name: String, env: List[JavaScriptBinding]): String =
+private fun java_script_variable_type(name: String, env: List[JavaScriptBinding], module: CompiledModule): String =
     match java_script_lookup_binding(name, env) with
     case Some { binding } -> binding.typeName
-    case None -> java_script_unknown_type()
+    case None ->
+        match java_script_imported_stdlib_constant_type(name, module.imports) with
+        case Some { typeName } -> typeName
+        case None -> java_script_unknown_type()
 
 private fun java_script_function_call_name(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_callable_binding_type(java_script_variable_type(name, env))
+    if java_script_callable_binding_type(java_script_variable_type(name, env, module))
     then java_script_variable_code(name, env, module, allModules)
     else if java_script_runtime_function(name)
     then name
@@ -1756,6 +1919,50 @@ private fun java_script_find_constant_in_imported_module(name: String, declarati
         }
     case None -> java_script_find_constant_in_imports(name, rest, module, allModules)
 
+private fun java_script_imported_stdlib_constant_code(name: String, imports: List[CompiledImportDeclaration]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & java_script_import_includes_name(name, declaration)
+        then match java_script_stdlib_constant_code(name, declaration.modulePath) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> java_script_imported_stdlib_constant_code(name, imports[1:])
+        else java_script_imported_stdlib_constant_code(name, imports[1:])
+
+private fun java_script_stdlib_constant_code(name: String, modulePath: String): /capy/lang/Option[String] =
+    let path = java_script_normalize_import_module_path(modulePath)
+    if path == "capy/date_time/Date" & name == "UNIX_DATE"
+    then /capy/lang/Option.Some { "__capy_date_unix_date()" }
+    else if path == "capy/date_time/Time" & name == "MIDNIGHT"
+    then /capy/lang/Option.Some { "__capy_time_midnight()" }
+    else if path == "capy/date_time/DateTime" & name == "UNIX_EPOCH"
+    then /capy/lang/Option.Some { "__capy_date_time_unix_epoch()" }
+    else if path == "capy/date_time/Duration" & name == "ZERO"
+    then /capy/lang/Option.Some { "__capy_duration_zero()" }
+    else /capy/lang/Option.None {}
+
+private fun java_script_imported_stdlib_constant_type(name: String, imports: List[CompiledImportDeclaration]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & java_script_import_includes_name(name, declaration)
+        then match java_script_stdlib_constant_type(name, declaration.modulePath) with
+            case Some { typeName } -> /capy/lang/Option.Some { typeName }
+            case None -> java_script_imported_stdlib_constant_type(name, imports[1:])
+        else java_script_imported_stdlib_constant_type(name, imports[1:])
+
+private fun java_script_stdlib_constant_type(name: String, modulePath: String): /capy/lang/Option[String] =
+    let path = java_script_normalize_import_module_path(modulePath)
+    if path == "capy/date_time/Date" & name == "UNIX_DATE"
+    then /capy/lang/Option.Some { "Date" }
+    else if path == "capy/date_time/Time" & name == "MIDNIGHT"
+    then /capy/lang/Option.Some { "Time" }
+    else if path == "capy/date_time/DateTime" & name == "UNIX_EPOCH"
+    then /capy/lang/Option.Some { "DateTime" }
+    else if path == "capy/date_time/Duration" & name == "ZERO"
+    then /capy/lang/Option.Some { "Duration" }
+    else /capy/lang/Option.None {}
+
 private fun java_script_find_imported_module(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     java_script_find_module_by_path(java_script_import_module_path(declaration.modulePath, module), allModules)
 
@@ -1843,6 +2050,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + java_script_numeric_runtime_code()
     + java_script_collection_runtime_code()
     + java_script_regex_runtime_code()
+    + java_script_date_time_runtime_code()
     + java_script_deep_equal_code()
     + java_script_test_gather_runtime_code(modules)
     + java_script_runtime_exports_code()
@@ -1996,6 +2204,53 @@ private fun java_script_regex_runtime_code(): String =
     + "function __capy_regex_find_all(regex, input) { const result = []; for (const match of String(__capy_unsafe_run(input)).matchAll(__capy_regex_compile(regex, true))) result.push(__capy_regex_match_data(match)); return result; }" + java_script_newline()
     + "function __capy_regex_replace(regex, replacement, input = undefined) { if (input === undefined) return value => __capy_regex_replace(regex, replacement, value); const replacementValue = String(__capy_unsafe_run(replacement)); return String(__capy_unsafe_run(input)).replace(__capy_regex_compile(regex, true), () => replacementValue); }" + java_script_newline()
     + "function __capy_regex_split(regex, input) { return String(__capy_unsafe_run(input)).split(__capy_regex_compile(regex)); }" + java_script_newline()
+    + java_script_newline()
+
+private fun java_script_date_time_runtime_code(): String =
+    "function __capy_raw_field(value, name) { value = __capy_unsafe_run(value); return value == null ? undefined : value[name]; }" + java_script_newline()
+    + "function __capy_int_value(value) { value = __capy_unsafe_run(value); if (value && typeof value === 'object') { if (Object.prototype.hasOwnProperty.call(value, 'value')) return Number(value.value); if (Object.prototype.hasOwnProperty.call(value, '$0')) return Number(value['$0']); } return Number(value); }" + java_script_newline()
+    + "function __capy_int_field(value, name) { return __capy_int_value(__capy_raw_field(value, name)); }" + java_script_newline()
+    + "function __capy_floor_div(left, right) { return Math.floor(Number(left) / Number(right)); }" + java_script_newline()
+    + "function __capy_floor_mod(left, right) { left = Number(left); right = Number(right); return left - Math.floor(left / right) * right; }" + java_script_newline()
+    + "function __capy_date(day, month, year) { return __capy_data('Date', { day: Number(day), month: Number(month), year: Number(year) }); }" + java_script_newline()
+    + "function __capy_time(hour, minute, second, offset_minutes) "
+    + "{"
+    + " return __capy_data('Time', "
+    + "{"
+    + " hour: Number(hour), minute: Number(minute), second: Number(second), offset_minutes: arguments.length < 4 ? __capy_data('None', Object.fromEntries([])) : offset_minutes "
+    + "}"
+    + "); "
+    + "}"
+    + java_script_newline()
+    + "function __capy_date_duration(years, months, days, hours, minutes, seconds) { return __capy_data('DateDuration', { years: Number(years), months: Number(months), days: Number(days), hours: Number(hours), minutes: Number(minutes), seconds: Number(seconds) }); }" + java_script_newline()
+    + "function __capy_date_time(date, time) { return __capy_data('DateTime', { date, time }); }" + java_script_newline()
+    + "function __capy_date_unix_date() { return __capy_date(1, 1, 1970); }" + java_script_newline()
+    + "function __capy_time_midnight() { return __capy_time(0, 0, 0); }" + java_script_newline()
+    + "function __capy_date_time_unix_epoch() { return __capy_date_time(__capy_date_unix_date(), __capy_time_midnight()); }" + java_script_newline()
+    + "function __capy_duration_zero() { return __capy_date_duration(0, 0, 0, 0, 0, 0); }" + java_script_newline()
+    + "function __capy_leap_year(year) { year = Number(year); return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0; }" + java_script_newline()
+    + "function __capy_days_in_month(year, month) { month = Number(month); if (month === 4 || month === 6 || month === 9 || month === 11) return 30; if (month === 2) return __capy_leap_year(year) ? 29 : 28; return 31; }" + java_script_newline()
+    + "function __capy_date_to_days_since_unix_epoch(date) { const day = __capy_int_field(date, 'day'); const month = __capy_int_field(date, 'month'); const year = __capy_int_field(date, 'year'); const y = month <= 2 ? year - 1 : year; const era = __capy_floor_div(y, 400); const yoe = y - era * 400; const mp = month > 2 ? month - 3 : month + 9; const doy = __capy_floor_div(153 * mp + 2, 5) + day - 1; const doe = yoe * 365 + __capy_floor_div(yoe, 4) - __capy_floor_div(yoe, 100) + doy; return era * 146097 + doe - 719468; }" + java_script_newline()
+    + "function __capy_date_from_days_since_unix_epoch(days) { let z = Number(days) + 719468; const era = __capy_floor_div(z, 146097); const doe = z - era * 146097; const yoe = __capy_floor_div(doe - __capy_floor_div(doe, 1460) + __capy_floor_div(doe, 36524) - __capy_floor_div(doe, 146096), 365); let year = yoe + era * 400; const doy = doe - (365 * yoe + __capy_floor_div(yoe, 4) - __capy_floor_div(yoe, 100)); const mp = __capy_floor_div(5 * doy + 2, 153); const day = doy - __capy_floor_div(153 * mp + 2, 5) + 1; const month = mp < 10 ? mp + 3 : mp - 9; if (month <= 2) year += 1; return __capy_date(day, month, year); }" + java_script_newline()
+    + "function __capy_date_add_days(date, days) { return __capy_date_from_days_since_unix_epoch(__capy_date_to_days_since_unix_epoch(date) + Number(days)); }" + java_script_newline()
+    + "function __capy_date_add_years_months(date, years, months) { const day = __capy_int_field(date, 'day'); const month = __capy_int_field(date, 'month'); const year = __capy_int_field(date, 'year'); const total_months = (year + Number(years)) * 12 + (month + Number(months) - 1); const normalized_year = __capy_floor_div(total_months, 12); const normalized_month = __capy_floor_mod(total_months, 12) + 1; return __capy_date(Math.min(day, __capy_days_in_month(normalized_year, normalized_month)), normalized_month, normalized_year); }" + java_script_newline()
+    + "function __capy_pad_int(value, size) { return String(Math.abs(Math.trunc(Number(value)))).padStart(Number(size), '0'); }" + java_script_newline()
+    + "function __capy_date_to_iso_8601(date) { const year = __capy_int_field(date, 'year'); let year_text = ''; if (year < 0) year_text = '-' + __capy_pad_int(year, 4); else if (year > 9999) year_text = '+' + String(year); else year_text = __capy_pad_int(year, 4); return year_text + '-' + __capy_pad_int(__capy_int_field(date, 'month'), 2) + '-' + __capy_pad_int(__capy_int_field(date, 'day'), 2); }" + java_script_newline()
+    + "function __capy_time_to_seconds(time) { return __capy_int_field(time, 'hour') * 3600 + __capy_int_field(time, 'minute') * 60 + __capy_int_field(time, 'second'); }" + java_script_newline()
+    + "function __capy_time_add_seconds(time, seconds) { const total_seconds = __capy_floor_mod(__capy_time_to_seconds(time) + Number(seconds), 86400); const hour = __capy_floor_div(total_seconds, 3600) % 24; const minute = __capy_floor_div(total_seconds, 60) % 60; const second = total_seconds % 60; return __capy_time(hour, minute, second, __capy_raw_field(time, 'offset_minutes')); }" + java_script_newline()
+    + "function __capy_time_to_iso_8601(time) { let text = __capy_pad_int(__capy_int_field(time, 'hour'), 2) + ':' + __capy_pad_int(__capy_int_field(time, 'minute'), 2) + ':' + __capy_pad_int(__capy_int_field(time, 'second'), 2); const offset = __capy_raw_field(time, 'offset_minutes'); if (__capy_data_is(offset, 'None')) return text; const offset_minutes = __capy_int_value(__capy_match_binding(offset, 'value', 0)); if (offset_minutes === 0) return text + 'Z'; const absolute = Math.abs(offset_minutes); return text + (offset_minutes < 0 ? '-' : '+') + __capy_pad_int(__capy_floor_div(absolute, 60), 2) + ':' + __capy_pad_int(absolute % 60, 2); }" + java_script_newline()
+    + "function __capy_date_time_timestamp(date_time) { return __capy_date_to_days_since_unix_epoch(__capy_raw_field(date_time, 'date')) * 86400 + __capy_time_to_seconds(__capy_raw_field(date_time, 'time')); }" + java_script_newline()
+    + "function __capy_date_time_plus(date_time, duration) { if (__capy_data_is(duration, 'WeekDuration')) duration = __capy_date_duration(0, 0, __capy_int_field(duration, 'weeks') * 7, 0, 0, 0); const date = __capy_raw_field(date_time, 'date'); const time = __capy_raw_field(date_time, 'time'); const date_with_months = __capy_date_add_years_months(date, __capy_duration_years(duration), __capy_duration_months(duration)); const days_from_hours = __capy_floor_div(__capy_duration_hours(duration), 24); const days_from_minutes = __capy_floor_div(__capy_duration_minutes(duration), 1440); const days_from_seconds = __capy_floor_div(__capy_duration_seconds(duration), 86400); const remainder_hours = __capy_floor_mod(__capy_duration_hours(duration), 24); const remainder_minutes = __capy_floor_mod(__capy_duration_minutes(duration), 1440); const remainder_seconds = __capy_floor_mod(__capy_duration_seconds(duration), 86400); const intra_day_seconds = remainder_hours * 3600 + remainder_minutes * 60 + remainder_seconds; const extra_days = __capy_floor_div(__capy_time_to_seconds(time) + intra_day_seconds, 86400); const new_date = __capy_date_add_days(date_with_months, __capy_duration_days(duration) + days_from_hours + days_from_minutes + days_from_seconds + extra_days); return __capy_date_time(new_date, __capy_time_add_seconds(time, intra_day_seconds)); }" + java_script_newline()
+    + "function __capy_date_time_minus(date_time, other) { if (__capy_data_is(other, 'DateTime')) { const delta = __capy_date_time_timestamp(date_time) - __capy_date_time_timestamp(other); const negative = delta < 0; const total_seconds = Math.abs(delta); const days = __capy_floor_div(total_seconds, 86400); let remainder = total_seconds % 86400; const hours = __capy_floor_div(remainder, 3600); remainder = remainder % 3600; const minutes = __capy_floor_div(remainder, 60); const seconds = remainder % 60; const duration = __capy_date_duration(0, 0, days, hours, minutes, seconds); return negative ? __capy_duration_negate(duration) : duration; } return __capy_date_time_plus(date_time, __capy_duration_negate(other)); }" + java_script_newline()
+    + "function __capy_date_time_to_iso_8601(date_time) { let time = __capy_raw_field(date_time, 'time'); const offset = __capy_raw_field(time, 'offset_minutes'); if (__capy_data_is(offset, 'Some')) { const offset_minutes = __capy_int_value(__capy_match_binding(offset, 'value', 0)); time = __capy_time(__capy_int_field(time, 'hour'), __capy_int_field(time, 'minute'), __capy_int_field(time, 'second')); date_time = __capy_date_time_plus(__capy_date_time(__capy_raw_field(date_time, 'date'), time), __capy_date_duration(0, 0, 0, 0, 0 - offset_minutes, 0)); } return __capy_date_to_iso_8601(__capy_raw_field(date_time, 'date')) + 'T' + __capy_time_to_iso_8601(__capy_raw_field(date_time, 'time')) + 'Z'; }" + java_script_newline()
+    + "function __capy_duration_years(duration) { return __capy_data_is(duration, 'DateDuration') ? __capy_int_field(duration, 'years') : 0; }" + java_script_newline()
+    + "function __capy_duration_months(duration) { return __capy_data_is(duration, 'DateDuration') ? __capy_int_field(duration, 'months') : 0; }" + java_script_newline()
+    + "function __capy_duration_days(duration) { return __capy_data_is(duration, 'DateDuration') ? __capy_int_field(duration, 'days') : __capy_int_field(duration, 'weeks') * 7; }" + java_script_newline()
+    + "function __capy_duration_hours(duration) { return __capy_data_is(duration, 'DateDuration') ? __capy_int_field(duration, 'hours') : 0; }" + java_script_newline()
+    + "function __capy_duration_minutes(duration) { return __capy_data_is(duration, 'DateDuration') ? __capy_int_field(duration, 'minutes') : 0; }" + java_script_newline()
+    + "function __capy_duration_seconds(duration) { return __capy_data_is(duration, 'DateDuration') ? __capy_int_field(duration, 'seconds') : 0; }" + java_script_newline()
+    + "function __capy_duration_negate(duration) { if (__capy_data_is(duration, 'WeekDuration')) return __capy_data('WeekDuration', { weeks: 0 - __capy_int_field(duration, 'weeks') }); return __capy_date_duration(0 - __capy_duration_years(duration), 0 - __capy_duration_months(duration), 0 - __capy_duration_days(duration), 0 - __capy_duration_hours(duration), 0 - __capy_duration_minutes(duration), 0 - __capy_duration_seconds(duration)); }" + java_script_newline()
+    + "function __capy_duration_to_iso_8601(duration) { if (__capy_data_is(duration, 'WeekDuration')) return 'P' + String(__capy_int_field(duration, 'weeks')) + 'W'; const years = __capy_duration_years(duration); const months = __capy_duration_months(duration); const days = __capy_duration_days(duration); const hours = __capy_duration_hours(duration); const minutes = __capy_duration_minutes(duration); const seconds = __capy_duration_seconds(duration); if (years === 0 && months === 0 && days === 0 && hours === 0 && minutes === 0 && seconds === 0) return 'PT0S'; let text = 'P'; if (years !== 0) text += String(years) + 'Y'; if (months !== 0) text += String(months) + 'M'; if (days !== 0) text += String(days) + 'D'; if (hours !== 0 || minutes !== 0 || seconds !== 0) text += 'T'; if (hours !== 0) text += String(hours) + 'H'; if (minutes !== 0) text += String(minutes) + 'M'; if (seconds !== 0) text += String(seconds) + 'S'; return text; }" + java_script_newline()
     + java_script_newline()
 
 private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]): String =
@@ -2220,7 +2475,7 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
         then match java_script_find_qualified_function_definition(call.name, module, allModules) with
             case Some _ -> true
             case None -> false
-        else if java_script_callable_binding_type(java_script_variable_type(call.name, env))
+        else if java_script_callable_binding_type(java_script_variable_type(call.name, env, module))
         then true
         else if java_script_local_function_unambiguous(call.name, module.functions)
         then true
@@ -2253,6 +2508,15 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_regex_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_date_time_method_call(
+        java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)),
+        call.name,
+        call.arguments.is_empty(),
+        java_script_one_method_argument(call.arguments),
+        java_script_two_method_arguments(call.arguments)
+    )
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_size_method_call(call)
@@ -2594,6 +2858,13 @@ private fun java_script_module_path(module: CompiledModule): String =
     if module.path.is_empty()
     then module.name
     else module.path + "/" + module.name
+
+private fun java_script_type_unqualified_name(typeName: String): String =
+    let rawName = java_script_schema_type_name(typeName)
+    let slash = java_script_last_index_of(rawName, "/", 0, -1)
+    let pathless = if slash < 0 then rawName else rawName[slash + 1, rawName.size().value]
+    let dot = java_script_last_dot_index(pathless)
+    if dot < 0 then pathless else pathless[dot + 1, pathless.size().value]
 
 private fun java_script_qualified_call_name(name: String): bool =
     let idx = java_script_last_dot_index(name)
