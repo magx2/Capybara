@@ -2362,8 +2362,10 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_result_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); return __capy_unsupported('result map'); }" + java_script_newline()
     + "function __capy_result_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(mapped, 'Error')) return mapped; if (__capy_data_is(mapped, 'Success')) return __capy_match_binding(mapped, 'value', 0); return mapped; } return __capy_unsupported('result flat_map'); }" + java_script_newline()
     + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(__capy_match_binding(value, 'message', 0))); return __capy_unsupported('result reduce'); }" + java_script_newline()
+    + "function __capy_result_or_else(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return __capy_match_binding(value, 'value', 0); return __capy_unsupported('result or_else'); }" + java_script_newline()
+    + "function __capy_result_or(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return value; return __capy_unsupported('result or'); }" + java_script_newline()
     + "function __capy_define_method(data, name, fn) { Object.defineProperty(data, name, { value: fn, enumerable: false, configurable: true }); }" + java_script_newline()
-    + "function __capy_attach_standard_methods(data, typeName) { typeName = __capy_normalize_type_name(typeName); if (typeName === 'Some' || typeName === 'None') { __capy_define_method(data, 'map', (mapper) => __capy_option_map(data, mapper)); __capy_define_method(data, 'filter', (predicate) => __capy_option_filter(data, predicate)); __capy_define_method(data, 'flat_map', (mapper) => __capy_option_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); } if (typeName === 'Success' || typeName === 'Error') { __capy_define_method(data, 'map', (mapper) => __capy_result_map(data, mapper)); __capy_define_method(data, 'flat_map', (mapper) => __capy_result_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); __capy_define_method(data, 'reduce', (on_success, on_error) => __capy_result_reduce(data, on_success, on_error)); __capy_define_method(data, 'reduce_left', data.reduce); } return data; }" + java_script_newline()
+    + "function __capy_attach_standard_methods(data, typeName) { typeName = __capy_normalize_type_name(typeName); if (typeName === 'Some' || typeName === 'None') { __capy_define_method(data, 'map', (mapper) => __capy_option_map(data, mapper)); __capy_define_method(data, 'filter', (predicate) => __capy_option_filter(data, predicate)); __capy_define_method(data, 'flat_map', (mapper) => __capy_option_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); } if (typeName === 'Success' || typeName === 'Error') { __capy_define_method(data, 'map', (mapper) => __capy_result_map(data, mapper)); __capy_define_method(data, 'flat_map', (mapper) => __capy_result_flat_map(data, mapper)); __capy_define_method(data, 'flatMap', data.flat_map); __capy_define_method(data, 'reduce', (on_success, on_error) => __capy_result_reduce(data, on_success, on_error)); __capy_define_method(data, 'reduce_left', data.reduce); __capy_define_method(data, 'or_else', (fallback) => __capy_result_or_else(data, fallback)); __capy_define_method(data, 'or', (fallback) => __capy_result_or(data, fallback)); } return data; }" + java_script_newline()
     + "function __capy_data(typeName, fields) { const normalized = __capy_normalize_type_name(typeName); return __capy_attach_standard_methods(Object.assign({ __type: normalized }, fields), normalized); }" + java_script_newline()
     + "function __capy_unsupported(source) { throw new Error('Unsupported CFUN expression: ' + source); }" + java_script_newline()
     + "function __capy_not_implemented(message) { throw new Error(String(message)); }" + java_script_newline()
@@ -2764,11 +2766,25 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     else if java_script_result_reduce_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_result_fallback_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
         case Some _ ->
             java_script_expression_gatherable(call.receiver, env, module, allModules)
                 & java_script_expressions_gatherable(call.arguments, env, module, allModules)
         case None -> false
+
+private fun java_script_result_fallback_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "or_else" | call.name == "or"
+    then
+        if java_script_one_method_argument(call.arguments)
+        then java_script_result_fallback_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
+
+private fun java_script_result_fallback_receiver_type(typeName: String): bool =
+    typeName == java_script_unknown_type() | java_script_result_pipe_receiver_type(typeName)
 
 private fun java_script_runtime_data_method_call(call: CompiledMethodCallExpression): bool =
     call.name == "map" | call.name == "filter" | call.name == "flat_map" | call.name == "flatMap"
