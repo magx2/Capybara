@@ -350,7 +350,13 @@ def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory
 def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
 def capyResourcesDir = layout.buildDirectory.dir('resources/main')
 def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
+def capybaraWrapperLinkedDir = layout.projectDirectory.dir('src/main/capybara-linked')
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources/capybara/main-without-wrapper')
+def capybaraWrapperSourceDir = layout.buildDirectory.dir('generated/sources/capybara/wrapper-source')
+def capybaraWrapperGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara-wrapper/java')
+def capybaraWrapperLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara-wrapper/linked')
+def capybaraMainLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraMainNativePythonSourceDir = layout.projectDirectory.dir('src/main/capybara/native/py')
 def capybaraMainNativeJavaScriptSourceDir = layout.projectDirectory.dir('src/main/capybara/native/js')
 def capybaraGeneratedCompilerPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/compiler')
@@ -403,6 +409,7 @@ sourceSets {
     main {
         java {
             exclude 'e2e-*/**'
+            srcDir capybaraWrapperGeneratedJavaDir
         }
     }
     integrationTest {
@@ -413,9 +420,64 @@ sourceSets {
     }
 }
 
+def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sync) {
+    group = 'build'
+    description = 'Prepares main Capybara compiler sources without the JVM wrapper module.'
+
+    from(capybaraMainSourceDir) {
+        exclude 'dev/capylang/Capy.cfun'
+    }
+    from(layout.projectDirectory.dir('src/main/java')) {
+        include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
+        into 'native/java'
+    }
+    into capybaraPreparedMainSourceDir
+}
+
+def prepareCapybaraWrapperSources = tasks.register('prepareCapybaraWrapperSources', Sync) {
+    group = 'build'
+    description = 'Prepares the JVM Capybara wrapper source for isolated generation.'
+
+    from(capybaraMainSourceDir) {
+        include 'dev/capylang/Capy.cfun'
+    }
+    into capybaraWrapperSourceDir
+}
+
 tasks.named('compileCapybara') {
+    dependsOn prepareMainCapybaraSources
+    inputDir.set(capybaraPreparedMainSourceDir)
     writeLinkedOutput.set(false)
     includeJavaLibResources.set(false)
+}
+
+tasks.named('linkCapybaraLinked') {
+    dependsOn prepareMainCapybaraSources
+    inputDir.set(capybaraPreparedMainSourceDir)
+    outputDir.set(capybaraMainLinkedOutputDir)
+}
+
+tasks.register('compileCapybaraWrapper', dev.capylang.CompileCapybaraTask) {
+    group = 'build'
+    description = 'Generates the public JVM Capybara wrapper from CFUN.'
+
+    dependsOn prepareCapybaraWrapperSources
+
+    inputDir.set(capybaraWrapperSourceDir)
+    libraryProgramFiles.from(capybaraWrapperLinkedDir)
+    outputDir.set(capybaraWrapperLinkedOutputDir)
+    writeLinkedOutput.set(false)
+    generatedOutputDir.set(capybaraWrapperGeneratedJavaDir)
+    compilerVersion.set(capybaraProjectVersion)
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
+    compileTestSourcesWithMainCompilation.set(false)
+    includeJavaLibResourcesInTestOutput.set(false)
+    logLevel.set('WARNING')
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('compileCapybaraWrapper')
 }
 
 configurations {
@@ -782,11 +844,12 @@ def generatePythonCompiler = registerCapybaraE2eGenerationTask(
         'generatePythonCompiler',
         'Compiles the Capybara compiler sources and generates Python.',
         'PYTHON',
-        capybaraMainSourceDir,
+        capybaraPreparedMainSourceDir,
         capybaraLinkedCompilerPythonOutputDir,
         capybaraGeneratedCompilerPythonDir
 )
 generatePythonCompiler.configure {
+    dependsOn prepareMainCapybaraSources
     dependsOn tasks.named('generatePythonAntlr')
 }
 
@@ -794,11 +857,12 @@ def generateJavaScriptCompiler = registerCapybaraE2eGenerationTask(
         'generateJavaScriptCompiler',
         'Compiles the Capybara compiler sources and generates JavaScript.',
         'JAVASCRIPT',
-        capybaraMainSourceDir,
+        capybaraPreparedMainSourceDir,
         capybaraLinkedCompilerJavaScriptOutputDir,
         capybaraGeneratedCompilerJavaScriptDir
 )
 generateJavaScriptCompiler.configure {
+    dependsOn prepareMainCapybaraSources
     dependsOn tasks.named('generateJavaScriptAntlr')
 }
 
