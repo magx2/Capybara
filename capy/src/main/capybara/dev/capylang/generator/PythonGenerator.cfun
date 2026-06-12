@@ -190,7 +190,7 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
     case CompiledTupleLiteral literal -> python_tuple_literal_code(literal.values, env, module, allModules)
     case CompiledIndexExpression index -> python_index_expression_code(index, env, module, allModules)
     case CompiledDataLiteral literal -> python_data_literal_code(literal, env, module, allModules)
-    case CompiledFieldAccessExpression access -> "__capy_get_field(" + python_expression_code(access.receiver, env, module, allModules) + ", " + python_string_literal(access.name) + ")"
+    case CompiledFieldAccessExpression access -> python_field_access_code(access, env, module, allModules)
     case CompiledReduceExpression reduce -> python_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_code(matchExpression, env, module, allModules)
     case CompiledBlockExpression block -> python_block_expression_code(block, env, module, allModules)
@@ -207,7 +207,9 @@ private fun python_variable_code(name: String, env: List[PythonBinding], module:
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.pythonName
     case None ->
-        match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        if python_qualified_enum_value_name(name, module, allModules)
+        then python_enum_qualified_value_code(name, module, allModules)
+        else match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
         case Some { binding } -> python_module_import_name(binding.module) + "." + python_identifier(binding.function.name)
         case None ->
             match python_imported_stdlib_constant(name, module.imports) with
@@ -326,7 +328,14 @@ private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: Li
     else "(" + unary.operator + python_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_function_call_name(call.name, module, allModules) + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+    if python_enum_parse_call(call, module, allModules)
+    then python_enum_parse_call_code(call, env, module, allModules)
+    else python_function_call_name(call.name, module, allModules) + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_field_access_code(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_enum_static_field_access(access, env, module, allModules)
+    then python_enum_static_field_access_code(access, module, allModules)
+    else "__capy_get_field(" + python_expression_code(access.receiver, env, module, allModules) + ", " + python_string_literal(access.name) + ")"
 
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
@@ -1493,7 +1502,11 @@ private fun python_variable_type(name: String, env: List[PythonBinding], module:
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.typeName
     case None ->
-        match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        if python_qualified_enum_value_name(name, module, allModules)
+        then python_enum_qualified_type_name(name)
+        else match python_find_constant(name, module.functions) with
+        case Some { function } -> function.returnType.name
+        case None -> match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
         case Some { binding } -> binding.function.returnType.name
         case None ->
             match python_imported_stdlib_constant(name, module.imports) with
@@ -1523,6 +1536,9 @@ private fun python_stdlib_constant(name: String, modulePath: String): /capy/lang
     else /capy/lang/Option.None {}
 
 private fun python_field_access_type(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_enum_static_field_access(access, env, module, allModules)
+    then python_enum_static_field_access_type(access)
+    else
     let receiverType = python_expression_type(access.receiver, env, module, allModules)
     if receiverType == python_unknown_type()
     then python_unknown_type()
@@ -1548,7 +1564,9 @@ private fun python_user_defined_index_type(receiverType: String, module: Compile
     case None -> python_unknown_type()
 
 private fun python_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_qualified_name(name)
+    if python_enum_parse_call_name(name, module, allModules)
+    then python_result_type()
+    else if python_qualified_name(name)
     then match python_find_qualified_function_binding(name, module, allModules) with
         case Some { binding } -> binding.function.returnType.name
         case None -> python_unknown_type()
@@ -1730,7 +1748,9 @@ private fun python_result_pipe_payload_type(binary: CompiledBinaryExpression, en
     case _ -> python_unknown_type()
 
 private fun python_result_payload_type_from_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_qualified_name(name)
+    if python_enum_parse_call_name(name, module, allModules)
+    then python_enum_qualified_type_name(name)
+    else if python_qualified_name(name)
     then match python_find_qualified_function_binding(name, module, allModules) with
         case Some { binding } -> python_result_payload_type_from_type_reference(binding.function.returnType)
         case None -> python_unknown_type()
@@ -2167,6 +2187,136 @@ private fun python_runtime_function(name: String): bool =
 private fun python_console_function(name: String): bool =
     name == "print" | name == "println" | name == "print_error" | name == "println_error"
 
+private fun python_enum_parse_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_enum_parse_call_name(call.name, module, allModules)
+        & python_one_method_argument(call.arguments)
+
+private fun python_enum_parse_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_qualified_name(name)
+        & python_enum_qualified_member_name(name) == "parse"
+        & python_enum_type_exists(python_enum_qualified_type_name(name), module, allModules)
+
+private fun python_enum_parse_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = python_enum_qualified_type_name(call.name)
+    "__capy_enum_parse("
+        + python_string_literal(typeName)
+        + ", ["
+        + python_enum_value_references_code(typeName, python_enum_values(typeName, module, allModules), module, allModules)
+        + "], "
+        + python_first_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
+
+private fun python_enum_parse_call_gatherable(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_one_method_argument(call.arguments)
+        & python_expressions_gatherable(call.arguments, env, module, allModules)
+
+private fun python_enum_static_field_access(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match access.receiver with
+    case CompiledVariableExpression variable ->
+        !python_binding_exists(variable.name, env)
+            & python_enum_type_exists(variable.name, module, allModules)
+            & (access.name == "values" | python_enum_value_exists(variable.name, access.name, module, allModules))
+    case _ -> false
+
+private fun python_enum_static_field_access_code(access: CompiledFieldAccessExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = python_enum_static_field_access_type_name(access)
+    if access.name == "values"
+    then "__capy_set([" + python_enum_value_references_code(typeName, python_enum_values(typeName, module, allModules), module, allModules) + "])"
+    else python_enum_value_reference_code(typeName, access.name, module, allModules)
+
+private fun python_enum_static_field_access_type(access: CompiledFieldAccessExpression): String =
+    if access.name == "values"
+    then python_set_type()
+    else python_enum_static_field_access_type_name(access)
+
+private fun python_enum_static_field_access_type_name(access: CompiledFieldAccessExpression): String =
+    match access.receiver with
+    case CompiledVariableExpression variable -> variable.name
+    case _ -> ""
+
+private fun python_qualified_enum_value_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_qualified_name(name)
+        & python_enum_value_exists(python_enum_qualified_type_name(name), python_enum_qualified_member_name(name), module, allModules)
+
+private fun python_enum_qualified_type_name(name: String): String =
+    name[0, python_last_dot_index(name)]
+
+private fun python_enum_qualified_member_name(name: String): String =
+    name[python_last_dot_index(name) + 1, name.size().value]
+
+private fun python_enum_qualified_value_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_enum_value_reference_code(python_enum_qualified_type_name(name), python_enum_qualified_member_name(name), module, allModules)
+
+private fun python_enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    !python_enum_values(name, module, allModules).is_empty()
+
+private fun python_enum_value_exists(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_string_list_contains(valueName, python_enum_values(typeName, module, allModules))
+
+private fun python_enum_values(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    if python_enum_type_exists_in_functions(name, module.functions)
+    then python_enum_values_in_functions(name, module.functions)
+    else match python_enum_values_in_imports(name, module.imports, module, allModules) with
+        case Some { values } -> values
+        case None -> []
+
+private fun python_enum_type_exists_in_functions(name: String, functions: List[CompiledFunction]): bool =
+    !python_enum_values_in_functions(name, functions).is_empty()
+
+private fun python_enum_values_in_functions(name: String, functions: List[CompiledFunction]): List[String] =
+    python_schema_values("__capy_schema_enum|" + name + "|", functions)
+
+private fun python_enum_values_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if python_data_import_matches(name, declaration)
+        then python_enum_values_in_import(name, imports[1:], module, allModules, declaration)
+        else python_enum_values_in_imports(name, imports[1:], module, allModules)
+
+private fun python_enum_values_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if python_enum_type_exists_in_functions(name, importedModule.functions)
+        then /capy/lang/Option.Some { python_enum_values_in_functions(name, importedModule.functions) }
+        else python_enum_values_in_imports(name, rest, module, allModules)
+    case _ -> python_enum_values_in_imports(name, rest, module, allModules)
+
+private fun python_enum_value_references_code(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } ->
+        python_enum_value_reference_code(typeName, value, module, allModules)
+            + python_enum_value_reference_tail(typeName, values[1:], module, allModules)
+
+private fun python_enum_value_reference_tail(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match values[0] with
+    case None -> ""
+    case Some _ -> ", " + python_enum_value_references_code(typeName, values, module, allModules)
+
+private fun python_enum_value_reference_code(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_enum_type_exists_in_functions(typeName, module.functions)
+    then python_identifier(valueName)
+    else match python_enum_type_imported_module(typeName, module.imports, module, allModules) with
+        case Some { importedModule } -> python_module_import_name(importedModule) + "." + python_identifier(valueName)
+        case None -> python_identifier(valueName)
+
+private fun python_enum_type_imported_module(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if python_data_import_matches(name, declaration)
+        then python_enum_type_imported_module_from(name, imports[1:], module, allModules, declaration)
+        else python_enum_type_imported_module(name, imports[1:], module, allModules)
+
+private fun python_enum_type_imported_module_from(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[CompiledModule] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if python_enum_type_exists_in_functions(name, importedModule.functions)
+        then /capy/lang/Option.Some { importedModule }
+        else python_enum_type_imported_module(name, rest, module, allModules)
+    case _ -> python_enum_type_imported_module(name, rest, module, allModules)
+
 private fun python_qualified_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_qualified_function_binding(name, module, allModules) with
     case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
@@ -2416,6 +2566,11 @@ private fun python_lookup_binding(name: String, env: List[PythonBinding]): /capy
         then /capy/lang/Option.Some { binding }
         else python_lookup_binding(name, env[1:])
 
+private fun python_binding_exists(name: String, env: List[PythonBinding]): bool =
+    match python_lookup_binding(name, env) with
+    case Some _ -> true
+    case None -> false
+
 private fun python_test_runtime_modules(modules: List[CompiledModule]): List[GeneratedModule] =
     [GeneratedModule {
         relativePath: "capy/test/CapyTestRuntime.py",
@@ -2427,6 +2582,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + python_test_runtime_effect_code()
     + python_test_runtime_assert_code()
     + python_test_runtime_numeric_code()
+    + python_test_runtime_enum_code()
     + python_test_runtime_date_time_code()
     + python_test_runtime_collection_helpers_code()
     + python_test_runtime_error_code()
@@ -2444,7 +2600,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -2663,6 +2819,19 @@ private fun python_test_runtime_numeric_parse_code(): String =
     + "        number = int(number / 10)" + python_newline()
     + "        result += 1" + python_newline()
     + "    return result" + python_newline()
+    + python_newline()
+
+private fun python_test_runtime_enum_code(): String =
+    "def __capy_enum_parse(type_name, values, input_value):" + python_newline()
+    + "    input_value = _unsafe_run(input_value)" + python_newline()
+    + "    for value in values:" + python_newline()
+    + "        enum_name = __capy_get_field(value, 'name')" + python_newline()
+    + "        enum_order = __capy_get_field(value, 'order')" + python_newline()
+    + "        if isinstance(input_value, str) and input_value == enum_name:" + python_newline()
+    + "            return __capy_success(value)" + python_newline()
+    + "        if isinstance(input_value, int) and not isinstance(input_value, bool) and input_value == enum_order:" + python_newline()
+    + "            return __capy_success(value)" + python_newline()
+    + "    return __capy_error('Cannot parse ' + str(type_name) + ' from ' + str(input_value))" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_numeric_operator_code(): String =
@@ -3828,7 +3997,7 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledTupleLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
     case CompiledIndexExpression index -> python_index_expression_gatherable(index, env, module, allModules)
     case CompiledDataLiteral literal -> python_data_fields_gatherable(literal.fields, env, module, allModules)
-    case CompiledFieldAccessExpression access -> python_expression_gatherable(access.receiver, env, module, allModules)
+    case CompiledFieldAccessExpression access -> python_enum_static_field_access(access, env, module, allModules) | python_expression_gatherable(access.receiver, env, module, allModules)
     case CompiledReduceExpression reduce -> python_reduce_expression_gatherable(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
@@ -3927,6 +4096,8 @@ private fun python_function_call_gatherable(call: CompiledFunctionCallExpression
     if python_expressions_gatherable(call.arguments, env, module, allModules)
     then if python_runtime_function(call.name)
         then true
+        else if python_enum_parse_call(call, module, allModules)
+        then python_enum_parse_call_gatherable(call, env, module, allModules)
         else if python_qualified_name(call.name)
         then python_qualified_function_call_gatherable(call, module, allModules)
         else if python_callable_binding_exists(call.name, env)
