@@ -193,7 +193,7 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledBinaryExpression binary -> java_script_binary_expression_code(binary, env, module, allModules)
     case CompiledUnaryExpression unary -> java_script_unary_expression_code(unary, env, module, allModules)
     case CompiledFunctionCallExpression call -> java_script_function_call_code(call, env, module, allModules)
-    case CompiledFunctionReferenceExpression reference -> java_script_function_call_name(reference.name, module, allModules)
+    case CompiledFunctionReferenceExpression reference -> java_script_function_call_name(reference.name, [], module, allModules)
     case CompiledMethodCallExpression call -> java_script_method_call_code(call, env, module, allModules)
     case CompiledWithExpression _ -> "__capy_unsupported('with')"
     case CompiledLambdaExpression lambda -> java_script_lambda_expression_code(lambda, env, module, allModules)
@@ -403,6 +403,9 @@ private fun java_script_callable_expression(expression: CompiledExpression): boo
     case CompiledFunctionReferenceExpression _ -> true
     case _ -> false
 
+private fun java_script_callable_binding_type(typeName: String): bool =
+    java_script_first_index_of(typeName, "=>", 0) >= 0
+
 private fun java_script_binary_runtime_call(name: String, binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     name
         + "("
@@ -448,7 +451,7 @@ private fun java_script_unary_expression_code(unary: CompiledUnaryExpression, en
     else "(" + unary.operator + java_script_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun java_script_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_function_call_name(call.name, module, allModules)
+    java_script_function_call_name(call.name, env, module, allModules)
         + "("
         + java_script_expression_list_code(call.arguments, env, module, allModules)
         + ")"
@@ -1090,8 +1093,10 @@ private fun java_script_variable_type(name: String, env: List[JavaScriptBinding]
     case Some { binding } -> binding.typeName
     case None -> java_script_unknown_type()
 
-private fun java_script_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_runtime_function(name)
+private fun java_script_function_call_name(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_callable_binding_type(java_script_variable_type(name, env))
+    then java_script_variable_code(name, env, module, allModules)
+    else if java_script_runtime_function(name)
     then name
     else if java_script_qualified_call_name(name)
     then match java_script_find_qualified_function_call(name, module, allModules) with
@@ -1489,7 +1494,7 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_tuple(value) { Object.defineProperty(value, '__capy_tuple', { value: true, enumerable: false, configurable: false }); return value; }" + java_script_newline()
     + "function __capy_normalized_index(length, index) { index = Number(index); if (!Number.isFinite(index)) return -1; index = Math.trunc(index); return index < 0 ? length + index : index; }" + java_script_newline()
     + "function __capy_index(value, index, typeName = '') { value = __capy_unsafe_run(value); if (typeName === 'Tuple' || (Array.isArray(value) && value.__capy_tuple === true)) { const idx = __capy_normalized_index(value.length, index); return value[idx]; } if (typeName === 'List' || Array.isArray(value)) { const idx = __capy_normalized_index(value.length, index); return __capy_option(value[idx], idx >= 0 && idx < value.length); } if (typeName === 'String' || typeof value === 'string') { const chars = Array.from(value); const idx = __capy_normalized_index(chars.length, index); return __capy_option(chars[idx], idx >= 0 && idx < chars.length); } if (typeName === 'Dict' || value instanceof Map) return __capy_option(value.get(index), value instanceof Map && value.has(index)); return value == null ? undefined : value[index]; }" + java_script_newline()
-    + "function __capy_slice(value, start, end, typeName = '') { value = __capy_unsafe_run(value); if (typeof value === 'string') return value.slice(start, end); if (Array.isArray(value)) return value.slice(start, end); if (value && typeof value.slice === 'function') return value.slice(start, end); return value; }" + java_script_newline()
+    + "function __capy_slice(value, start, end, typeName = '') { value = __capy_unsafe_run(value); if (typeof value === 'string') return value.slice(start, end); if (Array.isArray(value)) { const sliced = value.slice(start, end); return typeName === 'Tuple' || value.__capy_tuple === true ? __capy_tuple(sliced) : sliced; } if (value && typeof value.slice === 'function') return value.slice(start, end); return value; }" + java_script_newline()
     + "function __capy_get_field(value, name) { return value == null ? undefined : value[name]; }" + java_script_newline()
     + "function __capy_reduce(value, initial, keyed, reducer) { let result = initial; if (value instanceof Map) { for (const [key, item] of value) result = keyed ? reducer(result, key, item) : reducer(result, item); return result; } if (value && typeof value[Symbol.iterator] === 'function') { for (const item of value) result = reducer(result, item); } return result; }" + java_script_newline()
     + "function __capy_type_matches(value, typeName) { if (typeName === 'String') return typeof value === 'string'; if (typeName === 'bool') return typeof value === 'boolean'; if (typeName === 'long') return typeof value === 'bigint' || Number.isInteger(value); if (typeName === 'byte' || typeName === 'int') return Number.isInteger(value); if (typeName === 'float' || typeName === 'double') return typeof value === 'number'; if (typeName === 'List') return Array.isArray(value); if (typeName === 'Set') return value instanceof Set; if (typeName === 'Dict') return value instanceof Map; if (value == null || typeof value !== 'object') return false; const actual = __capy_normalize_type_name(value.__type); const expected = __capy_normalize_type_name(typeName); return actual === expected || actual === '__capy_raw|' + expected; }" + java_script_newline()
@@ -1650,7 +1655,7 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
         java_script_unary_operator_gatherable(unary.operator)
             & java_script_expression_gatherable(unary.expression, env, module, allModules)
     case CompiledFunctionCallExpression call -> java_script_function_call_gatherable(call, env, module, allModules)
-    case CompiledFunctionReferenceExpression _ -> false
+    case CompiledFunctionReferenceExpression reference -> java_script_function_reference_gatherable(reference, module, allModules)
     case CompiledMethodCallExpression call -> java_script_method_call_gatherable(call, env, module, allModules)
     case CompiledWithExpression _ -> false
     case CompiledLambdaExpression lambda ->
@@ -1736,6 +1741,8 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
         then match java_script_find_qualified_function_definition(call.name, module, allModules) with
             case Some _ -> true
             case None -> false
+        else if java_script_callable_binding_type(java_script_variable_type(call.name, env))
+        then true
         else if java_script_local_function_unambiguous(call.name, module.functions)
         then true
         else java_script_imported_function_exists(call.name, module.imports, module, allModules)
