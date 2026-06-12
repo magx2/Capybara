@@ -874,29 +874,43 @@ private fun native_python_module_name(relativePath: Path): String =
     withoutExtension.replace("/", ".")
 
 private fun native_python_class_name(source: String): String =
-    native_java_token_after(source, "class ")
+    let annotationIndex = native_java_index_of(source, "@NativeImplementation", 0)
+    if annotationIndex < 0
+    then ""
+    else native_java_token_after(source[annotationIndex, source.size().value], "class ")
 
 private fun native_python_interface_id(source: String): String =
     let className = native_python_class_name(source)
+    if source ? "interface_id = \""
+    then native_java_between(source, "interface_id = \"", "\"")
+    else if source ? "interface_id=\""
+    then native_java_between(source, "interface_id=\"", "\"")
+    else native_python_base_interface_id(source, className)
+
+private fun native_python_base_interface_id(source: String, className: String): String =
     if className.is_empty()
     then ""
     else
-        let classStart = native_java_index_of(source, "class " + className, 0)
-        if classStart < 0
+        let bases = native_java_between(source, "class " + className + "(", ")")
+        let baseName = native_python_first_base(bases)
+        if baseName.is_empty()
         then ""
-        else
-            let openParen = native_java_index_of(source, "(", classStart)
-            if openParen < 0
-            then ""
-            else
-                let closeParen = native_java_index_of(source, ")", openParen)
-                if closeParen < 0
-                then ""
-                else
-                    let baseName = native_java_token_from(source, openParen + 1, "")
-                    if baseName.is_empty()
-                    then ""
-                    else native_python_imported_name(source, baseName)
+        else if baseName ? "."
+        then baseName
+        else native_python_imported_name(source, baseName)
+
+private fun native_python_first_base(bases: String): String =
+    native_python_base_token(bases.trim(), 0, "")
+
+private fun native_python_base_token(source: String, idx: int, acc: String): String =
+    if idx >= source.size().value
+    then acc
+    else match source[idx] with
+        case None -> acc
+        case Some { char } ->
+            if native_java_token_char(char)
+            then native_python_base_token(source, idx + 1, acc + char)
+            else acc
 
 private fun native_python_qualifier(source: String): String =
     if source ? "qualifier = \""
