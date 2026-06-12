@@ -953,20 +953,110 @@ private fun python_data_field_name(name: String, typeName: String, module: Compi
 private fun python_data_literal_code(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if literal.typeName == "char"
     then python_char_constructor_code(literal.fields, env, module, allModules)
-    else match python_data_constructor_function(literal.typeName, module) with
-    case Some { function } -> python_data_constructor_call_code(function, literal, env, module, allModules)
-    case None -> "__capy_data(" + python_string_literal(literal.typeName) + ", {" + python_data_fields_code(literal.fields, literal.typeName, env, module, allModules) + "})"
+    else if python_raw_data_literal(literal.typeName)
+    then python_raw_data_literal_code(literal, env, module, allModules)
+    else
+        let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
+        let parentConstructors = python_data_parent_constructor_type_names(declaredTypeName, module, allModules)
+        if parentConstructors.is_empty()
+        then match python_data_constructor_function(declaredTypeName, module) with
+            case Some { function } -> python_data_constructor_call_code(declaredTypeName, python_function_name(function), function.parameters, literal, env, module, allModules)
+            case None -> python_raw_data_literal_code(literal, env, module, allModules)
+        else python_data_constructor_pipeline_code(parentConstructors + python_data_own_constructor_type_names(declaredTypeName, module), literal, env, module, allModules)
+
+private fun python_raw_data_literal_code(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(" + python_string_literal(literal.typeName) + ", {" + python_data_fields_code(literal.fields, literal.typeName, env, module, allModules) + "})"
+
+private fun python_data_literal_declared_type_name(typeName: String): String =
+    python_schema_type_name(python_raw_data_literal_type_name(typeName))
 
 private fun python_data_constructor_function(typeName: String, module: CompiledModule): /capy/lang/Option[CompiledFunction] =
     if python_raw_data_literal(typeName)
     then /capy/lang/Option.None {}
     else python_find_local_function("__capy_constructor|" + typeName, module.functions)
 
-private fun python_data_constructor_call_code(function: CompiledFunction, literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_function_name(function)
+private fun python_data_constructor_call_code(typeName: String, functionName: String, parameters: List[CompiledFunctionParameter], literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_constructor_result("
+        + python_string_literal(typeName)
+        + ", "
+        + functionName
         + "("
-        + python_data_constructor_call_arguments(function.parameters, literal.fields, literal.typeName, env, module, allModules)
+        + python_data_constructor_call_arguments(parameters, literal.fields, literal.typeName, env, module, allModules)
+        + "))"
+
+private fun python_data_own_constructor_type_names(typeName: String, module: CompiledModule): List[String] =
+    match python_data_constructor_function(typeName, module) with
+    case Some _ -> [typeName]
+    case None -> []
+
+private fun python_data_parent_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    python_data_parent_constructor_type_names_from(python_data_type_parent_types(typeName, module, allModules), module)
+
+private fun python_data_parent_constructor_type_names_from(typeNames: List[String], module: CompiledModule): List[String] =
+    match typeNames[0] with
+    case None -> []
+    case Some { typeName } ->
+        match python_data_constructor_function(python_schema_type_name(typeName), module) with
+        case Some _ -> [python_schema_type_name(typeName)] + python_data_parent_constructor_type_names_from(typeNames[1:], module)
+        case None -> python_data_parent_constructor_type_names_from(typeNames[1:], module)
+
+private fun python_data_constructor_pipeline_code(constructorTypes: List[String], literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
+    "__capy_constructor_pipeline("
+        + python_raw_data_literal_code(literal, env, module, allModules)
+        + ", ["
+        + python_data_constructor_pipeline_steps(constructorTypes, declaredTypeName, module)
+        + "], "
+        + python_bool_code(python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules))
         + ")"
+
+private fun python_data_constructor_pipeline_steps(constructorTypes: List[String], literalTypeName: String, module: CompiledModule): String =
+    match constructorTypes[0] with
+    case None -> ""
+    case Some { constructorType } ->
+        match python_data_constructor_function(constructorType, module) with
+        case Some { function } ->
+            python_data_constructor_pipeline_step(python_function_name(function), function.parameters, constructorType, constructorType != literalTypeName)
+                + python_data_constructor_pipeline_step_tail(constructorTypes[1:], literalTypeName, module)
+        case None -> python_data_constructor_pipeline_steps(constructorTypes[1:], literalTypeName, module)
+
+private fun python_data_constructor_pipeline_step_tail(constructorTypes: List[String], literalTypeName: String, module: CompiledModule): String =
+    match constructorTypes[0] with
+    case None -> ""
+    case Some _ ->
+        let tail = python_data_constructor_pipeline_steps(constructorTypes, literalTypeName, module)
+        if tail.is_empty()
+        then ""
+        else ", " + tail
+
+private fun python_data_constructor_pipeline_step(functionName: String, parameters: List[CompiledFunctionParameter], constructorType: String, parentConstructor: bool): String =
+    "("
+        + python_string_literal(constructorType)
+        + ", "
+        + python_bool_code(parentConstructor)
+        + ", lambda __capy_constructor_data: "
+        + python_data_constructor_data_call_code(functionName, parameters, "__capy_constructor_data")
+        + ")"
+
+private fun python_data_constructor_data_call_code(functionName: String, parameters: List[CompiledFunctionParameter], dataName: String): String =
+    functionName
+        + "("
+        + python_data_constructor_data_call_arguments(parameters, dataName)
+        + ")"
+
+private fun python_data_constructor_data_call_arguments(parameters: List[CompiledFunctionParameter], dataName: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        "__capy_get_field(" + dataName + ", " + python_string_literal(parameter.name) + ")"
+            + python_data_constructor_data_call_argument_tail(parameters[1:], dataName)
+
+private fun python_data_constructor_data_call_argument_tail(parameters: List[CompiledFunctionParameter], dataName: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        ", __capy_get_field(" + dataName + ", " + python_string_literal(parameter.name) + ")"
+            + python_data_constructor_data_call_argument_tail(parameters[1:], dataName)
 
 private fun python_data_constructor_call_arguments(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], typeName: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match parameters[0] with
@@ -1331,7 +1421,7 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
     case CompiledDictLiteral _ -> python_dict_type()
     case CompiledTupleLiteral _ -> python_unknown_type()
     case CompiledIndexExpression index -> python_index_expression_type(index, env, module, allModules)
-    case CompiledDataLiteral literal -> literal.typeName
+    case CompiledDataLiteral literal -> python_data_literal_expression_type(literal, env, module, allModules)
     case CompiledFieldAccessExpression access -> python_field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> python_expression_type(reduce.initial, env, module, allModules)
     case CompiledIfExpression ifExpression -> python_expression_type(ifExpression.thenBranch, env, module, allModules)
@@ -1463,6 +1553,62 @@ private fun python_result_method_call_type(call: CompiledMethodCallExpression, e
     else if call.name == "reduce" | call.name == "reduce_left"
     then python_unknown_type()
     else python_result_type()
+
+private fun python_data_literal_expression_type(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_result_constructor_type(literal.typeName)
+    then python_result_type()
+    else if python_option_constructor_type(literal.typeName)
+    then python_option_type()
+    else if python_raw_data_literal(literal.typeName)
+    then python_data_literal_declared_type_name(literal.typeName)
+    else
+        let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
+        let parentConstructors = python_data_parent_constructor_type_names(declaredTypeName, module, allModules)
+        if parentConstructors.is_empty()
+        then match python_data_constructor_function(declaredTypeName, module) with
+            case Some _ ->
+                if python_data_constructor_type_returns_result(declaredTypeName, module, allModules)
+                then python_result_type()
+                else declaredTypeName
+            case None -> declaredTypeName
+        else python_data_constructor_pipeline_type(declaredTypeName, parentConstructors + python_data_own_constructor_type_names(declaredTypeName, module), module, allModules)
+
+private fun python_data_constructor_pipeline_type(typeName: String, constructorTypes: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+    then python_result_type()
+    else typeName
+
+private fun python_data_constructor_pipeline_returns_result(constructorTypes: List[String], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match constructorTypes[0] with
+    case None -> false
+    case Some { constructorType } ->
+        python_data_constructor_type_returns_result(constructorType, module, allModules)
+            | python_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
+
+private fun python_data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match python_data_constructor_function(typeName, module) with
+    case Some { function } ->
+        python_result_pipe_receiver_type(function.returnType.name)
+            | python_result_pipe_receiver_type(python_data_constructor_inferred_expression_type(function.body, python_function_bindings(function), module, allModules))
+    case None -> false
+
+private fun python_data_constructor_inferred_expression_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledIfExpression ifExpression ->
+        python_preferred_constructor_type(
+            python_data_constructor_inferred_expression_type(ifExpression.thenBranch, env, module, allModules),
+            python_data_constructor_inferred_expression_type(ifExpression.elseBranch, env, module, allModules)
+        )
+    case CompiledBlockExpression block ->
+        python_data_constructor_inferred_expression_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+    case _ -> python_expression_type(expression, env, module, allModules)
+
+private fun python_preferred_constructor_type(first: String, second: String): String =
+    if python_result_pipe_receiver_type(first)
+    then python_result_type()
+    else if python_result_pipe_receiver_type(second)
+    then python_result_type()
+    else first
 
 private fun python_first_method_argument_type(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match arguments[0] with
@@ -1633,6 +1779,9 @@ private fun python_option_type(): String = "Option"
 private fun python_result_type(): String = "Result"
 private fun python_regex_type(): String = "Regex"
 private fun python_string_to_string_function_type(): String = "String=>String"
+
+private fun python_bool_code(value: bool): String =
+    if value then "True" else "False"
 
 private fun python_regex_method_call_type(name: String): String =
     if name == "matches"
@@ -2159,7 +2308,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -2746,6 +2895,42 @@ private fun python_test_runtime_error_code(): String =
     + "    result = dict(fields)" + python_newline()
     + "    result['__type'] = __capy_normalize_type_name(type_name)" + python_newline()
     + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_constructor_value(type_name, value):" + python_newline()
+    + "    if isinstance(value, dict):" + python_newline()
+    + "        return value" + python_newline()
+    + "    return __capy_data(type_name, dict(value=value))" + python_newline()
+    + python_newline()
+    + "def __capy_constructor_result(type_name, value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Error'):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Success'):" + python_newline()
+    + "        return __capy_data('Success', dict(value=__capy_constructor_value(type_name, _capy_data_value(value))))" + python_newline()
+    + "    return __capy_constructor_value(type_name, value)" + python_newline()
+    + python_newline()
+    + "def __capy_merge_data(target, source):" + python_newline()
+    + "    result = dict(target) if isinstance(target, dict) else __capy_data('', dict())" + python_newline()
+    + "    if isinstance(source, dict):" + python_newline()
+    + "        for key, value in source.items():" + python_newline()
+    + "            if key != '__type':" + python_newline()
+    + "                result[key] = value" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_constructor_pipeline(data, steps, returns_result):" + python_newline()
+    + "    current = data" + python_newline()
+    + "    for step_type, merge, step in steps:" + python_newline()
+    + "        result = _unsafe_run(step(current))" + python_newline()
+    + "        if _capy_data_is(result, 'Error'):" + python_newline()
+    + "            return result" + python_newline()
+    + "        if _capy_data_is(result, 'Success'):" + python_newline()
+    + "            constructed = __capy_constructor_value(step_type, _capy_data_value(result))" + python_newline()
+    + "        else:" + python_newline()
+    + "            constructed = __capy_constructor_value(step_type, result)" + python_newline()
+    + "        current = __capy_merge_data(current, constructed) if merge else constructed" + python_newline()
+    + "    if returns_result:" + python_newline()
+    + "        return __capy_data('Success', dict(value=current))" + python_newline()
+    + "    return current" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_helpers_code(): String =
