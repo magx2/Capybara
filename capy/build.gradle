@@ -235,6 +235,92 @@ abstract class CapybaraPythonTestTask extends DefaultTask {
     }
 }
 
+abstract class CapybaraJavaScriptTestTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
+
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract RegularFileProperty getRunnerFile()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getGeneratedDir()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    @Internal
+    abstract DirectoryProperty getExecutionDir()
+
+    @Input
+    abstract Property<String> getReportType()
+
+    @Input
+    abstract Property<String> getLogType()
+
+    @Input
+    abstract ListProperty<String> getTests()
+
+    @Input
+    abstract Property<Boolean> getPrintAvailableTests()
+
+    @Input
+    abstract Property<String> getOperatingSystemName()
+
+    @Option(option = 'tests', description = 'Run only matching Capybara tests. Can be provided multiple times.')
+    void addTest(String test) {
+        getTests().add(test)
+    }
+
+    @Option(option = 'available-tests', description = 'Print available Capybara tests without running them.')
+    void setAvailableTests(boolean availableTests) {
+        getPrintAvailableTests().set(availableTests)
+    }
+
+    @TaskAction
+    void runJavaScriptTests() {
+        if (!printAvailableTests.getOrElse(false)) {
+            def directory = outputDir.get().asFile
+            if (directory.exists()) {
+                directory.deleteDir()
+            }
+            directory.mkdirs()
+        }
+
+        def command = [
+                nodeExecutable(operatingSystemName.get()),
+                runnerFile.get().asFile.absolutePath,
+                '--generated-dir', generatedDir.get().asFile.absolutePath,
+                '--output-dir', outputDir.get().asFile.absolutePath,
+                '--report-type', reportType.get()
+        ]
+        def configuredLogType = logType.getOrElse('NONE')
+        if (!configuredLogType.isBlank() && !configuredLogType.equalsIgnoreCase('NONE')) {
+            command.addAll(['--log', configuredLogType])
+        }
+        tests.getOrElse([]).each { test ->
+            command.addAll(['--tests', test])
+        }
+        if (printAvailableTests.getOrElse(false)) {
+            command.add('--available-tests')
+        }
+
+        getExecOperations().exec { execSpec ->
+            execSpec.workingDir(getExecutionDir().get().asFile)
+            execSpec.commandLine(command)
+        }
+    }
+
+    private static String nodeExecutable(String osName) {
+        def normalized = osName.toLowerCase(Locale.ROOT)
+        if (normalized.contains('windows')) {
+            return 'node.exe'
+        }
+        return 'node'
+    }
+}
+
 abstract class InProcessCapybaraTestTask extends DefaultTask {
     @Classpath
     abstract ConfigurableFileCollection getRuntimeClasspath()
@@ -329,10 +415,13 @@ def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.di
 def e2eCfunCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-cfun/capybara')
 def e2eCfunGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-cfun')
 def e2eCfunGeneratedPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-cfun')
+def e2eCfunGeneratedJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-cfun')
 def e2eCfunLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-cfun')
 def e2eCfunLinkedPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-cfun')
+def e2eCfunLinkedJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/e2e-cfun')
 def e2eCfunTestResultsDir = layout.buildDirectory.dir('test-results/e2e-cfun')
 def e2eCfunPythonTestResultsDir = layout.buildDirectory.dir('test-results/e2e-python-cfun')
+def e2eCfunJavaScriptTestResultsDir = layout.buildDirectory.dir('test-results/e2e-javascript-cfun')
 def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
 def e2eCooNativeSourceDir = layout.projectDirectory.dir('src/e2e-coo/native')
 def e2eCooNativePythonSourceDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
@@ -344,6 +433,7 @@ def e2eCooLinkedPythonOutputDir = layout.buildDirectory.dir('generated/sources/c
 def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
 def e2eCooPythonTestResultsDir = layout.buildDirectory.dir('test-results/e2e-python-coo')
 def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
+def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
@@ -473,6 +563,11 @@ def e2ePythonTests = tasks.register('e2e-python') {
     group = 'verification'
 }
 
+def e2eJavaScriptTests = tasks.register('e2e-javascript') {
+    description = 'Runs Capybara e2e tests on JavaScript.'
+    group = 'verification'
+}
+
 check {
     dependsOn integrationTests
     dependsOn e2eCfunTests
@@ -514,6 +609,15 @@ def generateE2ePythonCfun = registerCapybaraE2eGenerationTask(
         e2eCfunGeneratedPythonDir
 )
 
+def generateE2eJavaScriptCfun = registerCapybaraE2eGenerationTask(
+        'generateE2eJavaScriptCfun',
+        'Compiles functional e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
+        'JAVASCRIPT',
+        e2eCfunCapybaraSourceDir,
+        e2eCfunLinkedJavaScriptOutputDir,
+        e2eCfunGeneratedJavaScriptDir
+)
+
 tasks.named('compileE2eCfunJava') {
     dependsOn linkCapybaraE2eCfunSources
 }
@@ -539,6 +643,27 @@ def e2ePythonCfunTests = tasks.register('e2e-python-cfun', CapybaraPythonTestTas
 
 e2ePythonTests.configure {
     dependsOn e2ePythonCfunTests
+}
+
+def e2eJavaScriptCfunTests = tasks.register('e2e-javascript-cfun', CapybaraJavaScriptTestTask) {
+    description = 'Runs functional Capybara e2e tests on JavaScript.'
+    group = 'verification'
+    dependsOn generateE2eJavaScriptCfun
+    shouldRunAfter e2eCfunTests
+
+    runnerFile.set(capybaraJavaScriptTestRunner)
+    generatedDir.set(e2eCfunGeneratedJavaScriptDir)
+    outputDir.set(e2eCfunJavaScriptTestResultsDir)
+    executionDir.set(layout.projectDirectory)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
+}
+
+e2eJavaScriptTests.configure {
+    dependsOn e2eJavaScriptCfunTests
 }
 
 def prepareE2eCooSources = tasks.register('prepareE2eCooSources', Sync) {

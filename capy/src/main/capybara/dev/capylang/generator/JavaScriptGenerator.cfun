@@ -41,7 +41,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -866,6 +866,10 @@ private fun java_script_unary_expression_code(unary: CompiledUnaryExpression, en
 private fun java_script_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_stdlib_effect_function_call(call, module)
     then java_script_stdlib_effect_function_call_code(call.name)
+    else if java_script_stdlib_path_function_call(call, module)
+    then java_script_stdlib_path_function_call_code(call, env, module, allModules)
+    else if java_script_stdlib_io_function_call(call, module)
+    then java_script_stdlib_io_function_call_code(call, env, module, allModules)
     else if java_script_stdlib_math_sqrt_call(call, module)
     then "Math.sqrt(" + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
     else if java_script_enum_parse_call(call, module, allModules)
@@ -2749,6 +2753,10 @@ private fun java_script_function_call_expression_type(name: String, module: Comp
     then java_script_runtime_function_type(name)
     else if java_script_stdlib_effect_function_call_by_name(name, module)
     then java_script_stdlib_effect_function_call_type(name)
+    else if java_script_stdlib_path_function_call_by_name(name, module)
+    then "Path"
+    else if java_script_stdlib_io_function_call_by_name(name, module)
+    then "Effect"
     else if java_script_enum_parse_call_name(name, module, allModules)
     then "Result"
     else if java_script_qualified_call_name(name)
@@ -2870,6 +2878,71 @@ private fun java_script_stdlib_effect_function_call_code(name: String): String =
 
 private fun java_script_stdlib_effect_function_call_type(name: String): String =
     "Effect"
+
+private fun java_script_stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    java_script_one_method_argument(call.arguments)
+        & java_script_stdlib_path_function_call_by_name(call.name, module)
+
+private fun java_script_stdlib_path_function_call_by_name(name: String, module: CompiledModule): bool =
+    java_script_local_function_count(name, module.functions) == 0
+        & name == "from_string"
+        & java_script_path_member_imported("from_string", module.imports)
+
+private fun java_script_stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_path_from_string("
+        + java_script_expression_list_code(call.arguments, env, module, allModules)
+        + ")"
+
+private fun java_script_stdlib_io_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    java_script_stdlib_io_function_call_by_name(call.name, module)
+        & java_script_stdlib_io_function_argument_count(call.name, call.arguments)
+
+private fun java_script_stdlib_io_function_call_by_name(name: String, module: CompiledModule): bool =
+    java_script_local_function_count(name, module.functions) == 0
+        & java_script_io_function_name(name)
+        & java_script_io_member_imported(name, module.imports)
+
+private fun java_script_stdlib_io_function_argument_count(name: String, arguments: List[CompiledExpression]): bool =
+    if java_script_io_unary_function_name(name)
+    then java_script_one_method_argument(arguments)
+    else if java_script_io_binary_function_name(name)
+    then java_script_two_method_arguments(arguments)
+    else false
+
+private fun java_script_io_unary_function_name(name: String): bool =
+    name == "read_text"
+        | name == "read_lines"
+        | name == "read_bytes"
+        | name == "exists"
+        | name == "is_file"
+        | name == "is_directory"
+        | name == "size"
+        | name == "create_file"
+        | name == "create_directory"
+        | name == "create_directories"
+        | name == "list_entries"
+        | name == "delete"
+
+private fun java_script_io_binary_function_name(name: String): bool =
+    name == "write_text"
+        | name == "write_lines"
+        | name == "write_bytes"
+        | name == "append_text"
+        | name == "append_lines"
+        | name == "append_bytes"
+        | name == "copy"
+        | name == "copy_replace"
+        | name == "move"
+        | name == "move_replace"
+
+private fun java_script_io_function_name(name: String): bool =
+    java_script_io_unary_function_name(name) | java_script_io_binary_function_name(name)
+
+private fun java_script_stdlib_io_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_io_" + call.name
+        + "("
+        + java_script_expression_list_code(call.arguments, env, module, allModules)
+        + ")"
 
 private fun java_script_stdlib_math_sqrt_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     if call.name == "sqrt"
@@ -3297,6 +3370,12 @@ private fun java_script_system_member_imported(member: String, imports: List[Com
 private fun java_script_clock_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     java_script_module_member_imported(member, imports, "/capy/date_time/Clock", "capy/date_time/Clock")
 
+private fun java_script_path_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    java_script_module_member_imported(member, imports, "/capy/io/Path", "capy/io/Path")
+
+private fun java_script_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    java_script_module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")
+
 private fun java_script_module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
     match imports[0] with
     case None -> false
@@ -3392,6 +3471,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_effect_runtime_code()
+    + java_script_io_runtime_code()
     + java_script_assert_runtime_code()
     + java_script_numeric_runtime_code()
     + java_script_collection_runtime_code()
@@ -3424,6 +3504,50 @@ private fun java_script_effect_runtime_code(): String =
     + "function println(value) { return Effect.delay(() => { process.stdout.write(__capy_console_value(value) + '\\n'); return value; }); }" + java_script_newline()
     + "function print_error(value) { return Effect.delay(() => { process.stderr.write(__capy_console_value(value)); return value; }); }" + java_script_newline()
     + "function println_error(value) { return Effect.delay(() => { process.stderr.write(__capy_console_value(value) + '\\n'); return value; }); }" + java_script_newline()
+    + java_script_newline()
+
+private fun java_script_io_runtime_code(): String =
+    "const fs = require('fs');" + java_script_newline()
+    + "const path = require('path');" + java_script_newline()
+    + "const os = require('os');" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_none() { return __capy_data('None', Object.fromEntries([])); }" + java_script_newline()
+    + "function __capy_path_root(root) { const order = root === 'ABSOLUTE' ? 1 : (root === 'HOME' ? 2 : 0); return __capy_data('__capy_raw|' + root, { name: root, order }); }" + java_script_newline()
+    + "function __capy_path(root, segments) { return __capy_data('Path', { root: __capy_path_root(root), prefix: __capy_none(), segments }); }" + java_script_newline()
+    + "function __capy_path_is(value) { return __capy_data_is(__capy_unsafe_run(value), 'Path'); }" + java_script_newline()
+    + "function __capy_path_root_name(value) { value = __capy_unsafe_run(value); if (value == null) return 'RELATIVE'; const root = __capy_unsafe_run(value.root || value); if (root && typeof root === 'object') { if (typeof root.name === 'string') return root.name; if (typeof root.__type === 'string') return __capy_normalize_type_name(root.__type).replace(/^__capy_raw\\|/, ''); } return String(root || 'RELATIVE'); }" + java_script_newline()
+    + "function __capy_path_segments(value) { value = __capy_unsafe_run(value); return value && Array.isArray(value.segments) ? value.segments.map(segment => String(__capy_unsafe_run(segment))) : []; }" + java_script_newline()
+    + "function __capy_normalize_path_segments(root, segments) { const result = []; for (const raw of segments) { const segment = String(__capy_unsafe_run(raw)); if (segment === '' || segment === '.') continue; if (segment === '..') { if (result.length > 0) result.pop(); else if (root === 'RELATIVE') result.push('..'); continue; } result.push(segment); } return result; }" + java_script_newline()
+    + "function __capy_path_from_string(pathString) { const text = String(__capy_unsafe_run(pathString)); let root = 'RELATIVE'; let body = text; if (text.startsWith('/')) { root = 'ABSOLUTE'; body = text.slice(1); } else if (text.startsWith('~')) { root = 'HOME'; body = text[1] === '/' ? text.slice(2) : text.slice(1); } const segments = body.split('/').filter(segment => segment.length > 0); return __capy_path(root, __capy_normalize_path_segments(root, segments)); }" + java_script_newline()
+    + "function __capy_path_join(left, right) { const root = __capy_path_root_name(left); const leftSegments = __capy_path_segments(left); const rightValue = __capy_unsafe_run(right); const rightSegments = __capy_path_is(rightValue) ? __capy_path_segments(rightValue) : [String(rightValue)]; return __capy_path(root, __capy_normalize_path_segments(root, leftSegments.concat(rightSegments))); }" + java_script_newline()
+    + "function __capy_path_to_string(value) { value = __capy_unsafe_run(value); const root = __capy_path_root_name(value); const segments = __capy_path_segments(value); if (root === 'ABSOLUTE') return '/' + segments.join('/'); if (root === 'HOME') return path.join(os.homedir(), ...segments); return segments.length === 0 ? '.' : segments.join('/'); }" + java_script_newline()
+    + "function __capy_fs_path(value) { return path.normalize(__capy_path_to_string(value)); }" + java_script_newline()
+    + "function __capy_io_result(operation, thunk) { try { return __capy_success(thunk()); } catch (error) { const message = error && error.message ? error.message : String(error); return __capy_error(operation + ' failed: ' + message); } }" + java_script_newline()
+    + "function __capy_io_effect(operation, thunk) { return Effect.delay(() => __capy_io_result(operation, thunk)); }" + java_script_newline()
+    + "function __capy_io_lines_text(lines) { const values = __capy_as_list(lines).map(item => String(__capy_unsafe_run(item))); return values.length === 0 ? '' : values.join('\\n') + '\\n'; }" + java_script_newline()
+    + "function __capy_io_byte_values(values) { return __capy_as_list(values).map(item => Number(__capy_unsafe_run(item)) & 255); }" + java_script_newline()
+    + "function __capy_io_read_text(filePath) { return __capy_io_effect('read_text', () => fs.readFileSync(__capy_fs_path(filePath), 'utf8')); }" + java_script_newline()
+    + "function __capy_io_read_lines(filePath) { return __capy_io_effect('read_lines', () => { const text = fs.readFileSync(__capy_fs_path(filePath), 'utf8').replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n'); if (text.length === 0) return []; const lines = text.split('\\n'); if (lines[lines.length - 1] === '') lines.pop(); return lines; }); }" + java_script_newline()
+    + "function __capy_io_read_bytes(filePath) { return __capy_io_effect('read_bytes', () => Array.from(fs.readFileSync(__capy_fs_path(filePath)))); }" + java_script_newline()
+    + "function __capy_io_write_text(filePath, text) { return __capy_io_effect('write_text', () => { const value = String(__capy_unsafe_run(text)); fs.writeFileSync(__capy_fs_path(filePath), value, 'utf8'); return value; }); }" + java_script_newline()
+    + "function __capy_io_write_lines(filePath, lines) { return __capy_io_effect('write_lines', () => { const values = __capy_as_list(lines).map(item => String(__capy_unsafe_run(item))); fs.writeFileSync(__capy_fs_path(filePath), __capy_io_lines_text(values), 'utf8'); return values; }); }" + java_script_newline()
+    + "function __capy_io_write_bytes(filePath, bytes) { return __capy_io_effect('write_bytes', () => { const values = __capy_io_byte_values(bytes); fs.writeFileSync(__capy_fs_path(filePath), Buffer.from(values)); return values; }); }" + java_script_newline()
+    + "function __capy_io_append_text(filePath, text) { return __capy_io_effect('append_text', () => { const value = String(__capy_unsafe_run(text)); fs.appendFileSync(__capy_fs_path(filePath), value, 'utf8'); return value; }); }" + java_script_newline()
+    + "function __capy_io_append_lines(filePath, lines) { return __capy_io_effect('append_lines', () => { const values = __capy_as_list(lines).map(item => String(__capy_unsafe_run(item))); fs.appendFileSync(__capy_fs_path(filePath), __capy_io_lines_text(values), 'utf8'); return values; }); }" + java_script_newline()
+    + "function __capy_io_append_bytes(filePath, bytes) { return __capy_io_effect('append_bytes', () => { const values = __capy_io_byte_values(bytes); fs.appendFileSync(__capy_fs_path(filePath), Buffer.from(values)); return values; }); }" + java_script_newline()
+    + "function __capy_io_exists(filePath) { return Effect.delay(() => fs.existsSync(__capy_fs_path(filePath))); }" + java_script_newline()
+    + "function __capy_io_is_file(filePath) { return Effect.delay(() => { try { return fs.statSync(__capy_fs_path(filePath)).isFile(); } catch (_) { return false; } }); }" + java_script_newline()
+    + "function __capy_io_is_directory(filePath) { return Effect.delay(() => { try { return fs.statSync(__capy_fs_path(filePath)).isDirectory(); } catch (_) { return false; } }); }" + java_script_newline()
+    + "function __capy_io_size(filePath) { return __capy_io_effect('size', () => __capy_data('byte_count', { value: __capy_long(BigInt(fs.statSync(__capy_fs_path(filePath)).size)) })); }" + java_script_newline()
+    + "function __capy_io_create_file(filePath) { return __capy_io_effect('create_file', () => { const target = __capy_fs_path(filePath); const handle = fs.openSync(target, 'wx'); fs.closeSync(handle); return filePath; }); }" + java_script_newline()
+    + "function __capy_io_create_directory(filePath) { return __capy_io_effect('create_directory', () => { fs.mkdirSync(__capy_fs_path(filePath)); return filePath; }); }" + java_script_newline()
+    + "function __capy_io_create_directories(filePath) { return __capy_io_effect('create_directories', () => { fs.mkdirSync(__capy_fs_path(filePath), { recursive: true }); return filePath; }); }" + java_script_newline()
+    + "function __capy_io_list_entries(filePath) { return __capy_io_effect('list_entries', () => { const directory = __capy_fs_path(filePath); return fs.readdirSync(directory).map(name => __capy_path_from_string(path.join(directory, name))); }); }" + java_script_newline()
+    + "function __capy_io_delete(filePath) { return __capy_io_effect('delete', () => { const target = __capy_fs_path(filePath); if (!fs.existsSync(target)) return false; const stat = fs.statSync(target); if (stat.isDirectory()) fs.rmdirSync(target); else fs.unlinkSync(target); return true; }); }" + java_script_newline()
+    + "function __capy_io_copy(source, target) { return __capy_io_effect('copy', () => { const sourcePath = __capy_fs_path(source); const targetPath = __capy_fs_path(target); if (fs.existsSync(targetPath)) throw new Error('target exists: ' + targetPath); fs.copyFileSync(sourcePath, targetPath, fs.constants.COPYFILE_EXCL); return target; }); }" + java_script_newline()
+    + "function __capy_io_copy_replace(source, target) { return __capy_io_effect('copy_replace', () => { fs.copyFileSync(__capy_fs_path(source), __capy_fs_path(target)); return target; }); }" + java_script_newline()
+    + "function __capy_io_move(source, target) { return __capy_io_effect('move', () => { const targetPath = __capy_fs_path(target); if (fs.existsSync(targetPath)) throw new Error('target exists: ' + targetPath); fs.renameSync(__capy_fs_path(source), targetPath); return target; }); }" + java_script_newline()
+    + "function __capy_io_move_replace(source, target) { return __capy_io_effect('move_replace', () => { const targetPath = __capy_fs_path(target); if (fs.existsSync(targetPath)) fs.rmSync(targetPath, { recursive: true, force: true }); fs.renameSync(__capy_fs_path(source), targetPath); return target; }); }" + java_script_newline()
     + java_script_newline()
 
 private fun java_script_assert_runtime_code(): String =
@@ -3501,7 +3625,7 @@ private fun java_script_numeric_runtime_code(): String =
     + "function __capy_add(left, right) { if (Array.isArray(left)) return left.concat(Array.isArray(right) ? right : [right]); if (left instanceof Set) return right instanceof Set ? __capy_set_concat(left, right) : __capy_set_append(left, right); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const [key, value] of right) result.set(key, value); else if (Array.isArray(right) && right.length === 2) result.set(right[0], right[1]); return result; } if (typeof left === 'string' || typeof right === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) + __capy_number(right) : __capy_long(__capy_bigint(left) + __capy_bigint(right)); return left + right; }" + java_script_newline()
     + "function __capy_sub(left, right) { if (Array.isArray(left)) { const remove = Array.isArray(right) ? right : [right]; return left.filter(item => !remove.some(other => __capy_deep_equal(item, other))); } if (left instanceof Set) return right instanceof Set ? __capy_set_remove_all(left, right) : __capy_set_remove(left, right); if (left instanceof Map) { const result = new Map(left); if (right instanceof Map) for (const key of right.keys()) result.delete(key); else result.delete(right); return result; } if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) - __capy_number(right) : __capy_long(__capy_bigint(left) - __capy_bigint(right)); return left - right; }" + java_script_newline()
     + "function __capy_mul(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) * __capy_number(right) : __capy_long(__capy_bigint(left) * __capy_bigint(right)); return left * right; }" + java_script_newline()
-    + "function __capy_div(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
+    + "function __capy_div(left, right) { if (__capy_path_is(left)) return __capy_path_join(left, right); if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
     + "function __capy_mod(left, right) { if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) % __capy_number(right) : __capy_long(__capy_bigint(left) % __capy_bigint(right)); return left % right; }" + java_script_newline()
     + "function __capy_pow(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) { if (__capy_has_fractional_number(left, right)) return Math.pow(__capy_number(left), __capy_number(right)); let exponent = __capy_bigint(right); if (exponent <= 0n) return 1n; let result = 1n; const base = __capy_bigint(left); while (exponent > 0n) { result = __capy_long(result * base); exponent--; } return result; } if (Number.isInteger(left) && Number.isInteger(right)) { if (right <= 0) return 1; let result = 1; for (let index = 0; index < right; index++) result *= left; return result; } return Math.pow(left, right); }" + java_script_newline()
 
@@ -3916,6 +4040,10 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
         else if java_script_runtime_function(call.name)
         then true
         else if java_script_stdlib_effect_function_call(call, module)
+        then true
+        else if java_script_stdlib_path_function_call(call, module)
+        then true
+        else if java_script_stdlib_io_function_call(call, module)
         then true
         else if java_script_enum_parse_call(call, module, allModules)
         then true
