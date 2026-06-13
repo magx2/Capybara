@@ -18,6 +18,7 @@ from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectO
 from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
@@ -27,7 +28,7 @@ from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
-from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, DeriveApplication, DeriverDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition, TypeDeclaration }
+from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, DeriveApplication, DeriverDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition, PrimitiveBackedTypeDeclaration, TypeDeclaration }
 from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
 from /dev/capylang/compiler/parser/FunctionAnnotationArgument import { FunctionAnnotationArgument }
@@ -111,7 +112,7 @@ private fun compile_module(module: ParsedModule, allModules: List[ParsedModule])
         name: module.name,
         path: normalize_module_path(module.path),
         types: {:},
-        visiblePrimitiveBackedTypes: {:},
+        visiblePrimitiveBackedTypes: compile_primitive_backed_types(module.definitions, module, allModules),
         functions: compile_functions(module.definitions, module.definitions, module, allModules)
             + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
             + compile_object_class_functions(module.objectOriented.classes, module, allModules),
@@ -119,6 +120,23 @@ private fun compile_module(module: ParsedModule, allModules: List[ParsedModule])
         derivers: derivers,
         annotations: compile_annotations(module.definitions),
         staticImports: []
+    }
+
+private fun compile_primitive_backed_types(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): Dict[CompiledPrimitiveBackedType] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        match definition with
+        case PrimitiveBackedTypeDeclaration declaration ->
+            compile_primitive_backed_types(definitions[1:], module, allModules) + (declaration.name, compile_primitive_backed_type(declaration, module, allModules))
+        case _ -> compile_primitive_backed_types(definitions[1:], module, allModules)
+
+private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledPrimitiveBackedType =
+    CompiledPrimitiveBackedType {
+        name: declaration.name,
+        visibility: declaration.visibility,
+        backingType: compile_type_in_module(declaration.backingType, module, allModules),
+        location: compile_location(declaration.location)
     }
 
 private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraries: List[CompiledModule]): CompiledModule =

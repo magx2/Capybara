@@ -231,7 +231,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             return new Definition.ConstantDefinition(constantDeclaration(definition.constDeclaration()));
         }
         if (definition.primitiveBackedTypeDeclaration() != null) {
-            return Definition.PrimitiveBackedTypeDeclaration.INSTANCE;
+            return primitiveBackedTypeDeclarationDefinitions(definition.primitiveBackedTypeDeclaration()).getFirst();
         }
         if (definition.typeDeclaration() != null) {
             return Definition.UnsupportedDefinition.INSTANCE;
@@ -1481,6 +1481,14 @@ public final class NativeCapybaraParser implements CapybaraParser {
         var backingType = primitiveBackingTypeReference(ctx.primitiveBackingType());
         var location = location(ctx);
         var definitions = new ArrayList<Definition>();
+        var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
+        definitions.add(new Definition.PrimitiveBackedTypeDeclaration(
+                name,
+                visibility,
+                backingType,
+                definitionAnnotationApplications(ctx.annotationBlock()),
+                location
+        ));
         definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
         definitions.add(schemaConstantDefinition("__capy_schema_primitive|" + name, backingType.name(), location));
         definitions.add(schemaConstantDefinition(
