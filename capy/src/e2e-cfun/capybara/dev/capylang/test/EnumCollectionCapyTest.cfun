@@ -40,20 +40,27 @@ private fun enum_provides_order_and_name(): Assert =
     ])
 
 private fun values_returns_enum_set(): Assert =
-    assert_that(color_values())
-        .has_size(6)
-        .contains(RED)
-        .contains(BLUE)
-        .contains(GREEN_BLUE)
-        .contains(YELLOW)
-        .contains(BLACK)
-        .contains(WHITE)
+    assert_all([
+        assert_that(color_values())
+            .has_size(6)
+            .contains(RED)
+            .contains(BLUE)
+            .contains(GREEN_BLUE)
+            .contains(YELLOW)
+            .contains(BLACK)
+            .contains(WHITE),
+        assert_that(Color.values)
+            .has_size(6)
+            .contains(Color.BLUE),
+    ])
 
 private fun parse_from_string_and_order_returns_result(): Assert =
     // Backends use different enum parse error wording; assert failure plus portable enum/input context.
     assert_all([
         assert_that(parse_color_name("BLUE")).succeeds(value => assert_that(value.name).is_equal_to("BLUE")),
         assert_that(parse_color_order(3)).succeeds(value => assert_that(value.name).is_equal_to("YELLOW")),
+        assert_that(Color.parse("BLUE")).succeeds(value => assert_that(value.name).is_equal_to("BLUE")),
+        assert_that(Color.parse(3)).succeeds(value => assert_that(value.name).is_equal_to("YELLOW")),
         assert_that(parse_color_name("UNKNOWN")).fails(),
         assert_that(parse_message(parse_color_name("UNKNOWN"))).contains("Color"),
         assert_that(parse_message(parse_color_name("UNKNOWN"))).contains("UNKNOWN"),
@@ -68,6 +75,7 @@ private fun parse_message(result: Result[Color]): String =
 private fun enum_values_can_be_used_without_braces_in_expressions(): Assert =
     assert_all([
         assert_that(qualified_color_without_braces() == BLUE).is_true(),
+        assert_that(Color.BLUE == BLUE).is_true(),
         assert_that(unqualified_color_without_braces() == GREEN_BLUE).is_true(),
         assert_that(inferred_color_without_braces() == RED).is_true(),
         assert_that(color_name_without_braces()).is_equal_to("YELLOW"),
