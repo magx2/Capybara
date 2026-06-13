@@ -1,18 +1,25 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data PythonBinding { name: String, pythonName: String, typeName: String }
+data PythonAnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
 data PythonQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
+data PythonSchemaAnnotationArgument { name: String, kind: String, value: String }
 data PythonStdlibValue { pythonName: String, typeName: String }
 
 fun python_generator(program: CompiledProgram): GeneratedProgram =
@@ -1991,6 +1998,8 @@ private fun python_runtime_function_type(name: String): String =
     then python_test_case_type()
     else if name == "test_file"
     then python_effect_type()
+    else if name == "reflection"
+    then "DataValueInfo"
     else if name == "to_seq"
     then python_seq_type()
     else if python_console_function(name)
@@ -2696,6 +2705,7 @@ private fun python_runtime_function(name: String): bool =
         | name == "assert_that"
         | name == "test"
         | name == "test_file"
+        | name == "reflection"
         | name == "digits"
         | name == "to_seq"
         | name == "pure"
@@ -3250,6 +3260,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + python_test_runtime_collection_helpers_code()
     + python_test_runtime_error_code()
     + python_runtime_data_helpers_code()
+    + python_test_runtime_reflection_code(modules)
     + python_test_runtime_effect_helpers_code()
     + python_test_runtime_gather_code(modules)
 
@@ -3265,7 +3276,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -4270,6 +4281,85 @@ private fun python_runtime_data_helpers_code(): String =
     + "    if fields:" + python_newline()
     + "        return value[fields[0]]" + python_newline()
     + "    return value" + python_newline()
+    + python_newline()
+
+private fun python_test_runtime_reflection_code(modules: List[CompiledModule]): String =
+    "__capy_reflection_types = " + python_reflection_types_literal(modules, modules) + python_newline()
+    + "__capy_reflection_enum_values = " + python_reflection_enum_values_literal(modules, modules) + python_newline()
+    + python_newline()
+    + "def __capy_reflection_package(metadata):" + python_newline()
+    + "    metadata = dict(metadata or dict())" + python_newline()
+    + "    return __capy_data('PackageInfo', dict(name=metadata.get('name', ''), path=metadata.get('path', '')))" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_type_info(type_name):" + python_newline()
+    + "    type_name = __capy_normalize_type_name(type_name)" + python_newline()
+    + "    metadata = __capy_reflection_types.get(type_name, dict())" + python_newline()
+    + "    return __capy_data('DataInfo', dict(name=type_name, pkg=__capy_reflection_package(metadata.get('pkg', dict())), annotations=[]))" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_annotation_value(metadata):" + python_newline()
+    + "    metadata = dict(metadata or dict())" + python_newline()
+    + "    kind = str(metadata.get('kind', 'nothing'))" + python_newline()
+    + "    value = metadata.get('value', '')" + python_newline()
+    + "    if kind == 'string':" + python_newline()
+    + "        return __capy_data('AnnotationString', dict(value=str(value)))" + python_newline()
+    + "    if kind == 'int':" + python_newline()
+    + "        return __capy_data('AnnotationInt', dict(value=int(value)))" + python_newline()
+    + "    if kind == 'long':" + python_newline()
+    + "        return __capy_data('AnnotationLong', dict(value=__capy_long(int(value))))" + python_newline()
+    + "    if kind == 'double':" + python_newline()
+    + "        return __capy_data('AnnotationDouble', dict(value=float(value)))" + python_newline()
+    + "    if kind == 'float':" + python_newline()
+    + "        return __capy_data('AnnotationFloat', dict(value=float(value)))" + python_newline()
+    + "    if kind == 'bool':" + python_newline()
+    + "        return __capy_data('AnnotationBool', dict(value=(value is True or str(value) == 'true')))" + python_newline()
+    + "    if kind == 'type':" + python_newline()
+    + "        return __capy_data('AnnotationTypeName', dict(value=str(value)))" + python_newline()
+    + "    return __capy_data('AnnotationNothing', dict())" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_annotation_argument(metadata):" + python_newline()
+    + "    metadata = dict(metadata or dict())" + python_newline()
+    + "    return __capy_data('AnnotationArgumentInfo', dict(name=metadata.get('name', ''), value=__capy_reflection_annotation_value(metadata.get('value', dict()))))" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_annotation(metadata):" + python_newline()
+    + "    metadata = dict(metadata or dict())" + python_newline()
+    + "    return __capy_data('AnnotationInfo', dict(name=metadata.get('name', ''), pkg=__capy_reflection_package(metadata.get('pkg', dict())), arguments=[__capy_reflection_annotation_argument(argument) for argument in metadata.get('arguments', [])]))" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_annotations(values):" + python_newline()
+    + "    return [__capy_reflection_annotation(value) for value in values or []]" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_field_value(value, metadata):" + python_newline()
+    + "    name = metadata.get('name', '')" + python_newline()
+    + "    try:" + python_newline()
+    + "        field_value = __capy_get_field(value, name)" + python_newline()
+    + "    except (KeyError, AttributeError):" + python_newline()
+    + "        field_value = None" + python_newline()
+    + "    return __capy_data('FieldValueInfo', dict(name=name, type=__capy_reflection_type_info(metadata.get('type', 'any')), value=field_value, annotations=__capy_reflection_annotations(metadata.get('annotations', []))))" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_type_name(value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if isinstance(value, dict):" + python_newline()
+    + "        return __capy_normalize_type_name(value.get('__type', ''))" + python_newline()
+    + "    return __capy_normalize_type_name(type(value).__name__)" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_enum_value_name(type_name):" + python_newline()
+    + "    type_name = __capy_normalize_type_name(type_name)" + python_newline()
+    + "    return type_name[len('__capy_raw|'):] if type_name.startswith('__capy_raw|') else type_name" + python_newline()
+    + python_newline()
+    + "def __capy_reflection_unknown(type_name):" + python_newline()
+    + "    return __capy_data('DataValueInfo', dict(name=type_name, pkg=__capy_reflection_package(dict()), fields=[], annotations=[]))" + python_newline()
+    + python_newline()
+    + "def reflection(obj):" + python_newline()
+    + "    value = _unsafe_run(obj)" + python_newline()
+    + "    type_name = __capy_reflection_type_name(value)" + python_newline()
+    + "    enum_metadata = __capy_reflection_enum_values.get(__capy_reflection_enum_value_name(type_name))" + python_newline()
+    + "    if enum_metadata is not None:" + python_newline()
+    + "        name = __capy_get_field(value, 'name') if isinstance(value, dict) and 'name' in value else enum_metadata.get('name', type_name)" + python_newline()
+    + "        return __capy_data('DataValueInfo', dict(name=name, pkg=__capy_reflection_package(enum_metadata.get('pkg', dict())), fields=[], annotations=__capy_reflection_annotations(enum_metadata.get('annotations', []))))" + python_newline()
+    + "    metadata = __capy_reflection_types.get(type_name)" + python_newline()
+    + "    if metadata is None:" + python_newline()
+    + "        return __capy_reflection_unknown(type_name)" + python_newline()
+    + "    fields = [__capy_reflection_field_value(value, field) for field in metadata.get('fields', [])]" + python_newline()
+    + "    return __capy_data('DataValueInfo', dict(name=metadata.get('name', type_name), pkg=__capy_reflection_package(metadata.get('pkg', dict())), fields=fields, annotations=__capy_reflection_annotations(metadata.get('annotations', []))))" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_collection_helpers_code(): String =
@@ -5350,6 +5440,381 @@ private fun python_assert_method(name: String): bool =
         | name == "fails"
         | name == "failed"
         | name == "succeeded"
+
+private fun python_reflection_types_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
+    python_code_dict(python_reflection_type_entries(modules, allModules))
+
+private fun python_reflection_type_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        python_reflection_type_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
+            + python_reflection_type_entries(modules[1:], allModules)
+
+private fun python_reflection_type_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match typeNames[0] with
+    case None -> []
+    case Some { typeName } ->
+        if python_enum_type_exists_in_functions(typeName, module.functions)
+        then python_reflection_type_entries_in_module(typeNames[1:], module, allModules)
+        else [python_code_dict_entry(typeName, python_reflection_type_metadata_literal(typeName, module, allModules))]
+            + python_reflection_type_entries_in_module(typeNames[1:], module, allModules)
+
+private fun python_reflection_type_metadata_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_code_dict([
+        python_code_dict_entry("name", python_string_literal(typeName)),
+        python_code_dict_entry("pkg", python_reflection_data_package_metadata_literal(module)),
+        python_code_dict_entry("fields", python_code_list_literal(python_reflection_field_metadata_literals(
+            typeName,
+            python_reflection_data_type_fields(typeName, module, allModules),
+            0,
+            module,
+            allModules
+        ))),
+        python_code_dict_entry("annotations", python_reflection_annotations_literal(
+            python_schema_values("__capy_schema_annotation|data|" + typeName + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun python_reflection_field_metadata_literals(dataName: String, fields: List[String], idx: int, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [python_reflection_field_metadata_literal(dataName, field, idx, module, allModules)]
+            + python_reflection_field_metadata_literals(dataName, fields[1:], idx + 1, module, allModules)
+
+private fun python_reflection_field_metadata_literal(dataName: String, field: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_code_dict([
+        python_code_dict_entry("name", python_string_literal(python_schema_field_name(field))),
+        python_code_dict_entry("type", python_string_literal(python_schema_field_type_name(field))),
+        python_code_dict_entry("annotations", python_reflection_annotations_literal(
+            python_schema_values("__capy_schema_annotation|field|" + dataName + "|" + idx + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun python_reflection_enum_values_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
+    python_code_dict(python_reflection_enum_value_entries(modules, allModules))
+
+private fun python_reflection_enum_value_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        python_reflection_enum_value_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
+            + python_reflection_enum_value_entries(modules[1:], allModules)
+
+private fun python_reflection_enum_value_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match typeNames[0] with
+    case None -> []
+    case Some { typeName } ->
+        if python_enum_type_exists_in_functions(typeName, module.functions)
+        then python_reflection_enum_value_entries_for_type(typeName, python_enum_values_in_functions(typeName, module.functions), module, allModules)
+            + python_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
+        else python_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
+
+private fun python_reflection_enum_value_entries_for_type(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [python_code_dict_entry(value, python_reflection_enum_value_metadata_literal(typeName, value, module, allModules))]
+            + python_reflection_enum_value_entries_for_type(typeName, values[1:], module, allModules)
+
+private fun python_reflection_enum_value_metadata_literal(typeName: String, value: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_code_dict([
+        python_code_dict_entry("name", python_string_literal(value)),
+        python_code_dict_entry("type", python_string_literal(typeName)),
+        python_code_dict_entry("pkg", python_reflection_data_package_metadata_literal(module)),
+        python_code_dict_entry("annotations", python_reflection_annotations_literal(
+            python_schema_values("__capy_schema_annotation|enum|" + typeName + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun python_reflection_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    python_merge_schema_fields(
+        python_reflection_data_type_parent_fields(python_data_type_parent_types(name, module, allModules), module, allModules),
+        python_data_type_direct_fields(name, module, allModules)
+    )
+
+private fun python_reflection_data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentName = python_schema_type_name(parent)
+        python_merge_schema_fields(
+            python_reflection_data_type_fields(parentName, module, allModules),
+            python_reflection_data_type_parent_fields(parents[1:], module, allModules)
+        )
+
+private fun python_reflection_annotations_literal(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    python_code_list_literal(python_reflection_annotation_metadata_literals(values, usageModule, allModules))
+
+private fun python_reflection_annotation_metadata_literals(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [python_reflection_annotation_metadata_literal(value, usageModule, allModules)]
+            + python_reflection_annotation_metadata_literals(values[1:], usageModule, allModules)
+
+private fun python_reflection_annotation_metadata_literal(value: String, usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = python_annotation_schema_name(value)
+    let explicitArguments = python_annotation_schema_arguments(python_annotation_schema_arguments_source(value))
+    match python_find_annotation_binding(name, usageModule, allModules) with
+    case Some { binding } ->
+        python_code_dict([
+            python_code_dict_entry("name", python_string_literal(binding.declaration.name)),
+            python_code_dict_entry("pkg", python_reflection_module_package_metadata_literal(binding.module)),
+            python_code_dict_entry("arguments", python_reflection_annotation_arguments_literal(explicitArguments, binding.declaration.fields)),
+        ])
+    case None ->
+        python_code_dict([
+            python_code_dict_entry("name", python_string_literal(python_annotation_display_name(name))),
+            python_code_dict_entry("pkg", python_reflection_module_package_metadata_literal(usageModule)),
+            python_code_dict_entry("arguments", python_code_list_literal(python_explicit_annotation_argument_metadata_literals(explicitArguments))),
+        ])
+
+private fun python_annotation_display_name(name: String): String =
+    if python_qualified_name(name) then python_qualified_call_member(name) else name
+
+private fun python_reflection_annotation_arguments_literal(arguments: List[PythonSchemaAnnotationArgument], fields: List[String]): String =
+    python_code_list_literal(python_explicit_annotation_argument_metadata_literals(arguments) + python_default_annotation_argument_metadata_literals(fields, arguments))
+
+private fun python_explicit_annotation_argument_metadata_literals(arguments: List[PythonSchemaAnnotationArgument]): List[String] =
+    match arguments[0] with
+    case None -> []
+    case Some { argument } ->
+        [python_annotation_argument_metadata_literal(argument.name, python_annotation_value_metadata_literal(argument.kind, argument.value))]
+            + python_explicit_annotation_argument_metadata_literals(arguments[1:])
+
+private fun python_default_annotation_argument_metadata_literals(fields: List[String], explicitArguments: List[PythonSchemaAnnotationArgument]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        let fieldName = python_annotation_field_schema_name(field)
+        if python_annotation_field_schema_has_default(field) & !python_schema_annotation_argument_exists(fieldName, explicitArguments)
+        then [python_annotation_argument_metadata_literal(fieldName, python_annotation_field_schema_default_value_metadata_literal(field))]
+            + python_default_annotation_argument_metadata_literals(fields[1:], explicitArguments)
+        else python_default_annotation_argument_metadata_literals(fields[1:], explicitArguments)
+
+private fun python_schema_annotation_argument_exists(name: String, arguments: List[PythonSchemaAnnotationArgument]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> argument.name == name | python_schema_annotation_argument_exists(name, arguments[1:])
+
+private fun python_annotation_argument_metadata_literal(name: String, valueCode: String): String =
+    python_code_dict([
+        python_code_dict_entry("name", python_string_literal(name)),
+        python_code_dict_entry("value", valueCode),
+    ])
+
+private fun python_annotation_value_metadata_literal(kind: String, value: String): String =
+    python_code_dict([
+        python_code_dict_entry("kind", python_string_literal(kind)),
+        python_code_dict_entry("value", python_string_literal(value)),
+    ])
+
+private fun python_annotation_schema_name(value: String): String =
+    let separator = python_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun python_annotation_schema_arguments_source(value: String): String =
+    let separator = python_first_index_of(value, "|", 0)
+    if separator < 0
+    then ""
+    else value[separator + 1, value.size().value]
+
+private fun python_annotation_schema_arguments(value: String): List[PythonSchemaAnnotationArgument] =
+    if value.is_empty()
+    then []
+    else
+        let separator = python_first_index_of(value, ";", 0)
+        if separator < 0
+        then [python_annotation_schema_argument(value)]
+        else [python_annotation_schema_argument(value[0, separator])] + python_annotation_schema_arguments(value[separator + 1, value.size().value])
+
+private fun python_annotation_schema_argument(value: String): PythonSchemaAnnotationArgument =
+    let equals = python_first_index_of(value, "=", 0)
+    if equals < 0
+    then PythonSchemaAnnotationArgument { name: value, kind: "nothing", value: "" }
+    else
+        let payload = value[equals + 1, value.size().value]
+        let colon = python_first_index_of(payload, ":", 0)
+        if colon < 0
+        then PythonSchemaAnnotationArgument { name: value[0, equals], kind: "nothing", value: "" }
+        else PythonSchemaAnnotationArgument {
+            name: value[0, equals],
+            kind: payload[0, colon],
+            value: payload[colon + 1, payload.size().value]
+        }
+
+private fun python_annotation_field_schema_name(value: String): String =
+    python_schema_field_name(value)
+
+private fun python_annotation_field_schema_has_default(value: String): bool =
+    let second = python_annotation_field_schema_second_separator(value)
+    let third = python_annotation_field_schema_third_separator(value)
+    if second < 0 | third < 0
+    then false
+    else value[second + 1, third] == "true"
+
+private fun python_annotation_field_schema_default_value_metadata_literal(value: String): String =
+    let third = python_annotation_field_schema_third_separator(value)
+    if third < 0
+    then python_annotation_value_metadata_literal("nothing", "")
+    else
+        let payload = value[third + 1, value.size().value]
+        let colon = python_first_index_of(payload, ":", 0)
+        if colon < 0
+        then python_annotation_value_metadata_literal("nothing", "")
+        else python_annotation_value_metadata_literal(payload[0, colon], payload[colon + 1, payload.size().value])
+
+private fun python_annotation_field_schema_second_separator(value: String): int =
+    let first = python_first_index_of(value, "|", 0)
+    if first < 0 then -1 else python_first_index_of(value, "|", first + 1)
+
+private fun python_annotation_field_schema_third_separator(value: String): int =
+    let second = python_annotation_field_schema_second_separator(value)
+    if second < 0 then -1 else python_first_index_of(value, "|", second + 1)
+
+private fun python_find_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    if python_qualified_name(name)
+    then python_find_qualified_annotation_binding(name, module, allModules)
+    else
+        match module.annotations.get(name) with
+        case Some { declaration } -> /capy/lang/Option.Some { PythonAnnotationBinding { declaration: declaration, module: module } }
+        case None ->
+            match python_find_annotation_binding_in_imports(name, module.imports, module, allModules) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> python_find_annotation_binding_in_modules(name, allModules)
+
+private fun python_find_qualified_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    let className = python_qualified_call_class_name(name)
+    let member = python_qualified_call_member(name)
+    if python_stdlib_annotations_class(className)
+    then python_stdlib_annotation_binding(member)
+    else match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
+    case Some { targetModule } -> python_annotation_binding_in_module(member, targetModule)
+    case None -> /capy/lang/Option.None {}
+
+private fun python_find_annotation_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        match python_stdlib_annotation_binding_in_import(name, declaration) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None ->
+            if python_annotation_import_matches(name, declaration)
+            then python_find_annotation_binding_in_import(name, imports[1:], module, allModules, declaration)
+            else python_find_annotation_binding_in_imports(name, imports[1:], module, allModules)
+
+private fun python_find_annotation_binding_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[PythonAnnotationBinding] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case None -> python_find_annotation_binding_in_imports(name, rest, module, allModules)
+    case Some { importedModule } ->
+        match python_annotation_binding_in_module(name, importedModule) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> python_find_annotation_binding_in_imports(name, rest, module, allModules)
+
+private fun python_find_annotation_binding_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        match python_annotation_binding_in_module(name, module) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> python_find_annotation_binding_in_modules(name, modules[1:])
+
+private fun python_annotation_binding_in_module(name: String, module: CompiledModule): /capy/lang/Option[PythonAnnotationBinding] =
+    match module.annotations.get(name) with
+    case Some { declaration } -> /capy/lang/Option.Some { PythonAnnotationBinding { declaration: declaration, module: module } }
+    case None -> /capy/lang/Option.None {}
+
+private fun python_annotation_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !python_stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & python_import_includes_name(name, declaration)
+
+private fun python_stdlib_annotation_binding_in_import(name: String, declaration: CompiledImportDeclaration): /capy/lang/Option[PythonAnnotationBinding] =
+    if !declaration.qualified
+        & python_stdlib_annotations_module_path(declaration.modulePath)
+        & python_import_includes_name(name, declaration)
+    then python_stdlib_annotation_binding(name)
+    else /capy/lang/Option.None {}
+
+private fun python_stdlib_annotation_binding(name: String): /capy/lang/Option[PythonAnnotationBinding] =
+    if name == "Deprecated"
+    then /capy/lang/Option.Some { PythonAnnotationBinding {
+        declaration: CompiledAnnotationDeclaration {
+            name: "Deprecated",
+            visibility: "public",
+            repeatable: false,
+            targets: ["fun", "method", "const", "data", "union", "enum", "type", "deriver", "class", "interface", "trait", "field", "init"],
+            fields: ["message|String|false|nothing:", "since|String|true|string:"],
+            location: CompiledSourceLocation { line: 2, column: 0 }
+        },
+        module: python_stdlib_annotations_module()
+    }}
+    else /capy/lang/Option.None {}
+
+private fun python_stdlib_annotations_module(): CompiledModule =
+    CompiledModule {
+        name: "Annotations",
+        path: "capy/meta_prog",
+        types: {:},
+        visiblePrimitiveBackedTypes: {:},
+        functions: [],
+        imports: [],
+        derivers: {:},
+        annotations: {:},
+        staticImports: []
+    }
+
+private fun python_stdlib_annotations_class(className: String): bool =
+    className == "capy.meta_prog.Annotations" | className == "capy/meta_prog/Annotations"
+
+private fun python_stdlib_annotations_module_path(path: String): bool =
+    path == "/capy/meta_prog/Annotations" | path == "capy/meta_prog/Annotations"
+
+private fun python_reflection_module_package_metadata_literal(module: CompiledModule): String =
+    python_code_dict([
+        python_code_dict_entry("name", python_string_literal(module.name)),
+        python_code_dict_entry("path", python_string_literal(module.path)),
+    ])
+
+private fun python_reflection_data_package_metadata_literal(module: CompiledModule): String =
+    python_code_dict([
+        python_code_dict_entry("name", python_string_literal(module.name)),
+        python_code_dict_entry("path", python_string_literal(python_reflection_module_path(module))),
+    ])
+
+private fun python_reflection_module_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else module.path + "/" + module.name
+
+private fun python_code_dict(entries: List[String]): String =
+    "{" + python_code_list(entries) + "}"
+
+private fun python_code_dict_entry(name: String, valueCode: String): String =
+    python_string_literal(name) + ": " + valueCode
+
+private fun python_code_list_literal(values: List[String]): String =
+    "[" + python_code_list(values) + "]"
+
+private fun python_code_list(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> value + python_code_list_tail(values[1:])
+
+private fun python_code_list_tail(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some _ -> ", " + python_code_list(values)
 
 private fun python_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     python_merge_schema_fields(
