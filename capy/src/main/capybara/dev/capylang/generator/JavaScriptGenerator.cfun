@@ -2433,32 +2433,36 @@ private fun java_script_variable_type(name: String, env: List[JavaScriptBinding]
             case None -> java_script_unknown_type()
 
 private fun java_script_function_call_name(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_callable_binding_type(java_script_variable_type(name, env, module, allModules))
-    then java_script_variable_code(name, env, module, allModules)
-    else if java_script_runtime_function(name)
-    then name
-    else if java_script_qualified_call_name(name)
-    then match java_script_find_qualified_function_call(name, module, allModules) with
-        case Some { binding } -> binding
-        case None -> java_script_identifier(name)
-    else match java_script_find_local_function(name, module.functions) with
-    case Some { function } ->
-        if java_script_overloaded_function_name(name, module.functions)
-        then java_script_identifier(name)
-        else java_script_function_name(function)
+    match java_script_lookup_binding(name, env) with
+    case Some { binding } -> binding.jsName
     case None ->
-        match java_script_find_function_in_imports(name, module.imports, module, allModules) with
-        case Some { binding } -> binding
-        case None -> java_script_identifier(name)
+        if java_script_runtime_function(name)
+        then name
+        else if java_script_qualified_call_name(name)
+        then match java_script_find_qualified_function_call(name, module, allModules) with
+            case Some { binding } -> binding
+            case None -> java_script_identifier(name)
+        else match java_script_find_local_function(name, module.functions) with
+        case Some { function } ->
+            if java_script_overloaded_function_name(name, module.functions)
+            then java_script_identifier(name)
+            else java_script_function_name(function)
+        case None ->
+            match java_script_find_function_in_imports(name, module.imports, module, allModules) with
+            case Some { binding } -> binding
+            case None -> java_script_identifier(name)
 
 private fun java_script_function_call_definition(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    if java_script_callable_binding_type(java_script_variable_type(name, env, module, allModules)) | java_script_runtime_function(name)
-    then /capy/lang/Option.None {}
-    else if java_script_qualified_call_name(name)
-    then java_script_find_qualified_function_definition(name, module, allModules)
-    else match java_script_find_local_function(name, module.functions) with
-    case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> java_script_find_function_definition_in_imports(name, module.imports, module, allModules)
+    match java_script_lookup_binding(name, env) with
+    case Some _ -> /capy/lang/Option.None {}
+    case None ->
+        if java_script_runtime_function(name)
+        then /capy/lang/Option.None {}
+        else if java_script_qualified_call_name(name)
+        then java_script_find_qualified_function_definition(name, module, allModules)
+        else match java_script_find_local_function(name, module.functions) with
+        case Some { function } -> /capy/lang/Option.Some { function }
+        case None -> java_script_find_function_definition_in_imports(name, module.imports, module, allModules)
 
 private fun java_script_runtime_function(name: String): bool =
     name == "assert_all"
@@ -3493,7 +3497,9 @@ private fun java_script_index_expression_gatherable(index: CompiledIndexExpressi
 
 private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_expressions_gatherable(call.arguments, env, module, allModules)
-    then if java_script_runtime_function(call.name)
+    then if java_script_binding_exists(call.name, env)
+        then true
+        else if java_script_runtime_function(call.name)
         then true
         else if java_script_enum_parse_call(call, module, allModules)
         then true
@@ -3509,6 +3515,11 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
         then true
         else java_script_imported_function_exists(call.name, module.imports, module, allModules)
     else false
+
+private fun java_script_binding_exists(name: String, env: List[JavaScriptBinding]): bool =
+    match java_script_lookup_binding(name, env) with
+    case Some _ -> true
+    case None -> false
 
 private fun java_script_method_call_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "is_equal_to" | call.name == "is_true" | call.name == "is_false"
