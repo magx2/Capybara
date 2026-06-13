@@ -52,7 +52,13 @@ data DeriverDeclaration {
 }
 data EnumValueDeclaration { name: String, location: SourceLocation }
 data EnumDeclaration { name: String, values: List[EnumValueDeclaration], annotations: List[AnnotationApplication], location: SourceLocation }
-data PrimitiveBackedTypeDeclaration {}
+data PrimitiveBackedTypeDeclaration {
+    name: String,
+    visibility: String,
+    backingType: TypeReference,
+    annotations: List[AnnotationApplication],
+    location: SourceLocation
+}
 data TypeDeclaration {
     name: String,
     visibility: String,

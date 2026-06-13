@@ -1,1 +1,9 @@
-data CompiledPrimitiveBackedType {}
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+
+data CompiledPrimitiveBackedType {
+    name: String,
+    visibility: String,
+    backingType: CompiledTypeReference,
+    location: CompiledSourceLocation
+}
