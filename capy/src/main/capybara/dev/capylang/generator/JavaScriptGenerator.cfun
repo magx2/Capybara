@@ -1234,7 +1234,7 @@ private fun java_script_lambda_bindings_with_single_type(parameters: List[String
 
 private fun java_script_with_expression_code(withExpression: CompiledWithExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_with_expression_receiver_type(withExpression, env, module, allModules)
-    let constructorTypes = java_script_with_constructor_type_names(receiverType, module, allModules)
+    let constructorTypes = java_script_data_constructor_type_names(receiverType, module, allModules)
     let rawWithCode = java_script_raw_with_expression_code(withExpression, env, module, allModules)
     if constructorTypes.is_empty()
     then rawWithCode
@@ -1261,12 +1261,9 @@ private fun java_script_with_fields_object_code(fields: List[CompiledDataField],
 private fun java_script_with_expression_receiver_type(withExpression: CompiledWithExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_expression_type(withExpression.receiver, env, module, allModules)
 
-private fun java_script_with_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    java_script_data_parent_constructor_type_names(typeName, module, allModules) + java_script_data_own_constructor_type_names(typeName, module)
-
 private fun java_script_with_expression_type(withExpression: CompiledWithExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_with_expression_receiver_type(withExpression, env, module, allModules)
-    let constructorTypes = java_script_with_constructor_type_names(receiverType, module, allModules)
+    let constructorTypes = java_script_data_constructor_type_names(receiverType, module, allModules)
     if constructorTypes.is_empty()
     then receiverType
     else java_script_with_constructor_result_type(receiverType, constructorTypes, module, allModules)
@@ -1415,11 +1412,12 @@ private fun java_script_data_literal_code(literal: CompiledDataLiteral, env: Lis
     else
         let declaredTypeName = java_script_data_literal_declared_type_name(literal.typeName)
         let parentConstructors = java_script_data_parent_constructor_type_names(declaredTypeName, module, allModules)
+        let constructorTypes = java_script_data_constructor_type_names(declaredTypeName, module, allModules)
         if parentConstructors.is_empty()
         then match java_script_data_constructor_function(declaredTypeName, module) with
             case Some { function } -> java_script_data_constructor_call_code(function, literal, env, module, allModules)
             case None -> java_script_raw_data_literal_code(literal, env, module, allModules)
-        else java_script_data_constructor_pipeline_code(parentConstructors + java_script_data_own_constructor_type_names(declaredTypeName, module), literal, env, module, allModules)
+        else java_script_data_constructor_pipeline_code(constructorTypes, literal, env, module, allModules)
 
 private fun java_script_raw_data_literal(typeName: String): bool =
     java_script_string_has_prefix(typeName, "__capy_raw|")
@@ -1445,6 +1443,11 @@ private fun java_script_data_own_constructor_type_names(typeName: String, module
     match java_script_data_constructor_function(typeName, module) with
     case Some _ -> [typeName]
     case None -> []
+
+private fun java_script_data_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    if java_script_raw_data_literal(typeName)
+    then []
+    else java_script_data_parent_constructor_type_names(typeName, module, allModules) + java_script_data_own_constructor_type_names(typeName, module)
 
 private fun java_script_data_parent_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     java_script_data_parent_constructor_type_names_from(java_script_data_type_parent_types(typeName, module, allModules), module)
@@ -1560,15 +1563,10 @@ private fun java_script_data_literal_expression_type(literal: CompiledDataLitera
     then java_script_data_literal_declared_type_name(literal.typeName)
     else
         let declaredTypeName = java_script_data_literal_declared_type_name(literal.typeName)
-        let parentConstructors = java_script_data_parent_constructor_type_names(declaredTypeName, module, allModules)
-        if parentConstructors.is_empty()
-        then match java_script_data_constructor_function(declaredTypeName, module) with
-            case Some _ ->
-                if java_script_data_constructor_type_returns_result(declaredTypeName, module, allModules)
-                then "Result"
-                else declaredTypeName
-            case None -> declaredTypeName
-        else if java_script_data_constructor_pipeline_returns_result(parentConstructors + java_script_data_own_constructor_type_names(declaredTypeName, module), module, allModules)
+        let constructorTypes = java_script_data_constructor_type_names(declaredTypeName, module, allModules)
+        if constructorTypes.is_empty()
+        then declaredTypeName
+        else if java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
         then "Result"
         else declaredTypeName
 
@@ -2231,7 +2229,7 @@ private fun java_script_result_payload_type_from_method_call(call: CompiledMetho
 
 private fun java_script_result_payload_type_from_with_expression(withExpression: CompiledWithExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_with_expression_receiver_type(withExpression, env, module, allModules)
-    let constructorTypes = java_script_with_constructor_type_names(receiverType, module, allModules)
+    let constructorTypes = java_script_data_constructor_type_names(receiverType, module, allModules)
     if java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
     then receiverType
     else java_script_unknown_type()
@@ -2252,7 +2250,7 @@ private fun java_script_result_payload_type_from_data_literal(literal: CompiledD
     then java_script_success_literal_payload_type(literal.fields, env, module, allModules)
     else
         let declaredTypeName = java_script_data_literal_declared_type_name(literal.typeName)
-        let constructorTypes = java_script_data_parent_constructor_type_names(declaredTypeName, module, allModules) + java_script_data_own_constructor_type_names(declaredTypeName, module)
+        let constructorTypes = java_script_data_constructor_type_names(declaredTypeName, module, allModules)
         if !java_script_raw_data_literal(literal.typeName) & java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
         then declaredTypeName
         else java_script_unknown_type()
