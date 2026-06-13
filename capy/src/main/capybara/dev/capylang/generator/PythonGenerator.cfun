@@ -599,7 +599,7 @@ private fun python_collection_method_call(call: CompiledMethodCallExpression, re
         & python_single_callable_argument(call.arguments)
 
 private fun python_collection_method_name(name: String): bool =
-    name == "map" | name == "filter" | name == "`|-`" | name == "flat_map"
+    name == "map" | name == "filter" | name == "`|-`" | name == "reject" | name == "flat_map"
 
 private fun python_collection_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
     match call.arguments[0] with
@@ -621,6 +621,8 @@ private fun python_collection_method_binary(call: CompiledMethodCallExpression):
 private fun python_collection_method_operator(name: String): String =
     if name == "filter" | name == "`|-`"
     then "|-"
+    else if name == "reject"
+    then "|!"
     else if name == "flat_map"
     then "|*"
     else "|"
@@ -637,6 +639,7 @@ private fun python_collection_reduce_method_call(call: CompiledMethodCallExpress
                     call.arguments[2:].is_empty()
                         & match reducer with
                             case CompiledLambdaExpression lambda -> python_collection_reduce_lambda_parameters_supported(lambda.parameters, receiverType)
+                            case CompiledFunctionReferenceExpression _ -> true
                             case _ -> false
 
 private fun python_collection_reduce_lambda_parameters_supported(parameters: List[String], receiverType: String): bool =
@@ -665,6 +668,8 @@ private fun python_collection_reduce_method_code(call: CompiledMethodCallExpress
                 let keyName = python_reduce_key_parameter(lambda.parameters, receiverType)
                 let valueName = python_reduce_value_parameter(lambda.parameters, receiverType)
                 python_collection_reduce_method_lambda_code(call.receiver, initial, lambda.body, accumulatorName, keyName, valueName, env, module, allModules)
+            case CompiledFunctionReferenceExpression reference ->
+                python_collection_reduce_method_callable_code(call.receiver, initial, reference, receiverType, env, module, allModules)
             case _ -> "__capy_unsupported('collection reduce')"
 
 private fun python_collection_reduce_method_lambda_code(receiver: CompiledExpression, initial: CompiledExpression, body: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -680,6 +685,18 @@ private fun python_collection_reduce_method_lambda_code(receiver: CompiledExpres
         + python_reduce_parameters_from_names(accumulatorName, keyName, valueName)
         + ": "
         + python_expression_code(body, reduceEnv, module, allModules)
+        + ")"
+
+private fun python_collection_reduce_method_callable_code(receiver: CompiledExpression, initial: CompiledExpression, reducer: CompiledExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let keyed = if receiverType == python_dict_type() then "True" else "False"
+    "__capy_reduce("
+        + python_expression_code(receiver, env, module, allModules)
+        + ", "
+        + python_expression_code(initial, env, module, allModules)
+        + ", "
+        + keyed
+        + ", "
+        + python_expression_code(reducer, env, module, allModules)
         + ")"
 
 private fun python_reduce_parameters_from_names(accumulatorName: String, keyName: String, valueName: String): String =
@@ -787,6 +804,8 @@ private fun python_collection_pipe_code(binary: CompiledBinaryExpression, env: L
 private fun python_collection_pipe_helper(operator: String): String =
     if operator == "|-"
     then "__capy_seq_filter"
+    else if operator == "|!"
+    then "__capy_seq_reject"
     else if operator == "|*"
     then "__capy_seq_flat_map"
     else "__capy_seq_map"
@@ -1559,6 +1578,27 @@ private fun python_index_argument_tail(index: CompiledIndexExpression, env: List
     else ", " + python_expression_code(index.index, env, module, allModules)
 
 private fun python_reduce_expression_code(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_option_reduce_expression(reduce, env, module, allModules)
+    then python_option_reduce_expression_code(reduce, env, module, allModules)
+    else python_collection_reduce_expression_code(reduce, env, module, allModules)
+
+private fun python_option_reduce_expression(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    reduce.keyName.is_empty()
+        & python_option_pipe_receiver_type(python_expression_type(reduce.receiver, env, module, allModules))
+
+private fun python_option_reduce_expression_code(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let reduceEnv = python_reduce_bindings(reduce, env)
+    "__capy_option_reduce("
+        + python_expression_code(reduce.receiver, env, module, allModules)
+        + ", "
+        + python_expression_code(reduce.initial, env, module, allModules)
+        + ", lambda "
+        + python_reduce_parameters(reduce)
+        + ": "
+        + python_expression_code(reduce.body, reduceEnv, module, allModules)
+        + ")"
+
+private fun python_collection_reduce_expression_code(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let reduceEnv = python_reduce_bindings(reduce, env)
     let keyed = if reduce.keyName.is_empty() then "False" else "True"
     "__capy_reduce("
@@ -2333,7 +2373,7 @@ private fun python_collection_pipe_expression_with_left_type(binary: CompiledBin
         & python_callable_expression(binary.right)
 
 private fun python_collection_pipe_operator(operator: String): bool =
-    operator == "|" | operator == "|-" | operator == "|*"
+    operator == "|" | operator == "|-" | operator == "|*" | operator == "|!"
 
 private fun python_collection_pipe_receiver_type(type: String): bool =
     type == python_unknown_type()
@@ -3031,7 +3071,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', 'to_seq', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', 'to_seq', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -4163,6 +4203,12 @@ private fun python_test_runtime_sequence_helpers_code(): String =
     + "        return dict((key, item) for key, item in value.items() if __capy_apply_lambda(predicate, (key, item)))" + python_newline()
     + "    return [item for item in __capy_as_iterable(value) if __capy_apply_lambda(predicate, item)]" + python_newline()
     + python_newline()
+    + "def __capy_seq_reject(value, predicate):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if isinstance(value, dict) and '__type' not in value:" + python_newline()
+    + "        return dict((key, item) for key, item in value.items() if not __capy_apply_lambda(predicate, (key, item)))" + python_newline()
+    + "    return [item for item in __capy_as_iterable(value) if not __capy_apply_lambda(predicate, item)]" + python_newline()
+    + python_newline()
     + "def __capy_seq_flat_map(value, mapper):" + python_newline()
     + "    result = []" + python_newline()
     + "    for item in __capy_as_iterable(value):" + python_newline()
@@ -4204,6 +4250,14 @@ private fun python_test_runtime_option_helpers_code(): String =
     + "            return mapped" + python_newline()
     + "        return __capy_data('Some', dict(value=mapped))" + python_newline()
     + "    return __capy_unsupported('option flat_map')" + python_newline()
+    + python_newline()
+    + "def __capy_option_reduce(value, initial, reducer):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'None'):" + python_newline()
+    + "        return initial" + python_newline()
+    + "    if _capy_data_is(value, 'Some'):" + python_newline()
+    + "        return _unsafe_run(reducer(initial, _capy_data_value(value)))" + python_newline()
+    + "    return __capy_unsupported('option reduce')" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_result_helpers_code(): String =
