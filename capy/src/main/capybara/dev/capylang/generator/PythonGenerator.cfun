@@ -224,6 +224,8 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
     then python_result_pipe_code(binary, env, module, allModules)
     else if python_option_pipe_expression_with_left_type(binary, leftType)
     then python_option_pipe_code(binary, env, module, allModules)
+    else if python_collection_pipe_chained_method_expression_with_left_type(binary, leftType)
+    then python_method_call_code(python_collection_pipe_chained_method_call(binary), env, module, allModules)
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_code(binary, env, module, allModules)
     else if python_regex_binary_expression_with_left_type(binary, leftType)
@@ -366,6 +368,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_effect_method_call_code(call, env, module, allModules)
     else if python_result_method_call(call, receiverType)
     then python_result_method_call_code(call, env, module, allModules)
+    else if python_option_method_call(call, receiverType)
+    then python_option_pipe_code(python_option_method_binary(call), env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
     then "__capy_size(" + receiver + ")"
     else if python_enum_name_method_call(call, receiverType, module, allModules)
@@ -384,10 +388,16 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_stdlib_date_time_method_call_code(call, env, module, allModules)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_code(call, env, module, allModules)
+    else if python_collection_reduce_method_call(call, receiverType)
+    then python_collection_reduce_method_code(call, receiverType, env, module, allModules)
+    else if python_collection_method_call(call, receiverType)
+    then python_collection_pipe_code(python_collection_method_binary(call), env, module, allModules)
     else if python_native_collection_method_call_with_receiver_type(call, receiverType)
     then python_native_collection_method_call_code(call, receiverType, receiver, env, module, allModules)
     else if python_seq_as_list_call(call)
     then "__capy_as_list(" + receiver + ")"
+    else if python_seq_first_call(call, receiverType)
+    then "__capy_index(__capy_as_list(" + receiver + "), 0)"
     else if python_collection_predicate_call(call, receiverType)
     then python_collection_predicate_call_code(call, env, module, allModules)
     else if python_primitive_conversion_method_call(call, receiverType)
@@ -551,6 +561,162 @@ private fun python_result_method_helper(name: String): String =
     then "__capy_result_flat_map"
     else "__capy_result_map"
 
+private fun python_option_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    python_option_method_name(call.name)
+        & python_option_pipe_receiver_type(receiverType)
+        & python_single_callable_argument(call.arguments)
+
+private fun python_option_method_name(name: String): bool =
+    name == "map" | name == "filter" | name == "flat_map"
+
+private fun python_option_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
+    match call.arguments[0] with
+    case None ->
+        CompiledBinaryExpression {
+            operator: python_option_method_operator(call.name),
+            left: call.receiver,
+            right: python_missing_argument(),
+            location: call.location
+        }
+    case Some { argument } ->
+        CompiledBinaryExpression {
+            operator: python_option_method_operator(call.name),
+            left: call.receiver,
+            right: argument,
+            location: call.location
+        }
+
+private fun python_option_method_operator(name: String): String =
+    if name == "filter"
+    then "|-"
+    else if name == "flat_map"
+    then "|*"
+    else "|"
+
+private fun python_collection_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    python_collection_method_name(call.name)
+        & python_collection_pipe_receiver_type(receiverType)
+        & python_single_callable_argument(call.arguments)
+
+private fun python_collection_method_name(name: String): bool =
+    name == "map" | name == "filter" | name == "`|-`" | name == "flat_map"
+
+private fun python_collection_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
+    match call.arguments[0] with
+    case None ->
+        CompiledBinaryExpression {
+            operator: python_collection_method_operator(call.name),
+            left: call.receiver,
+            right: python_missing_argument(),
+            location: call.location
+        }
+    case Some { argument } ->
+        CompiledBinaryExpression {
+            operator: python_collection_method_operator(call.name),
+            left: call.receiver,
+            right: argument,
+            location: call.location
+        }
+
+private fun python_collection_method_operator(name: String): String =
+    if name == "filter" | name == "`|-`"
+    then "|-"
+    else if name == "flat_map"
+    then "|*"
+    else "|"
+
+private fun python_collection_reduce_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    (call.name == "reduce" | call.name == "reduce_left")
+        & python_collection_pipe_receiver_type(receiverType)
+        & match call.arguments[0] with
+            case None -> false
+            case Some _ ->
+                match call.arguments[1] with
+                case None -> false
+                case Some { reducer } ->
+                    call.arguments[2:].is_empty()
+                        & match reducer with
+                            case CompiledLambdaExpression lambda -> python_collection_reduce_lambda_parameters_supported(lambda.parameters, receiverType)
+                            case _ -> false
+
+private fun python_collection_reduce_lambda_parameters_supported(parameters: List[String], receiverType: String): bool =
+    if receiverType == python_dict_type()
+    then python_reduce_lambda_arity_supported(parameters, 3)
+    else python_reduce_lambda_arity_supported(parameters, 2)
+
+private fun python_reduce_lambda_arity_supported(parameters: List[String], arity: int): bool =
+    if arity == 0
+    then parameters.is_empty()
+    else match parameters[0] with
+        case None -> false
+        case Some _ -> python_reduce_lambda_arity_supported(parameters[1:], arity - 1)
+
+private fun python_collection_reduce_method_code(call: CompiledMethodCallExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.arguments[0] with
+    case None ->
+        "__capy_unsupported('collection reduce')"
+    case Some { initial } ->
+        match call.arguments[1] with
+        case None -> "__capy_unsupported('collection reduce')"
+        case Some { reducer } ->
+            match reducer with
+            case CompiledLambdaExpression lambda ->
+                let accumulatorName = python_lambda_parameter_at(lambda.parameters, 0)
+                let keyName = python_reduce_key_parameter(lambda.parameters, receiverType)
+                let valueName = python_reduce_value_parameter(lambda.parameters, receiverType)
+                python_collection_reduce_method_lambda_code(call.receiver, initial, lambda.body, accumulatorName, keyName, valueName, env, module, allModules)
+            case _ -> "__capy_unsupported('collection reduce')"
+
+private fun python_collection_reduce_method_lambda_code(receiver: CompiledExpression, initial: CompiledExpression, body: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let reduceEnv = python_reduce_bindings_from_names(accumulatorName, keyName, valueName, env)
+    let keyed = if keyName.is_empty() then "False" else "True"
+    "__capy_reduce("
+        + python_expression_code(receiver, env, module, allModules)
+        + ", "
+        + python_expression_code(initial, env, module, allModules)
+        + ", "
+        + keyed
+        + ", lambda "
+        + python_reduce_parameters_from_names(accumulatorName, keyName, valueName)
+        + ": "
+        + python_expression_code(body, reduceEnv, module, allModules)
+        + ")"
+
+private fun python_reduce_parameters_from_names(accumulatorName: String, keyName: String, valueName: String): String =
+    if keyName.is_empty()
+    then python_identifier(accumulatorName) + ", " + python_identifier(valueName)
+    else python_identifier(accumulatorName) + ", " + python_identifier(keyName) + ", " + python_identifier(valueName)
+
+private fun python_reduce_bindings_from_names(accumulatorName: String, keyName: String, valueName: String, env: List[PythonBinding]): List[PythonBinding] =
+    if keyName.is_empty()
+    then [
+            PythonBinding { name: accumulatorName, pythonName: python_identifier(accumulatorName), typeName: python_unknown_type() },
+            PythonBinding { name: valueName, pythonName: python_identifier(valueName), typeName: python_unknown_type() },
+        ] + env
+    else [
+            PythonBinding { name: accumulatorName, pythonName: python_identifier(accumulatorName), typeName: python_unknown_type() },
+            PythonBinding { name: keyName, pythonName: python_identifier(keyName), typeName: python_unknown_type() },
+            PythonBinding { name: valueName, pythonName: python_identifier(valueName), typeName: python_unknown_type() },
+        ] + env
+
+private fun python_reduce_key_parameter(parameters: List[String], receiverType: String): String =
+    if receiverType == python_dict_type()
+    then python_lambda_parameter_at(parameters, 1)
+    else ""
+
+private fun python_reduce_value_parameter(parameters: List[String], receiverType: String): String =
+    if receiverType == python_dict_type()
+    then python_lambda_parameter_at(parameters, 2)
+    else python_lambda_parameter_at(parameters, 1)
+
+private fun python_lambda_parameter_at(parameters: List[String], target: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        if target == 0
+        then parameter
+        else python_lambda_parameter_at(parameters[1:], target - 1)
+
 private fun python_result_reduce_success_callable_code(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match arguments[0] with
     case None -> "__capy_unsupported('result reduce success mapper')"
@@ -624,6 +790,34 @@ private fun python_collection_pipe_helper(operator: String): String =
     else if operator == "|*"
     then "__capy_seq_flat_map"
     else "__capy_seq_map"
+
+private fun python_collection_pipe_chained_method_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    python_collection_pipe_operator(binary.operator)
+        & python_collection_pipe_receiver_type(leftType)
+        & match binary.right with
+            case CompiledMethodCallExpression call -> python_callable_expression(call.receiver)
+            case _ -> false
+
+private fun python_collection_pipe_chained_method_call(binary: CompiledBinaryExpression): CompiledMethodCallExpression =
+    match binary.right with
+    case CompiledMethodCallExpression call ->
+        CompiledMethodCallExpression {
+            receiver: CompiledBinaryExpression {
+                operator: binary.operator,
+                left: binary.left,
+                right: call.receiver,
+                location: binary.location
+            },
+            name: call.name,
+            arguments: call.arguments,
+            location: call.location
+        }
+    case _ -> CompiledMethodCallExpression {
+        receiver: binary,
+        name: "",
+        arguments: [],
+        location: binary.location
+    }
 
 private fun python_result_pipe_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     python_result_pipe_helper(binary.operator)
@@ -1708,6 +1902,8 @@ private fun python_runtime_function_type(name: String): String =
     then python_test_case_type()
     else if name == "test_file"
     then python_effect_type()
+    else if name == "to_seq"
+    then python_seq_type()
     else if python_console_function(name)
     then python_effect_type()
     else python_unknown_type()
@@ -1746,8 +1942,16 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_effect_type()
     else if python_result_method_call(call, receiverType)
     then python_result_method_call_type(call, env, module, allModules)
+    else if python_option_method_call(call, receiverType)
+    then python_option_type()
     else if python_assert_method(call.name)
     then python_assert_type()
+    else if python_collection_reduce_method_call(call, receiverType)
+    then python_first_method_argument_type(call.arguments, env, module, allModules)
+    else if python_collection_method_call(call, receiverType)
+    then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
+    else if python_seq_first_call(call, receiverType)
+    then python_option_type()
     else match python_find_extension_method(call, env, module, allModules) with
         case Some { function } -> function.returnType.name
         case None -> python_unknown_type()
@@ -1965,6 +2169,8 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     then python_result_type()
     else if python_option_pipe_expression_with_left_type(binary, leftType)
     then python_option_type()
+    else if python_collection_pipe_chained_method_expression_with_left_type(binary, leftType)
+    then python_method_call_expression_type(python_collection_pipe_chained_method_call(binary), env, module, allModules)
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_result_type(binary.operator, leftType)
     else if python_regex_binary_expression_with_left_type(binary, leftType)
@@ -2192,6 +2398,11 @@ private fun python_seq_as_list_call(call: CompiledMethodCallExpression): bool =
     call.name == "as_list"
         & call.arguments.is_empty()
 
+private fun python_seq_first_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    call.name == "first"
+        & call.arguments.is_empty()
+        & python_collection_pipe_receiver_type(receiverType)
+
 private fun python_native_collection_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String): bool =
     if receiverType == python_list_type()
     then if call.name == "is_empty"
@@ -2313,6 +2524,7 @@ private fun python_runtime_function(name: String): bool =
         | name == "test"
         | name == "test_file"
         | name == "digits"
+        | name == "to_seq"
         | name == "pure"
         | name == "delay"
         | python_console_function(name)
@@ -2819,7 +3031,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', 'to_seq', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -3569,6 +3781,10 @@ private fun python_value_assert_extra_methods_code(): String =
     + "        result = str(self.value).startswith(str(other))" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to start with ' + repr(other), 'Assert.starts_with')" + python_newline()
     + python_newline()
+    + "    def does_not_start_with(self, other):" + python_newline()
+    + "        result = not str(self.value).startswith(str(other))" + python_newline()
+    + "        return self._append(result, 'Expected ' + repr(self.value) + ' not to start with ' + repr(other), 'Assert.does_not_start_with')" + python_newline()
+    + python_newline()
     + "    def succeeds(self, expected=None):" + python_newline()
     + "        if not _capy_data_is(self.value, 'Success'):" + python_newline()
     + "            return self._append(False, 'Expected ' + repr(self.value) + ' to succeed', 'Assert.succeeds')" + python_newline()
@@ -3908,6 +4124,9 @@ private fun python_test_runtime_iterable_helpers_code(): String =
     + "    if isinstance(value, list):" + python_newline()
     + "        return value" + python_newline()
     + "    return list(__capy_as_iterable(value))" + python_newline()
+    + python_newline()
+    + "def to_seq(value):" + python_newline()
+    + "    return __capy_as_list(value)" + python_newline()
     + python_newline()
     + "def __capy_seq_iter(seq):" + python_newline()
     + "    while isinstance(seq, dict) and seq.get('__type') == 'Cons':" + python_newline()
@@ -4253,6 +4472,8 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
     then python_result_pipe_gatherable(binary, env, module, allModules)
     else if python_option_pipe_expression_with_left_type(binary, leftType)
     then python_option_pipe_gatherable(binary, env, module, allModules)
+    else if python_collection_pipe_chained_method_expression_with_left_type(binary, leftType)
+    then python_method_call_gatherable(python_collection_pipe_chained_method_call(binary), env, module, allModules)
     else if python_collection_pipe_expression_with_left_type(binary, leftType)
     then python_collection_pipe_gatherable(binary, env, module, allModules)
     else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
@@ -4401,6 +4622,14 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then python_effect_method_gatherable(call, env, module, allModules)
     else if python_result_method_call(call, receiverType)
     then python_result_method_gatherable(call, env, module, allModules)
+    else if python_option_method_call(call, receiverType)
+    then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
+    else if python_collection_reduce_method_call(call, receiverType)
+    then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
+    else if python_collection_method_call(call, receiverType)
+    then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
+    else if python_seq_first_call(call, receiverType)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
     else match python_find_extension_method(call, env, module, allModules) with
         case Some _ ->
             python_expression_gatherable(call.receiver, env, module, allModules)
@@ -4420,6 +4649,23 @@ private fun python_result_method_gatherable(call: CompiledMethodCallExpression, 
         & python_result_reduce_arguments_gatherable(call.receiver, call.arguments, env, module, allModules)
     else python_expression_gatherable(call.receiver, env, module, allModules)
         & python_result_single_callable_argument_gatherable(call.receiver, call.arguments, env, module, allModules)
+
+private fun python_collection_reduce_method_gatherable(call: CompiledMethodCallExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_expression_gatherable(call.receiver, env, module, allModules)
+        & match call.arguments[0] with
+            case None -> false
+            case Some { initial } ->
+                python_expression_gatherable(initial, env, module, allModules)
+                    & match call.arguments[1] with
+                        case None -> false
+                        case Some { reducer } ->
+                            match reducer with
+                            case CompiledLambdaExpression lambda ->
+                                let accumulatorName = python_lambda_parameter_at(lambda.parameters, 0)
+                                let keyName = python_reduce_key_parameter(lambda.parameters, receiverType)
+                                let valueName = python_reduce_value_parameter(lambda.parameters, receiverType)
+                                python_expression_gatherable(lambda.body, python_reduce_bindings_from_names(accumulatorName, keyName, valueName, env), module, allModules)
+                            case _ -> false
 
 private fun python_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     python_expression_gatherable(call.receiver, env, module, allModules)
@@ -4634,6 +4880,7 @@ private fun python_assert_method(name: String): bool =
         | name == "has_size"
         | name == "contains"
         | name == "starts_with"
+        | name == "does_not_start_with"
         | name == "succeeds"
         | name == "fails"
         | name == "failed"
