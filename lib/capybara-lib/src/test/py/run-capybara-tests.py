@@ -376,6 +376,23 @@ def make_overload_dispatcher(candidates, parents, fallback):
     return dispatcher
 
 
+def runtime_parameter_signature(candidate):
+    return tuple(
+        simple_type_name(field(parameter.get("typeReference", {}), "name", default="any"))
+        for parameter in candidate["parameters"]
+    )
+
+
+def generated_overload_names_are_runtime_distinguishable(candidates):
+    seen = set()
+    for candidate in candidates:
+        signature = runtime_parameter_signature(candidate)
+        if signature in seen:
+            return False
+        seen.add(signature)
+    return True
+
+
 def dispatchable_function(function):
     visibility = str(function.get("visibility", ""))
     name = str(function.get("name", ""))
@@ -406,12 +423,14 @@ def patch_overload_dispatchers(generated_dir):
                 "parameters": function.get("parameters", []),
                 "callable": py_function,
             })
-        for candidates in groups.values():
+        for source_name, candidates in groups.items():
             if len(candidates) < 2:
                 continue
             dispatcher = make_overload_dispatcher(candidates, parents, candidates[0]["callable"])
-            for candidate in candidates:
-                setattr(module, candidate["python_name"], dispatcher)
+            setattr(module, source_name, dispatcher)
+            if generated_overload_names_are_runtime_distinguishable(candidates):
+                for candidate in candidates:
+                    setattr(module, candidate["python_name"], dispatcher)
 
 
 def assertion_value(value):
