@@ -249,18 +249,165 @@ private fun java_script_constant_name(function: CompiledFunction): String =
     java_script_identifier(function.name)
 
 private fun java_script_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_tail_recursive_function(function, module)
+    then java_script_tail_recursive_function_code(function, module, allModules)
+    else "function "
+            + java_script_function_name(function)
+            + "("
+            + java_script_function_parameters(function)
+            + ") {"
+            + java_script_newline()
+            + "    return "
+            + java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
+            + ";"
+            + java_script_newline()
+            + "}"
+            + java_script_newline()
+
+private fun java_script_tail_recursive_function(function: CompiledFunction, module: CompiledModule): bool =
+    !java_script_extension_method_function(function)
+        & java_script_local_function_count(function.name, module.functions) == 1
+        & java_script_tail_position_has_self_call(function.body, function.name)
+
+private fun java_script_tail_position_has_self_call(expression: CompiledExpression, functionName: String): bool =
+    match expression with
+    case CompiledFunctionCallExpression call -> call.name == functionName
+    case CompiledIfExpression ifExpression ->
+        java_script_tail_position_has_self_call(ifExpression.thenBranch, functionName)
+            | java_script_tail_position_has_self_call(ifExpression.elseBranch, functionName)
+    case CompiledBlockExpression block -> java_script_tail_position_has_self_call(block.result, functionName)
+    case _ -> false
+
+private fun java_script_tail_recursive_function_code(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     "function "
         + java_script_function_name(function)
         + "("
         + java_script_function_parameters(function)
         + ") {"
         + java_script_newline()
-        + "    return "
-        + java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
-        + ";"
+        + "    while (true) {"
+        + java_script_newline()
+        + java_script_tail_position_statements(function.body, java_script_function_bindings(function), function, module, allModules, "        ")
+        + "    }"
         + java_script_newline()
         + "}"
         + java_script_newline()
+
+private fun java_script_tail_position_statements(expression: CompiledExpression, env: List[JavaScriptBinding], function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    match expression with
+    case CompiledFunctionCallExpression call ->
+        if call.name == function.name
+        then java_script_tail_call_statements(call, function, env, module, allModules, indent)
+        else java_script_tail_return_statement(expression, env, module, allModules, indent)
+    case CompiledIfExpression ifExpression -> java_script_tail_if_statements(ifExpression, env, function, module, allModules, indent)
+    case CompiledBlockExpression block -> java_script_tail_block_statements(block, env, function, module, allModules, indent)
+    case _ -> java_script_tail_return_statement(expression, env, module, allModules, indent)
+
+private fun java_script_tail_return_statement(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    indent
+        + "return "
+        + java_script_expression_code(expression, env, module, allModules)
+        + ";"
+        + java_script_newline()
+
+private fun java_script_tail_call_statements(call: CompiledFunctionCallExpression, function: CompiledFunction, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    java_script_tail_call_temp_statements(function.parameters, call.arguments, function, env, module, allModules, 0, indent)
+        + java_script_tail_call_assignment_statements(function.parameters, call.arguments, function, 0, indent)
+        + indent
+        + "continue;"
+        + java_script_newline()
+
+private fun java_script_tail_call_temp_statements(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], function: CompiledFunction, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule], idx: int, indent: String): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } ->
+        indent
+            + "const "
+            + java_script_tail_call_temp_name(function, idx)
+            + " = "
+            + java_script_tail_call_argument_code(parameters, argument, env, module, allModules)
+            + ";"
+            + java_script_newline()
+            + java_script_tail_call_temp_statements(java_script_parameter_rest(parameters), arguments[1:], function, env, module, allModules, idx + 1, indent)
+
+private fun java_script_tail_call_argument_code(parameters: List[CompiledFunctionParameter], argument: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> java_script_expression_code(argument, env, module, allModules)
+    case Some { parameter } -> java_script_argument_code(parameter, argument, env, module, allModules)
+
+private fun java_script_tail_call_assignment_statements(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], function: CompiledFunction, idx: int, indent: String): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        indent
+            + java_script_identifier(parameter.name)
+            + " = "
+            + java_script_tail_call_assignment_value(arguments, function, idx)
+            + ";"
+            + java_script_newline()
+            + java_script_tail_call_assignment_statements(parameters[1:], java_script_expression_rest(arguments), function, idx + 1, indent)
+
+private fun java_script_tail_call_assignment_value(arguments: List[CompiledExpression], function: CompiledFunction, idx: int): String =
+    match arguments[0] with
+    case None -> "undefined"
+    case Some _ -> java_script_tail_call_temp_name(function, idx)
+
+private fun java_script_tail_call_temp_name(function: CompiledFunction, idx: int): String =
+    "__capy_tail_"
+        + function.location.line
+        + "_"
+        + function.location.column
+        + "_"
+        + idx
+
+private fun java_script_parameter_rest(parameters: List[CompiledFunctionParameter]): List[CompiledFunctionParameter] =
+    match parameters[0] with
+    case None -> []
+    case Some _ -> parameters[1:]
+
+private fun java_script_expression_rest(expressions: List[CompiledExpression]): List[CompiledExpression] =
+    match expressions[0] with
+    case None -> []
+    case Some _ -> expressions[1:]
+
+private fun java_script_tail_if_statements(ifExpression: CompiledIfExpression, env: List[JavaScriptBinding], function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    indent
+        + "if ("
+        + java_script_truthy_expression_code(ifExpression.condition, env, module, allModules)
+        + ") {"
+        + java_script_newline()
+        + java_script_tail_position_statements(ifExpression.thenBranch, env, function, module, allModules, indent + "    ")
+        + indent
+        + "} else {"
+        + java_script_newline()
+        + java_script_tail_position_statements(ifExpression.elseBranch, env, function, module, allModules, indent + "    ")
+        + indent
+        + "}"
+        + java_script_newline()
+
+private fun java_script_tail_block_statements(block: CompiledBlockExpression, env: List[JavaScriptBinding], function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    if java_script_block_has_result_binding(block.bindings, env, module, allModules) | java_script_block_has_effect_binding(block.bindings)
+    then indent
+        + "return "
+        + java_script_block_expression_code(block, env, module, allModules)
+        + ";"
+        + java_script_newline()
+    else java_script_tail_block_binding_statements(block.bindings, env, module, allModules, indent)
+        + java_script_tail_position_statements(block.result, java_script_block_env(block.bindings, env), function, module, allModules, indent)
+
+private fun java_script_tail_block_binding_statements(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
+    match bindings[0] with
+    case None -> ""
+    case Some { binding } ->
+        let jsBinding = java_script_let_binding(binding)
+        indent
+            + "const "
+            + jsBinding.jsName
+            + " = "
+            + java_script_expression_code(binding.value, env, module, allModules)
+            + ";"
+            + java_script_newline()
+            + java_script_tail_block_binding_statements(bindings[1:], [jsBinding] + env, module, allModules, indent)
 
 private fun java_script_function_parameters(function: CompiledFunction): String =
     if java_script_extension_method_function(function)
