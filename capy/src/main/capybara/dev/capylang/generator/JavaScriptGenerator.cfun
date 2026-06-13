@@ -125,8 +125,13 @@ private fun java_script_schema_parent_owner_name(name: String): String =
 
 private fun java_script_dispatch_runtime_code(): String =
     "function __capy_dispatch_normalize(typeName) { typeName = String(typeName || ''); if (typeName.startsWith('__capy_raw|')) return __capy_dispatch_normalize(typeName.slice('__capy_raw|'.length)); if (typeName.includes('/')) typeName = typeName.slice(typeName.lastIndexOf('/') + 1); if (typeName.includes('.')) typeName = typeName.slice(typeName.lastIndexOf('.') + 1); return typeName; }" + java_script_newline()
+    + "function __capy_dispatch_split_type_args(text) { const result = []; let depth = 0; let start = 0; for (let i = 0; i < text.length; i++) { const char = text[i]; if (char === '[') depth++; else if (char === ']') depth--; else if (char === ',' && depth === 0) { const part = text.slice(start, i).trim(); if (part) result.push(part); start = i + 1; } } const tail = text.slice(start).trim(); if (tail) result.push(tail); return result; }" + java_script_newline()
+    + "function __capy_dispatch_parse_type(typeName) { typeName = String(typeName || ''); const start = typeName.indexOf('['); if (start < 0 || !typeName.endsWith(']')) return { name: __capy_dispatch_normalize(typeName), args: [] }; return { name: __capy_dispatch_normalize(typeName.slice(0, start)), args: __capy_dispatch_split_type_args(typeName.slice(start + 1, -1)).map(__capy_dispatch_parse_type) }; }" + java_script_newline()
     + "function __capy_dispatch_parent_distance(actual, expected, distance, seen) { actual = __capy_dispatch_normalize(actual); expected = __capy_dispatch_normalize(expected); if (actual === expected) return distance; if (!actual || seen.includes(actual)) return -1; const parents = __capy_type_parents[actual] || []; let best = -1; for (const parent of parents) { const next = __capy_dispatch_parent_distance(parent, expected, distance + 1, seen.concat([actual])); if (next >= 0 && (best < 0 || next < best)) best = next; } return best; }" + java_script_newline()
-    + "function __capy_dispatch_type_score(value, expected) { expected = __capy_dispatch_normalize(expected); if (expected === 'any' || expected === '') return 1000; if (expected === 'String') return typeof value === 'string' ? 0 : 1000000; if (expected === 'char') return typeof value === 'string' && Array.from(value).length === 1 ? 0 : 1000000; if (expected === 'bool') return typeof value === 'boolean' ? 0 : 1000000; if (expected === 'int' || expected === 'byte') return Number.isInteger(value) ? 0 : 1000000; if (expected === 'long') return (typeof value === 'bigint' || Number.isInteger(value)) ? 0 : 1000000; if (expected === 'float' || expected === 'double') return typeof value === 'number' ? 0 : 1000000; if (expected === 'List') return Array.isArray(value) ? 0 : 1000000; if (expected === 'Set') return value instanceof Set ? 0 : 1000000; if (expected === 'Dict') return value instanceof Map ? 0 : 1000000; if (value == null || typeof value !== 'object') return 1000000; const distance = __capy_dispatch_parent_distance(value.__type, expected, 0, []); return distance >= 0 ? distance : 1000000; }" + java_script_newline()
+    + "function __capy_dispatch_values_score(values, expected) { if (expected.args.length === 0) return 0; let score = 0; for (const item of values) { const part = __capy_dispatch_type_score_parsed(item, expected.args[0]); if (part >= 1000000) return 1000000; score += part; } return score; }" + java_script_newline()
+    + "function __capy_dispatch_dict_score(value, expected) { if (expected.args.length === 0) return 0; let score = 0; for (const entry of value.entries()) { if (expected.args.length > 1) { const keyScore = __capy_dispatch_type_score_parsed(entry[0], expected.args[0]); if (keyScore >= 1000000) return 1000000; score += keyScore; const valueScore = __capy_dispatch_type_score_parsed(entry[1], expected.args[1]); if (valueScore >= 1000000) return 1000000; score += valueScore; } else { const valueScore = __capy_dispatch_type_score_parsed(entry[1], expected.args[0]); if (valueScore >= 1000000) return 1000000; score += valueScore; } } return score; }" + java_script_newline()
+    + "function __capy_dispatch_type_score(value, expected) { return __capy_dispatch_type_score_parsed(value, __capy_dispatch_parse_type(expected)); }" + java_script_newline()
+    + "function __capy_dispatch_type_score_parsed(value, expected) { if (expected.name === 'any' || expected.name === '') return 1000; if (expected.name === 'String') return typeof value === 'string' ? 0 : 1000000; if (expected.name === 'char') return typeof value === 'string' && Array.from(value).length === 1 ? 0 : 1000000; if (expected.name === 'bool') return typeof value === 'boolean' ? 0 : 1000000; if (expected.name === 'int' || expected.name === 'byte') return Number.isInteger(value) ? 0 : 1000000; if (expected.name === 'long') { if (typeof value === 'bigint') return 0; return Number.isInteger(value) ? 1 : 1000000; } if (expected.name === 'float' || expected.name === 'double') return (typeof value === 'number' || typeof value === 'bigint') ? 0 : 1000000; if (expected.name === 'List') return Array.isArray(value) ? __capy_dispatch_values_score(value, expected) : 1000000; if (expected.name === 'Set') return value instanceof Set ? __capy_dispatch_values_score(value.values(), expected) : 1000000; if (expected.name === 'Dict') return value instanceof Map ? __capy_dispatch_dict_score(value, expected) : 1000000; if (value == null || typeof value !== 'object') return 1000000; const distance = __capy_dispatch_parent_distance(value.__type, expected.name, 0, []); return distance >= 0 ? distance : 1000000; }" + java_script_newline()
     + "function __capy_dispatch(name, args, candidates) { let best = null; let bestScore = 1000000; for (const candidate of candidates) { const types = candidate[0]; if (types.length !== args.length) continue; let score = 0; let ok = true; for (let i = 0; i < types.length; i++) { const part = __capy_dispatch_type_score(args[i], types[i]); if (part >= 1000000) { ok = false; break; } score += part; } if (ok && score < bestScore) { best = candidate[1]; bestScore = score; } } if (best) return best(...args); throw new Error('No overload matched ' + name + '/' + args.length); }" + java_script_newline()
 
 private fun java_script_overload_dispatcher_functions(functions: List[CompiledFunction], emittedNames: List[String]): String =
@@ -178,13 +183,28 @@ private fun java_script_dispatch_parameter_types(parameters: List[CompiledFuncti
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        java_script_string_literal(parameter.typeReference.name) + java_script_dispatch_parameter_type_tail(parameters[1:])
+        java_script_string_literal(java_script_type_reference_name(parameter.typeReference)) + java_script_dispatch_parameter_type_tail(parameters[1:])
 
 private fun java_script_dispatch_parameter_type_tail(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        ", " + java_script_string_literal(parameter.typeReference.name) + java_script_dispatch_parameter_type_tail(parameters[1:])
+        ", " + java_script_string_literal(java_script_type_reference_name(parameter.typeReference)) + java_script_dispatch_parameter_type_tail(parameters[1:])
+
+private fun java_script_type_reference_name(typeReference: CompiledTypeReference): String =
+    if typeReference.arguments.is_empty()
+    then typeReference.name
+    else typeReference.name + "[" + java_script_type_reference_arguments(typeReference.arguments) + "]"
+
+private fun java_script_type_reference_arguments(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> java_script_type_reference_name(argument) + java_script_type_reference_argument_tail(arguments[1:])
+
+private fun java_script_type_reference_argument_tail(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_type_reference_arguments(arguments)
 
 private fun java_script_skip_function(function: CompiledFunction): bool =
     java_script_compiled_constant(function)
