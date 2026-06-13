@@ -1,19 +1,26 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data JavaScriptBinding { name: String, jsName: String, typeName: String }
 private data JavaScriptQualifiedFunctionBinding { function: CompiledFunction, binding: String }
 private data JavaScriptEnumTypeBinding { declaration: CompiledImportDeclaration, module: CompiledModule }
+private data JavaScriptAnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
+private data JavaScriptSchemaAnnotationArgument { name: String, kind: String, value: String }
 
 fun java_script_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
@@ -41,7 +48,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, reflection, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_deep_equal"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -393,13 +400,13 @@ private fun java_script_tail_block_statements(block: CompiledBlockExpression, en
         + ";"
         + java_script_newline()
     else java_script_tail_block_binding_statements(block.bindings, env, module, allModules, indent)
-        + java_script_tail_position_statements(block.result, java_script_block_env(block.bindings, env), function, module, allModules, indent)
+        + java_script_tail_position_statements(block.result, java_script_block_env(block.bindings, env, module, allModules), function, module, allModules, indent)
 
 private fun java_script_tail_block_binding_statements(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        let jsBinding = java_script_let_binding(binding)
+        let jsBinding = java_script_let_binding(binding, env, module, allModules)
         indent
             + "const "
             + jsBinding.jsName
@@ -1919,7 +1926,7 @@ private fun java_script_data_constructor_inferred_expression_type(expression: Co
             java_script_data_constructor_inferred_expression_type(ifExpression.elseBranch, env, module, allModules)
         )
     case CompiledBlockExpression block ->
-        java_script_data_constructor_inferred_expression_type(block.result, java_script_block_env(block.bindings, env), module, allModules)
+        java_script_data_constructor_inferred_expression_type(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
     case _ -> java_script_expression_type(expression, env, module, allModules)
 
 private fun java_script_preferred_constructor_type(first: String, second: String): String =
@@ -2233,7 +2240,7 @@ private fun java_script_plain_block_expression_code(bindings: List[CompiledLetBi
     "(() => { "
         + java_script_block_binding_statements(bindings, env, module, allModules)
         + "return "
-        + java_script_expression_code(result, java_script_block_env(bindings, env), module, allModules)
+        + java_script_expression_code(result, java_script_block_env(bindings, env, module, allModules), module, allModules)
         + "; })()"
 
 private fun java_script_effect_block_expression_code(bindings: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2243,7 +2250,7 @@ private fun java_script_effect_block_expression_code(bindings: List[CompiledLetB
         if binding.operator == "<-"
         then java_script_effect_binding_code(binding, bindings[1:], result, env, module, allModules)
         else
-            let jsBinding = java_script_let_binding(binding)
+            let jsBinding = java_script_let_binding(binding, env, module, allModules)
             "(() => { const "
             + jsBinding.jsName
             + " = "
@@ -2258,7 +2265,7 @@ private fun java_script_effect_block_result_code(result: CompiledExpression, env
     else "pure(" + java_script_expression_code(result, env, module, allModules) + ")"
 
 private fun java_script_effect_binding_code(binding: CompiledLetBinding, rest: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let jsBinding = java_script_let_binding(binding)
+    let jsBinding = java_script_let_binding(binding, env, module, allModules)
     let nextEnv = [jsBinding] + env
     java_script_expression_code(binding.value, env, module, allModules)
         + "."
@@ -2280,7 +2287,7 @@ private fun java_script_effect_binding_body(rest: List[CompiledLetBinding], resu
     else java_script_plain_block_expression_code(rest, result, env, module, allModules)
 
 private fun java_script_effect_block_result_type(rest: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_expression_type(result, java_script_block_env(rest, env), module, allModules)
+    java_script_expression_type(result, java_script_block_env(rest, env, module, allModules), module, allModules)
 
 private fun java_script_block_has_effect_binding(bindings: List[CompiledLetBinding]): bool =
     match bindings[0] with
@@ -2291,13 +2298,13 @@ private fun java_script_block_has_result_binding(bindings: List[CompiledLetBindi
     match bindings[0] with
     case None -> false
     case Some { binding } ->
-        let jsBinding = java_script_let_binding(binding)
+        let jsBinding = java_script_let_binding(binding, env, module, allModules)
         if binding.operator == "<-" & java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
         then true
         else java_script_block_has_result_binding(bindings[1:], [jsBinding] + env, module, allModules)
 
 private fun java_script_result_block_expression_code(bindings: List[CompiledLetBinding], result: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let resultEnv = java_script_block_env(bindings, env)
+    let resultEnv = java_script_block_env(bindings, env, module, allModules)
     "(() => { "
         + java_script_result_block_binding_statements(bindings, env, module, allModules)
         + "return "
@@ -2308,7 +2315,7 @@ private fun java_script_result_block_binding_statements(bindings: List[CompiledL
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        let jsBinding = java_script_let_binding(binding)
+        let jsBinding = java_script_let_binding(binding, env, module, allModules)
         java_script_result_block_binding_statement(binding, jsBinding, env, module, allModules)
             + java_script_result_block_binding_statements(bindings[1:], [jsBinding] + env, module, allModules)
 
@@ -2352,7 +2359,7 @@ private fun java_script_block_binding_statements(bindings: List[CompiledLetBindi
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        let jsBinding = java_script_let_binding(binding)
+        let jsBinding = java_script_let_binding(binding, env, module, allModules)
         "const "
             + jsBinding.jsName
             + " = "
@@ -2360,20 +2367,20 @@ private fun java_script_block_binding_statements(bindings: List[CompiledLetBindi
             + "; "
             + java_script_block_binding_statements(bindings[1:], [jsBinding] + env, module, allModules)
 
-private fun java_script_block_env(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding]): List[JavaScriptBinding] =
+private fun java_script_block_env(bindings: List[CompiledLetBinding], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaScriptBinding] =
     match bindings[0] with
     case None -> env
-    case Some { binding } -> java_script_block_env(bindings[1:], [java_script_let_binding(binding)] + env)
+    case Some { binding } -> java_script_block_env(bindings[1:], [java_script_let_binding(binding, env, module, allModules)] + env, module, allModules)
 
-private fun java_script_let_binding(binding: CompiledLetBinding): JavaScriptBinding =
-    JavaScriptBinding { name: binding.name, jsName: java_script_let_binding_name(binding), typeName: java_script_let_binding_type(binding) }
+private fun java_script_let_binding(binding: CompiledLetBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): JavaScriptBinding =
+    JavaScriptBinding { name: binding.name, jsName: java_script_let_binding_name(binding), typeName: java_script_let_binding_type(binding, env, module, allModules) }
 
 private fun java_script_let_binding_name(binding: CompiledLetBinding): String =
     java_script_identifier(binding.name) + "__local__" + binding.location.line + "_" + binding.location.column
 
-private fun java_script_let_binding_type(binding: CompiledLetBinding): String =
+private fun java_script_let_binding_type(binding: CompiledLetBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding.typeReference.name.is_empty()
-    then java_script_unknown_type()
+    then java_script_expression_type(binding.value, env, module, allModules)
     else binding.typeReference.name
 
 private fun java_script_truthy_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2406,7 +2413,7 @@ private fun java_script_expression_type(expression: CompiledExpression, env: Lis
     case CompiledFieldAccessExpression access -> java_script_field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> java_script_expression_type(reduce.initial, env, module, allModules)
     case CompiledWithExpression withExpression -> java_script_with_expression_type(withExpression, env, module, allModules)
-    case CompiledBlockExpression block -> java_script_expression_type(block.result, java_script_block_env(block.bindings, env), module, allModules)
+    case CompiledBlockExpression block -> java_script_expression_type(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledIfExpression ifExpression ->
         let thenType = java_script_expression_type(ifExpression.thenBranch, env, module, allModules)
         let elseType = java_script_expression_type(ifExpression.elseBranch, env, module, allModules)
@@ -2578,7 +2585,7 @@ private fun java_script_result_payload_type(expression: CompiledExpression, env:
     case CompiledWithExpression withExpression -> java_script_result_payload_type_from_with_expression(withExpression, env, module, allModules)
     case CompiledDataLiteral literal -> java_script_result_payload_type_from_data_literal(literal, env, module, allModules)
     case CompiledIfExpression ifExpression -> java_script_result_payload_type(ifExpression.thenBranch, env, module, allModules)
-    case CompiledBlockExpression block -> java_script_result_payload_type(block.result, java_script_block_env(block.bindings, env), module, allModules)
+    case CompiledBlockExpression block -> java_script_result_payload_type(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledReduceExpression reduce -> java_script_result_payload_type(reduce.initial, env, module, allModules)
     case _ -> java_script_unknown_type()
 
@@ -2777,6 +2784,8 @@ private fun java_script_runtime_function_type(name: String): String =
     then "TestCase"
     else if name == "test_file"
     then "Effect"
+    else if name == "reflection"
+    then "DataValueInfo"
     else if name == "print" | name == "println" | name == "print_error" | name == "println_error"
     then "Effect"
     else if name == "pure" | name == "delay"
@@ -2846,6 +2855,7 @@ private fun java_script_runtime_function(name: String): bool =
         | name == "assert_that"
         | name == "test"
         | name == "test_file"
+        | name == "reflection"
         | name == "digits"
         | name == "pure"
         | name == "delay"
@@ -3479,6 +3489,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + java_script_regex_runtime_code()
     + java_script_date_time_runtime_code()
     + java_script_deep_equal_code()
+    + java_script_reflection_runtime_code(modules)
     + java_script_test_gather_runtime_code(modules)
     + java_script_runtime_exports_code()
 
@@ -3838,6 +3849,87 @@ private fun java_script_deep_equal_code(): String =
     + "    return JSON.stringify(value, replacer);" + java_script_newline()
     + "}" + java_script_newline()
 
+private fun java_script_reflection_runtime_code(modules: List[CompiledModule]): String =
+    "const __capy_reflection_types = " + java_script_reflection_types_literal(modules, modules) + ";" + java_script_newline()
+    + "const __capy_reflection_enum_values = " + java_script_reflection_enum_values_literal(modules, modules) + ";" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_package(metadata) {" + java_script_newline()
+    + "    metadata = metadata || Object.create(null);" + java_script_newline()
+    + "    return __capy_data('PackageInfo', { name: metadata.name || '', path: metadata.path || '' });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_type_info(typeName) {" + java_script_newline()
+    + "    typeName = __capy_normalize_type_name(typeName);" + java_script_newline()
+    + "    const metadata = __capy_reflection_types[typeName] || Object.create(null);" + java_script_newline()
+    + "    return __capy_data('DataInfo', { name: typeName, pkg: __capy_reflection_package(metadata.pkg), annotations: [] });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_annotation_value(metadata) {" + java_script_newline()
+    + "    metadata = metadata || Object.create(null);" + java_script_newline()
+    + "    const kind = String(metadata.kind || 'nothing');" + java_script_newline()
+    + "    const value = metadata.value == null ? '' : metadata.value;" + java_script_newline()
+    + "    if (kind === 'string') return __capy_data('AnnotationString', { value: String(value) });" + java_script_newline()
+    + "    if (kind === 'int') return __capy_data('AnnotationInt', { value: Number.parseInt(String(value), 10) || 0 });" + java_script_newline()
+    + "    if (kind === 'long') return __capy_data('AnnotationLong', { value: __capy_long(BigInt(String(value || '0'))) });" + java_script_newline()
+    + "    if (kind === 'double') return __capy_data('AnnotationDouble', { value: Number(value) });" + java_script_newline()
+    + "    if (kind === 'float') return __capy_data('AnnotationFloat', { value: Number(value) });" + java_script_newline()
+    + "    if (kind === 'bool') return __capy_data('AnnotationBool', { value: value === true || String(value) === 'true' });" + java_script_newline()
+    + "    if (kind === 'type') return __capy_data('AnnotationTypeName', { value: String(value) });" + java_script_newline()
+    + "    return __capy_data('AnnotationNothing', Object.fromEntries([]));" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_annotation_argument(metadata) {" + java_script_newline()
+    + "    metadata = metadata || Object.create(null);" + java_script_newline()
+    + "    return __capy_data('AnnotationArgumentInfo', { name: metadata.name || '', value: __capy_reflection_annotation_value(metadata.value) });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_annotation(metadata) {" + java_script_newline()
+    + "    metadata = metadata || Object.create(null);" + java_script_newline()
+    + "    return __capy_data('AnnotationInfo', { name: metadata.name || '', pkg: __capy_reflection_package(metadata.pkg), arguments: (metadata.arguments || []).map(__capy_reflection_annotation_argument) });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_annotations(values) {" + java_script_newline()
+    + "    return (values || []).map(__capy_reflection_annotation);" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_field_value(value, metadata) {" + java_script_newline()
+    + "    metadata = metadata || Object.create(null);" + java_script_newline()
+    + "    const name = metadata.name || '';" + java_script_newline()
+    + "    let fieldValue;" + java_script_newline()
+    + "    try { fieldValue = __capy_get_field(value, name); } catch (_) { fieldValue = undefined; }" + java_script_newline()
+    + "    return __capy_data('FieldValueInfo', { name, type: __capy_reflection_type_info(metadata.type || 'any'), value: fieldValue, annotations: __capy_reflection_annotations(metadata.annotations) });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_type_name(value) {" + java_script_newline()
+    + "    value = __capy_unsafe_run(value);" + java_script_newline()
+    + "    if (value != null && typeof value === 'object') return __capy_normalize_type_name(value.__type || '');" + java_script_newline()
+    + "    return __capy_normalize_type_name(value == null ? '' : typeof value);" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_enum_value_name(typeName) {" + java_script_newline()
+    + "    typeName = __capy_normalize_type_name(typeName);" + java_script_newline()
+    + "    return typeName.startsWith('__capy_raw|') ? typeName.slice('__capy_raw|'.length) : typeName;" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function __capy_reflection_unknown(typeName) {" + java_script_newline()
+    + "    return __capy_data('DataValueInfo', { name: typeName, pkg: __capy_reflection_package(Object.create(null)), fields: [], annotations: [] });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+    + "function reflection(obj, declaredType = null) {" + java_script_newline()
+    + "    const value = __capy_unsafe_run(obj);" + java_script_newline()
+    + "    const typeName = declaredType == null ? __capy_reflection_type_name(value) : __capy_normalize_type_name(declaredType);" + java_script_newline()
+    + "    const enumMetadata = __capy_reflection_enum_values[__capy_reflection_enum_value_name(typeName)];" + java_script_newline()
+    + "    if (enumMetadata != null) {" + java_script_newline()
+    + "        const name = value != null && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'name') ? __capy_get_field(value, 'name') : (enumMetadata.name || typeName);" + java_script_newline()
+    + "        return __capy_data('DataValueInfo', { name, pkg: __capy_reflection_package(enumMetadata.pkg), fields: [], annotations: __capy_reflection_annotations(enumMetadata.annotations) });" + java_script_newline()
+    + "    }" + java_script_newline()
+    + "    const metadata = __capy_reflection_types[typeName];" + java_script_newline()
+    + "    if (metadata == null) return __capy_reflection_unknown(typeName);" + java_script_newline()
+    + "    const fields = (metadata.fields || []).map(field => __capy_reflection_field_value(value, field));" + java_script_newline()
+    + "    return __capy_data('DataValueInfo', { name: metadata.name || typeName, pkg: __capy_reflection_package(metadata.pkg), fields, annotations: __capy_reflection_annotations(metadata.annotations) });" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
+
 private fun java_script_test_gather_calls(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
     match modules[0] with
     case None -> ""
@@ -3942,7 +4034,7 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
     case CompiledMatchExpression matchExpression -> java_script_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
         java_script_bindings_gatherable(block.bindings, env, module, allModules)
-            & java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env), module, allModules)
+            & java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
 
 private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let leftType = java_script_expression_type(binary.left, env, module, allModules)
@@ -4284,7 +4376,7 @@ private fun java_script_bindings_gatherable(bindings: List[CompiledLetBinding], 
     match bindings[0] with
     case None -> true
     case Some { binding } ->
-        let jsBinding = java_script_let_binding(binding)
+        let jsBinding = java_script_let_binding(binding, env, module, allModules)
         if binding.operator == "=" | binding.operator == "<-"
         then java_script_expression_gatherable(binding.value, env, module, allModules)
             & java_script_bindings_gatherable(bindings[1:], [jsBinding] + env, module, allModules)
@@ -4359,6 +4451,381 @@ private fun java_script_zero_arg_lambda(expression: CompiledExpression): bool =
     match expression with
     case CompiledLambdaExpression lambda -> lambda.parameters.is_empty()
     case _ -> false
+
+private fun java_script_reflection_types_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
+    java_script_code_object(java_script_reflection_type_entries(modules, allModules))
+
+private fun java_script_reflection_type_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        java_script_reflection_type_entries_in_module(java_script_schema_values("__capy_schema_type|", module.functions), module, allModules)
+            + java_script_reflection_type_entries(modules[1:], allModules)
+
+private fun java_script_reflection_type_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match typeNames[0] with
+    case None -> []
+    case Some { typeName } ->
+        if java_script_enum_type_exists_in_functions(typeName, module.functions)
+        then java_script_reflection_type_entries_in_module(typeNames[1:], module, allModules)
+        else [java_script_code_object_entry(typeName, java_script_reflection_type_metadata_literal(typeName, module, allModules))]
+            + java_script_reflection_type_entries_in_module(typeNames[1:], module, allModules)
+
+private fun java_script_reflection_type_metadata_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(typeName)),
+        java_script_code_object_entry("pkg", java_script_reflection_data_package_metadata_literal(module)),
+        java_script_code_object_entry("fields", java_script_code_list_literal(java_script_reflection_field_metadata_literals(
+            typeName,
+            java_script_reflection_data_type_fields(typeName, module, allModules),
+            0,
+            module,
+            allModules
+        ))),
+        java_script_code_object_entry("annotations", java_script_reflection_annotations_literal(
+            java_script_schema_values("__capy_schema_annotation|data|" + typeName + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun java_script_reflection_field_metadata_literals(dataName: String, fields: List[String], idx: int, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [java_script_reflection_field_metadata_literal(dataName, field, idx, module, allModules)]
+            + java_script_reflection_field_metadata_literals(dataName, fields[1:], idx + 1, module, allModules)
+
+private fun java_script_reflection_field_metadata_literal(dataName: String, field: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(java_script_schema_field_name(field))),
+        java_script_code_object_entry("type", java_script_string_literal(java_script_schema_field_type_name(field))),
+        java_script_code_object_entry("annotations", java_script_reflection_annotations_literal(
+            java_script_schema_values("__capy_schema_annotation|field|" + dataName + "|" + idx + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun java_script_reflection_enum_values_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
+    java_script_code_object(java_script_reflection_enum_value_entries(modules, allModules))
+
+private fun java_script_reflection_enum_value_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        java_script_reflection_enum_value_entries_in_module(java_script_schema_values("__capy_schema_type|", module.functions), module, allModules)
+            + java_script_reflection_enum_value_entries(modules[1:], allModules)
+
+private fun java_script_reflection_enum_value_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match typeNames[0] with
+    case None -> []
+    case Some { typeName } ->
+        if java_script_enum_type_exists_in_functions(typeName, module.functions)
+        then java_script_reflection_enum_value_entries_for_type(typeName, java_script_enum_values_in_functions(typeName, module.functions), module, allModules)
+            + java_script_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
+        else java_script_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
+
+private fun java_script_reflection_enum_value_entries_for_type(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [java_script_code_object_entry(value, java_script_reflection_enum_value_metadata_literal(typeName, value, module, allModules))]
+            + java_script_reflection_enum_value_entries_for_type(typeName, values[1:], module, allModules)
+
+private fun java_script_reflection_enum_value_metadata_literal(typeName: String, value: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(value)),
+        java_script_code_object_entry("type", java_script_string_literal(typeName)),
+        java_script_code_object_entry("pkg", java_script_reflection_data_package_metadata_literal(module)),
+        java_script_code_object_entry("annotations", java_script_reflection_annotations_literal(
+            java_script_schema_values("__capy_schema_annotation|enum|" + typeName + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun java_script_reflection_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    java_script_merge_schema_fields(
+        java_script_reflection_data_type_parent_fields(java_script_data_type_parent_types(name, module, allModules), module, allModules),
+        java_script_data_type_direct_fields(name, module, allModules)
+    )
+
+private fun java_script_reflection_data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentName = java_script_schema_type_name(parent)
+        java_script_merge_schema_fields(
+            java_script_reflection_data_type_fields(parentName, module, allModules),
+            java_script_reflection_data_type_parent_fields(parents[1:], module, allModules)
+        )
+
+private fun java_script_reflection_annotations_literal(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_list_literal(java_script_reflection_annotation_metadata_literals(values, usageModule, allModules))
+
+private fun java_script_reflection_annotation_metadata_literals(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [java_script_reflection_annotation_metadata_literal(value, usageModule, allModules)]
+            + java_script_reflection_annotation_metadata_literals(values[1:], usageModule, allModules)
+
+private fun java_script_reflection_annotation_metadata_literal(value: String, usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = java_script_annotation_schema_name(value)
+    let explicitArguments = java_script_annotation_schema_arguments(java_script_annotation_schema_arguments_source(value))
+    match java_script_find_annotation_binding(name, usageModule, allModules) with
+    case Some { binding } ->
+        java_script_code_object([
+            java_script_code_object_entry("name", java_script_string_literal(binding.declaration.name)),
+            java_script_code_object_entry("pkg", java_script_reflection_module_package_metadata_literal(binding.module)),
+            java_script_code_object_entry("arguments", java_script_reflection_annotation_arguments_literal(explicitArguments, binding.declaration.fields)),
+        ])
+    case None ->
+        java_script_code_object([
+            java_script_code_object_entry("name", java_script_string_literal(java_script_annotation_display_name(name))),
+            java_script_code_object_entry("pkg", java_script_reflection_module_package_metadata_literal(usageModule)),
+            java_script_code_object_entry("arguments", java_script_code_list_literal(java_script_explicit_annotation_argument_metadata_literals(explicitArguments))),
+        ])
+
+private fun java_script_annotation_display_name(name: String): String =
+    if java_script_qualified_call_name(name) then java_script_qualified_call_member(name) else name
+
+private fun java_script_reflection_annotation_arguments_literal(arguments: List[JavaScriptSchemaAnnotationArgument], fields: List[String]): String =
+    java_script_code_list_literal(java_script_explicit_annotation_argument_metadata_literals(arguments) + java_script_default_annotation_argument_metadata_literals(fields, arguments))
+
+private fun java_script_explicit_annotation_argument_metadata_literals(arguments: List[JavaScriptSchemaAnnotationArgument]): List[String] =
+    match arguments[0] with
+    case None -> []
+    case Some { argument } ->
+        [java_script_annotation_argument_metadata_literal(argument.name, java_script_annotation_value_metadata_literal(argument.kind, argument.value))]
+            + java_script_explicit_annotation_argument_metadata_literals(arguments[1:])
+
+private fun java_script_default_annotation_argument_metadata_literals(fields: List[String], explicitArguments: List[JavaScriptSchemaAnnotationArgument]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        let fieldName = java_script_annotation_field_schema_name(field)
+        if java_script_annotation_field_schema_has_default(field) & !java_script_schema_annotation_argument_exists(fieldName, explicitArguments)
+        then [java_script_annotation_argument_metadata_literal(fieldName, java_script_annotation_field_schema_default_value_metadata_literal(field))]
+            + java_script_default_annotation_argument_metadata_literals(fields[1:], explicitArguments)
+        else java_script_default_annotation_argument_metadata_literals(fields[1:], explicitArguments)
+
+private fun java_script_schema_annotation_argument_exists(name: String, arguments: List[JavaScriptSchemaAnnotationArgument]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> argument.name == name | java_script_schema_annotation_argument_exists(name, arguments[1:])
+
+private fun java_script_annotation_argument_metadata_literal(name: String, valueCode: String): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(name)),
+        java_script_code_object_entry("value", valueCode),
+    ])
+
+private fun java_script_annotation_value_metadata_literal(kind: String, value: String): String =
+    java_script_code_object([
+        java_script_code_object_entry("kind", java_script_string_literal(kind)),
+        java_script_code_object_entry("value", java_script_string_literal(value)),
+    ])
+
+private fun java_script_annotation_schema_name(value: String): String =
+    let separator = java_script_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun java_script_annotation_schema_arguments_source(value: String): String =
+    let separator = java_script_first_index_of(value, "|", 0)
+    if separator < 0
+    then ""
+    else value[separator + 1, value.size().value]
+
+private fun java_script_annotation_schema_arguments(value: String): List[JavaScriptSchemaAnnotationArgument] =
+    if value.is_empty()
+    then []
+    else
+        let separator = java_script_first_index_of(value, ";", 0)
+        if separator < 0
+        then [java_script_annotation_schema_argument(value)]
+        else [java_script_annotation_schema_argument(value[0, separator])] + java_script_annotation_schema_arguments(value[separator + 1, value.size().value])
+
+private fun java_script_annotation_schema_argument(value: String): JavaScriptSchemaAnnotationArgument =
+    let equals = java_script_first_index_of(value, "=", 0)
+    if equals < 0
+    then JavaScriptSchemaAnnotationArgument { name: value, kind: "nothing", value: "" }
+    else
+        let payload = value[equals + 1, value.size().value]
+        let colon = java_script_first_index_of(payload, ":", 0)
+        if colon < 0
+        then JavaScriptSchemaAnnotationArgument { name: value[0, equals], kind: "nothing", value: "" }
+        else JavaScriptSchemaAnnotationArgument {
+            name: value[0, equals],
+            kind: payload[0, colon],
+            value: payload[colon + 1, payload.size().value]
+        }
+
+private fun java_script_annotation_field_schema_name(value: String): String =
+    java_script_schema_field_name(value)
+
+private fun java_script_annotation_field_schema_has_default(value: String): bool =
+    let second = java_script_annotation_field_schema_second_separator(value)
+    let third = java_script_annotation_field_schema_third_separator(value)
+    if second < 0 | third < 0
+    then false
+    else value[second + 1, third] == "true"
+
+private fun java_script_annotation_field_schema_default_value_metadata_literal(value: String): String =
+    let third = java_script_annotation_field_schema_third_separator(value)
+    if third < 0
+    then java_script_annotation_value_metadata_literal("nothing", "")
+    else
+        let payload = value[third + 1, value.size().value]
+        let colon = java_script_first_index_of(payload, ":", 0)
+        if colon < 0
+        then java_script_annotation_value_metadata_literal("nothing", "")
+        else java_script_annotation_value_metadata_literal(payload[0, colon], payload[colon + 1, payload.size().value])
+
+private fun java_script_annotation_field_schema_second_separator(value: String): int =
+    let first = java_script_first_index_of(value, "|", 0)
+    if first < 0 then -1 else java_script_first_index_of(value, "|", first + 1)
+
+private fun java_script_annotation_field_schema_third_separator(value: String): int =
+    let second = java_script_annotation_field_schema_second_separator(value)
+    if second < 0 then -1 else java_script_first_index_of(value, "|", second + 1)
+
+private fun java_script_find_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    if java_script_qualified_call_name(name)
+    then java_script_find_qualified_annotation_binding(name, module, allModules)
+    else
+        match module.annotations.get(name) with
+        case Some { declaration } -> /capy/lang/Option.Some { JavaScriptAnnotationBinding { declaration: declaration, module: module } }
+        case None ->
+            match java_script_find_annotation_binding_in_imports(name, module.imports, module, allModules) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> java_script_find_annotation_binding_in_modules(name, allModules)
+
+private fun java_script_find_qualified_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    let className = java_script_qualified_call_qualifier(name)
+    let member = java_script_qualified_call_member(name)
+    if java_script_stdlib_annotations_class(className)
+    then java_script_stdlib_annotation_binding(member)
+    else match java_script_find_module_by_path(java_script_qualified_module_path(className, module), allModules) with
+    case Some { targetModule } -> java_script_annotation_binding_in_module(member, targetModule)
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_find_annotation_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        match java_script_stdlib_annotation_binding_in_import(name, declaration) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None ->
+            if java_script_annotation_import_matches(name, declaration)
+            then java_script_find_annotation_binding_in_import(name, imports[1:], module, allModules, declaration)
+            else java_script_find_annotation_binding_in_imports(name, imports[1:], module, allModules)
+
+private fun java_script_find_annotation_binding_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case None -> java_script_find_annotation_binding_in_imports(name, rest, module, allModules)
+    case Some { importedModule } ->
+        match java_script_annotation_binding_in_module(name, importedModule) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> java_script_find_annotation_binding_in_imports(name, rest, module, allModules)
+
+private fun java_script_find_annotation_binding_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        match java_script_annotation_binding_in_module(name, module) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> java_script_find_annotation_binding_in_modules(name, modules[1:])
+
+private fun java_script_annotation_binding_in_module(name: String, module: CompiledModule): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    match module.annotations.get(name) with
+    case Some { declaration } -> /capy/lang/Option.Some { JavaScriptAnnotationBinding { declaration: declaration, module: module } }
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_annotation_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
+    !java_script_stdlib_import(declaration.modulePath)
+        & !declaration.qualified
+        & java_script_import_includes_name(name, declaration)
+
+private fun java_script_stdlib_annotation_binding_in_import(name: String, declaration: CompiledImportDeclaration): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    if !declaration.qualified
+        & java_script_stdlib_annotations_module_path(declaration.modulePath)
+        & java_script_import_includes_name(name, declaration)
+    then java_script_stdlib_annotation_binding(name)
+    else /capy/lang/Option.None {}
+
+private fun java_script_stdlib_annotation_binding(name: String): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    if name == "Deprecated"
+    then /capy/lang/Option.Some { JavaScriptAnnotationBinding {
+        declaration: CompiledAnnotationDeclaration {
+            name: "Deprecated",
+            visibility: "public",
+            repeatable: false,
+            targets: ["fun", "method", "const", "data", "union", "enum", "type", "deriver", "class", "interface", "trait", "field", "init"],
+            fields: ["message|String|false|nothing:", "since|String|true|string:"],
+            location: CompiledSourceLocation { line: 2, column: 0 }
+        },
+        module: java_script_stdlib_annotations_module()
+    }}
+    else /capy/lang/Option.None {}
+
+private fun java_script_stdlib_annotations_module(): CompiledModule =
+    CompiledModule {
+        name: "Annotations",
+        path: "capy/meta_prog",
+        types: {:},
+        visiblePrimitiveBackedTypes: {:},
+        functions: [],
+        imports: [],
+        derivers: {:},
+        annotations: {:},
+        staticImports: []
+    }
+
+private fun java_script_stdlib_annotations_class(className: String): bool =
+    className == "capy.meta_prog.Annotations" | className == "capy/meta_prog/Annotations"
+
+private fun java_script_stdlib_annotations_module_path(path: String): bool =
+    path == "/capy/meta_prog/Annotations" | path == "capy/meta_prog/Annotations"
+
+private fun java_script_reflection_module_package_metadata_literal(module: CompiledModule): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(module.name)),
+        java_script_code_object_entry("path", java_script_string_literal(module.path)),
+    ])
+
+private fun java_script_reflection_data_package_metadata_literal(module: CompiledModule): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(module.name)),
+        java_script_code_object_entry("path", java_script_string_literal(java_script_reflection_module_path(module))),
+    ])
+
+private fun java_script_reflection_module_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else module.path + "/" + module.name
+
+private fun java_script_code_object(entries: List[String]): String =
+    "{" + java_script_code_list(entries) + "}"
+
+private fun java_script_code_object_entry(name: String, valueCode: String): String =
+    java_script_string_literal(name) + ": " + valueCode
+
+private fun java_script_code_list_literal(values: List[String]): String =
+    "[" + java_script_code_list(values) + "]"
+
+private fun java_script_code_list(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> value + java_script_code_list_tail(values[1:])
+
+private fun java_script_code_list_tail(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_code_list(values)
 
 private fun java_script_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     java_script_merge_schema_fields(
