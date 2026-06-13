@@ -23,6 +23,8 @@ fun invoke_hof_unused(s: String) = hof(_ => s)
 
 fun run_lambda_unused_middle() = run((a, _, c, d) => a + c)
 
+fun run_lambda_unused_pair() = run((_, _, c, d) => c + d)
+
 fun run0(fun: () => String) = fun()
 
 fun run_lambda_no_args() = run0(() => "Hello, Wrold")

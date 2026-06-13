@@ -1229,28 +1229,42 @@ private fun java_script_lambda_expression_code_with_bindings(lambda: CompiledLam
         + java_script_expression_code(lambda.body, bindings + env, module, allModules)
 
 private fun java_script_lambda_parameters(parameters: List[String]): String =
-    match parameters[0] with
-    case None -> ""
-    case Some { parameter } -> java_script_identifier(parameter) + java_script_lambda_parameter_tail(parameters[1:])
+    java_script_lambda_parameters_from(parameters, 0)
 
-private fun java_script_lambda_parameter_tail(parameters: List[String]): String =
+private fun java_script_lambda_parameters_from(parameters: List[String], idx: int): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> ", " + java_script_identifier(parameter) + java_script_lambda_parameter_tail(parameters[1:])
+    case Some { parameter } -> java_script_lambda_parameter_name(parameter, idx) + java_script_lambda_parameter_tail(parameters[1:], idx + 1)
+
+private fun java_script_lambda_parameter_tail(parameters: List[String], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_lambda_parameters_from(parameters, idx)
+
+private fun java_script_lambda_parameter_name(parameter: String, idx: int): String =
+    if parameter == "_"
+    then "__capy_lambda_unused_" + idx
+    else java_script_identifier(parameter)
 
 private fun java_script_lambda_bindings(parameters: List[String]): List[JavaScriptBinding] =
+    java_script_lambda_bindings_from(parameters, 0)
+
+private fun java_script_lambda_bindings_from(parameters: List[String], idx: int): List[JavaScriptBinding] =
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [JavaScriptBinding { name: parameter, jsName: java_script_identifier(parameter), typeName: java_script_unknown_type() }]
-            + java_script_lambda_bindings(parameters[1:])
+        [JavaScriptBinding { name: parameter, jsName: java_script_lambda_parameter_name(parameter, idx), typeName: java_script_unknown_type() }]
+            + java_script_lambda_bindings_from(parameters[1:], idx + 1)
 
 private fun java_script_lambda_bindings_with_single_type(parameters: List[String], typeName: String): List[JavaScriptBinding] =
+    java_script_lambda_bindings_with_single_type_from(parameters, typeName, 0)
+
+private fun java_script_lambda_bindings_with_single_type_from(parameters: List[String], typeName: String, idx: int): List[JavaScriptBinding] =
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [JavaScriptBinding { name: parameter, jsName: java_script_identifier(parameter), typeName: typeName }]
-            + java_script_lambda_bindings(parameters[1:])
+        [JavaScriptBinding { name: parameter, jsName: java_script_lambda_parameter_name(parameter, idx), typeName: typeName }]
+            + java_script_lambda_bindings_with_single_type_from(parameters[1:], typeName, idx + 1)
 
 private fun java_script_with_expression_code(withExpression: CompiledWithExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_with_expression_receiver_type(withExpression, env, module, allModules)
