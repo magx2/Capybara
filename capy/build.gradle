@@ -709,6 +709,37 @@ def e2eJavaScriptCfunTests = tasks.register('e2e-javascript-cfun', CapybaraJavaS
     getPrintAvailableTests().convention(false)
 }
 
+def e2eJavaScriptCfunReview051060Selectors = [
+        '/dev/capylang/test/ImplicitGenericResult.cfun',
+        '/dev/capylang/test/ConstructorResultAssert.cfun',
+        '/dev/capylang/test/Data.cfun',
+        '/dev/capylang/test/Temporary.cfun',
+        '/dev/capylang/test/PrivateData.cfun',
+        '/dev/capylang/test/DataConstructor.cfun',
+        '/dev/capylang/test/WithExpression.cfun',
+        '/dev/capylang/test/With.cfun',
+        '/dev/capylang/test/Extension.cfun',
+        '/dev/capylang/test/EnumDataField.cfun',
+]
+
+def e2eJavaScriptCfunReview051060Tests = tasks.register('e2e-javascript-cfun-051-060-review', CapybaraJavaScriptTestTask) {
+    description = 'Runs JavaScript functional e2e tests covered by review task 051-060.'
+    group = 'verification'
+    dependsOn generateE2eJavaScriptCfun
+    shouldRunAfter e2eCfunTests
+
+    runnerFile.set(capybaraJavaScriptTestRunner)
+    generatedDir.set(e2eCfunGeneratedJavaScriptDir)
+    outputDir.set(layout.buildDirectory.dir('test-results/e2e-javascript-cfun-051-060-review'))
+    executionDir.set(layout.projectDirectory)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    existingNodePath.set(providers.environmentVariable('NODE_PATH').orElse(''))
+    getTests().convention(e2eJavaScriptCfunReview051060Selectors)
+    getPrintAvailableTests().convention(false)
+}
+
 e2eJavaScriptTests.configure {
     dependsOn e2eJavaScriptCfunTests
 }
