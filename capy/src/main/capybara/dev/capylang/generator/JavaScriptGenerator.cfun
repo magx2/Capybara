@@ -535,9 +535,7 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_result_pipe_code(binary, env, module, allModules)
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
     then java_script_option_pipe_code(binary, env, module, allModules)
-    else if java_script_collection_pipe_expression_with_left_type(binary, leftType)
-    then java_script_collection_pipe_code(binary, env, module, allModules)
-    else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
+    else if java_script_collection_or_unknown_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_code(binary, env, module, allModules)
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
     then java_script_set_binary_code(binary, env, module, allModules)
@@ -741,14 +739,9 @@ private fun java_script_stdlib_data_constructor_name(typeName: String, family: S
         | typeName == family + "." + ctor
         | typeName == "/capy/lang/" + family + "." + ctor
 
-private fun java_script_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+private fun java_script_collection_or_unknown_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     java_script_collection_pipe_operator(binary.operator)
-        & java_script_collection_pipe_receiver_type(leftType)
-        & java_script_callable_expression(binary.right)
-
-private fun java_script_unknown_collection_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
-    leftType == java_script_unknown_type()
-        & java_script_collection_pipe_operator(binary.operator)
+        & (java_script_collection_pipe_receiver_type(leftType) | leftType == java_script_unknown_type())
         & java_script_callable_expression(binary.right)
 
 private fun java_script_collection_pipe_operator(operator: String): bool =
@@ -2426,9 +2419,7 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
     then "Result"
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
     then "Option"
-    else if java_script_collection_pipe_expression_with_left_type(binary, leftType)
-    then java_script_collection_pipe_result_type(binary.operator, leftType)
-    else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
+    else if java_script_collection_or_unknown_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_result_type(binary.operator, leftType)
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
     then java_script_set_binary_expression_type(binary.operator)
@@ -3837,12 +3828,10 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
     then java_script_method_call_gatherable(java_script_collection_pipe_chained_method_call(binary), env, module, allModules)
     else if java_script_result_pipe_expression_with_left_type(binary, leftType)
     then java_script_result_pipe_gatherable(binary, env, module, allModules)
-    else if java_script_collection_pipe_expression_with_left_type(binary, leftType)
+    else if java_script_collection_or_unknown_pipe_expression_with_left_type(binary, leftType)
     then java_script_collection_pipe_gatherable(binary, env, module, allModules)
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
     then java_script_option_pipe_gatherable(binary, env, module, allModules)
-    else if java_script_unknown_collection_pipe_expression_with_left_type(binary, leftType)
-    then java_script_collection_pipe_gatherable(binary, env, module, allModules)
     else if java_script_set_binary_expression_with_left_type(binary, leftType)
     then java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_expression_gatherable(binary.right, env, module, allModules)
@@ -3860,10 +3849,12 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
         case None -> false
 
 private fun java_script_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_expression_gatherable(binary.left, env, module, allModules)
-        & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
+    java_script_pipe_gatherable(binary, env, module, allModules)
 
 private fun java_script_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_pipe_gatherable(binary, env, module, allModules)
+
+private fun java_script_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
 
