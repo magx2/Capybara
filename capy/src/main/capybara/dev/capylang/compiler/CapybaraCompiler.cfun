@@ -47,6 +47,8 @@ from /dev/capylang/compiler/parser/RawModule import { RawModule }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
+private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
+
 fun compile(
     rawModules: List[RawModule],
     libraries: Set[CompiledModule],
@@ -1623,11 +1625,8 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         expression: compile_expression_in_function(unary.expression, functionName),
         location: compile_location(unary.location)
     }
-    case FunctionCallExpression { name, arguments, location } -> CompiledFunctionCallExpression {
-        name: name,
-        arguments: compile_expressions(arguments, functionName),
-        location: compile_location(location)
-    }
+    case FunctionCallExpression { name, arguments, location } ->
+        compiled_function_call(name, compile_expressions(arguments, functionName), compile_location(location))
     case FunctionReferenceExpression { name, location } -> CompiledFunctionReferenceExpression {
         name: name,
         location: compile_location(location)
@@ -1715,12 +1714,82 @@ private fun compiled_method_call_with_receiver(call: MethodCallExpression, recei
     case _ -> compiled_method_call_expression(call, receiver, arguments)
 
 private fun compiled_method_call_expression(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
-    CompiledMethodCallExpression {
+    let location = compile_location(call.location)
+    let methodCall = CompiledMethodCallExpression {
         receiver: receiver,
         name: call.name,
         arguments: arguments,
-        location: compile_location(call.location)
+        location: location
     }
+    if compiled_expressions_have_placeholders(arguments)
+    then compiled_partial_application(arguments, methodCall, location)
+    else methodCall
+
+private fun compiled_function_call(name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation): CompiledExpression =
+    let functionCall = CompiledFunctionCallExpression {
+        name: name,
+        arguments: arguments,
+        location: location
+    }
+    if compiled_expressions_have_placeholders(arguments)
+    then compiled_partial_application(arguments, functionCall, location)
+    else functionCall
+
+private fun compiled_partial_application(arguments: List[CompiledExpression], body: CompiledExpression, location: CompiledSourceLocation): CompiledExpression =
+    let partial = compiled_partial_arguments(arguments, 1)
+    CompiledLambdaExpression {
+        parameters: partial.parameters,
+        body: compiled_partial_body(body, partial.arguments),
+        location: location
+    }
+
+private fun compiled_partial_body(body: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
+    match body with
+    case CompiledFunctionCallExpression call -> call.with(arguments: arguments)
+    case CompiledMethodCallExpression call -> call.with(arguments: arguments)
+    case _ -> body
+
+private fun compiled_partial_arguments(arguments: List[CompiledExpression], idx: int): CompiledPartialArguments =
+    match arguments[0] with
+    case None -> CompiledPartialArguments { parameters: [], arguments: [] }
+    case Some { argument } ->
+        let rest = compiled_partial_arguments(arguments[1:], idx + 1)
+        match argument with
+        case CompiledUnsupportedExpression unsupported ->
+            if compiler_compiled_placeholder_source(unsupported.source)
+            then
+                let parameter = compiled_partial_parameter_name(unsupported.location, idx)
+                let replacement: CompiledExpression = CompiledVariableExpression { name: parameter, location: unsupported.location }
+                CompiledPartialArguments {
+                    parameters: [parameter] + rest.parameters,
+                    arguments: [replacement] + rest.arguments
+                }
+            else
+                let original: CompiledExpression = argument
+                CompiledPartialArguments {
+                    parameters: rest.parameters,
+                    arguments: [original] + rest.arguments
+                }
+        case _ -> CompiledPartialArguments {
+            parameters: rest.parameters,
+            arguments: [argument] + rest.arguments
+        }
+
+private fun compiled_expressions_have_placeholders(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> compiled_placeholder_expression(argument) | compiled_expressions_have_placeholders(arguments[1:])
+
+private fun compiled_placeholder_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledUnsupportedExpression unsupported -> compiler_compiled_placeholder_source(unsupported.source)
+    case _ -> false
+
+private fun compiler_compiled_placeholder_source(source: String): bool =
+    compiler_string_has_prefix(source, "__capy_placeholder__|")
+
+private fun compiled_partial_parameter_name(location: CompiledSourceLocation, idx: int): String =
+    "__capy_partial_" + location.line + "_" + location.column + "_" + idx
 
 private fun compile_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
     match access.receiver with

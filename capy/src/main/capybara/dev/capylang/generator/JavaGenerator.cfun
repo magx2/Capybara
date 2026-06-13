@@ -899,12 +899,12 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         let effectBody = effect_block_body(block, env, returnType, module, allModules, "        ")
         if !effectBody.is_empty()
         then effectBody
-        else if !expression_emittable(function.body, env, module, allModules)
+        else if !expression_emittable_as(function.body, returnType, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else block_statements(block.bindings, env, returnType, module, allModules, "        ")
             + "        return " + block_result_code(block, env, returnType, module, allModules) + ";" + newline()
     case _ ->
-        if !expression_emittable(function.body, env, module, allModules)
+        if !expression_emittable_as(function.body, returnType, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
 
@@ -7852,6 +7852,17 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledMatchExpression e -> expression_emittable(e.value, env, module, allModules) & match_cases_emittable(e.cases, expression_type(e.value, env, module, allModules), env, module, allModules)
     case CompiledBlockExpression e -> let_bindings_emittable(e.bindings, env, module, allModules) & expression_emittable(e.result, block_env(e.bindings, env, module, allModules), module, allModules)
 
+private fun expression_emittable_as(expression: CompiledExpression, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledLambdaExpression _ ->
+        if function_type(expectedType)
+        then function_lambda_assignable(expectedType, expression, env, module, allModules)
+        else expression_emittable(expression, env, module, allModules)
+    case CompiledBlockExpression block ->
+        let_bindings_emittable(block.bindings, env, module, allModules)
+            & expression_emittable_as(block.result, expectedType, block_env(block.bindings, env, module, allModules), module, allModules)
+    case _ -> expression_emittable(expression, env, module, allModules)
+
 private fun expressions_emittable(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expressions[0] with
     case None -> true
@@ -7896,7 +7907,7 @@ private fun let_bindings_emittable(bindings: List[CompiledLetBinding], env: List
         let bindingValueType = binding_value_type(binding, env, module, allModules)
         let effectBindNeedsSpecialCode = binding.operator == "<-" & bindingValueType.name == "Effect"
         !effectBindNeedsSpecialCode
-            & expression_emittable(binding.value, env, module, allModules)
+            & expression_emittable_as(binding.value, valueType, env, module, allModules)
             & let_bindings_emittable(bindings[1:], [local_java_binding(binding.name, valueType, binding.location, env)] + env, module, allModules)
 
 private fun binding_exists(name: String, env: List[JavaBinding]): bool =
