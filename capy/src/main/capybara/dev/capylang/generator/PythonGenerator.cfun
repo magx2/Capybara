@@ -336,7 +336,16 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
             + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
     else if python_enum_parse_call(call, module, allModules)
     then python_enum_parse_call_code(call, env, module, allModules)
-    else python_function_call_name(call.name, module, allModules) + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+    else
+        let resolvedName =
+            if python_local_function_count(call.name, module.functions) > 1 & python_one_method_argument(call.arguments)
+            then
+                let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
+                if argumentType == python_unknown_type()
+                then python_function_call_name(call.name, module, allModules)
+                else python_function_call_name(python_overload_request_name(call.name, argumentType), module, allModules)
+            else python_function_call_name(call.name, module, allModules)
+        resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 private fun python_field_access_code(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_enum_static_field_access(access, env, module, allModules)
@@ -1821,7 +1830,15 @@ private fun python_preferred_constructor_type(first: String, second: String): St
 private fun python_first_method_argument_type(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match arguments[0] with
     case None -> python_unknown_type()
-    case Some { argument } -> python_expression_type(argument, env, module, allModules)
+    case Some { argument } ->
+        match argument with
+        case CompiledFunctionCallExpression call ->
+            if call.arguments.is_empty()
+            then match python_find_local_function(call.name, module.functions) with
+                case Some { function } -> python_type_reference_name_key(function.returnType.name, python_first_type_argument_name(function.returnType.arguments))
+                case None -> python_expression_type(argument, env, module, allModules)
+            else python_expression_type(argument, env, module, allModules)
+        case _ -> python_expression_type(argument, env, module, allModules)
 
 private fun python_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
@@ -2477,6 +2494,58 @@ private fun python_qualified_module_path(name: String, module: CompiledModule): 
     then name
     else module.path + "/" + name
 
+private fun python_overload_request_name(name: String, argumentType: String): String =
+    name + "__capy_overload_arg__" + argumentType
+
+private fun python_overload_request(name: String): bool =
+    name ? "__capy_overload_arg__"
+
+private fun python_overload_requested_function_name(name: String): String =
+    let marker = python_first_index_of(name, "__capy_overload_arg__", 0)
+    if marker < 0 then name else name[0, marker]
+
+private fun python_overload_requested_argument_type(name: String): String =
+    let marker = python_first_index_of(name, "__capy_overload_arg__", 0)
+    if marker < 0 then python_unknown_type() else name[marker + "__capy_overload_arg__".size().value, name.size().value]
+
+private fun python_type_reference_name_key(name: String, argumentName: String): String =
+    if argumentName.is_empty()
+    then name
+    else name + "[" + argumentName + "]"
+
+private fun python_type_key_match_score(target: String, source: String): int =
+    if target == source
+    then 0
+    else if source == python_unknown_type() | source.is_empty()
+    then 1000000
+    else if python_type_key_base(target) == python_type_key_base(source) & python_type_key_has_argument(target) & python_type_key_has_argument(source)
+    then python_type_key_match_score(python_type_key_argument(target), python_type_key_argument(source))
+    else if python_primitive_numeric_widening_type_key(target, source)
+    then 10
+    else 1000000
+
+private fun python_type_key_base(typeKey: String): String =
+    let bracket = python_first_index_of(typeKey, "[", 0)
+    if bracket < 0 then typeKey else typeKey[0, bracket]
+
+private fun python_type_key_has_argument(typeKey: String): bool =
+    python_first_index_of(typeKey, "[", 0) >= 0
+
+private fun python_type_key_argument(typeKey: String): String =
+    let start = python_first_index_of(typeKey, "[", 0)
+    let end = python_first_index_of(typeKey, "]", 0)
+    if start < 0 | end <= start
+    then python_unknown_type()
+    else typeKey[start + 1, end]
+
+private fun python_primitive_numeric_widening_type_key(target: String, source: String): bool =
+    !(source ? "[") & !(target ? "[") & (
+        (source == "byte" & (target == "int" | target == "long" | target == "float" | target == "double"))
+        | (source == "int" & (target == "long" | target == "float" | target == "double"))
+        | (source == "long" & (target == "float" | target == "double"))
+        | (source == "float" & target == "double")
+    )
+
 private fun python_find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
@@ -2489,12 +2558,46 @@ private fun python_callable_function(function: CompiledFunction): bool =
     !python_skip_function(function) & function.visibility != "private" & function.visibility != "const:private"
 
 private fun python_find_local_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    if python_overload_request(name)
+    then python_find_local_overload(
+        python_overload_requested_function_name(name),
+        python_overload_requested_argument_type(name),
+        functions,
+        /capy/lang/Option.None {},
+        1000000
+    )
+    else python_find_local_function_by_name(name, functions)
+
+private fun python_find_local_function_by_name(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if !python_skip_function(function) & function.name == name
         then /capy/lang/Option.Some { function }
-        else python_find_local_function(name, functions[1:])
+        else python_find_local_function_by_name(name, functions[1:])
+
+private fun python_find_local_overload(name: String, argumentType: String, functions: List[CompiledFunction], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> best
+    case Some { function } ->
+        if !python_skip_function(function) & function.name == name
+        then
+            let score = python_function_first_parameter_match_score(function, argumentType)
+            if score == 0
+            then /capy/lang/Option.Some { function }
+            else if score < bestScore
+            then python_find_local_overload(name, argumentType, functions[1:], /capy/lang/Option.Some { function }, score)
+            else python_find_local_overload(name, argumentType, functions[1:], best, bestScore)
+        else python_find_local_overload(name, argumentType, functions[1:], best, bestScore)
+
+private fun python_function_first_parameter_match_score(function: CompiledFunction, argumentType: String): int =
+    match function.parameters[0] with
+    case None -> 1000000
+    case Some { parameter } ->
+        python_type_key_match_score(
+            python_type_reference_name_key(parameter.typeReference.name, python_first_type_argument_name(parameter.typeReference.arguments)),
+            argumentType
+        )
 
 private fun python_find_function_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match python_find_function_binding_in_imports(name, imports, module, allModules) with
