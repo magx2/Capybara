@@ -330,7 +330,9 @@ private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: Li
     else "(" + unary.operator + python_expression_code(unary.expression, env, module, allModules) + ")"
 
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_partial_function_call(call)
+    if python_stdlib_effect_function_call(call, module)
+    then python_stdlib_effect_function_call_code(call.name)
+    else if python_partial_function_call(call)
     then
         let names = python_partial_placeholder_names(call.arguments, env)
         "lambda " + python_lambda_parameters(names) + ": "
@@ -1224,28 +1226,42 @@ private fun python_lambda_expression_code_with_bindings(lambda: CompiledLambdaEx
     "lambda " + python_lambda_parameters(lambda.parameters) + ": " + python_expression_code(lambda.body, bindings + env, module, allModules)
 
 private fun python_lambda_parameters(parameters: List[String]): String =
-    match parameters[0] with
-    case None -> ""
-    case Some { parameter } -> python_identifier(parameter) + python_lambda_parameter_tail(parameters[1:])
+    python_lambda_parameters_from(parameters, 0)
 
-private fun python_lambda_parameter_tail(parameters: List[String]): String =
+private fun python_lambda_parameters_from(parameters: List[String], idx: int): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> ", " + python_identifier(parameter) + python_lambda_parameter_tail(parameters[1:])
+    case Some { parameter } -> python_lambda_parameter_name(parameter, idx) + python_lambda_parameter_tail(parameters[1:], idx + 1)
+
+private fun python_lambda_parameter_tail(parameters: List[String], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", " + python_lambda_parameters_from(parameters, idx)
+
+private fun python_lambda_parameter_name(parameter: String, idx: int): String =
+    if parameter == "_"
+    then "__capy_lambda_unused_" + idx
+    else python_identifier(parameter)
 
 private fun python_lambda_bindings(parameters: List[String]): List[PythonBinding] =
+    python_lambda_bindings_from(parameters, 0)
+
+private fun python_lambda_bindings_from(parameters: List[String], idx: int): List[PythonBinding] =
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [PythonBinding { name: parameter, pythonName: python_identifier(parameter), typeName: python_unknown_type() }]
-            + python_lambda_bindings(parameters[1:])
+        [PythonBinding { name: parameter, pythonName: python_lambda_parameter_name(parameter, idx), typeName: python_unknown_type() }]
+            + python_lambda_bindings_from(parameters[1:], idx + 1)
 
 private fun python_lambda_bindings_with_single_type(parameters: List[String], typeName: String): List[PythonBinding] =
+    python_lambda_bindings_with_single_type_from(parameters, typeName, 0)
+
+private fun python_lambda_bindings_with_single_type_from(parameters: List[String], typeName: String, idx: int): List[PythonBinding] =
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [PythonBinding { name: parameter, pythonName: python_identifier(parameter), typeName: typeName }]
-            + python_lambda_bindings(parameters[1:])
+        [PythonBinding { name: parameter, pythonName: python_lambda_parameter_name(parameter, idx), typeName: typeName }]
+            + python_lambda_bindings_with_single_type_from(parameters[1:], typeName, idx + 1)
 
 private fun python_expression_list_code(expressions: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expressions[0] with
@@ -1837,7 +1853,9 @@ private fun python_let_binding_type_name(binding: CompiledLetBinding, env: List[
     if binding.typeReference.name.is_empty()
     then
         let valueType = python_expression_type(binding.value, env, module, allModules)
-        if binding.operator == "<-" & python_result_pipe_receiver_type(valueType)
+        if binding.operator == "<-" & valueType == python_effect_type()
+        then python_effect_payload_type(binding.value, env, module, allModules)
+        else if binding.operator == "<-" & python_result_pipe_receiver_type(valueType)
         then python_result_payload_type(binding.value, env, module, allModules)
         else valueType
     else binding.typeReference.name
@@ -1864,7 +1882,7 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
     case CompiledVariableExpression variable -> python_variable_type(variable.name, env, module, allModules)
     case CompiledUnaryExpression unary -> if unary.operator == "!" then python_bool_type() else python_expression_type(unary.expression, env, module, allModules)
     case CompiledBinaryExpression binary -> python_binary_expression_type(binary, env, module, allModules)
-    case CompiledFunctionCallExpression call -> python_function_call_expression_type(call.name, module, allModules)
+    case CompiledFunctionCallExpression call -> python_function_call_expression_type(call, module, allModules)
     case CompiledMethodCallExpression call -> python_method_call_expression_type(call, env, module, allModules)
     case CompiledListLiteral _ -> python_list_type()
     case CompiledSetLiteral _ -> python_set_type()
@@ -1944,7 +1962,12 @@ private fun python_user_defined_index_type(receiverType: String, module: Compile
     case Some { function } -> function.returnType.name
     case None -> python_unknown_type()
 
-private fun python_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_function_call_expression_type(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_stdlib_effect_function_call(call, module)
+    then python_stdlib_effect_function_call_type(call.name)
+    else python_function_name_expression_type(call.name, module, allModules)
+
+private fun python_function_name_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_enum_parse_call_name(name, module, allModules)
     then python_result_type()
     else if python_qualified_name(name)
@@ -1970,6 +1993,42 @@ private fun python_runtime_function_type(name: String): String =
     else if python_console_function(name)
     then python_effect_type()
     else python_unknown_type()
+
+private fun python_stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.arguments.is_empty()
+        & python_local_function_count(call.name, module.functions) == 0
+        & if call.name == "current_millis"
+            then python_system_member_imported("current_millis", module.imports)
+            else if call.name == "nano_time"
+            then python_system_member_imported("nano_time", module.imports)
+            else if call.name == "now"
+            then python_clock_member_imported("now", module.imports)
+            else false
+
+private fun python_stdlib_effect_function_call_code(name: String): String =
+    if name == "current_millis"
+    then "__capy_current_millis()"
+    else if name == "nano_time"
+    then "__capy_nano_time()"
+    else "__capy_clock_now()"
+
+private fun python_stdlib_effect_function_call_type(name: String): String =
+    python_effect_type()
+
+private fun python_system_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    python_module_member_imported(member, imports, "/capy/lang/System", "capy/lang/System")
+
+private fun python_clock_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    python_module_member_imported(member, imports, "/capy/date_time/Clock", "capy/date_time/Clock")
+
+private fun python_module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if (declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath)
+            & python_import_includes_name(member, declaration)
+        then true
+        else python_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
@@ -2130,6 +2189,54 @@ private fun python_result_payload_type(expression: CompiledExpression, env: List
     case CompiledBlockExpression block -> python_result_payload_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledReduceExpression reduce -> python_result_payload_type(reduce.initial, env, module, allModules)
     case _ -> python_unknown_type()
+
+private fun python_effect_payload_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledFunctionCallExpression call -> python_effect_payload_type_from_function_call(call, env, module, allModules)
+    case CompiledIfExpression ifExpression -> python_effect_payload_type(ifExpression.thenBranch, env, module, allModules)
+    case CompiledBlockExpression block -> python_effect_payload_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+    case _ -> python_unknown_type()
+
+private fun python_effect_payload_type_from_function_call(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_stdlib_effect_function_call(call, module)
+    then python_stdlib_effect_payload_type(call.name)
+    else if call.name == "pure"
+    then python_effect_payload_type_from_pure_call(call.arguments, env, module, allModules)
+    else if call.name == "delay"
+    then python_effect_payload_type_from_delay_call(call.arguments, env, module, allModules)
+    else if python_qualified_name(call.name)
+    then match python_find_qualified_function_binding(call.name, module, allModules) with
+        case Some { binding } -> python_effect_payload_type_from_type_reference(binding.function.returnType)
+        case None -> python_unknown_type()
+    else match python_find_local_function(call.name, module.functions) with
+    case Some { function } -> python_effect_payload_type_from_type_reference(function.returnType)
+    case None ->
+        match python_find_function_in_imports(call.name, module.imports, module, allModules) with
+        case Some { function } -> python_effect_payload_type_from_type_reference(function.returnType)
+        case None -> python_unknown_type()
+
+private fun python_effect_payload_type_from_pure_call(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> python_unknown_type()
+    case Some { value } -> python_expression_type(value, env, module, allModules)
+
+private fun python_effect_payload_type_from_delay_call(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> python_unknown_type()
+    case Some { expression } ->
+        match expression with
+        case CompiledLambdaExpression lambda -> python_expression_type(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
+        case _ -> python_unknown_type()
+
+private fun python_effect_payload_type_from_type_reference(typeReference: CompiledTypeReference): String =
+    if typeReference.name == python_effect_type()
+    then python_first_type_argument_name(typeReference.arguments)
+    else python_unknown_type()
+
+private fun python_stdlib_effect_payload_type(name: String): String =
+    if name == "now"
+    then "DateTime"
+    else python_long_type()
 
 private fun python_result_payload_type_from_binary(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
@@ -2443,7 +2550,7 @@ private fun python_result_reduce_success_type(receiver: CompiledExpression, argu
                 module,
                 allModules
             )
-        case CompiledFunctionReferenceExpression reference -> python_function_call_expression_type(reference.name, module, allModules)
+        case CompiledFunctionReferenceExpression reference -> python_function_name_expression_type(reference.name, module, allModules)
         case _ -> python_unknown_type()
 
 private fun python_result_pipe_operator(operator: String): bool =
@@ -3152,7 +3259,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', 'to_seq', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -3182,6 +3289,18 @@ private fun python_test_runtime_effect_code(): String =
     + python_newline()
     + "def delay(thunk):" + python_newline()
     + "    return Effect.delay(thunk)" + python_newline()
+    + python_newline()
+    + "def __capy_current_millis():" + python_newline()
+    + "    return Effect.delay(lambda: __capy_long(int(time.time() * 1000)))" + python_newline()
+    + python_newline()
+    + "def __capy_nano_time():" + python_newline()
+    + "    return Effect.delay(lambda: __capy_long(time.monotonic_ns()))" + python_newline()
+    + python_newline()
+    + "def __capy_clock_now():" + python_newline()
+    + "    def __capy_run_clock_now():" + python_newline()
+    + "        current = time.gmtime()" + python_newline()
+    + "        return __capy_date_time(__capy_date(current.tm_mday, current.tm_mon, current.tm_year), __capy_time(current.tm_hour, current.tm_min, current.tm_sec, __capy_some(0)))" + python_newline()
+    + "    return Effect.delay(__capy_run_clock_now)" + python_newline()
     + python_newline()
     + "def _console_print(value, newline, error):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
@@ -3894,6 +4013,12 @@ private fun python_value_assert_extra_methods_code(): String =
     + python_newline()
     + "    def is_one(self):" + python_newline()
     + "        return self._append(self.value == 1, 'Expected ' + repr(self.value) + ' to be one', 'Assert.is_one')" + python_newline()
+    + python_newline()
+    + "    def is_greater_than(self, other):" + python_newline()
+    + "        return self._append(self.value > other, 'Expected ' + repr(self.value) + ' to be greater than ' + repr(other), 'Assert.is_greater_than')" + python_newline()
+    + python_newline()
+    + "    def is_between(self, start, end):" + python_newline()
+    + "        return self._append(self.value >= start and self.value <= end, 'Expected ' + repr(self.value) + ' to be between ' + repr(start) + ' and ' + repr(end), 'Assert.is_between')" + python_newline()
     + python_newline()
     + "    def has_size(self, expected):" + python_newline()
     + "        actual = globals()['__capy_size'](self.value)" + python_newline()
@@ -4692,7 +4817,9 @@ private fun python_unary_operator_gatherable(operator: String): bool =
 
 private fun python_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_expressions_gatherable(call.arguments, env, module, allModules)
-    then if python_runtime_function(call.name)
+    then if python_stdlib_effect_function_call(call, module)
+        then true
+        else if python_runtime_function(call.name)
         then true
         else if python_enum_parse_call(call, module, allModules)
         then python_enum_parse_call_gatherable(call, env, module, allModules)
@@ -5019,6 +5146,8 @@ private fun python_assert_method(name: String): bool =
         | name == "is_false"
         | name == "is_zero"
         | name == "is_one"
+        | name == "is_greater_than"
+        | name == "is_between"
         | name == "is_empty"
         | name == "has_size"
         | name == "contains"
