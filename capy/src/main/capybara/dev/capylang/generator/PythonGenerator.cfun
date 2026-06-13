@@ -127,7 +127,8 @@ private fun python_function_bindings(function: CompiledFunction): List[PythonBin
             name: "this",
             pythonName: python_identifier("this"),
             typeName: python_method_owner_name(function.name)
-        }] + python_parameter_bindings(function.parameters)
+        }]
+        + python_parameter_bindings(function.parameters)
     else python_parameter_bindings(function.parameters)
 
 private fun python_return_statement(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String, returnType: CompiledTypeReference): String =
@@ -214,9 +215,16 @@ private fun python_variable_code(name: String, env: List[PythonBinding], module:
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.pythonName
     case None ->
-        if python_qualified_enum_value_name(name, module, allModules)
-        then python_enum_qualified_value_code(name, module, allModules)
-        else match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        if name == "receiver"
+        then match python_lookup_binding("this", env) with
+            case Some { binding } -> binding.pythonName
+            case None -> python_unbound_variable_code(name, module, allModules)
+        else python_unbound_variable_code(name, module, allModules)
+
+private fun python_unbound_variable_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_qualified_enum_value_name(name, module, allModules)
+    then python_enum_qualified_value_code(name, module, allModules)
+    else match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
         case Some { binding } -> python_module_import_name(binding.module) + "." + python_identifier(binding.function.name)
         case None ->
             match python_imported_stdlib_constant(name, module.imports) with
@@ -339,6 +347,8 @@ private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: Li
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_function_call_code(call.name)
+    else if python_reflection_function_call(call)
+    then python_reflection_function_call_code(call, env, module, allModules)
     else if python_partial_function_call(call)
     then
         let names = python_partial_placeholder_names(call.arguments, env)
@@ -359,6 +369,23 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
                 case None -> python_function_call_name(call.name, module, allModules)
             else python_function_call_name(call.name, module, allModules)
         resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_reflection_function_call(call: CompiledFunctionCallExpression): bool =
+    call.name == "reflection" & python_one_method_argument(call.arguments)
+
+private fun python_reflection_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let valueCode = python_first_method_argument_code(call.arguments, env, module, allModules)
+    let typeName = python_first_method_argument_type(call.arguments, env, module, allModules)
+    if python_reflection_static_type(typeName, module, allModules)
+    then "reflection(" + valueCode + ", " + python_string_literal(python_type_unqualified_name(typeName)) + ")"
+    else "reflection(" + valueCode + ")"
+
+private fun python_reflection_static_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    !typeName.is_empty()
+        & typeName != python_unknown_type()
+        & typeName != "data"
+        & typeName != "enum"
+        & !python_enum_type_exists(typeName, module, allModules)
 
 private fun python_field_access_code(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(access.receiver, env, module, allModules)
@@ -1911,9 +1938,16 @@ private fun python_variable_type(name: String, env: List[PythonBinding], module:
     match python_lookup_binding(name, env) with
     case Some { binding } -> binding.typeName
     case None ->
-        if python_qualified_enum_value_name(name, module, allModules)
-        then python_enum_qualified_type_name(name)
-        else match python_find_constant(name, module.functions) with
+        if name == "receiver"
+        then match python_lookup_binding("this", env) with
+            case Some { binding } -> binding.typeName
+            case None -> python_unbound_variable_type(name, module, allModules)
+        else python_unbound_variable_type(name, module, allModules)
+
+private fun python_unbound_variable_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_qualified_enum_value_name(name, module, allModules)
+    then python_enum_qualified_type_name(name)
+    else match python_find_constant(name, module.functions) with
         case Some { function } -> function.returnType.name
         case None -> match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
         case Some { binding } -> binding.function.returnType.name
@@ -1949,9 +1983,39 @@ private fun python_field_access_type(access: CompiledFieldAccessExpression, env:
     then python_enum_static_field_access_type(access)
     else
     let receiverType = python_expression_type(access.receiver, env, module, allModules)
-    if receiverType == python_unknown_type()
-    then python_unknown_type()
-    else python_data_field_type(access.name, python_data_type_fields(receiverType, module, allModules))
+    match python_reflection_field_type(access.name, receiverType) with
+    case Some { typeName } -> typeName
+    case None ->
+        if receiverType == python_unknown_type()
+        then python_unknown_type()
+        else python_data_field_type(access.name, python_data_type_fields(receiverType, module, allModules))
+
+private fun python_reflection_field_type(name: String, receiverType: String): /capy/lang/Option[String] =
+    if (receiverType == "DataValueInfo" | receiverType == "DataInfo" | receiverType == "AnnotationInfo") & name == "name"
+    then /capy/lang/Option.Some { python_string_type() }
+    else if (receiverType == "DataValueInfo" | receiverType == "DataInfo" | receiverType == "AnnotationInfo") & name == "pkg"
+    then /capy/lang/Option.Some { "PackageInfo" }
+    else if receiverType == "DataValueInfo" & (name == "fields" | name == "annotations")
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "FieldValueInfo" & name == "name"
+    then /capy/lang/Option.Some { python_string_type() }
+    else if receiverType == "FieldValueInfo" & name == "type"
+    then /capy/lang/Option.Some { "DataInfo" }
+    else if receiverType == "FieldValueInfo" & name == "value"
+    then /capy/lang/Option.Some { python_unknown_type() }
+    else if receiverType == "FieldValueInfo" & name == "annotations"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "DataInfo" & name == "annotations"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "PackageInfo" & (name == "name" | name == "path")
+    then /capy/lang/Option.Some { python_string_type() }
+    else if receiverType == "AnnotationInfo" & name == "arguments"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "AnnotationArgumentInfo" & name == "name"
+    then /capy/lang/Option.Some { python_string_type() }
+    else if receiverType == "AnnotationArgumentInfo" & name == "value"
+    then /capy/lang/Option.Some { python_unknown_type() }
+    else /capy/lang/Option.None {}
 
 private fun python_data_field_type(name: String, fields: List[String]): String =
     match fields[0] with
@@ -4348,9 +4412,9 @@ private fun python_test_runtime_reflection_code(modules: List[CompiledModule]): 
     + "def __capy_reflection_unknown(type_name):" + python_newline()
     + "    return __capy_data('DataValueInfo', dict(name=type_name, pkg=__capy_reflection_package(dict()), fields=[], annotations=[]))" + python_newline()
     + python_newline()
-    + "def reflection(obj):" + python_newline()
+    + "def reflection(obj, declared_type=None):" + python_newline()
     + "    value = _unsafe_run(obj)" + python_newline()
-    + "    type_name = __capy_reflection_type_name(value)" + python_newline()
+    + "    type_name = __capy_normalize_type_name(declared_type) if declared_type else __capy_reflection_type_name(value)" + python_newline()
     + "    enum_metadata = __capy_reflection_enum_values.get(__capy_reflection_enum_value_name(type_name))" + python_newline()
     + "    if enum_metadata is not None:" + python_newline()
     + "        name = __capy_get_field(value, 'name') if isinstance(value, dict) and 'name' in value else enum_metadata.get('name', type_name)" + python_newline()
