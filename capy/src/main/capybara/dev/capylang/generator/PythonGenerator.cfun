@@ -125,6 +125,7 @@ private fun python_object_runtime_aliases(classIdentifier: String): String =
         + python_object_runtime_alias(classPrefix, "__capy_no_match")
         + python_object_runtime_alias(classPrefix, "__capy_unsupported")
         + python_object_runtime_alias(classPrefix, "__capy_not_implemented")
+        + python_object_runtime_alias(classPrefix, "__capy_reflection_annotations")
         + python_object_runtime_alias(classPrefix, "__capy_long")
         + python_object_runtime_alias(classPrefix, "__capy_to_int")
         + python_object_runtime_alias(classPrefix, "__capy_to_long")
@@ -174,12 +175,37 @@ private fun python_object_info_literal(objectClass: CompiledObjectOrientedClass,
         + ", fields=" + python_object_field_infos_literal(objectClass.name, objectClass.fields, 0, module, allModules)
         + ", methods=" + python_object_method_infos_literal(objectClass.name, objectClass.methods, module, allModules)
         + ", parents=" + python_object_parent_infos_literal(objectClass.parents, module, allModules)
-        + ", annotations=" + python_reflection_annotations_literal(
+        + ", annotations=" + python_reflection_annotation_infos_literal(
             python_schema_values("__capy_oo_annotation|type|" + objectClass.name + "|", module.functions),
             module,
             allModules
         )
         + "))"
+
+private fun python_object_interface_info_literal(interfaceName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"" + python_object_interface_info_type(python_object_interface_kind(interfaceName, module.functions)) + "\", dict("
+        + "name=" + python_string_literal(interfaceName)
+        + ", pkg=" + python_package_info_literal(module.name, module.path)
+        + ", methods=" + python_object_interface_method_infos_literal(interfaceName, module.functions, module, allModules)
+        + ", parents=" + python_object_parent_infos_literal(
+            python_object_schema_type_references(python_schema_values("__capy_oo_interface_parent|" + interfaceName + "|", module.functions)),
+            module,
+            allModules
+        )
+        + ", annotations=" + python_reflection_annotation_infos_literal(
+            python_schema_values("__capy_oo_annotation|type|" + interfaceName + "|", module.functions),
+            module,
+            allModules
+        )
+        + "))"
+
+private fun python_object_interface_kind(interfaceName: String, functions: List[CompiledFunction]): String =
+    match python_schema_value_named("__capy_oo_interface_kind|" + interfaceName, functions) with
+    case Some { value } -> value
+    case None -> "interface"
+
+private fun python_object_interface_info_type(kind: String): String =
+    if kind == "trait" then "TraitInfo" else "InterfaceInfo"
 
 private fun python_object_field_infos_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
@@ -200,7 +226,7 @@ private fun python_object_field_info_literal(className: String, field: CompiledO
     "__capy_data(\"FieldInfo\", dict("
         + "name=" + python_string_literal(field.name)
         + ", type=" + python_any_info_literal(field.typeReference, module, allModules)
-        + ", annotations=" + python_reflection_annotations_literal(
+        + ", annotations=" + python_reflection_annotation_infos_literal(
             python_schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", module.functions),
             module,
             allModules
@@ -228,8 +254,42 @@ private fun python_object_method_info_literal(className: String, method: Compile
         + ", pkg=" + python_package_info_literal(module.name, module.path)
         + ", params=" + python_object_method_param_infos_literal(method.parameters, module, allModules)
         + ", return_type=" + python_any_info_literal(method.returnType, module, allModules)
-        + ", annotations=" + python_reflection_annotations_literal(
+        + ", annotations=" + python_reflection_annotation_infos_literal(
             python_schema_values("__capy_oo_annotation|method|" + className + "|" + method.name + "|", module.functions),
+            module,
+            allModules
+        )
+        + "))"
+
+private fun python_object_interface_method_infos_literal(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match functions[0] with
+    case None -> "[]"
+    case Some { function } ->
+        if python_compiled_object_interface_method_function_for_interface(function, interfaceName)
+        then "[" + python_object_interface_method_info_literal(function, module, allModules)
+            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+            + "]"
+        else python_object_interface_method_infos_literal(interfaceName, functions[1:], module, allModules)
+
+private fun python_object_interface_method_infos_tail_literal(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if python_compiled_object_interface_method_function_for_interface(function, interfaceName)
+        then ", " + python_object_interface_method_info_literal(function, module, allModules)
+            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+        else python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+
+private fun python_object_interface_method_info_literal(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let interfaceName = python_compiled_object_interface_method_owner_name(function.name)
+    let methodName = python_compiled_object_interface_method_name(function.name)
+    "__capy_data(\"MethodInfo\", dict("
+        + "name=" + python_string_literal(methodName)
+        + ", pkg=" + python_package_info_literal(module.name, module.path)
+        + ", params=" + python_object_method_param_infos_literal(function.parameters, module, allModules)
+        + ", return_type=" + python_any_info_literal(function.returnType, module, allModules)
+        + ", annotations=" + python_reflection_annotation_infos_literal(
+            python_schema_values("__capy_oo_annotation|method|" + interfaceName + "|" + methodName + "|", module.functions),
             module,
             allModules
         )
@@ -938,12 +998,18 @@ private fun python_object_type_function_receiver_name(name: String): String =
 private fun python_object_type_receiver_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_find_object_class_in_scope(name, module, allModules) with
     case Some _ -> true
-    case None -> false
+    case None ->
+        match python_find_object_interface_module_in_scope(name, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 private fun python_object_type_call_code_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_object_class_in_scope(name, module, allModules) with
     case Some { binding } -> python_object_class_reference(binding, module) + ".type()"
-    case None -> "__capy_unsupported('COO type')"
+    case None ->
+        match python_find_object_interface_module_in_scope(name, module, allModules) with
+        case Some { owner } -> python_object_interface_info_literal(python_object_interface_member_name(name), owner, allModules)
+        case None -> "__capy_unsupported('COO type')"
 
 private fun python_object_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_find_object_method(call, env, module, allModules) with
@@ -2603,7 +2669,7 @@ private fun python_function_call_expression_type(call: CompiledFunctionCallExpre
     if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_function_call_type(call.name)
     else if python_object_type_function_call(call, module, allModules)
-    then "ObjectInfo"
+    then python_object_type_function_call_type(call, module, allModules)
     else if python_object_constructor_call(call, module, allModules)
     then python_effect_type()
     else python_function_name_expression_type(call.name, module, allModules)
@@ -2636,6 +2702,22 @@ private fun python_runtime_function_type(name: String): String =
     else if python_console_function(name)
     then python_effect_type()
     else python_unknown_type()
+
+private fun python_object_type_function_call_type(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_object_info_type_for_name(python_object_type_function_receiver_name(call.name), module, allModules)
+
+private fun python_object_type_method_call_type(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.receiver with
+    case CompiledVariableExpression variable -> python_object_info_type_for_name(variable.name, module, allModules)
+    case _ -> "ObjectInfo"
+
+private fun python_object_info_type_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_object_class_in_scope(name, module, allModules) with
+    case Some _ -> "ObjectInfo"
+    case None ->
+        match python_find_object_interface_module_in_scope(name, module, allModules) with
+        case Some { owner } -> python_object_interface_info_type(python_object_interface_kind(python_object_interface_member_name(name), owner.functions))
+        case None -> "ObjectInfo"
 
 private fun python_stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     call.arguments.is_empty()
@@ -2704,7 +2786,7 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     else if python_primitive_conversion_method_call(call, receiverType)
     then if call.name == "to_int" then python_int_type() else python_long_type()
     else if python_object_type_method_call(call, env, module, allModules)
-    then "ObjectInfo"
+    then python_object_type_method_call_type(call, module, allModules)
     else if python_effect_method_call(call, receiverType)
     then python_effect_type()
     else if python_result_method_call(call, receiverType)
@@ -3934,6 +4016,24 @@ private fun python_compiled_object_method_visibility(visibility: String): String
     then visibility[3, visibility.size().value]
     else visibility
 
+private fun python_compiled_object_interface_method_function_for_interface(function: CompiledFunction, interfaceName: String): bool =
+    if python_compiled_object_interface_method_function(function)
+    then python_compiled_object_interface_method_owner_name(function.name) == interfaceName
+    else false
+
+private fun python_compiled_object_interface_method_function(function: CompiledFunction): bool =
+    python_string_has_prefix(function.name, "__capy_oo_interface_method|")
+
+private fun python_compiled_object_interface_method_owner_name(name: String): String =
+    let rest = name["__capy_oo_interface_method|".size().value, name.size().value]
+    let separator = python_first_index_of(rest, "|", 0)
+    if separator < 0 then rest else rest[0, separator]
+
+private fun python_compiled_object_interface_method_name(name: String): String =
+    let rest = name["__capy_oo_interface_method|".size().value, name.size().value]
+    let separator = python_first_index_of(rest, "|", 0)
+    if separator < 0 then "" else rest[separator + 1, rest.size().value]
+
 private fun python_find_object_class_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
     if python_qualified_name(name)
     then python_find_qualified_object_class(name, module, allModules)
@@ -3974,6 +4074,46 @@ private fun python_find_object_class_in_import(name: String, rest: List[Compiled
         case None -> python_find_object_class_in_imports(name, rest, module, allModules)
     }
     case None -> python_find_object_class_in_imports(name, rest, module, allModules)
+
+private fun python_find_object_interface_module_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    if python_qualified_name(name)
+    then python_find_qualified_object_interface_module(name, module, allModules)
+    else if python_object_interface_declared(name, module)
+    then /capy/lang/Option.Some { module }
+    else python_find_object_interface_module_in_imports(name, module.imports, module, allModules)
+
+private fun python_find_qualified_object_interface_module(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    let interfaceName = python_qualified_call_member(name)
+    match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
+    case Some { targetModule } ->
+        if python_object_interface_declared(interfaceName, targetModule)
+        then /capy/lang/Option.Some { targetModule }
+        else /capy/lang/Option.None {}
+    case None -> /capy/lang/Option.None {}
+
+private fun python_object_interface_declared(name: String, module: CompiledModule): bool =
+    match python_schema_value_named("__capy_oo_interface|" + name, module.functions) with
+    case Some _ -> true
+    case None -> false
+
+private fun python_find_object_interface_module_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !python_stdlib_import(declaration.modulePath) & !declaration.qualified & python_import_includes_name(name, declaration)
+        then python_find_object_interface_module_in_import(name, imports[1:], declaration, module, allModules)
+        else python_find_object_interface_module_in_imports(name, imports[1:], module, allModules)
+
+private fun python_find_object_interface_module_in_import(name: String, rest: List[CompiledImportDeclaration], declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if python_object_interface_declared(name, importedModule)
+        then /capy/lang/Option.Some { importedModule }
+        else python_find_object_interface_module_in_imports(name, rest, module, allModules)
+    case None -> python_find_object_interface_module_in_imports(name, rest, module, allModules)
+
+private fun python_object_interface_member_name(name: String): String =
+    if python_qualified_name(name) then python_qualified_call_member(name) else name
 
 private fun python_find_object_class_by_type(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
     match modules[0] with
@@ -4222,7 +4362,7 @@ private fun python_test_runtime_header_code(): String =
     + "import sys" + python_newline()
     + "import time" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 private fun python_test_runtime_effect_code(): String =
@@ -6520,6 +6660,9 @@ private fun python_reflection_data_type_parent_fields(parents: List[String], mod
 
 private fun python_reflection_annotations_literal(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): String =
     python_code_list_literal(python_reflection_annotation_metadata_literals(values, usageModule, allModules))
+
+private fun python_reflection_annotation_infos_literal(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_reflection_annotations(" + python_reflection_annotations_literal(values, usageModule, allModules) + ")"
 
 private fun python_reflection_annotation_metadata_literals(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match values[0] with
