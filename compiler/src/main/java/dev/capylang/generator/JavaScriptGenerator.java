@@ -74,6 +74,7 @@ public final class JavaScriptGenerator implements Generator {
             "capy/io/IO",
             "capy/io/Stdout",
             "capy/lang/Effect",
+            "capy/lang/Ordering",
             "capy/lang/Option",
             "capy/lang/Primitives",
             "capy/lang/Regex",
@@ -938,6 +939,10 @@ public final class JavaScriptGenerator implements Generator {
             }
             if (("reduce".equals(methodName) || "|>".equals(methodName) || "pipe_greater".equals(methodName)) && tailArgs.size() >= 2 && isCollectionType(receiverType)) {
                 return "capy.reduceCollection(" + receiver + ", " + tailArgs.get(0) + ", " + tailArgs.get(1) + ")";
+            }
+            if ("sort".equals(methodName) && tailArgs.size() == 1 && receiverType instanceof CollectionLinkedType.CompiledList) {
+                require("capy.collection.List");
+                return moduleVar("capy.collection.List") + ".sort(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (isPrimitiveConversion(methodName)) {
                 return renderConversion(methodName, receiver, receiverType, functionCall.type());
@@ -2821,6 +2826,8 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.Option", Set.of("Some", "None"));
             exports.put("capy.lang.Result", Set.of("Success", "Error"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
+            exports.put("capy.lang.Ordering", Set.of("Ordering", "LESS", "EQUAL", "GREATER", "fromInt", "from_int", "reverse", "thenOrdering", "then_ordering"));
+            exports.put("capy.lang.OrderingModule", Set.of("Ordering", "LESS", "EQUAL", "GREATER", "fromInt", "from_int", "reverse", "thenOrdering", "then_ordering"));
             exports.put("capy.lang.Program", Set.of(
                     "Success", "Failed", "__constructor__primitive__failed_exit_code",
                     "next__name_next__failed_exit_code", "previous__name_previous__failed_exit_code",
@@ -2849,7 +2856,7 @@ public final class JavaScriptGenerator implements Generator {
                     "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
                     "RoundMode", "FLOOR", "CEILING", "HALF_UP", "HALF_DOWN", "HALF_EVEN", "round"
             ));
-            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
+            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce", "sort"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
             exports.put("capy.collection.Tuple", Set.of("get"));
@@ -2905,6 +2912,9 @@ public final class JavaScriptGenerator implements Generator {
             fields.put("None", List.of());
             fields.put("Success", List.of("value"));
             fields.put("Error", List.of("message"));
+            fields.put("LESS", List.of());
+            fields.put("EQUAL", List.of());
+            fields.put("GREATER", List.of());
             fields.put("_UnsafeEffect", List.of("unsafe_thunk"));
             fields.put("Cons", List.of("value", "rest"));
             fields.put("End", List.of());
@@ -2919,6 +2929,8 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "lang", "Option.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Some", "None")),
                     new GeneratedModule(Path.of("capy", "lang", "Result.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Success", "Error")),
                     new GeneratedModule(Path.of("capy", "lang", "Effect.js"), runtimeForwarder("../../dev/capylang/capybara.js", "pure", "delay")),
+                    new GeneratedModule(Path.of("capy", "lang", "Ordering.js"), orderingRuntime()),
+                    new GeneratedModule(Path.of("capy", "lang", "OrderingModule.js"), orderingModuleRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Program.js"), programRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.js"), primitivesRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "String.js"), stringRuntime()),
@@ -2950,6 +2962,8 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.lang.Option",
                     "capy.lang.Result",
                     "capy.lang.Effect",
+                    "capy.lang.Ordering",
+                    "capy.lang.OrderingModule",
                     "capy.lang.Program",
                     "capy.lang.Primitives",
                     "capy.lang.String",
@@ -2982,6 +2996,72 @@ public final class JavaScriptGenerator implements Generator {
                    + "module.exports = {\n"
                    + Stream.of(names).map(name -> "    " + name + ": capy." + name + ",").collect(joining("\n"))
                    + "\n};\n";
+        }
+
+        private static String orderingModuleRuntime() {
+            return "'use strict';\n"
+                   + "module.exports = require('./Ordering.js');\n";
+        }
+
+        private static String orderingRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    const Ordering = (() => {
+                        const values = [
+                            capy.enumValue('LESS', 'Ordering', ['Ordering'], 0, [], 'capy.lang', 'capy/lang/Ordering', { fields: [], annotations: [] }),
+                            capy.enumValue('EQUAL', 'Ordering', ['Ordering'], 1, [], 'capy.lang', 'capy/lang/Ordering', { fields: [], annotations: [] }),
+                            capy.enumValue('GREATER', 'Ordering', ['Ordering'], 2, [], 'capy.lang', 'capy/lang/Ordering', { fields: [], annotations: [] }),
+                        ];
+                        return Object.freeze({
+                            LESS: values[0],
+                            EQUAL: values[1],
+                            GREATER: values[2],
+                            values,
+                            valuesSet: () => capy.set(values),
+                            parse: value => capy.parseEnum(value, values, 'Ordering'),
+                        });
+                    })();
+                    const LESS = Ordering.LESS;
+                    const EQUAL = Ordering.EQUAL;
+                    const GREATER = Ordering.GREATER;
+
+                    function fromInt(value) {
+                        return value < 0 ? LESS : (value > 0 ? GREATER : EQUAL);
+                    }
+                    const from_int = fromInt;
+
+                    function reverse(ordering) {
+                        if (capy.isType(ordering, 'LESS')) {
+                            return GREATER;
+                        }
+                        if (capy.isType(ordering, 'EQUAL')) {
+                            return EQUAL;
+                        }
+                        if (capy.isType(ordering, 'GREATER')) {
+                            return LESS;
+                        }
+                        throw new Error('Non-exhaustive match expression');
+                    }
+
+                    function thenOrdering(ordering, other) {
+                        return capy.isType(ordering, 'EQUAL') ? other : ordering;
+                    }
+                    const then_ordering = thenOrdering;
+
+                    module.exports = {
+                        Ordering,
+                        LESS,
+                        EQUAL,
+                        GREATER,
+                        fromInt,
+                        from_int,
+                        reverse,
+                        thenOrdering,
+                        then_ordering,
+                    };
+                    """;
         }
 
         private static String primitivesRuntime() {
@@ -3190,6 +3270,7 @@ public final class JavaScriptGenerator implements Generator {
                    + "    flat_map: capy.flatMapCollection,\n"
                    + "    flatMap: capy.flatMapCollection,\n"
                    + "    reduce: capy.reduceCollection,\n"
+                   + "    sort: capy.listSort,\n"
                    + "};\n";
         }
 
@@ -6225,7 +6306,37 @@ public final class JavaScriptGenerator implements Generator {
 
                         function listMinus(left, right) {
                             return list(nativeArrayFilter.call(left, item => !contains(right, item)));
+                    }
+
+                    function listSort(values, compare) {
+                        const input = list(values);
+                        if (input.length <= 1) {
+                            return input;
                         }
+                        const mid = Math.floor(input.length / 2);
+                        return listSortMerge(
+                            listSort(input.slice(0, mid), compare),
+                            listSort(input.slice(mid), compare),
+                            compare
+                        );
+                    }
+
+                    function listSortMerge(left, right, compare) {
+                        const result = [];
+                        let leftIdx = 0;
+                        let rightIdx = 0;
+                        while (leftIdx < left.length && rightIdx < right.length) {
+                            const ordering = invoke(compare, left[leftIdx], right[rightIdx]);
+                            if (ordering && ordering.name === 'GREATER') {
+                                result.push(right[rightIdx]);
+                                rightIdx += 1;
+                            } else {
+                                result.push(left[leftIdx]);
+                                leftIdx += 1;
+                            }
+                        }
+                        return list(result.concat(left.slice(leftIdx), right.slice(rightIdx)));
+                    }
 
                     function setAppend(valueSet, value) {
                         const result = set(valueSet);
@@ -6765,6 +6876,7 @@ public final class JavaScriptGenerator implements Generator {
                         listPlus,
                         listRemove,
                         listMinus,
+                        listSort,
                         setAppend,
                         setPlus,
                         setRemove,

@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Ordering import { * }
 from /capy/lang/Seq import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/meta_prog/Recursive import { Recursive }
@@ -130,8 +131,37 @@ fun List[T].flat_map(map: T => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, v
 /// Applies `map` to each value and concatenates the resulting lists.
 fun List[T].`|*`(map: T => List[Y]): Seq[Y] = this.flat_map(map)
 
+/// Returns this List sorted with `compare`.
+///
+/// The sort is stable: values that compare as `EQUAL` keep their original order.
+fun List[T].sort(compare: (T, T) => Ordering): List[T] = sort_list(this, compare)
+
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
 fun List[T].get(idx: index): Option[T] = <native>
 
 /// Returns the values in the half-open range [from, to) using the same bounds and negative-index rules as list[from:to].
 fun List[T].get(from: int, to: int): List[T] = <native>
+
+private fun sort_list(list: List[T], compare: (T, T) => Ordering): List[T] =
+    if list.size() <= 1
+    then list
+    else merge_sorted(
+        sort_list(list.get(0, list.size().value / 2), compare),
+        0,
+        sort_list(list.get(list.size().value / 2, list.size().value), compare),
+        0,
+        compare,
+        []
+    )
+
+@Recursive
+private fun merge_sorted(left: List[T], left_idx: int, right: List[T], right_idx: int, compare: (T, T) => Ordering, acc: List[T]): List[T] =
+    match left[left_idx] with
+    case None -> acc + right.get(right_idx, right.size().value)
+    case Some { left_value } ->
+        match right[right_idx] with
+        case None -> acc + left.get(left_idx, left.size().value)
+        case Some { right_value } ->
+            match compare(left_value, right_value) with
+            case GREATER -> merge_sorted(left, left_idx, right, right_idx + 1, compare, acc + right_value)
+            case _ -> merge_sorted(left, left_idx + 1, right, right_idx, compare, acc + left_value)

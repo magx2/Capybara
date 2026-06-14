@@ -23,6 +23,12 @@ fun tests(): Effect[TestFile] =
         test("not_nested_is_empty reads nested list field", () => list_collection_not_nested_is_empty_reads_nested_list_field()),
         test("size returns list size", () => list_collection_size_returns_list_size()),
         test("let_named_list returns local list size", () => list_collection_let_named_list_returns_local_list_size()),
+        test("sort_ints_ascending returns sorted list", () => list_collection_sort_ints_ascending_returns_sorted_list()),
+        test("sort_ints_descending returns reverse sorted list", () => list_collection_sort_ints_descending_returns_reverse_sorted_list()),
+        test("sort_ints_with_duplicates preserves duplicates", () => list_collection_sort_ints_with_duplicates_preserves_duplicates()),
+        test("sort_empty_ints returns empty list", () => list_collection_sort_empty_ints_returns_empty_list()),
+        test("sort_single_int returns single item list", () => list_collection_sort_single_int_returns_single_item_list()),
+        test("sort_items_by_priority sorts custom data stably", () => list_collection_sort_items_by_priority_sorts_custom_data_stably()),
     ])
 
 private fun list_collection_static_list_returns_expected_values(): Assert =
@@ -126,3 +132,26 @@ private fun list_collection_size_returns_list_size(): Assert =
 
 private fun list_collection_let_named_list_returns_local_list_size(): Assert =
     assert_that(let_named_list()).is_equal_to(4)
+
+private fun list_collection_sort_ints_ascending_returns_sorted_list(): Assert =
+    assert_that(sort_ints_ascending()).is_equal_to([1, 1, 3, 4, 5])
+
+private fun list_collection_sort_ints_descending_returns_reverse_sorted_list(): Assert =
+    assert_that(sort_ints_descending()).is_equal_to([5, 4, 3, 1, 1])
+
+private fun list_collection_sort_ints_with_duplicates_preserves_duplicates(): Assert =
+    assert_that(sort_ints_with_duplicates()).is_equal_to([1, 2, 2, 3, 3])
+
+private fun list_collection_sort_empty_ints_returns_empty_list(): Assert =
+    assert_that(sort_empty_ints()).is_empty()
+
+private fun list_collection_sort_single_int_returns_single_item_list(): Assert =
+    assert_that(sort_single_int()).is_equal_to([9])
+
+private fun list_collection_sort_items_by_priority_sorts_custom_data_stably(): Assert =
+    assert_that(sort_items_by_priority()).is_equal_to([
+        SortedItem { label: "first-a", priority: 1 },
+        SortedItem { label: "first-b", priority: 1 },
+        SortedItem { label: "second", priority: 2 },
+        SortedItem { label: "third", priority: 3 },
+    ])

@@ -1,10 +1,13 @@
 from /capy/test/Assert import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Ordering import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Seq import { * }
 from /capy/collection/List import { * }
 from /capy/test/CapyTest import { * }
+
+data SortRecord { name: String, rank: int }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/collection/List.cfun", [
@@ -17,6 +20,8 @@ fun tests(): Effect[TestFile] =
         test("should map values", () => list_should_map_values()),
         test("should filter and reject values", () => list_should_filter_and_reject_values()),
         test("should flat map values", () => list_should_flat_map_values()),
+        test("should sort values with comparator", () => list_should_sort_values_with_comparator()),
+        test("should sort custom data stably", () => list_should_sort_custom_data_stably()),
         test("should get values by index", () => list_should_get_values_by_index()),
         test("should get values by range", () => list_should_get_values_by_range()),
     ])
@@ -91,6 +96,30 @@ fun list_should_flat_map_values(): Assert =
         assert_that([3].flat_map(value => [value, value * 2]).as_list()).is_equal_to([3, 6]),
     ])
 
+fun list_should_sort_values_with_comparator(): Assert =
+    let empty: List[int] = []
+    assert_all([
+        assert_that([5, 1, 4, 1, 3].sort(:compare_int_ascending)).is_equal_to([1, 1, 3, 4, 5]),
+        assert_that([5, 1, 4, 1, 3].sort(:compare_int_descending)).is_equal_to([5, 4, 3, 1, 1]),
+        assert_that([2, 3, 2, 1, 3].sort(:compare_int_ascending)).is_equal_to([1, 2, 2, 3, 3]),
+        assert_that(empty.sort(:compare_int_ascending)).is_empty(),
+        assert_that([9].sort(:compare_int_ascending)).is_equal_to([9]),
+    ])
+
+fun list_should_sort_custom_data_stably(): Assert =
+    let values = [
+        SortRecord { name: "second", rank: 2 },
+        SortRecord { name: "first-a", rank: 1 },
+        SortRecord { name: "first-b", rank: 1 },
+        SortRecord { name: "third", rank: 3 },
+    ]
+    assert_that(values.sort(:compare_sort_record_rank)).is_equal_to([
+        SortRecord { name: "first-a", rank: 1 },
+        SortRecord { name: "first-b", rank: 1 },
+        SortRecord { name: "second", rank: 2 },
+        SortRecord { name: "third", rank: 3 },
+    ])
+
 fun list_should_get_values_by_index(): Assert =
     let values = [10, 20, 30, 40]
     assert_all([
@@ -113,3 +142,16 @@ private fun list_test_index(value: int): index =
     match index { value } with
     case Success { parsed } -> parsed
     case Error -> FIRST_ELEMENT
+
+private fun compare_int_ascending(left: int, right: int): Ordering =
+    if left < right
+    then LESS
+    else if left > right
+        then GREATER
+        else EQUAL
+
+private fun compare_int_descending(left: int, right: int): Ordering =
+    compare_int_ascending(right, left)
+
+private fun compare_sort_record_rank(left: SortRecord, right: SortRecord): Ordering =
+    compare_int_ascending(left.rank, right.rank)
