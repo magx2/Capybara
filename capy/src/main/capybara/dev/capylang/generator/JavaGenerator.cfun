@@ -6157,11 +6157,13 @@ private fun find_annotation_binding(name: String, module: CompiledModule, allMod
             case None -> find_annotation_binding_in_modules(name, allModules)
 
 private fun find_qualified_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    let qualifier = qualified_call_qualifier(name)
     let className = qualified_call_class_name(name, module)
     let member = qualified_call_member(name)
     if absolute_qualified_call_name(name)
     then find_qualified_annotation_binding_in_class(className, member, allModules)
     else match find_qualified_annotation_binding_in_imports(
+            qualifier,
             className,
             member,
             module.imports,
@@ -6183,23 +6185,38 @@ private fun find_qualified_annotation_binding_in_class(className: String, member
         }
     case None -> /capy/lang/Option.None {}
 
-private fun find_qualified_annotation_binding_in_imports(className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+private fun find_qualified_annotation_binding_in_imports(qualifier: String, className: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.qualified & !stdlib_import(declaration.modulePath) & imported_module_class(module, declaration.modulePath) == className
-        then find_qualified_annotation_binding_in_import(className, member, imports[1:], module, allModules)
-        else find_qualified_annotation_binding_in_imports(className, member, imports[1:], module, allModules)
+        if declaration.qualified & qualified_annotation_import_matches(qualifier, className, declaration, module)
+        then find_qualified_annotation_binding_in_import(qualifier, className, declaration, member, imports[1:], module, allModules)
+        else find_qualified_annotation_binding_in_imports(qualifier, className, member, imports[1:], module, allModules)
 
-private fun find_qualified_annotation_binding_in_import(className: String, member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
-    match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> find_qualified_annotation_binding_in_module(member, rest, module, allModules, importedModule)
-    case None -> find_qualified_annotation_binding_in_imports(className, member, rest, module, allModules)
+private fun find_qualified_annotation_binding_in_import(qualifier: String, className: String, declaration: CompiledImportDeclaration, member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
+    if stdlib_annotations_module_path(declaration.modulePath)
+    then {
+        match stdlib_annotation_binding(member) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> find_qualified_annotation_binding_in_imports(qualifier, className, member, rest, module, allModules)
+    }
+    else {
+        match find_module_by_class(imported_module_class(module, declaration.modulePath), allModules) with
+        case Some { importedModule } -> find_qualified_annotation_binding_in_module(member, rest, module, allModules, importedModule)
+        case None -> find_qualified_annotation_binding_in_imports(qualifier, className, member, rest, module, allModules)
+    }
 
 private fun find_qualified_annotation_binding_in_module(member: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[AnnotationBinding] =
     match importedModule.annotations.get(member) with
     case Some { declaration } -> /capy/lang/Option.Some { AnnotationBinding { declaration: declaration, module: importedModule } }
-    case None -> find_qualified_annotation_binding_in_imports(module_fqcn(importedModule), member, rest, module, allModules)
+    case None -> find_qualified_annotation_binding_in_imports(module_fqcn(importedModule), module_fqcn(importedModule), member, rest, module, allModules)
+
+private fun qualified_annotation_import_matches(qualifier: String, className: String, declaration: CompiledImportDeclaration, module: CompiledModule): bool =
+    let importedClass = imported_module_class(module, declaration.modulePath)
+    qualifier == declaration.modulePath
+        | qualifier == importedClass
+        | qualifier == module_class_leaf_name(importedClass)
+        | className == importedClass
 
 private fun find_annotation_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[AnnotationBinding] =
     match imports[0] with
@@ -9217,13 +9234,20 @@ private fun qualified_call_name(name: String): bool =
 private fun qualified_call_member(name: String): String =
     name[last_dot_index(name) + 1, name.size().value]
 
+private fun qualified_call_qualifier(name: String): String =
+    name[0, last_dot_index(name)]
+
 private fun qualified_call_class_name(name: String, module: CompiledModule): String =
-    let qualifier = name[0, last_dot_index(name)]
+    let qualifier = qualified_call_qualifier(name)
     if java_generator_string_has_prefix(qualifier, "/")
     then path_to_class(java_generator_normalize_import_module_path(qualifier))
     else if qualifier ? "/"
     then path_to_class(java_generator_normalize_import_module_path(qualifier))
     else imported_module_class(module, qualifier)
+
+private fun module_class_leaf_name(className: String): String =
+    let idx = last_dot_index(className)
+    if idx < 0 then className else className[idx + 1, className.size().value]
 
 private fun find_qualified_function(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match find_qualified_function_binding(name, module, allModules) with
