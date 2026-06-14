@@ -1,0 +1,68 @@
+= Sample AsciiDoc Document
+:author: ChatGPT
+:revdate: 2026-06-14
+:toc:
+:icons: font
+
+== Introduction
+
+This is a simple `.adoc` / AsciiDoc sample file.
+
+AsciiDoc is a lightweight markup format that can be converted into HTML, PDF, EPUB, and other formats.
+
+== Features
+
+* Headings
+* Paragraphs
+* Lists
+* Tables
+* Source code blocks
+* Notes and warnings
+* Links
+
+== Sample Table
+
+[cols="1,1,1", options="header"]
+|===
+| Name | Role | Status
+
+| Alice
+| Developer
+| Active
+
+| Bob
+| Designer
+| Pending
+
+| Charlie
+| Tester
+| Done
+|===
+
+== Source Code Example
+
+[source,java]
+----
+public class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello, AsciiDoc!");
+    }
+}
+----
+
+== Notes
+
+NOTE: This is a sample note block.
+
+WARNING: This is a sample warning block.
+
+== Checklist
+
+* [x] Create sample document
+* [x] Add table
+* [x] Add code block
+* [ ] Convert to PDF later
+
+== Conclusion
+
+This file can be used as a starting point for documentation, README files, technical specs, or project notes.
