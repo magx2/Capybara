@@ -4,12 +4,11 @@ on:
   push:
     branches:
       - "release/*"
-    paths:
-      - "gradle.properties"
 
 permissions:
   actions: write
   contents: write
+  pull-requests: write
 
 concurrency:
   group: merge-back-${{ github.event.repository.default_branch }}
@@ -40,7 +39,7 @@ jobs:
           git config user.name "CapyAutomata"
           git config user.email "CapyAutomata@capylang.dev"
 
-      - name: Merge release branch into default branch
+      - name: Create merge-back pull request
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -48,37 +47,95 @@ jobs:
           set -euo pipefail
           RELEASE_BRANCH="${GITHUB_REF_NAME}"
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          BACK_BRANCH="merge-back/${RELEASE_BRANCH//\//-}-to-${DEFAULT_BRANCH}"
+          STATE_BRANCH="merge-back-state/${RELEASE_BRANCH//\//-}-to-${DEFAULT_BRANCH}"
           if [[ ! "${RELEASE_BRANCH}" =~ ^release/[0-9]+\.[0-9]+\.x$ ]]; then
             echo "::error::Merge Back requires a release/{major}.{minor}.x branch, got '${RELEASE_BRANCH}'."
             exit 1
           fi
 
-          git fetch origin "${RELEASE_BRANCH}:${RELEASE_BRANCH}" "${DEFAULT_BRANCH}:${DEFAULT_BRANCH}"
-          git checkout "${DEFAULT_BRANCH}"
+          resolve_conflicts() {
+            local gradle_side="$1"
+            local conflicts
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [[ -z "${conflicts}" ]]; then
+              return 0
+            fi
 
-          set +e
-          git merge --no-ff --no-commit "${RELEASE_BRANCH}"
-          MERGE_STATUS=$?
-          set -e
-
-          if [[ "${MERGE_STATUS}" -ne 0 ]]; then
-            CONFLICTS="$(git diff --name-only --diff-filter=U)"
-            if [[ "${CONFLICTS}" == "gradle.properties" ]]; then
-              git checkout --ours gradle.properties
+            if [[ "${conflicts}" == "gradle.properties" ]]; then
+              git checkout "${gradle_side}" gradle.properties
               git add gradle.properties
             else
               echo "::error::Merge conflict outside gradle.properties. Conflicting files:"
-              printf '%s\n' "${CONFLICTS}"
+              printf '%s\n' "${conflicts}"
               exit 1
             fi
+          }
+
+          merge_ref() {
+            local ref="$1"
+            local gradle_side="$2"
+            local message="$3"
+
+            set +e
+            git merge --no-ff --no-commit "${ref}"
+            local merge_status=$?
+            set -e
+
+            if [[ "${merge_status}" -ne 0 ]]; then
+              resolve_conflicts "${gradle_side}"
+            fi
+
+            if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+              echo "::error::Unresolved merge conflicts remain:"
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+
+            if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+              git commit -m "${message}"
+            fi
+          }
+
+          git fetch origin \
+            "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}" \
+            "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+
+          if git ls-remote --exit-code --heads origin "${STATE_BRANCH}" >/dev/null; then
+            git fetch origin "+refs/heads/${STATE_BRANCH}:refs/remotes/origin/${STATE_BRANCH}"
+            git checkout -B "${STATE_BRANCH}" "origin/${STATE_BRANCH}"
+            merge_ref "origin/${DEFAULT_BRANCH}" "--theirs" "merge ${DEFAULT_BRANCH} into ${STATE_BRANCH}"
+          else
+            git checkout -B "${STATE_BRANCH}" "origin/${DEFAULT_BRANCH}"
           fi
 
-          if [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
-            if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
-              git commit -m "merge: ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
-              git push origin "HEAD:${DEFAULT_BRANCH}"
-              gh workflow run check.yml --ref "${DEFAULT_BRANCH}"
-            else
-              echo "Default branch already contains ${RELEASE_BRANCH}."
-            fi
+          merge_ref "origin/${RELEASE_BRANCH}" "--ours" "merge ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
+          git branch -f "${BACK_BRANCH}" HEAD
+
+          if git diff --quiet "origin/${DEFAULT_BRANCH}" HEAD; then
+            echo "Default branch already contains ${RELEASE_BRANCH}."
+            exit 0
           fi
+
+          git push --force-with-lease origin "HEAD:${STATE_BRANCH}" "HEAD:${BACK_BRANCH}"
+
+          PR_URL="$(gh pr list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --head "${BACK_BRANCH}" \
+            --base "${DEFAULT_BRANCH}" \
+            --state open \
+            --json url \
+            --jq '.[0].url // empty')"
+          if [[ -n "${PR_URL}" ]]; then
+            echo "Merge-back pull request already exists: ${PR_URL}"
+          else
+            PR_URL="$(gh pr create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${DEFAULT_BRANCH}" \
+              --head "${BACK_BRANCH}" \
+              --title "merge back ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}" \
+              --body "Automated merge-back from \`${RELEASE_BRANCH}\` into \`${DEFAULT_BRANCH}\`. This PR branch preserves merge ancestry; use squash merge to keep \`${DEFAULT_BRANCH}\` linear.")"
+            echo "Created merge-back pull request: ${PR_URL}"
+          fi
+
+          gh workflow run check.yml --ref "${BACK_BRANCH}"
