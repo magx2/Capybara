@@ -1,0 +1,144 @@
+from /capy/collection/List import { * }
+from /capy/io/IO import { create_directories, write_text }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+from /capy/lang/Result import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
+from /dev/capylang/compiler/CompiledExpression import { CompiledIntLiteral, CompiledStringLiteral }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
+from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
+from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
+from Documentation import { Documentation }
+from AsciiDocGenerator import { generate_asciidoc_docs }
+
+fun generate_docs(program: CompiledProgram, type: DocType): List[Documentation] =
+    match type with
+    case ADOC -> generate_asciidoc_docs(program)
+
+enum DocType {
+    ADOC,
+}
+
+fun main(args: List[String]): Effect[/capy/lang/Program] =
+    write_docs(from_string("build/capy-docs"), generate_docs(example_program(), ADOC)).map(result =>
+        match result with
+        case Success _ -> /capy/lang/Program.Success {}
+        case Error _ -> /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE }
+    )
+
+private fun write_docs(outputDir: Path, docs: List[Documentation]): Effect[Result[String]] =
+    create_directories(outputDir).flat_map(directoryResult =>
+        match directoryResult with
+        case Error e -> pure(e)
+        case Success _ -> write_documentation_items(outputDir, docs)
+    )
+
+private fun write_documentation_items(outputDir: Path, docs: List[Documentation]): Effect[Result[String]] =
+    match docs[0] with
+    case None -> pure(Success { "documentation written" })
+    case Some { doc } ->
+        write_documentation_item(outputDir, doc).flat_map(writeResult =>
+            match writeResult with
+            case Error e -> pure(e)
+            case Success _ -> write_documentation_items(outputDir, docs[1:])
+        )
+
+private fun write_documentation_item(outputDir: Path, doc: Documentation): Effect[Result[String]] =
+    let outputFile = outputDir / from_string(doc.path)
+    doc_create_parent_directories(outputFile).flat_map(parentResult =>
+        match parentResult with
+        case Error e -> pure(e)
+        case Success _ -> write_text(outputFile, doc.content)
+    )
+
+private fun doc_create_parent_directories(path: Path): Effect[Result[Path]] =
+    match path.parent() with
+    case None -> pure(Success { path })
+    case Some { parent } -> create_directories(parent)
+
+private fun example_program(): CompiledProgram =
+    CompiledProgram {
+        modules: [example_module()],
+        objectOrientedModules: [],
+        nativeProviders: empty_native_provider_manifest(),
+        nativeProviderCatalog: empty_native_provider_catalog()
+    }
+
+private fun example_module(): CompiledModule =
+    CompiledModule {
+        name: "ExampleDocs",
+        path: "dev/capylang/example",
+        types: {:},
+        visiblePrimitiveBackedTypes: {:},
+        functions: [
+            CompiledFunction {
+                name: "greeting",
+                visibility: "public",
+                parameters: [],
+                returnType: doc_string_type(),
+                body: CompiledStringLiteral {
+                    value: "hello",
+                    source: "\"hello\"",
+                    location: example_location()
+                },
+                location: example_location()
+            },
+            CompiledFunction {
+                name: "repeat",
+                visibility: "public",
+                parameters: [
+                    doc_parameter("message", doc_string_type()),
+                    doc_parameter("times", doc_int_type())
+                ],
+                returnType: doc_string_type(),
+                body: CompiledStringLiteral {
+                    value: "hello",
+                    source: "\"hello\"",
+                    location: example_location()
+                },
+                location: example_location()
+            },
+            CompiledFunction {
+                name: "_default_count",
+                visibility: "private",
+                parameters: [],
+                returnType: doc_int_type(),
+                body: CompiledIntLiteral {
+                    value: 1,
+                    source: "1",
+                    location: example_location()
+                },
+                location: example_location()
+            },
+        ],
+        imports: [],
+        derivers: {:},
+        annotations: {:},
+        staticImports: []
+    }
+
+private fun doc_parameter(name: String, typeReference: CompiledTypeReference): CompiledFunctionParameter =
+    CompiledFunctionParameter {
+        name: name,
+        typeReference: typeReference,
+        location: example_location()
+    }
+
+private fun doc_string_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "String", arguments: [] }
+
+private fun doc_int_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "int", arguments: [] }
+
+private fun example_location(): CompiledSourceLocation =
+    CompiledSourceLocation { line: 1, column: 1 }

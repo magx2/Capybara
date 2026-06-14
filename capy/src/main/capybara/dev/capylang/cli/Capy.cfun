@@ -1277,6 +1277,9 @@ private fun last_segment(segments: List[String]): Option[String] =
         case None -> Some { segment }
         case Some _ -> last_segment(segments[1:])
 
+private fun relative_to(base: Path, path: Path): Path =
+    cli_relative_to(base, path)
+
 private fun cli_relative_to(base: Path, path: Path): Path =
     from_string(cli_path_segments_to_string(cli_drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
 
