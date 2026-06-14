@@ -92,8 +92,203 @@ private fun python_object_classes(classes: List[CompiledObjectOrientedClass], mo
 
 private fun python_object_class(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     "class " + python_identifier(objectClass.name) + ":" + python_newline()
+    + python_object_type_method(objectClass, module, allModules)
     + python_object_constructor(objectClass, module, allModules)
     + python_object_methods(objectClass.methods, objectClass, module, allModules)
+    + python_object_runtime_aliases(python_identifier(objectClass.name))
+
+private fun python_object_runtime_aliases(classIdentifier: String): String =
+    let classPrefix = python_object_mangle_prefix(classIdentifier)
+    if classPrefix.is_empty()
+    then ""
+    else python_object_runtime_alias(classPrefix, "__capy_bind_value")
+        + python_object_runtime_alias(classPrefix, "__capy_effect_bind_value")
+        + python_object_runtime_alias(classPrefix, "__capy_data")
+        + python_object_runtime_alias(classPrefix, "__capy_set")
+        + python_object_runtime_alias(classPrefix, "__capy_add")
+        + python_object_runtime_alias(classPrefix, "__capy_sub")
+        + python_object_runtime_alias(classPrefix, "__capy_deep_equal")
+        + python_object_runtime_alias(classPrefix, "__capy_size")
+        + python_object_runtime_alias(classPrefix, "__capy_contains")
+        + python_object_runtime_alias(classPrefix, "__capy_is_empty")
+        + python_object_runtime_alias(classPrefix, "__capy_get_field")
+        + python_object_runtime_alias(classPrefix, "__capy_index")
+        + python_object_runtime_alias(classPrefix, "__capy_as_list")
+        + python_object_runtime_alias(classPrefix, "__capy_seq_map")
+        + python_object_runtime_alias(classPrefix, "__capy_seq_filter")
+        + python_object_runtime_alias(classPrefix, "__capy_seq_reject")
+        + python_object_runtime_alias(classPrefix, "__capy_seq_flat_map")
+        + python_object_runtime_alias(classPrefix, "__capy_any")
+        + python_object_runtime_alias(classPrefix, "__capy_all")
+        + python_object_runtime_alias(classPrefix, "__capy_type_matches")
+        + python_object_runtime_alias(classPrefix, "__capy_match_binding")
+        + python_object_runtime_alias(classPrefix, "__capy_no_match")
+        + python_object_runtime_alias(classPrefix, "__capy_unsupported")
+        + python_object_runtime_alias(classPrefix, "__capy_not_implemented")
+        + python_object_runtime_alias(classPrefix, "__capy_long")
+        + python_object_runtime_alias(classPrefix, "__capy_to_int")
+        + python_object_runtime_alias(classPrefix, "__capy_to_long")
+        + python_object_runtime_alias(classPrefix, "__capy_to_string")
+        + python_object_runtime_alias(classPrefix, "__capy_with")
+        + python_object_runtime_alias(classPrefix, "__capy_constructor_value")
+        + python_object_runtime_alias(classPrefix, "__capy_constructor_result")
+        + python_object_runtime_alias(classPrefix, "__capy_primitive_constructor_result")
+        + python_object_runtime_alias(classPrefix, "__capy_constructor_pipeline")
+        + python_object_runtime_alias(classPrefix, "__capy_set_append")
+        + python_object_runtime_alias(classPrefix, "__capy_set_concat")
+        + python_object_runtime_alias(classPrefix, "__capy_set_remove")
+        + python_object_runtime_alias(classPrefix, "__capy_set_remove_all")
+        + python_object_runtime_alias(classPrefix, "__capy_set_subset")
+        + python_object_runtime_alias(classPrefix, "__capy_set_proper_subset")
+        + python_object_runtime_alias(classPrefix, "__capy_set_intersection")
+        + python_object_runtime_alias(classPrefix, "__capy_set_symmetric_difference")
+        + python_object_runtime_alias(classPrefix, "__capy_set_cartesian_product")
+        + python_object_runtime_alias(classPrefix, "__capy_set_power_set")
+        + python_object_runtime_alias(classPrefix, "__capy_mul")
+        + python_object_runtime_alias(classPrefix, "__capy_div")
+        + python_object_runtime_alias(classPrefix, "__capy_mod")
+        + python_object_runtime_alias(classPrefix, "__capy_pow")
+        + python_object_runtime_alias(classPrefix, "__capy_pow_int")
+
+private fun python_object_runtime_alias(classPrefix: String, name: String): String =
+    "_" + classPrefix + name + " = " + name + python_newline()
+
+private fun python_object_mangle_prefix(classIdentifier: String): String =
+    if classIdentifier.is_empty()
+    then ""
+    else if classIdentifier[0, 1] == "_"
+    then python_object_mangle_prefix(classIdentifier[1, classIdentifier.size().value])
+    else classIdentifier
+
+private fun python_object_type_method(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "    @staticmethod" + python_newline()
+    + "    def type():" + python_newline()
+    + "        return " + python_object_info_literal(objectClass, module, allModules) + python_newline()
+    + python_newline()
+
+private fun python_object_info_literal(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"ObjectInfo\", dict("
+        + "name=" + python_string_literal(objectClass.name)
+        + ", pkg=" + python_package_info_literal(module.name, module.path)
+        + ", open=" + python_bool_code(objectClass.open)
+        + ", fields=" + python_object_field_infos_literal(objectClass.name, objectClass.fields, 0, module, allModules)
+        + ", methods=" + python_object_method_infos_literal(objectClass.name, objectClass.methods, module, allModules)
+        + ", parents=" + python_object_parent_infos_literal(objectClass.parents, module, allModules)
+        + ", annotations=" + python_reflection_annotations_literal(
+            python_schema_values("__capy_oo_annotation|type|" + objectClass.name + "|", module.functions),
+            module,
+            allModules
+        )
+        + "))"
+
+private fun python_object_field_infos_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> "[]"
+    case Some { field } ->
+        "[" + python_object_field_info_literal(className, field, idx, module, allModules)
+            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, module, allModules)
+            + "]"
+
+private fun python_object_field_infos_tail_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        ", " + python_object_field_info_literal(className, field, idx, module, allModules)
+            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, module, allModules)
+
+private fun python_object_field_info_literal(className: String, field: CompiledObjectOrientedField, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"FieldInfo\", dict("
+        + "name=" + python_string_literal(field.name)
+        + ", type=" + python_any_info_literal(field.typeReference, module, allModules)
+        + ", annotations=" + python_reflection_annotations_literal(
+            python_schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", module.functions),
+            module,
+            allModules
+        )
+        + "))"
+
+private fun python_object_method_infos_literal(className: String, methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match methods[0] with
+    case None -> "[]"
+    case Some { method } ->
+        "[" + python_object_method_info_literal(className, method, module, allModules)
+            + python_object_method_infos_tail_literal(className, methods[1:], module, allModules)
+            + "]"
+
+private fun python_object_method_infos_tail_literal(className: String, methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match methods[0] with
+    case None -> ""
+    case Some { method } ->
+        ", " + python_object_method_info_literal(className, method, module, allModules)
+            + python_object_method_infos_tail_literal(className, methods[1:], module, allModules)
+
+private fun python_object_method_info_literal(className: String, method: CompiledObjectOrientedMethod, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"MethodInfo\", dict("
+        + "name=" + python_string_literal(method.name)
+        + ", pkg=" + python_package_info_literal(module.name, module.path)
+        + ", params=" + python_object_method_param_infos_literal(method.parameters, module, allModules)
+        + ", return_type=" + python_any_info_literal(method.returnType, module, allModules)
+        + ", annotations=" + python_reflection_annotations_literal(
+            python_schema_values("__capy_oo_annotation|method|" + className + "|" + method.name + "|", module.functions),
+            module,
+            allModules
+        )
+        + "))"
+
+private fun python_object_method_param_infos_literal(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> "[]"
+    case Some { parameter } ->
+        "[" + python_object_method_param_info_literal(parameter, module, allModules)
+            + python_object_method_param_infos_tail_literal(parameters[1:], module, allModules)
+            + "]"
+
+private fun python_object_method_param_infos_tail_literal(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        ", " + python_object_method_param_info_literal(parameter, module, allModules)
+            + python_object_method_param_infos_tail_literal(parameters[1:], module, allModules)
+
+private fun python_object_method_param_info_literal(parameter: CompiledFunctionParameter, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"FieldInfo\", dict("
+        + "name=" + python_string_literal(parameter.name)
+        + ", type=" + python_any_info_literal(parameter.typeReference, module, allModules)
+        + ", annotations=[]"
+        + "))"
+
+private fun python_object_parent_infos_literal(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parents[0] with
+    case None -> "__capy_set([])"
+    case Some { parent } ->
+        "__capy_set([" + python_any_info_literal(parent, module, allModules)
+            + python_object_parent_infos_tail_literal(parents[1:], module, allModules)
+            + "])"
+
+private fun python_object_parent_infos_tail_literal(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parents[0] with
+    case None -> ""
+    case Some { parent } ->
+        ", " + python_any_info_literal(parent, module, allModules)
+            + python_object_parent_infos_tail_literal(parents[1:], module, allModules)
+
+private fun python_any_info_literal(typeReference: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"DataInfo\", dict("
+        + "name=" + python_string_literal(python_type_unqualified_name(typeReference.name))
+        + ", pkg=" + python_type_package_info_literal(typeReference.name, module, allModules)
+        + ", annotations=[]"
+        + "))"
+
+private fun python_type_package_info_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_object_class_by_type(typeName, allModules) with
+    case Some { binding } -> python_package_info_literal(binding.module.name, binding.module.path)
+    case None ->
+        match python_data_type_owner_module(python_type_unqualified_name(typeName), module, allModules) with
+        case Some { owner } -> python_package_info_literal(owner.name, owner.path)
+        case None -> python_package_info_literal("", "")
+
+private fun python_package_info_literal(name: String, path: String): String =
+    "__capy_data(\"PackageInfo\", dict(name=" + python_string_literal(name) + ", path=" + python_string_literal(path) + "))"
 
 private fun python_object_constructor(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     let env = python_object_constructor_bindings(objectClass, module)
@@ -573,6 +768,8 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_stdlib_effect_function_call_code(call.name)
     else if python_reflection_function_call(call)
     then python_reflection_function_call_code(call, env, module, allModules)
+    else if python_object_type_function_call(call, module, allModules)
+    then python_object_type_function_call_code(call, module, allModules)
     else if python_object_constructor_call(call, module, allModules)
     then python_object_constructor_call_code(call, env, module, allModules)
     else if python_partial_function_call(call)
@@ -688,6 +885,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_collection_predicate_call_code(call, env, module, allModules)
     else if python_primitive_conversion_method_call(call, receiverType)
     then python_primitive_conversion_method_code(call, env, module, allModules)
+    else if python_object_type_method_call(call, env, module, allModules)
+    then python_object_type_method_call_code(call, module, allModules)
     else if python_object_method_call(call, env, module, allModules)
     then python_object_method_call_code(call, env, module, allModules)
     else match python_find_extension_method(call, env, module, allModules) with
@@ -708,6 +907,43 @@ private fun python_object_constructor_call_code(call: CompiledFunctionCallExpres
             + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
     case None -> python_function_call_name(call.name, module, allModules)
         + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun python_object_type_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    call.name == "type"
+        & call.arguments.is_empty()
+        & match call.receiver with
+            case CompiledVariableExpression variable ->
+                !python_binding_exists(variable.name, env)
+                    & python_object_type_receiver_name(variable.name, module, allModules)
+            case _ -> false
+
+private fun python_object_type_method_call_code(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.receiver with
+    case CompiledVariableExpression variable -> python_object_type_call_code_for_name(variable.name, module, allModules)
+    case _ -> "__capy_unsupported('COO type')"
+
+private fun python_object_type_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_qualified_name(call.name)
+        & python_qualified_call_member(call.name) == "type"
+        & call.arguments.is_empty()
+        & python_object_type_receiver_name(python_object_type_function_receiver_name(call.name), module, allModules)
+
+private fun python_object_type_function_call_code(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_object_type_call_code_for_name(python_object_type_function_receiver_name(call.name), module, allModules)
+
+private fun python_object_type_function_receiver_name(name: String): String =
+    let idx = python_last_dot_index(name)
+    if idx < 0 then name else name[0, idx]
+
+private fun python_object_type_receiver_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match python_find_object_class_in_scope(name, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+private fun python_object_type_call_code_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_object_class_in_scope(name, module, allModules) with
+    case Some { binding } -> python_object_class_reference(binding, module) + ".type()"
+    case None -> "__capy_unsupported('COO type')"
 
 private fun python_object_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_find_object_method(call, env, module, allModules) with
@@ -2279,9 +2515,18 @@ private fun python_object_field_type(name: String, fields: List[CompiledObjectOr
         else python_object_field_type(name, fields[1:])
 
 private fun python_reflection_field_type(name: String, receiverType: String): /capy/lang/Option[String] =
-    if (receiverType == "DataValueInfo" | receiverType == "DataInfo" | receiverType == "AnnotationInfo") & name == "name"
+    if (receiverType == "AnyInfo" | receiverType == "CFunInfo" | receiverType == "CooInfo"
+        | receiverType == "DataValueInfo" | receiverType == "DataInfo" | receiverType == "AnnotationInfo"
+        | receiverType == "FieldInfo" | receiverType == "FunctionTypeInfo" | receiverType == "ListInfo"
+        | receiverType == "SetInfo" | receiverType == "DictInfo" | receiverType == "TupleInfo"
+        | receiverType == "InterfaceInfo" | receiverType == "ObjectInfo" | receiverType == "TraitInfo"
+        | receiverType == "MethodInfo") & name == "name"
     then /capy/lang/Option.Some { python_string_type() }
-    else if (receiverType == "DataValueInfo" | receiverType == "DataInfo" | receiverType == "AnnotationInfo") & name == "pkg"
+    else if (receiverType == "AnyInfo" | receiverType == "CFunInfo" | receiverType == "CooInfo"
+        | receiverType == "DataValueInfo" | receiverType == "DataInfo" | receiverType == "AnnotationInfo"
+        | receiverType == "FunctionTypeInfo" | receiverType == "ListInfo" | receiverType == "SetInfo"
+        | receiverType == "DictInfo" | receiverType == "TupleInfo" | receiverType == "InterfaceInfo"
+        | receiverType == "ObjectInfo" | receiverType == "TraitInfo" | receiverType == "MethodInfo") & name == "pkg"
     then /capy/lang/Option.Some { "PackageInfo" }
     else if receiverType == "DataValueInfo" & (name == "fields" | name == "annotations")
     then /capy/lang/Option.Some { python_list_type() }
@@ -2293,7 +2538,37 @@ private fun python_reflection_field_type(name: String, receiverType: String): /c
     then /capy/lang/Option.Some { python_unknown_type() }
     else if receiverType == "FieldValueInfo" & name == "annotations"
     then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "FieldInfo" & name == "type"
+    then /capy/lang/Option.Some { "AnyInfo" }
+    else if receiverType == "FieldInfo" & name == "annotations"
+    then /capy/lang/Option.Some { python_list_type() }
     else if receiverType == "DataInfo" & name == "annotations"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "FunctionTypeInfo" & name == "params"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "FunctionTypeInfo" & name == "return_type"
+    then /capy/lang/Option.Some { "AnyInfo" }
+    else if (receiverType == "ListInfo" | receiverType == "SetInfo") & name == "element_type"
+    then /capy/lang/Option.Some { "AnyInfo" }
+    else if receiverType == "DictInfo" & name == "value_type"
+    then /capy/lang/Option.Some { "AnyInfo" }
+    else if receiverType == "TupleInfo" & name == "elements"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if (receiverType == "InterfaceInfo" | receiverType == "TraitInfo") & name == "methods"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if (receiverType == "InterfaceInfo" | receiverType == "ObjectInfo" | receiverType == "TraitInfo") & name == "parents"
+    then /capy/lang/Option.Some { python_set_type() }
+    else if (receiverType == "InterfaceInfo" | receiverType == "ObjectInfo" | receiverType == "TraitInfo") & name == "annotations"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "ObjectInfo" & name == "open"
+    then /capy/lang/Option.Some { python_bool_type() }
+    else if receiverType == "ObjectInfo" & (name == "fields" | name == "methods")
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "MethodInfo" & name == "params"
+    then /capy/lang/Option.Some { python_list_type() }
+    else if receiverType == "MethodInfo" & name == "return_type"
+    then /capy/lang/Option.Some { "AnyInfo" }
+    else if receiverType == "MethodInfo" & name == "annotations"
     then /capy/lang/Option.Some { python_list_type() }
     else if receiverType == "PackageInfo" & (name == "name" | name == "path")
     then /capy/lang/Option.Some { python_string_type() }
@@ -2327,6 +2602,8 @@ private fun python_user_defined_index_type(receiverType: String, module: Compile
 private fun python_function_call_expression_type(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_function_call_type(call.name)
+    else if python_object_type_function_call(call, module, allModules)
+    then "ObjectInfo"
     else if python_object_constructor_call(call, module, allModules)
     then python_effect_type()
     else python_function_name_expression_type(call.name, module, allModules)
@@ -2426,6 +2703,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_bool_type()
     else if python_primitive_conversion_method_call(call, receiverType)
     then if call.name == "to_int" then python_int_type() else python_long_type()
+    else if python_object_type_method_call(call, env, module, allModules)
+    then "ObjectInfo"
     else if python_effect_method_call(call, receiverType)
     then python_effect_type()
     else if python_result_method_call(call, receiverType)
@@ -5781,6 +6060,8 @@ private fun python_function_call_gatherable(call: CompiledFunctionCallExpression
         then true
         else if python_runtime_function(call.name)
         then true
+        else if python_object_type_function_call(call, module, allModules)
+        then true
         else if python_enum_parse_call(call, module, allModules)
         then python_enum_parse_call_gatherable(call, env, module, allModules)
         else if python_object_constructor_call(call, module, allModules)
@@ -5816,6 +6097,8 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     else if call.name == "__capy_call"
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
+    else if python_object_type_method_call(call, env, module, allModules)
+    then true
     else if call.name == "size"
     then if call.arguments.is_empty()
         then python_expression_gatherable(call.receiver, env, module, allModules)
@@ -6530,6 +6813,22 @@ private fun python_code_list_tail(values: List[String]): String =
     match values[0] with
     case None -> ""
     case Some _ -> ", " + python_code_list(values)
+
+private fun python_data_type_owner_module(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    if python_data_type_declared_in_module(name, module)
+    then /capy/lang/Option.Some { module }
+    else python_data_type_owner_module_in_modules(name, allModules)
+
+private fun python_data_type_owner_module_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        if python_data_type_declared_in_module(name, module)
+        then /capy/lang/Option.Some { module }
+        else python_data_type_owner_module_in_modules(name, modules[1:])
+
+private fun python_data_type_declared_in_module(name: String, module: CompiledModule): bool =
+    python_string_list_contains(name, python_schema_values("__capy_schema_type|", module.functions))
 
 private fun python_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     python_merge_schema_fields(
