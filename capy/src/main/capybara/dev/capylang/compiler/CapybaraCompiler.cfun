@@ -368,11 +368,14 @@ private fun compile_object_interface_kind_schema_function(interface: ObjectOrien
     )
 
 private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
+    compile_object_parent_schema_functions("__capy_oo_interface_parent|", interfaceName, parents, module, allModules, idx, location)
+
+private fun compile_object_parent_schema_functions(prefix: String, ownerName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parents[0] with
     case None -> []
     case Some { parent } ->
-        [compile_schema_constant("__capy_oo_interface_parent|" + interfaceName + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
-            + compile_object_interface_parent_schema_functions(interfaceName, parents[1:], module, allModules, idx + 1, location)
+        [compile_schema_constant(prefix + ownerName + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
+            + compile_object_parent_schema_functions(prefix, ownerName, parents[1:], module, allModules, idx + 1, location)
 
 private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
@@ -430,11 +433,7 @@ private fun compile_object_class_parameter_schema_functions(className: String, p
             + compile_object_class_parameter_schema_functions(className, parameters[1:], module, allModules, idx + 1)
 
 private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
-    match parents[0] with
-    case None -> []
-    case Some { parent } ->
-        [compile_schema_constant("__capy_oo_parent|" + className + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
-            + compile_object_class_parent_schema_functions(className, parents[1:], module, allModules, idx + 1, location)
+    compile_object_parent_schema_functions("__capy_oo_parent|", className, parents, module, allModules, idx, location)
 
 private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match fields[0] with
