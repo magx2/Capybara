@@ -214,6 +214,22 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return rawNames.trim().equals("*");
     }
 
+    private static List<String> docComments(List<? extends ParserRuleContext> contexts) {
+        if (contexts.isEmpty()) {
+            return List.of();
+        }
+        var comments = new ArrayList<String>();
+        for (var context : contexts) {
+            comments.add(docComment(context.getText()));
+        }
+        return List.copyOf(comments);
+    }
+
+    private static String docComment(String source) {
+        var text = source.startsWith("///") ? source.substring(3) : source;
+        return text.startsWith(" ") ? text.substring(1) : text;
+    }
+
     private static Definition functionalDefinition(dev.capylang.parser.antlr.FunctionalParser.DefinitionContext definition) {
         if (definition.annotationDeclaration() != null) {
             return annotationDeclaration(definition.annotationDeclaration());
@@ -243,13 +259,13 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.ObjectOrientedParser.ClassDeclarationContext ctx
     ) {
         var fields = new ArrayList<ObjectOrientedField>();
-        var initBlocks = new ArrayList<Expression>();
+        var initBlocks = new ArrayList<ObjectOrientedInitBlock>();
         var methods = new ArrayList<ObjectOrientedMethod>();
         for (var member : ctx.typeBody().memberDeclaration()) {
             if (member.fieldDeclaration() != null) {
                 fields.add(objectOrientedField(member.fieldDeclaration()));
             } else if (member.initBlock() != null) {
-                initBlocks.add(objectStatementBlock(member.initBlock().statementBlock()));
+                initBlocks.add(objectOrientedInitBlock(member.initBlock()));
             } else if (member.methodDeclaration() != null) {
                 methods.add(objectOrientedMethod(member.methodDeclaration()));
             }
@@ -263,6 +279,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(fields),
                 List.copyOf(initBlocks),
                 List.copyOf(methods),
+                docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -295,6 +312,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 "interface",
                 objectParents(ctx.inheritanceClause()),
                 List.copyOf(methods),
+                docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -315,6 +333,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 "trait",
                 objectParents(ctx.inheritanceClause()),
                 List.copyOf(methods),
+                docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -344,6 +363,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 typeReference(ctx.type().getText()),
                 hasValue ? objectExpression(ctx.expression()) : unsupported(ctx),
                 hasValue,
+                docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -368,6 +388,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
                 ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
                 objectMethodBody(ctx.methodBody()),
+                docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -383,7 +404,18 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
                 ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
                 unsupported(ctx),
+                docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
+                location(ctx)
+        );
+    }
+
+    private static ObjectOrientedInitBlock objectOrientedInitBlock(
+            dev.capylang.parser.antlr.ObjectOrientedParser.InitBlockContext ctx
+    ) {
+        return new ObjectOrientedInitBlock(
+                objectStatementBlock(ctx.statementBlock()),
+                docComments(ctx.docComment()),
                 location(ctx)
         );
     }
@@ -462,6 +494,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 type,
                 ctx.letBindingOperator().getText(),
                 objectExpression(ctx.expression()),
+                List.of(),
                 location(ctx)
         );
     }
@@ -516,6 +549,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 type,
                 ctx.letBindingOperator().getText(),
                 objectExpressionNoLet(ctx.expressionNoLet()),
+                List.of(),
                 location(ctx)
         );
     }
@@ -910,6 +944,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.TYPE().getText(),
                 visibility,
                 List.copyOf(methods),
+                docComments(ctx.docComment()),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -930,6 +965,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(parameters),
                 typeReference(ctx.functionType().type()),
                 expression(ctx.expression()),
+                docComments(ctx.docComment()),
                 annotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -945,6 +981,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.multipleModifier() != null,
                 annotationTargets(ctx.annotationTargetClause()),
                 annotationFields(ctx.annotationBody()),
+                docComments(ctx.docComment()),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -1206,6 +1243,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 visibility,
                 type,
                 expressionNoLet(ctx.expressionNoLet()),
+                docComments(ctx.docComment()),
                 location(ctx)
         );
     }
@@ -1222,6 +1260,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Definition.EnumDeclaration(
                 types.getFirst().getText(),
                 List.copyOf(values),
+                docComments(ctx.docComment()),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -1297,6 +1336,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(parameters),
                 returnType,
                 functionBody(ctx.functionBody(), localNames),
+                docComments(ctx.docComment()),
                 annotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -1322,6 +1362,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 List.copyOf(parameters),
                 returnType,
                 rewriteLocalFunctionCalls(expression(ctx.expression()), localNames),
+                docComments(ctx.docComment()),
                 annotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -1337,6 +1378,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 visibility,
                 ctx.dataBody(),
                 ctx.constructorClause(),
+                docComments(ctx.docComment()),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 deriveApplications(ctx.deriveClause()),
                 location(ctx)
@@ -1347,7 +1389,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.FunctionalParser.LocalDataDeclarationContext ctx
     ) {
         var declaration = ctx.genericTypeDeclaration();
-        return dataDeclarationDefinitions(declaration, "private", ctx.dataBody(), ctx.constructorClause(), List.of(), List.of(), location(ctx));
+        return dataDeclarationDefinitions(declaration, "private", ctx.dataBody(), ctx.constructorClause(), List.of(), List.of(), List.of(), location(ctx));
     }
 
     private static List<Definition> typeDeclarationDefinitions(
@@ -1358,6 +1400,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText(),
                 ctx.fieldDeclarationList(),
                 ctx.constructorClause(),
+                docComments(ctx.docComment()),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 deriveApplications(ctx.deriveClause()),
                 location(ctx)
@@ -1374,6 +1417,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 ctx.constructorClause(),
                 List.of(),
                 List.of(),
+                List.of(),
                 location(ctx)
         );
     }
@@ -1383,6 +1427,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             String visibility,
             dev.capylang.parser.antlr.FunctionalParser.FieldDeclarationListContext parentFields,
             dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause,
+            List<String> documentation,
             List<Definition.AnnotationApplication> annotations,
             List<Definition.DeriveApplication> derives,
             SourceLocation location
@@ -1400,11 +1445,12 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 dataTypeParameters(unionDeclaration),
                 fieldDeclarationFieldDtos(parentFields),
                 typeDeclarationVariants(declarations),
+                documentation,
                 annotations,
                 derives,
                 location
         ));
-        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
+        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, documentation, location));
 
         var typeParameters = dataTypeParameters(unionDeclaration);
         for (var i = 0; i < typeParameters.size(); i++) {
@@ -1452,6 +1498,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
             String visibility,
             dev.capylang.parser.antlr.FunctionalParser.DataBodyContext dataBody,
             dev.capylang.parser.antlr.FunctionalParser.ConstructorClauseContext constructorClause,
+            List<String> documentation,
             List<Definition.AnnotationApplication> annotations,
             List<Definition.DeriveApplication> derives,
             SourceLocation location
@@ -1464,6 +1511,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 dataTypeParameters(declaration),
                 dataDeclarationOwnFields(dataBody),
                 dataDeclarationParents(dataBody),
+                documentation,
                 annotations,
                 derives,
                 location
@@ -1486,10 +1534,11 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 name,
                 visibility,
                 backingType,
+                docComments(ctx.docComment()),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 location
         ));
-        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, location));
+        definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, docComments(ctx.docComment()), location));
         definitions.add(schemaConstantDefinition("__capy_schema_primitive|" + name, backingType.name(), location));
         definitions.add(schemaConstantDefinition(
                 "__capy_schema_field|" + name + "|0",
@@ -1517,6 +1566,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 parameters,
                 new TypeReference("any", List.of()),
                 rewriteConstructorData(expression(constructorClause.expression()), name),
+                List.of(),
                 List.of(),
                 location(constructorClause)
         ));
@@ -1562,11 +1612,16 @@ public final class NativeCapybaraParser implements CapybaraParser {
     }
 
     private static Definition schemaConstantDefinition(String name, String value, SourceLocation location) {
+        return schemaConstantDefinition(name, value, List.of(), location);
+    }
+
+    private static Definition schemaConstantDefinition(String name, String value, List<String> documentation, SourceLocation location) {
         return new Definition.ConstantDefinition(new ConstantDeclaration(
                 name,
                 "schema",
                 stringType(),
                 new Expression.StringLiteral(value, quote(value), location),
+                documentation,
                 location
         ));
     }
@@ -1678,6 +1733,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
         return new Definition.DataFieldDeclaration(
                 name,
                 typeReference(ctx.type()),
+                List.of(),
                 definitionAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)
         );
@@ -1788,6 +1844,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 type,
                 "=",
                 rewriteLocalFunctionCalls(expressionNoLet(ctx.expressionNoLet()), localNames),
+                docComments(ctx.docComment()),
                 location(ctx)
         );
     }
@@ -1980,6 +2037,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         binding.typeReference(),
                         binding.operator(),
                         rewriteLocalFunctionCalls(binding.value(), localNames),
+                        binding.documentation(),
                         binding.location()
                 ))
                 .toList();
@@ -2165,6 +2223,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         binding.typeReference(),
                         binding.operator(),
                         rewriteConstructorData(binding.value(), dataTypeName),
+                        binding.documentation(),
                         binding.location()
                 ))
                 .toList();
@@ -2189,6 +2248,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                 type,
                 ctx.letBindingOperator().getText(),
                 expressionNoLet(ctx.expressionNoLet()),
+                List.of(),
                 location(ctx)
         );
     }
@@ -3440,6 +3500,7 @@ public final class NativeCapybaraParser implements CapybaraParser {
                         binding.typeReference(),
                         binding.operator(),
                         offsetExpression(binding.value(), lineOffset, columnOffset),
+                        binding.documentation(),
                         offsetLocation(binding.location(), lineOffset, columnOffset)
                 ))
                 .toList();

@@ -1,13 +1,9 @@
 from /capy/collection/List import { List }
 from /dev/capylang/compiler/parser/Expression import { Expression }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
-from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
-data ConstantDeclaration {
-    name: String,
-    visibility: String,
-    typeReference: TypeReference,
-    expression: Expression,
+data ObjectOrientedInitBlock {
+    body: Expression,
     documentation: List[String],
     location: SourceLocation
 }

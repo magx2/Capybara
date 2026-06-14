@@ -39,6 +39,7 @@ from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration 
 from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
 from /dev/capylang/compiler/parser/ObjectOrientedClass import { ObjectOrientedClass }
 from /dev/capylang/compiler/parser/ObjectOrientedField import { ObjectOrientedField }
+from /dev/capylang/compiler/parser/ObjectOrientedInitBlock import { ObjectOrientedInitBlock }
 from /dev/capylang/compiler/parser/ObjectOrientedInterface import { ObjectOrientedInterface }
 from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
 from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
@@ -321,10 +322,10 @@ private fun compile_object_field(className: String, field: ObjectOrientedField, 
         location: compile_location(field.location)
     }
 
-private fun compile_object_init_blocks(className: String, initBlocks: List[Expression]): List[CompiledExpression] =
+private fun compile_object_init_blocks(className: String, initBlocks: List[ObjectOrientedInitBlock]): List[CompiledExpression] =
     match initBlocks[0] with
     case None -> []
-    case Some { initBlock } -> [compile_expression_in_function(initBlock, className + ".init")] + compile_object_init_blocks(className, initBlocks[1:])
+    case Some { initBlock } -> [compile_expression_in_function(initBlock.body, className + ".init")] + compile_object_init_blocks(className, initBlocks[1:])
 
 private fun compile_object_methods(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedMethod] =
     match methods[0] with
@@ -473,21 +474,21 @@ private fun compile_object_field_init_function(className: String, parameters: Li
         location: compile_location(field.location)
     }
 
-private fun compile_object_init_functions(className: String, parameters: List[FunctionParameter], initBlocks: List[Expression], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+private fun compile_object_init_functions(className: String, parameters: List[FunctionParameter], initBlocks: List[ObjectOrientedInitBlock], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match initBlocks[0] with
     case None -> []
     case Some { initBlock } ->
         [compile_object_init_function(className, parameters, initBlock, module, allModules, idx)]
             + compile_object_init_functions(className, parameters, initBlocks[1:], module, allModules, idx + 1)
 
-private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: Expression, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
+private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: ObjectOrientedInitBlock, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
     CompiledFunction {
         name: object_indexed_schema_key(object_init_schema_prefix(), className, idx),
         visibility: "oo_init",
         parameters: compile_parameters_in_module(parameters, module, allModules),
         returnType: compile_type(compiler_any_type()),
-        body: compile_expression_in_function(initBlock, className + ".init"),
-        location: compile_location(expression_location(initBlock))
+        body: compile_expression_in_function(initBlock.body, className + ".init"),
+        location: compile_location(initBlock.location)
     }
 
 private fun compile_object_method_functions(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
