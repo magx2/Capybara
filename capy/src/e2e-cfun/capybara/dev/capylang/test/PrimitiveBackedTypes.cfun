@@ -25,6 +25,8 @@ fun raw_token(value: String): token = token { value }
 fun unwrap_token(value: token): String = value.value
 fun append_token_suffix(value: String): String = value + "_suffix"
 fun pass_token_to_string(value: token): String = append_token_suffix(value)
+fun token.compare(other: token): bool = this.value == other.value
+fun tokens_match(left: token, right: token): bool = left.compare(right)
 
 fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
 fun user_id.`+`(other: user_id): user_id = user_id! { this.value + other.value }
