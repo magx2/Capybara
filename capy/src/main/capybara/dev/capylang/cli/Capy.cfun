@@ -591,6 +591,21 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
     )
 
 private fun read_native_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
+    read_native_implementation_manifest_at(inputPath).flat_map(providers =>
+        if !providers.providers.is_empty()
+        then pure(providers)
+        else match inputPath.parent() with
+            case None -> pure(providers)
+            case Some { parent } ->
+                match last_segment(inputPath.normalize().segments) with
+                case Some { segment } ->
+                    if segment == "capybara"
+                    then read_native_implementation_manifest_at(parent)
+                    else pure(providers)
+                case None -> pure(providers)
+    )
+
+private fun read_native_implementation_manifest_at(inputPath: Path): Effect[NativeProviderManifest] =
     read_native_java_implementation_manifest(inputPath).flat_map(javaProviders =>
         read_native_python_implementation_manifest(inputPath).map(pythonProviders =>
             NativeProviderManifest {
