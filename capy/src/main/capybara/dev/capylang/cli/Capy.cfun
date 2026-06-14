@@ -607,10 +607,12 @@ private fun read_native_implementation_manifest(inputPath: Path): Effect[NativeP
 
 private fun read_native_implementation_manifest_at(inputPath: Path): Effect[NativeProviderManifest] =
     read_native_java_implementation_manifest(inputPath).flat_map(javaProviders =>
-        read_native_python_implementation_manifest(inputPath).map(pythonProviders =>
-            NativeProviderManifest {
-                providers: javaProviders.providers + pythonProviders.providers
-            }
+        read_native_python_implementation_manifest(inputPath).flat_map(pythonProviders =>
+            read_native_javascript_implementation_manifest(inputPath).map(javascriptProviders =>
+                NativeProviderManifest {
+                    providers: javaProviders.providers + pythonProviders.providers + javascriptProviders.providers
+                }
+            )
         )
     )
 
@@ -646,6 +648,26 @@ private fun read_native_python_implementation_manifest(inputPath: Path): Effect[
         )
     )
 
+private fun read_native_javascript_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
+    match inputPath.parent() with
+    case None -> read_native_javascript_implementation_root(inputPath / "native" / "js")
+    case Some { parent } -> read_native_javascript_implementation_root(parent / "native" / "js")
+
+private fun read_native_javascript_implementation_root(root: Path): Effect[NativeProviderManifest] =
+    exists(root).flat_map(present =>
+        if !present
+        then pure(empty_native_provider_manifest())
+        else is_directory(root).flat_map(directory =>
+            if !directory
+            then pure(empty_native_provider_manifest())
+            else list_regular_files(root).flat_map(filesResult =>
+                match filesResult with
+                case Error _ -> pure(empty_native_provider_manifest())
+                case Success { files } -> read_native_javascript_provider_bindings(root, javascript_source_files(files))
+            )
+        )
+    )
+
 private fun java_source_files(files: List[Path]): List[Path] =
     match files[0] with
     case None -> []
@@ -661,6 +683,14 @@ private fun python_source_files(files: List[Path]): List[Path] =
         if path_to_string(file).end_with(".py")
         then [file] + python_source_files(files[1:])
         else python_source_files(files[1:])
+
+private fun javascript_source_files(files: List[Path]): List[Path] =
+    match files[0] with
+    case None -> []
+    case Some { file } ->
+        if path_to_string(file).end_with(".js")
+        then [file] + javascript_source_files(files[1:])
+        else javascript_source_files(files[1:])
 
 private fun read_native_java_provider_bindings(files: List[Path]): Effect[NativeProviderManifest] =
     match files[0] with
@@ -688,6 +718,25 @@ private fun read_native_python_provider_bindings(root: Path, files: List[Path]):
                 read_native_python_provider_bindings(root, files[1:]).map(rest =>
                     NativeProviderManifest {
                         providers: native_python_provider_bindings(content, native_python_module_name(relative_to(root, file))) + rest.providers
+                    }
+                )
+        )
+
+private fun read_native_javascript_provider_bindings(root: Path, files: List[Path]): Effect[NativeProviderManifest] =
+    match files[0] with
+    case None -> pure(empty_native_provider_manifest())
+    case Some { file } ->
+        read_text(file).flat_map(readResult =>
+            match readResult with
+            case Error _ -> read_native_javascript_provider_bindings(root, files[1:])
+            case Success { content } ->
+                read_native_javascript_provider_bindings(root, files[1:]).map(rest =>
+                    NativeProviderManifest {
+                        providers: native_javascript_provider_bindings(
+                            content,
+                            native_javascript_module_name(relative_to(root, file)),
+                            path_to_string(file.normalize())
+                        ) + rest.providers
                     }
                 )
         )
@@ -732,6 +781,27 @@ private fun native_python_provider_bindings(source: String, moduleName: String):
                 exportName: Some { className },
                 factory: None {}
             }}
+        }]
+
+private fun native_javascript_provider_bindings(source: String, moduleName: String, sourceFilePath: String): List[NativeProviderBinding] =
+    if !(source ? "@NativeImplementation")
+    then []
+    else
+        let className = native_javascript_class_name(source)
+        let interfaceId = native_javascript_interface_id(source, moduleName)
+        if className.is_empty() | interfaceId.is_empty() | sourceFilePath.is_empty()
+        then []
+        else [NativeProviderBinding {
+            interfaceId: interfaceId,
+            qualifier: native_javascript_qualifier(source),
+            javaBinding: None {},
+            javascriptBinding: Some { NativeProviderBackendBinding {
+                className: None {},
+                moduleName: Some { sourceFilePath },
+                exportName: Some { className },
+                factory: None {}
+            }},
+            pythonBinding: None {}
         }]
 
 private fun native_java_class_name(source: String): String =
@@ -804,6 +874,100 @@ private fun native_python_qualifier(source: String): String =
     else if source ? "@NativeImplementation(\""
     then native_java_between(source, "@NativeImplementation(\"", "\"")
     else ""
+
+private fun native_javascript_module_name(relativePath: Path): String =
+    let path = path_to_string(relativePath.normalize())
+    let withoutExtension =
+        if path.end_with(".js")
+        then path[0, path.size().value - ".js".size().value]
+        else path
+    withoutExtension.replace("/", ".")
+
+private fun native_javascript_class_name(source: String): String =
+    native_java_token_after(source, "class ")
+
+private fun native_javascript_interface_id(source: String, moduleName: String): String =
+    let className = native_javascript_class_name(source)
+    if className.is_empty()
+    then ""
+    else
+        let classStart = native_java_index_of(source, "class " + className, 0)
+        if classStart < 0
+        then ""
+        else
+            let extendsName = native_javascript_extends_name(source, classStart)
+            if extendsName.is_empty()
+            then ""
+            else native_javascript_imported_name(source, extendsName, moduleName)
+
+private fun native_javascript_extends_name(source: String, classStart: int): String =
+    let extendsStart = native_java_index_of(source, " extends ", classStart)
+    if extendsStart < 0
+    then ""
+    else native_java_token_from(source, extendsStart + " extends ".size().value, "")
+
+private fun native_javascript_qualifier(source: String): String =
+    if source ? "qualifier = \""
+    then native_java_between(source, "qualifier = \"", "\"")
+    else if source ? "qualifier=\""
+    then native_java_between(source, "qualifier=\"", "\"")
+    else if source ? "@NativeImplementation(\""
+    then native_java_between(source, "@NativeImplementation(\"", "\"")
+    else ""
+
+private fun native_javascript_imported_name(source: String, simpleName: String, moduleName: String): String =
+    if simpleName ? "."
+    then simpleName
+    else
+        let requiredModule = native_javascript_required_module(source)
+        if requiredModule.is_empty()
+        then native_javascript_module_relative_name(moduleName, simpleName)
+        else native_javascript_required_interface_id(moduleName, requiredModule, simpleName)
+
+private fun native_javascript_required_module(source: String): String =
+    if source ? "require('"
+    then native_java_between(source, "require('", "'")
+    else if source ? "require(\""
+    then native_java_between(source, "require(\"", "\"")
+    else ""
+
+private fun native_javascript_required_interface_id(moduleName: String, requiredModule: String, simpleName: String): String =
+    let parentModule = native_javascript_parent_module_name(moduleName)
+    let normalized = native_javascript_required_module_name(parentModule, requiredModule)
+    let withoutExtension =
+        if normalized.end_with(".js")
+        then normalized[0, normalized.size().value - ".js".size().value]
+        else normalized
+    if withoutExtension.end_with("." + simpleName)
+    then withoutExtension
+    else withoutExtension + "." + simpleName
+
+private fun native_javascript_required_module_name(baseModule: String, requiredModule: String): String =
+    if requiredModule.starts_with("../")
+    then native_javascript_join_module(native_javascript_parent_module_name(baseModule), requiredModule[3, requiredModule.size().value])
+    else if requiredModule.starts_with("./")
+    then native_javascript_join_module(baseModule, requiredModule[2, requiredModule.size().value])
+    else requiredModule.replace("/", ".")
+
+private fun native_javascript_join_module(baseModule: String, relativeModule: String): String =
+    let moduleName = relativeModule.replace("/", ".")
+    if baseModule.is_empty()
+    then moduleName
+    else if moduleName.is_empty()
+    then baseModule
+    else baseModule + "." + moduleName
+
+private fun native_javascript_parent_module_name(moduleName: String): String =
+    let separator = native_java_last_index_of(moduleName, ".", 0, -1, moduleName.size().value)
+    if separator < 0
+    then ""
+    else moduleName[0, separator]
+
+private fun native_javascript_module_relative_name(moduleName: String, simpleName: String): String =
+    let parentModule = native_javascript_parent_module_name(moduleName)
+    if parentModule.is_empty()
+    then simpleName
+    else parentModule + "." + simpleName
 
 private fun native_python_imported_name(source: String, simpleName: String): String =
     if simpleName ? "."
