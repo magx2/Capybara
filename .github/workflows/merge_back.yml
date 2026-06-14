@@ -51,11 +51,13 @@ jobs:
             exit 1
           fi
 
-          git fetch origin "${RELEASE_BRANCH}:${RELEASE_BRANCH}" "${DEFAULT_BRANCH}:${DEFAULT_BRANCH}"
-          git checkout "${DEFAULT_BRANCH}"
+          git fetch origin \
+            "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}" \
+            "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          git checkout -B "${DEFAULT_BRANCH}" "origin/${DEFAULT_BRANCH}"
 
           set +e
-          git merge --no-ff --no-commit "${RELEASE_BRANCH}"
+          git merge --no-ff --no-commit "origin/${RELEASE_BRANCH}"
           MERGE_STATUS=$?
           set -e
 
