@@ -7,11 +7,15 @@ from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
@@ -24,18 +28,18 @@ private data JavaScriptSchemaAnnotationArgument { name: String, kind: String, va
 
 fun java_script_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
-        modules: java_script_modules(program.modules, program.modules) + java_script_test_runtime_modules(program.modules)
+        modules: java_script_modules(program.modules, program.modules, program.nativeProviderCatalog) + java_script_test_runtime_modules(program.modules)
     }
 
-private fun java_script_modules(modules: List[CompiledModule], allModules: List[CompiledModule]): List[GeneratedModule] =
+private fun java_script_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): List[GeneratedModule] =
     match modules[0] with
     case None -> []
     case Some { module } -> [GeneratedModule {
         relativePath: java_script_module_relative_path(module, ".js"),
-        code: java_script_module_code(module, allModules)
-    }] + java_script_modules(modules[1:], allModules)
+        code: java_script_module_code(module, allModules, nativeProviderCatalog)
+    }] + java_script_modules(modules[1:], allModules, nativeProviderCatalog)
 
-private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_runtime_import(module)
@@ -43,12 +47,12 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_newline()
     + java_script_constants(module.functions, module, allModules)
     + java_script_newline()
-    + java_script_functions(module.functions, module, allModules)
+    + java_script_functions(module.functions, module, allModules, nativeProviderCatalog)
     + java_script_overload_dispatchers(module.functions)
     + java_script_exports(module.functions)
 
 private fun java_script_runtime_symbols(): String =
-    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, reflection, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_unsafe_run, __capy_deep_equal"
+    "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, reflection, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_unsafe_run, __capy_deep_equal, __capy_native_provider"
 
 private fun java_script_runtime_import(module: CompiledModule): String =
     "const { " + java_script_runtime_symbols() + " } = require("
@@ -212,7 +216,28 @@ private fun java_script_oo_method_expression_code(expression: CompiledExpression
             + ", "
             + java_script_string_literal(access.name)
             + ")"
+    case CompiledMethodCallExpression call -> "__capy_unsafe_run(" + java_script_oo_method_raw_method_call_code(call, env) + ")"
     case _ -> "__capy_unsupported(" + java_script_string_literal("unsupported object method expression") + ")"
+
+private fun java_script_oo_method_raw_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding]): String =
+    java_script_oo_method_expression_code(call.receiver, env)
+        + "."
+        + java_script_method_name(call.name)
+        + "("
+        + java_script_oo_method_expression_list_code(call.arguments, env)
+        + ")"
+
+private fun java_script_oo_method_expression_list_code(expressions: List[CompiledExpression], env: List[JavaScriptBinding]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some { expression } ->
+        java_script_oo_method_expression_code(expression, env)
+            + java_script_oo_method_expression_tail_code(expressions[1:], env)
+
+private fun java_script_oo_method_expression_tail_code(expressions: List[CompiledExpression], env: List[JavaScriptBinding]): String =
+    match expressions[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_oo_method_expression_list_code(expressions, env)
 
 private fun java_script_oo_method_binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding]): String =
     if binary.operator == "+"
@@ -376,24 +401,51 @@ private fun java_script_object_method_exists(className: String, methodName: Stri
             else java_script_object_method_exists(className, methodName, functions[1:])
         else java_script_object_method_exists(className, methodName, functions[1:])
 
+private fun java_script_object_interface_method_prefix(interfaceName: String): String =
+    "__capy_oo_interface_method|" + interfaceName + "|"
+
+private fun java_script_object_interface_method_function_for_interface(interfaceName: String, function: CompiledFunction): bool =
+    java_script_string_has_prefix(function.name, java_script_object_interface_method_prefix(interfaceName))
+
+private fun java_script_object_interface_method_name(interfaceName: String, function: CompiledFunction): String =
+    function.name[java_script_object_interface_method_prefix(interfaceName).size().value, function.name.size().value]
+
+private fun java_script_object_interface_method_exists(interfaceName: String, methodName: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_interface_method_function_for_interface(interfaceName, function)
+        then if java_script_object_interface_method_name(interfaceName, function) == methodName
+            then true
+            else java_script_object_interface_method_exists(interfaceName, methodName, functions[1:])
+        else java_script_object_interface_method_exists(interfaceName, methodName, functions[1:])
+
+private fun java_script_object_method_exists_in_modules(typeName: String, methodName: String, modules: List[CompiledModule]): bool =
+    match modules[0] with
+    case None -> false
+    case Some { module } ->
+        java_script_object_method_exists(typeName, methodName, module.functions)
+            | java_script_object_interface_method_exists(typeName, methodName, module.functions)
+            | java_script_object_method_exists_in_modules(typeName, methodName, modules[1:])
+
 private fun java_script_object_runtime_class_name(className: String): String =
     "__capy_oo_class_" + java_script_identifier(className)
 
 private fun java_script_object_constructor_name(className: String): String =
     java_script_identifier(className)
 
-private fun java_script_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
         if java_script_object_helper_function(function)
         then java_script_object_helper_code(function, functions, module, allModules)
-            + java_script_functions(functions[1:], module, allModules)
+            + java_script_functions(functions[1:], module, allModules, nativeProviderCatalog)
         else if java_script_skip_function(function)
-        then java_script_functions(functions[1:], module, allModules)
-        else java_script_function(function, module, allModules)
+        then java_script_functions(functions[1:], module, allModules, nativeProviderCatalog)
+        else java_script_function(function, module, allModules, nativeProviderCatalog)
             + java_script_newline()
-            + java_script_functions(functions[1:], module, allModules)
+            + java_script_functions(functions[1:], module, allModules, nativeProviderCatalog)
 
 private fun java_script_overload_dispatchers(functions: List[CompiledFunction]): String =
     if java_script_has_overloaded_functions(functions)
@@ -561,7 +613,7 @@ private fun java_script_constant(function: CompiledFunction, module: CompiledMod
 private fun java_script_constant_name(function: CompiledFunction): String =
     java_script_identifier(function.name)
 
-private fun java_script_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     if java_script_tail_recursive_function(function, module)
     then java_script_tail_recursive_function_code(function, module, allModules)
     else "function "
@@ -571,11 +623,89 @@ private fun java_script_function(function: CompiledFunction, module: CompiledMod
             + ") {"
             + java_script_newline()
             + "    return "
-            + java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
+            + java_script_function_body_expression(function, module, allModules, nativeProviderCatalog)
             + ";"
             + java_script_newline()
             + "}"
             + java_script_newline()
+
+private fun java_script_function_body_expression(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+    match java_script_find_native_provider_declaration(function, module, nativeProviderCatalog.declarations) with
+    case Some { declaration } -> java_script_native_provider_function_body(declaration, function.returnType, nativeProviderCatalog)
+    case None -> java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
+
+private fun java_script_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
+    match declarations[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.providerName == function.name
+            & declaration.sourceModuleName == module.name
+            & declaration.sourceModulePath == module.path
+        then /capy/lang/Option.Some { declaration }
+        else java_script_find_native_provider_declaration(function, module, declarations[1:])
+
+private fun java_script_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =
+    match java_script_find_native_provider_binding(declaration, catalog.bindings) with
+    case Some { binding } -> java_script_native_provider_binding_body(declaration, returnType, binding)
+    case None -> java_script_native_provider_not_wired_body(declaration, returnType)
+
+private fun java_script_native_provider_binding_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, binding: CompiledNativeProviderBinding): String =
+    match binding.javascriptBinding with
+    case Some { backend } -> java_script_native_provider_bound_body(declaration, returnType, backend)
+    case None -> java_script_native_provider_not_wired_body(declaration, returnType)
+
+private fun java_script_find_native_provider_binding(declaration: CompiledNativeProviderDeclaration, bindings: List[CompiledNativeProviderBinding]): /capy/lang/Option[CompiledNativeProviderBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if binding.interfaceId == declaration.interfaceId & binding.qualifier == declaration.qualifier & java_script_native_provider_binding_has_javascript(binding)
+        then /capy/lang/Option.Some { binding }
+        else java_script_find_native_provider_binding(declaration, bindings[1:])
+
+private fun java_script_native_provider_binding_has_javascript(binding: CompiledNativeProviderBinding): bool =
+    match binding.javascriptBinding with
+    case Some _ -> true
+    case None -> false
+
+private fun java_script_native_provider_bound_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, backend: NativeProviderBackendBinding): String =
+    let valueCode = java_script_native_provider_backend_value_code(declaration, backend)
+    if valueCode.is_empty()
+    then java_script_native_provider_not_wired_body(declaration, returnType)
+    else if returnType.name == "Effect"
+    then "delay(() => " + valueCode + ")"
+    else valueCode
+
+private fun java_script_native_provider_backend_value_code(declaration: CompiledNativeProviderDeclaration, backend: NativeProviderBackendBinding): String =
+    match backend.factory with
+    case Some { factory } -> factory + "()"
+    case None -> java_script_native_provider_backend_module_value_code(declaration, backend)
+
+private fun java_script_native_provider_backend_module_value_code(declaration: CompiledNativeProviderDeclaration, backend: NativeProviderBackendBinding): String =
+    match backend.moduleName with
+    case Some { moduleName } -> {
+        match backend.exportName with
+        case Some { exportName } ->
+            "__capy_native_provider("
+                + java_script_string_literal(moduleName)
+                + ", "
+                + java_script_string_literal(exportName)
+                + ", "
+                + java_script_string_literal(declaration.interfaceId)
+                + ")"
+        case None -> ""
+    }
+    case None -> java_script_native_provider_backend_class_value_code(backend)
+
+private fun java_script_native_provider_backend_class_value_code(backend: NativeProviderBackendBinding): String =
+    match backend.className with
+    case Some { className } -> "new " + className + "()"
+    case None -> ""
+
+private fun java_script_native_provider_not_wired_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference): String =
+    let message = "NotWired: No native provider registered for interface `" + declaration.interfaceId + "` with qualifier `" + declaration.qualifier + "`."
+    if returnType.name == "Effect"
+    then "delay(() => __capy_unsupported(" + java_script_string_literal(message) + "))"
+    else "__capy_unsupported(" + java_script_string_literal(message) + ")"
 
 private fun java_script_tail_recursive_function(function: CompiledFunction, module: CompiledModule): bool =
     !java_script_extension_method_function(function)
@@ -1386,7 +1516,7 @@ private fun java_script_oo_method_call(call: CompiledMethodCallExpression, env: 
     let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
     if receiverType == java_script_unknown_type()
     then false
-    else java_script_object_method_exists(receiverType, call.name, module.functions)
+    else java_script_object_method_exists_in_modules(receiverType, call.name, [module] + allModules)
 
 private fun java_script_callable_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "(" + java_script_expression_code(call.receiver, env, module, allModules) + ")("
@@ -2826,8 +2956,25 @@ private fun java_script_effect_binding_payload_type(expression: CompiledExpressi
     case CompiledFunctionCallExpression call ->
         if java_script_oo_constructor_call(call.name, module, allModules)
         then java_script_oo_constructor_call_payload_type(call.name, module, allModules)
-        else java_script_unknown_type()
+        else java_script_effect_payload_type_from_function_call(call.name, module, allModules)
     case _ -> java_script_unknown_type()
+
+private fun java_script_effect_payload_type_from_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_qualified_call_name(name)
+    then match java_script_find_qualified_function_definition(name, module, allModules) with
+        case Some { function } -> java_script_effect_payload_type_from_type_reference(function.returnType)
+        case None -> java_script_unknown_type()
+    else match java_script_find_local_function(name, module.functions) with
+    case Some { function } -> java_script_effect_payload_type_from_type_reference(function.returnType)
+    case None ->
+        match java_script_find_function_definition_in_imports(name, module.imports, module, allModules) with
+        case Some { function } -> java_script_effect_payload_type_from_type_reference(function.returnType)
+        case None -> java_script_unknown_type()
+
+private fun java_script_effect_payload_type_from_type_reference(typeReference: CompiledTypeReference): String =
+    if typeReference.name == "Effect"
+    then java_script_first_type_argument_name(typeReference.arguments)
+    else java_script_unknown_type()
 
 private fun java_script_truthy_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_truthy_code(java_script_expression_code(expression, env, module, allModules))
@@ -3998,6 +4145,55 @@ private fun java_script_io_runtime_code(): String =
     + "const path = require('path');" + java_script_newline()
     + "const os = require('os');" + java_script_newline()
     + java_script_newline()
+    + "const __capy_native_module_cache = new Map();" + java_script_newline()
+    + "function __capy_strip_native_decorators(source) {" + java_script_newline()
+    + "    return String(source).split(/\\r?\\n/).filter(line => !line.trim().startsWith('@NativeImplementation')).join('\\n');" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_native_stub_module(request) {" + java_script_newline()
+    + "    const leaf = path.basename(String(request), '.js');" + java_script_newline()
+    + "    const exports = Object.create(null);" + java_script_newline()
+    + "    exports[leaf] = function NativeStub() { return undefined; };" + java_script_newline()
+    + "    return exports;" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_load_native_module(modulePath) {" + java_script_newline()
+    + "    const absolute = path.resolve(String(modulePath));" + java_script_newline()
+    + "    if (__capy_native_module_cache.has(absolute)) return __capy_native_module_cache.get(absolute);" + java_script_newline()
+    + "    const moduleExports = Object.create(null);" + java_script_newline()
+    + "    const nativeModule = Object.create(null);" + java_script_newline()
+    + "    nativeModule.exports = moduleExports;" + java_script_newline()
+    + "    const nativeRequire = request => {" + java_script_newline()
+    + "        const resolved = path.resolve(path.dirname(absolute), String(request));" + java_script_newline()
+    + "        if (fs.existsSync(resolved)) return require(resolved);" + java_script_newline()
+    + "        if (fs.existsSync(resolved + '.js')) return require(resolved + '.js');" + java_script_newline()
+    + "        return __capy_native_stub_module(request);" + java_script_newline()
+    + "    };" + java_script_newline()
+    + "    const source = __capy_strip_native_decorators(fs.readFileSync(absolute, 'utf8'));" + java_script_newline()
+    + "    new Function('require', 'module', 'exports', source)(nativeRequire, nativeModule, moduleExports);" + java_script_newline()
+    + "    __capy_native_module_cache.set(absolute, nativeModule.exports);" + java_script_newline()
+    + "    return nativeModule.exports;" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_wrap_native_provider(value) {" + java_script_newline()
+    + "    if (value == null || typeof value !== 'object') return value;" + java_script_newline()
+    + "    const prototype = Object.getPrototypeOf(value);" + java_script_newline()
+    + "    for (const property of Object.getOwnPropertyNames(prototype)) {" + java_script_newline()
+    + "        if (property === 'constructor') continue;" + java_script_newline()
+    + "        const member = value[property];" + java_script_newline()
+    + "        if (typeof member !== 'function') continue;" + java_script_newline()
+    + "        value[property] = (...args) => {" + java_script_newline()
+    + "            const result = member.apply(value, args);" + java_script_newline()
+    + "            if (result && (typeof result.unsafe_run === 'function' || typeof result.unsafeRun === 'function')) return result;" + java_script_newline()
+    + "            return pure(result);" + java_script_newline()
+    + "        };" + java_script_newline()
+    + "    }" + java_script_newline()
+    + "    return value;" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_native_provider(modulePath, exportName, interfaceId) {" + java_script_newline()
+    + "    const exports = __capy_load_native_module(modulePath);" + java_script_newline()
+    + "    const provider = exports[exportName];" + java_script_newline()
+    + "    if (typeof provider !== 'function') return __capy_unsupported('NotWired: Missing JavaScript native provider export `' + exportName + '` for interface `' + interfaceId + '`.');" + java_script_newline()
+    + "    return __capy_wrap_native_provider(new provider());" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
     + "function __capy_none() { return __capy_data('None', Object.fromEntries([])); }" + java_script_newline()
     + "function __capy_path_root(root) { const order = root === 'ABSOLUTE' ? 1 : (root === 'HOME' ? 2 : 0); return __capy_data('__capy_raw|' + root, { name: root, order }); }" + java_script_newline()
     + "function __capy_path(root, segments) { return __capy_data('Path', { root: __capy_path_root(root), prefix: __capy_none(), segments }); }" + java_script_newline()
@@ -4466,11 +4662,18 @@ private fun java_script_function_gatherable(function: CompiledFunction, module: 
     then java_script_expression_gatherable(function.body, [], module, allModules)
     else if java_script_placeholder_function_body(function)
     then true
+    else if java_script_native_function_body(function)
+    then true
     else java_script_expression_gatherable(function.body, java_script_function_bindings(function), module, allModules)
 
 private fun java_script_placeholder_function_body(function: CompiledFunction): bool =
     match function.body with
     case CompiledUnsupportedExpression unsupported -> java_script_compiled_placeholder_source(unsupported.source)
+    case _ -> false
+
+private fun java_script_native_function_body(function: CompiledFunction): bool =
+    match function.body with
+    case CompiledUnsupportedExpression unsupported -> unsupported.source == "<native>"
     case _ -> false
 
 private fun java_script_expression_gatherable(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
