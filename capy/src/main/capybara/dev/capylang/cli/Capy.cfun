@@ -617,7 +617,21 @@ private fun read_native_implementation_manifest_at(inputPath: Path): Effect[Nati
     )
 
 private fun read_native_java_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
-    let nativeJavaPath = inputPath / "native" / "java"
+    read_native_java_implementation_root(inputPath / "native" / "java").flat_map(providers =>
+        if !providers.providers.is_empty()
+        then pure(providers)
+        else match inputPath.parent() with
+            case None -> pure(providers)
+            case Some { parent } ->
+                match last_segment(inputPath.normalize().segments) with
+                case Some { segment } ->
+                    if segment == "capybara"
+                    then read_native_java_implementation_root(parent / "native" / "java")
+                    else pure(providers)
+                case None -> pure(providers)
+    )
+
+private fun read_native_java_implementation_root(nativeJavaPath: Path): Effect[NativeProviderManifest] =
     exists(nativeJavaPath).flat_map(present =>
         if !present
         then pure(empty_native_provider_manifest())
@@ -633,7 +647,21 @@ private fun read_native_java_implementation_manifest(inputPath: Path): Effect[Na
     )
 
 private fun read_native_python_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
-    let nativePythonPath = inputPath / "native" / "py"
+    read_native_python_implementation_root(inputPath / "native" / "py").flat_map(providers =>
+        if !providers.providers.is_empty()
+        then pure(providers)
+        else match inputPath.parent() with
+            case None -> pure(providers)
+            case Some { parent } ->
+                match last_segment(inputPath.normalize().segments) with
+                case Some { segment } ->
+                    if segment == "capybara"
+                    then read_native_python_implementation_root(parent / "native" / "py")
+                    else pure(providers)
+                case None -> pure(providers)
+    )
+
+private fun read_native_python_implementation_root(nativePythonPath: Path): Effect[NativeProviderManifest] =
     exists(nativePythonPath).flat_map(present =>
         if !present
         then pure(empty_native_provider_manifest())
