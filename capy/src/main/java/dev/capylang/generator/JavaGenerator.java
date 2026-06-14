@@ -53,6 +53,7 @@ public final class JavaGenerator implements Generator {
         var primitiveBackedTypeInfo = primitiveBackedTypeInfo(program);
         var singletonTypeInfo = singletonTypeInfo(program);
         var nativeProviderInfos = nativeProviderInfos(program);
+        var topLevelTypeReferences = topLevelTypeReferences(program);
         var astBuilder = new JavaAstBuilder(functionNameOverrides, enumValueOwnerOverrides, program);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         JavaExpressionEvaluator.setStaticExtensionMethodOwners(staticExtensionMethodOwners);
@@ -66,7 +67,8 @@ public final class JavaGenerator implements Generator {
                 singletonTypeInfo,
                 nativeProviderInfos.stream()
                         .map(JavaGenerator::objectOrientedNativeProviderInfo)
-                        .toList()
+                        .toList(),
+                topLevelTypeReferences
         );
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         modules.addAll(nativeProviderBootstrapModules(nativeProviderInfos));
@@ -739,6 +741,28 @@ public final class JavaGenerator implements Generator {
             }
         }
         return !hasNameConflict || hasOwnerInterface;
+    }
+
+    private Set<String> topLevelTypeReferences(CompiledProgram program) {
+        var references = new TreeSet<String>();
+        for (var module : program.modules()) {
+            if (!staticMethodsAreNestedInOwner(module)) {
+                var packageName = buildJavaPackageName(module.path());
+                module.types().values().stream()
+                        .map(type -> normalizeJavaIdentifier(simpleTypeName(type.name()), true))
+                        .map(typeName -> packageName.isBlank() ? typeName : packageName + "." + typeName)
+                        .forEach(references::add);
+            }
+        }
+        for (var module : program.objectOrientedModules()) {
+            var packageName = buildJavaPackageName(module.path());
+            module.objectOriented().definitions().stream()
+                    .map(ObjectOriented.TypeDeclaration::name)
+                    .map(typeName -> normalizeJavaIdentifier(typeName, true))
+                    .map(typeName -> packageName.isBlank() ? typeName : packageName + "." + typeName)
+                    .forEach(references::add);
+        }
+        return Set.copyOf(references);
     }
 
     private String buildJavaPackageName(String rawPath) {
