@@ -4709,7 +4709,37 @@ private fun java_script_find_qualified_annotation_binding(name: String, module: 
     let member = java_script_qualified_call_member(name)
     if java_script_stdlib_annotations_class(className)
     then java_script_stdlib_annotation_binding(member)
-    else match java_script_find_module_by_path(java_script_qualified_module_path(className, module), allModules) with
+    else match java_script_find_qualified_annotation_binding_in_imports(className, member, module.imports, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> java_script_find_qualified_annotation_binding_in_modules(className, member, module, allModules)
+
+private fun java_script_find_qualified_annotation_binding_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & java_script_qualified_import_matches(qualifier, declaration, module)
+        then java_script_find_qualified_annotation_binding_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else java_script_find_qualified_annotation_binding_in_imports(qualifier, member, imports[1:], module, allModules)
+
+private fun java_script_find_qualified_annotation_binding_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    if java_script_stdlib_annotations_module_path(declaration.modulePath)
+    then {
+        match java_script_stdlib_annotation_binding(member) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> java_script_find_qualified_annotation_binding_in_imports(qualifier, member, rest, module, allModules)
+    }
+    else {
+        match java_script_find_imported_module(declaration, module, allModules) with
+        case Some { importedModule } -> {
+            match java_script_annotation_binding_in_module(member, importedModule) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> java_script_find_qualified_annotation_binding_in_imports(qualifier, member, rest, module, allModules)
+        }
+        case None -> java_script_find_qualified_annotation_binding_in_imports(qualifier, member, rest, module, allModules)
+    }
+
+private fun java_script_find_qualified_annotation_binding_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
+    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
     case Some { targetModule } -> java_script_annotation_binding_in_module(member, targetModule)
     case None -> /capy/lang/Option.None {}
 
