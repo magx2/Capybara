@@ -591,6 +591,15 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
     )
 
 private fun read_native_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
+    read_native_java_implementation_manifest(inputPath).flat_map(javaProviders =>
+        read_native_python_implementation_manifest(inputPath).map(pythonProviders =>
+            NativeProviderManifest {
+                providers: javaProviders.providers + pythonProviders.providers
+            }
+        )
+    )
+
+private fun read_native_java_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
     let nativeJavaPath = inputPath / "native" / "java"
     exists(nativeJavaPath).flat_map(present =>
         if !present
@@ -606,6 +615,22 @@ private fun read_native_implementation_manifest(inputPath: Path): Effect[NativeP
         )
     )
 
+private fun read_native_python_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
+    let nativePythonPath = inputPath / "native" / "py"
+    exists(nativePythonPath).flat_map(present =>
+        if !present
+        then pure(empty_native_provider_manifest())
+        else is_directory(nativePythonPath).flat_map(directory =>
+            if !directory
+            then pure(empty_native_provider_manifest())
+            else list_regular_files(nativePythonPath).flat_map(filesResult =>
+                match filesResult with
+                case Error _ -> pure(empty_native_provider_manifest())
+                case Success { files } -> read_native_python_provider_bindings(nativePythonPath, python_source_files(files))
+            )
+        )
+    )
+
 private fun java_source_files(files: List[Path]): List[Path] =
     match files[0] with
     case None -> []
@@ -613,6 +638,14 @@ private fun java_source_files(files: List[Path]): List[Path] =
         if path_to_string(file).end_with(".java")
         then [file] + java_source_files(files[1:])
         else java_source_files(files[1:])
+
+private fun python_source_files(files: List[Path]): List[Path] =
+    match files[0] with
+    case None -> []
+    case Some { file } ->
+        if path_to_string(file).end_with(".py")
+        then [file] + python_source_files(files[1:])
+        else python_source_files(files[1:])
 
 private fun read_native_java_provider_bindings(files: List[Path]): Effect[NativeProviderManifest] =
     match files[0] with
@@ -625,6 +658,21 @@ private fun read_native_java_provider_bindings(files: List[Path]): Effect[Native
                 read_native_java_provider_bindings(files[1:]).map(rest =>
                     NativeProviderManifest {
                         providers: native_java_provider_bindings(content) + rest.providers
+                    }
+                )
+        )
+
+private fun read_native_python_provider_bindings(root: Path, files: List[Path]): Effect[NativeProviderManifest] =
+    match files[0] with
+    case None -> pure(empty_native_provider_manifest())
+    case Some { file } ->
+        read_text(file).flat_map(readResult =>
+            match readResult with
+            case Error _ -> read_native_python_provider_bindings(root, files[1:])
+            case Success { content } ->
+                read_native_python_provider_bindings(root, files[1:]).map(rest =>
+                    NativeProviderManifest {
+                        providers: native_python_provider_bindings(content, native_python_module_name(relative_to(root, file))) + rest.providers
                     }
                 )
         )
@@ -648,6 +696,27 @@ private fun native_java_provider_bindings(source: String): List[NativeProviderBi
             }},
             javascriptBinding: None {},
             pythonBinding: None {}
+        }]
+
+private fun native_python_provider_bindings(source: String, moduleName: String): List[NativeProviderBinding] =
+    if !(source ? "@NativeImplementation")
+    then []
+    else
+        let className = native_python_class_name(source)
+        let interfaceId = native_python_interface_id(source)
+        if className.is_empty() | interfaceId.is_empty() | moduleName.is_empty()
+        then []
+        else [NativeProviderBinding {
+            interfaceId: interfaceId,
+            qualifier: native_python_qualifier(source),
+            javaBinding: None {},
+            javascriptBinding: None {},
+            pythonBinding: Some { NativeProviderBackendBinding {
+                className: None {},
+                moduleName: Some { moduleName },
+                exportName: Some { className },
+                factory: None {}
+            }}
         }]
 
 private fun native_java_class_name(source: String): String =
@@ -678,6 +747,67 @@ private fun native_java_qualifier(source: String): String =
     else if source ? "@NativeImplementation(\""
     then native_java_between(source, "@NativeImplementation(\"", "\"")
     else ""
+
+private fun native_python_module_name(relativePath: Path): String =
+    let path = path_to_string(relativePath.normalize())
+    let withoutExtension =
+        if path.end_with(".py")
+        then path[0, path.size().value - ".py".size().value]
+        else path
+    withoutExtension.replace("/", ".")
+
+private fun native_python_class_name(source: String): String =
+    native_java_token_after(source, "class ")
+
+private fun native_python_interface_id(source: String): String =
+    let className = native_python_class_name(source)
+    if className.is_empty()
+    then ""
+    else
+        let classStart = native_java_index_of(source, "class " + className, 0)
+        if classStart < 0
+        then ""
+        else
+            let openParen = native_java_index_of(source, "(", classStart)
+            if openParen < 0
+            then ""
+            else
+                let closeParen = native_java_index_of(source, ")", openParen)
+                if closeParen < 0
+                then ""
+                else
+                    let baseName = native_java_token_from(source, openParen + 1, "")
+                    if baseName.is_empty()
+                    then ""
+                    else native_python_imported_name(source, baseName)
+
+private fun native_python_qualifier(source: String): String =
+    if source ? "qualifier = \""
+    then native_java_between(source, "qualifier = \"", "\"")
+    else if source ? "qualifier=\""
+    then native_java_between(source, "qualifier=\"", "\"")
+    else if source ? "@NativeImplementation(\""
+    then native_java_between(source, "@NativeImplementation(\"", "\"")
+    else ""
+
+private fun native_python_imported_name(source: String, simpleName: String): String =
+    if simpleName ? "."
+    then simpleName
+    else
+        let importSuffix = " import " + simpleName
+        let suffixIndex = native_java_index_of(source, importSuffix, 0)
+        if suffixIndex >= 0
+        then
+            let importStart = native_java_last_index_of(source, "from ", 0, -1, suffixIndex)
+            if importStart >= 0
+            then native_python_imported_module_name(source[importStart + "from ".size().value, suffixIndex].trim(), simpleName)
+            else simpleName
+        else simpleName
+
+private fun native_python_imported_module_name(moduleName: String, simpleName: String): String =
+    if moduleName.end_with("." + simpleName)
+    then moduleName
+    else moduleName + "." + simpleName
 
 private fun native_java_imported_name(source: String, simpleName: String, packageName: String): String =
     let importSuffix = "." + simpleName + ";"
