@@ -1,5 +1,6 @@
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
+from /capy/lang/Ordering import { * }
 from /capy/lang/Option import { * }
 from /capy/collection/CollectionTypes import { * }
 
@@ -22,6 +23,10 @@ fun end_with_method(s: String, part: String): bool = s.end_with(part)
 fun trim_method(s: String): String = s.trim()
 
 fun replace_method(s: String, old: String, new: String): String = s.replace(old, new)
+
+fun compare_method(s: String, other: String): Ordering = s.compare(other)
+
+fun char_compare_method(left: char, right: char): Ordering = left.compare(right)
 
 fun is_empty_method(s: String): bool = s.is_empty()
 

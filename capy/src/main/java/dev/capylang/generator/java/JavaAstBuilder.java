@@ -397,8 +397,15 @@ public class JavaAstBuilder {
     private boolean isStaticNativeTypeMethod(CompiledFunction function, Set<String> nativeTypeNames) {
         return methodOwnerType(function.name())
                 .filter(nativeTypeNames::contains)
-                .filter(ignored -> !isNativeExpression(function))
+                .filter(ignored -> !isNativeExpression(function) || isNativeStringCompareMethod(function))
                 .isPresent();
+    }
+
+    private boolean isNativeStringCompareMethod(CompiledFunction function) {
+        return (METHOD_DECL_PREFIX + "String__compare").equals(function.name())
+               && function.parameters().size() == 2
+               && function.parameters().getFirst().type() == PrimitiveLinkedType.STRING
+               && function.parameters().get(1).type() == PrimitiveLinkedType.STRING;
     }
 
     private Optional<String> methodOwnerType(String functionName) {

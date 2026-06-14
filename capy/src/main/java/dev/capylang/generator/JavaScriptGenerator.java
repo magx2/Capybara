@@ -870,6 +870,10 @@ public final class JavaScriptGenerator implements Generator {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".getChar(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
+            if (isBuiltinStringCompareCall(functionCall, receiverType, tailArgs)) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".compare(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
@@ -1422,6 +1426,14 @@ public final class JavaScriptGenerator implements Generator {
             return type == PrimitiveLinkedType.STRING
                    || (type instanceof CompiledPrimitiveBackedType primitiveBackedType
                        && primitiveBackedType.backingType() == PrimitiveLinkedType.STRING);
+        }
+
+        private boolean isBuiltinStringCompareCall(CompiledFunctionCall functionCall, CompiledType receiverType, List<String> tailArgs) {
+            return (METHOD_DECL_PREFIX + "String__compare").equals(functionCall.name())
+                   && receiverType == PrimitiveLinkedType.STRING
+                   && tailArgs.size() == 1
+                   && functionCall.arguments().size() == 2
+                   && functionCall.arguments().get(1).type() == PrimitiveLinkedType.STRING;
         }
 
         private boolean isNativePlusType(CompiledType type) {
@@ -2844,10 +2856,10 @@ public final class JavaScriptGenerator implements Generator {
                     "clamp_long_to_int", "clampLongToInt", "safe_long_to_int", "safeLongToInt"
             ));
             exports.put("capy.lang.String", Set.of(
-                    "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
+                    "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim", "compare",
                     "chars", "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
                     "to_string", "toString", "toString__name_to_string__char",
-                    "op3d_op3d__op_op3d_op3d__char__char", "__capybaraPrimitiveTypes"
+                    "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
             exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
@@ -3211,10 +3223,16 @@ public final class JavaScriptGenerator implements Generator {
         private static String stringRuntime() {
             return "'use strict';\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
+                   + "const Ordering = require('./Ordering.js');\n"
                    + "const Seq = require('./Seq.js');\n"
                    + "function __constructor__primitive__char(value) {\n"
                    + "    const text = String(value);\n"
                    + "    return text.length === 1 ? new capy.Success({ value: text }) : new capy.Error({ message: 'char must contain exactly one character' });\n"
+                   + "}\n"
+                   + "function compare(left, right) {\n"
+                   + "    const leftText = String(left);\n"
+                   + "    const rightText = String(right);\n"
+                   + "    return leftText < rightText ? Ordering.LESS : (leftText > rightText ? Ordering.GREATER : Ordering.EQUAL);\n"
                    + "}\n"
                    + "const charAt = (value, idx) => capy.getIndex(value, idx);\n"
                    + "const chars = value => {\n"
@@ -3235,6 +3253,7 @@ public final class JavaScriptGenerator implements Generator {
                    + "    starts_with: (value, part) => String(value).startsWith(part),\n"
                    + "    end_with: (value, part) => String(value).endsWith(part),\n"
                    + "    trim: value => String(value).trim(),\n"
+                   + "    compare,\n"
                    + "    chars,\n"
                    + "    __constructor__primitive__char,\n"
                    + "    char_at: charAt,\n"
@@ -3245,6 +3264,7 @@ public final class JavaScriptGenerator implements Generator {
                    + "    toString: toStringChar,\n"
                    + "    toString__name_to_string__char: toStringChar,\n"
                    + "    op3d_op3d__op_op3d_op3d__char__char: equalsChar,\n"
+                   + "    compare__name_compare__char__char: compare,\n"
                    + "    __capybaraPrimitiveTypes,\n"
                    + "};\n";
         }
