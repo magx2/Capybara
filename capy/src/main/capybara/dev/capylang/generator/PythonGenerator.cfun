@@ -3125,6 +3125,12 @@ private fun python_qualified_call_class_name(name: String): String =
     let idx = python_last_dot_index(name)
     if idx < 0 then name else name[0, idx]
 
+private fun python_qualified_import_matches(qualifier: String, declaration: CompiledImportDeclaration, module: CompiledModule): bool =
+    let importPath = python_import_module_path(declaration.modulePath, module)
+    qualifier == declaration.modulePath
+        | qualifier == importPath
+        | qualifier == python_module_leaf_name(importPath)
+
 private fun python_qualified_module_path(name: String, module: CompiledModule): String =
     if python_string_has_prefix(name, "/")
     then python_normalize_import_module_path(name).replace(".", "/")
@@ -3135,6 +3141,10 @@ private fun python_qualified_module_path(name: String, module: CompiledModule): 
     else if module.path.is_empty()
     then name
     else module.path + "/" + name
+
+private fun python_module_leaf_name(modulePath: String): String =
+    let idx = python_last_index_of(modulePath, "/")
+    if idx < 0 then modulePath else modulePath[idx + 1, modulePath.size().value]
 
 private fun python_overload_request_name(name: String, argumentType: String): String =
     name + "__capy_overload_arg__" + argumentType
@@ -6219,7 +6229,37 @@ private fun python_find_qualified_annotation_binding(name: String, module: Compi
     let member = python_qualified_call_member(name)
     if python_stdlib_annotations_class(className)
     then python_stdlib_annotation_binding(member)
-    else match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
+    else match python_find_qualified_annotation_binding_in_imports(className, member, module.imports, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> python_find_qualified_annotation_binding_in_modules(name, member, module, allModules)
+
+private fun python_find_qualified_annotation_binding_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & python_qualified_import_matches(qualifier, declaration, module)
+        then python_find_qualified_annotation_binding_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else python_find_qualified_annotation_binding_in_imports(qualifier, member, imports[1:], module, allModules)
+
+private fun python_find_qualified_annotation_binding_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    if python_stdlib_annotations_module_path(declaration.modulePath)
+    then {
+        match python_stdlib_annotation_binding(member) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> python_find_qualified_annotation_binding_in_imports(qualifier, member, rest, module, allModules)
+    }
+    else {
+        match python_find_imported_module(declaration, module, allModules) with
+        case Some { importedModule } -> {
+            match python_annotation_binding_in_module(member, importedModule) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> python_find_qualified_annotation_binding_in_imports(qualifier, member, rest, module, allModules)
+        }
+        case None -> python_find_qualified_annotation_binding_in_imports(qualifier, member, rest, module, allModules)
+    }
+
+private fun python_find_qualified_annotation_binding_in_modules(name: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonAnnotationBinding] =
+    match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
     case Some { targetModule } -> python_annotation_binding_in_module(member, targetModule)
     case None -> /capy/lang/Option.None {}
 
