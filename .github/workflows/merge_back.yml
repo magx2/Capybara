@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - "release/*"
-    paths:
-      - "gradle.properties"
 
 permissions:
   actions: write
