@@ -75,6 +75,7 @@ public final class PythonGenerator implements Generator {
             "capy/io/IO",
             "capy/io/Stdout",
             "capy/lang/Effect",
+            "capy/lang/Ordering",
             "capy/lang/Option",
             "capy/lang/Primitives",
             "capy/lang/Regex",
@@ -928,6 +929,10 @@ public final class PythonGenerator implements Generator {
             }
             if (("reduce".equals(methodName) || "|>".equals(methodName) || "pipe_greater".equals(methodName)) && tailArgs.size() >= 2 && isCollectionType(receiverType)) {
                 return "capy.reduce_collection(" + receiver + ", " + tailArgs.get(0) + ", " + tailArgs.get(1) + ")";
+            }
+            if ("sort".equals(methodName) && tailArgs.size() == 1 && receiverType instanceof CollectionLinkedType.CompiledList) {
+                require("capy.collection.List");
+                return moduleVar("capy.collection.List") + ".sort(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (isPrimitiveConversion(methodName)) {
                 return renderConversion(methodName, receiver, receiverType, functionCall.type());
@@ -2725,6 +2730,8 @@ public final class PythonGenerator implements Generator {
             exports.put("capy.lang.Option", Set.of("Some", "None_"));
             exports.put("capy.lang.Result", Set.of("Success", "Error"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
+            exports.put("capy.lang.Ordering", Set.of("Ordering", "LESS", "EQUAL", "GREATER", "fromInt", "from_int", "reverse", "thenOrdering", "then_ordering"));
+            exports.put("capy.lang.OrderingModule", Set.of("Ordering", "LESS", "EQUAL", "GREATER", "fromInt", "from_int", "reverse", "thenOrdering", "then_ordering"));
             exports.put("capy.lang.Program", Set.of(
                     "Success", "Failed", "__constructor__primitive__failed_exit_code", "capy__constructorPrimitiveFailedExitCode",
                     "next__name_next__failed_exit_code", "previous__name_previous__failed_exit_code",
@@ -2754,7 +2761,7 @@ public final class PythonGenerator implements Generator {
                     "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
                     "RoundMode", "FLOOR", "CEILING", "HALF_UP", "HALF_DOWN", "HALF_EVEN", "round"
             ));
-            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
+            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce", "sort"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
             exports.put("capy.collection.Tuple", Set.of("get"));
@@ -2804,6 +2811,9 @@ public final class PythonGenerator implements Generator {
             fields.put("None_", List.of());
             fields.put("Success", List.of("value"));
             fields.put("Error", List.of("message"));
+            fields.put("LESS", List.of());
+            fields.put("EQUAL", List.of());
+            fields.put("GREATER", List.of());
             fields.put("_UnsafeEffect", List.of("unsafe_thunk"));
             fields.put("Cons", List.of("value", "rest"));
             fields.put("End", List.of());
@@ -2818,6 +2828,8 @@ public final class PythonGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "lang", "Option.py"), runtimeForwarder("Some", "None_")),
                     new GeneratedModule(Path.of("capy", "lang", "Result.py"), runtimeForwarder("Success", "Error")),
                     new GeneratedModule(Path.of("capy", "lang", "Effect.py"), runtimeForwarder("pure", "delay")),
+                    new GeneratedModule(Path.of("capy", "lang", "Ordering.py"), orderingRuntime()),
+                    new GeneratedModule(Path.of("capy", "lang", "OrderingModule.py"), orderingModuleRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Program.py"), programRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.py"), primitivesRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "String.py"), stringRuntime()),
@@ -2849,6 +2861,8 @@ public final class PythonGenerator implements Generator {
                     "capy.lang.Option",
                     "capy.lang.Result",
                     "capy.lang.Effect",
+                    "capy.lang.Ordering",
+                    "capy.lang.OrderingModule",
                     "capy.lang.Program",
                     "capy.lang.Primitives",
                     "capy.lang.String",
@@ -2878,6 +2892,58 @@ public final class PythonGenerator implements Generator {
         private static String runtimeForwarder(String... names) {
             return "# Generated by Capybara. Do not edit.\n"
                    + "from dev.capylang.capybara import " + String.join(", ", names) + "\n";
+        }
+
+        private static String orderingModuleRuntime() {
+            return "# Generated by Capybara. Do not edit.\n"
+                   + "from capy.lang.Ordering import *\n";
+        }
+
+        private static String orderingRuntime() {
+            return """
+                    # Generated by Capybara. Do not edit.
+                    import dev.capylang.capybara as capy
+
+                    _Ordering_values = [
+                        capy.enum_value('LESS', 'Ordering', ['Ordering'], 0, [], 'capy.lang', 'capy/lang/Ordering', {'fields': [], 'annotations': []}),
+                        capy.enum_value('EQUAL', 'Ordering', ['Ordering'], 1, [], 'capy.lang', 'capy/lang/Ordering', {'fields': [], 'annotations': []}),
+                        capy.enum_value('GREATER', 'Ordering', ['Ordering'], 2, [], 'capy.lang', 'capy/lang/Ordering', {'fields': [], 'annotations': []}),
+                    ]
+                    class Ordering:
+                        values = _Ordering_values
+                        LESS = values[0]
+                        EQUAL = values[1]
+                        GREATER = values[2]
+
+                        @staticmethod
+                        def valuesSet():
+                            return capy.set_(Ordering.values)
+
+                        @staticmethod
+                        def parse(value):
+                            return capy.parse_enum(value, Ordering.values, 'Ordering')
+
+                    LESS = Ordering.LESS
+                    EQUAL = Ordering.EQUAL
+                    GREATER = Ordering.GREATER
+
+                    def fromInt(value):
+                        return LESS if value < 0 else (GREATER if value > 0 else EQUAL)
+                    from_int = fromInt
+
+                    def reverse(ordering):
+                        if capy.is_type(ordering, 'LESS'):
+                            return GREATER
+                        if capy.is_type(ordering, 'EQUAL'):
+                            return EQUAL
+                        if capy.is_type(ordering, 'GREATER'):
+                            return LESS
+                        raise ValueError('Non-exhaustive match expression')
+
+                    def thenOrdering(ordering, other):
+                        return other if capy.is_type(ordering, 'EQUAL') else ordering
+                    then_ordering = thenOrdering
+                    """;
         }
 
         private static String primitivesRuntime() {
@@ -3042,6 +3108,7 @@ public final class PythonGenerator implements Generator {
                     flat_map = capy.flat_map_collection
                     flatMap = capy.flat_map_collection
                     reduce = capy.reduce_collection
+                    sort = capy.list_sort
                     """;
         }
 
@@ -4051,6 +4118,7 @@ public final class PythonGenerator implements Generator {
                         def reduce_left(self, initial, reducer): return self.reduce(initial, reducer)
                         def pipeGreater(self, initial, reducer): return reduce_collection(self, initial, reducer)
                         def pipe_greater(self, initial, reducer): return self.pipeGreater(initial, reducer)
+                        def sort(self, compare): return list_sort(self, compare)
 
                     class CapySet:
                         def __init__(self, values=None):
@@ -4250,6 +4318,25 @@ public final class PythonGenerator implements Generator {
                     def list_plus(left, right): return CapyList(list(left) + list(right))
                     def list_remove(value_list, value): return CapyList([item for item in value_list if not equals(item, value)])
                     def list_minus(left, right): return CapyList([item for item in left if not contains(right, item)])
+                    def list_sort(values, compare):
+                        values = CapyList(values)
+                        if len(values) <= 1:
+                            return values
+                        mid = len(values) // 2
+                        return list_sort_merge(list_sort(values[:mid], compare), list_sort(values[mid:], compare), compare)
+                    def list_sort_merge(left, right, compare):
+                        result = []
+                        left_idx = 0
+                        right_idx = 0
+                        while left_idx < len(left) and right_idx < len(right):
+                            ordering = invoke(compare, left[left_idx], right[right_idx])
+                            if getattr(ordering, 'name', None) == 'GREATER':
+                                result.append(right[right_idx])
+                                right_idx += 1
+                            else:
+                                result.append(left[left_idx])
+                                left_idx += 1
+                        return CapyList(result + list(left[left_idx:]) + list(right[right_idx:]))
                     def set_append(value_set, value): return set_(list(value_set) + [value])
                     def set_plus(left, right): return set_(list(left) + list(right))
                     def set_remove(value_set, value): return set_([item for item in value_set if not equals(item, value)])
