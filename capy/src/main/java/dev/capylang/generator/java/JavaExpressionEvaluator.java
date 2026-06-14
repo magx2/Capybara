@@ -57,7 +57,7 @@ public class JavaExpressionEvaluator {
                 "capy.collection.List",
                 java.util.List.of("List"),
                 "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
-                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
+                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*", "sort"
         );
         registerStandardExtensionMethods(
                 owners,

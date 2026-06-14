@@ -965,6 +965,57 @@ class ObjectOrientedJavaGeneratorTest {
         compileGeneratedJava(generatedProgram);
     }
 
+    @Test
+    void shouldInferPeerImportsForObjectOrientedInterfaceTypesInSamePackage() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "RawModule",
+                        "/dev/capylang/compiler/parser",
+                        """
+                                data RawModule { name: String }
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "ParsedProgram",
+                        "/dev/capylang/compiler/parser",
+                        """
+                                from RawModule import { RawModule }
+
+                                data ParsedProgram { modules: List[RawModule] }
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "CapybaraParser",
+                        "/dev/capylang/compiler/parser",
+                        """
+                                interface CapybaraParser {
+                                    def parse(modules: List[RawModule]): ParsedProgram
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var parserModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of(
+                        "dev", "capylang", "compiler", "parser", "CapybaraParser.java"
+                )))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(parserModule.code())
+                .contains("import dev.capylang.compiler.parser.ParsedProgram;")
+                .contains("import dev.capylang.compiler.parser.RawModule;")
+                .contains("ParsedProgram parse(java.util.List<RawModule> modules);")
+                .doesNotContain("CapybaraParser.ParsedProgram")
+                .doesNotContain("CapybaraParser.RawModule");
+
+        compileGeneratedJava(generatedProgram);
+    }
+
 
     @Test
     void shouldIgnoreSingleQuotedLiteralsDuringInferredImportScan() throws Exception {
