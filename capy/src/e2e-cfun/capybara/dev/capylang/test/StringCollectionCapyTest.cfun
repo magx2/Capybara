@@ -1,6 +1,7 @@
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Ordering import { * }
 from /capy/lang/Result import { * }
 from StringCollection import { * }
 
@@ -17,6 +18,8 @@ fun tests(): Effect[TestFile] =
         test("end_with_method detects suffixes", () => end_with_method_detects_suffixes()),
         test("trim_method trims surrounding whitespace", () => trim_method_trims_surrounding_whitespace()),
         test("replace_method replaces all occurrences", () => replace_method_replaces_all_occurrences()),
+        test("compare_method returns ordering", () => compare_method_returns_ordering()),
+        test("char_compare_method returns ordering", () => char_compare_method_returns_ordering()),
         test("is_empty_method detects empty strings", () => is_empty_method_detects_empty_strings()),
         test("not_is_empty_method negates emptiness", () => not_is_empty_method_negates_emptiness()),
         test("not_nested_is_empty reads nested buffer", () => not_nested_is_empty_reads_nested_buffer()),
@@ -95,6 +98,28 @@ private fun replace_method_replaces_all_occurrences(): Assert =
         assert_that(replace_method("capybara", "bara", "lang")).is_equal_to("capylang"),
         assert_that(replace_method("aaaa", "a", "b")).is_equal_to("bbbb"),
         assert_that(replace_method("capybara", "dog", "cat")).is_equal_to("capybara"),
+    ])
+
+private fun compare_method_returns_ordering(): Assert =
+    assert_all([
+        assert_that(compare_method("capy", "capy")).is_equal_to(EQUAL),
+        assert_that(compare_method("apple", "banana")).is_equal_to(LESS),
+        assert_that(compare_method("zebra", "yak")).is_equal_to(GREATER),
+        assert_that(compare_method("capy", "capybara")).is_equal_to(LESS),
+        assert_that(compare_method("", "a")).is_equal_to(LESS),
+    ])
+
+private fun char_compare_method_returns_ordering(): Assert =
+    assert_all([
+        assert_that(make_char("a")).succeeds(left =>
+            assert_that(make_char("a")).succeeds(right =>
+                assert_that(char_compare_method(left, right)).is_equal_to(EQUAL))),
+        assert_that(make_char("a")).succeeds(left =>
+            assert_that(make_char("b")).succeeds(right =>
+                assert_that(char_compare_method(left, right)).is_equal_to(LESS))),
+        assert_that(make_char("b")).succeeds(left =>
+            assert_that(make_char("a")).succeeds(right =>
+                assert_that(char_compare_method(left, right)).is_equal_to(GREATER))),
     ])
 
 private fun is_empty_method_detects_empty_strings(): Assert =

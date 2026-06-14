@@ -1664,6 +1664,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyLangPrimitivesStringParseMethod(ownerPackage, ownerName, method)) {
             return mapCapyLangPrimitivesStringParseMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyLangStringCompareMethod(ownerPackage, ownerName, method)) {
+            return mapCapyLangStringCompareMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyIoConsoleMethod(ownerPackage, ownerName, method)) {
             return mapCapyIoConsoleMethod(method, visibility, methodTypeParameters);
         }
@@ -1774,6 +1777,25 @@ public final class JavaGenerator implements Generator {
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(syntheticMethodCall, method.parameters(), null)
                + "\n}\n";
+    }
+
+    private boolean isCapyLangStringCompareMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "compare".equals(method.name())
+               && (METHOD_DECL_PREFIX + "String__compare").equals(method.sourceName())
+               && method.parameters().size() == 2
+               && method.sourceParameterTypes().size() == 2
+               && method.sourceParameterTypes().getFirst() == PrimitiveLinkedType.STRING
+               && method.sourceParameterTypes().get(1) == PrimitiveLinkedType.STRING
+               && isNativeExpression(method);
+    }
+
+    private String mapCapyLangStringCompareMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        var left = method.parameters().getFirst();
+        var right = method.parameters().get(1);
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + "return capy.lang.OrderingModule.fromInt(" + left.generatedName() + ".compareTo(" + right.generatedName() + "));\n"
+               + "}\n";
     }
 
     private boolean isNativeExpression(JavaMethod method) {

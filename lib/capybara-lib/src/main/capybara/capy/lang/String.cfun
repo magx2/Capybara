@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Ordering import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
@@ -23,6 +24,9 @@ type char -> String with constructor {
 
 /// Returns true when both chars contain the same character.
 fun char.`==`(other: char): bool = this.value == other.value
+
+/// Compares this char with `other` using case-sensitive lexicographic ordering.
+fun char.compare(other: char): Ordering = this.value.compare(other.value)
 
 /// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
 fun String.get(idx: index): Option[char] = <native>
@@ -55,6 +59,9 @@ fun String.`+`(value: any): String = <native>
 
 /// Returns this String with `value` appended.
 fun String.plus(value: any): String = this + value
+
+/// Compares this String with `other` using case-sensitive lexicographic ordering.
+fun String.compare(other: String): Ordering = <native>
 
 /// Returns true when at least one character satisfies `predicate`.
 fun String.any(predicate: String => bool): bool =
