@@ -110,14 +110,18 @@ jobs:
           fi
 
           merge_ref "origin/${RELEASE_BRANCH}" "--ours" "merge ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
-          git branch -f "${BACK_BRANCH}" HEAD
+          STATE_HEAD="$(git rev-parse HEAD)"
 
-          if git diff --quiet "origin/${DEFAULT_BRANCH}" HEAD; then
+          if git diff --quiet "origin/${DEFAULT_BRANCH}" "${STATE_HEAD}"; then
             echo "Default branch already contains ${RELEASE_BRANCH}."
             exit 0
           fi
 
-          git push --force-with-lease origin "HEAD:${STATE_BRANCH}" "HEAD:${BACK_BRANCH}"
+          git checkout -B "${BACK_BRANCH}" "origin/${DEFAULT_BRANCH}"
+          git diff --binary "origin/${DEFAULT_BRANCH}" "${STATE_HEAD}" | git apply --index
+          git commit -m "merge back ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
+
+          git push --force-with-lease origin "${STATE_HEAD}:refs/heads/${STATE_BRANCH}" "HEAD:${BACK_BRANCH}"
 
           PR_URL="$(gh pr list \
             --repo "${GITHUB_REPOSITORY}" \
@@ -134,7 +138,7 @@ jobs:
               --base "${DEFAULT_BRANCH}" \
               --head "${BACK_BRANCH}" \
               --title "merge back ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}" \
-              --body "Automated merge-back from \`${RELEASE_BRANCH}\` into \`${DEFAULT_BRANCH}\`. This PR branch preserves merge ancestry; use squash merge to keep \`${DEFAULT_BRANCH}\` linear.")"
+              --body "Automated merge-back from \`${RELEASE_BRANCH}\` into \`${DEFAULT_BRANCH}\`. The \`${STATE_BRANCH}\` branch preserves merge ancestry, while this PR branch stays linear for \`${DEFAULT_BRANCH}\`.")"
             echo "Created merge-back pull request: ${PR_URL}"
           fi
 
