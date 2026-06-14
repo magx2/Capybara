@@ -20,6 +20,8 @@ private fun primitive_backed_values_run_as_primitive_ints_and_strings(): Assert 
         assert_that(unwrap_score(score_of(11))).is_equal_to(11),
         assert_that(unwrap_token(raw_token("abc"))).is_equal_to("abc"),
         assert_that(pass_token_to_string(raw_token("abc"))).is_equal_to("abc_suffix"),
+        assert_that(tokens_match(raw_token("abc"), raw_token("abc"))).is_true(),
+        assert_that(tokens_match(raw_token("abc"), raw_token("def"))).is_false(),
     ])
 
 private fun result_returning_constructor_retags_payload_type(): Assert =
