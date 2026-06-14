@@ -235,6 +235,10 @@ def e2eCfunCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-cfun/capybar
 def e2eCfunGeneratedJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-cfun')
 def e2eCfunLinkedJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/e2e-cfun')
 def e2eCfunJavaScriptTestResultsDir = layout.buildDirectory.dir('test-results/e2e-javascript-cfun')
+def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
+def e2eCooGeneratedJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-coo')
+def e2eCooLinkedJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/e2e-coo')
+def e2eCooJavaScriptTestResultsDir = layout.buildDirectory.dir('test-results/e2e-javascript-coo')
 def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
@@ -346,8 +350,34 @@ def e2eJavaScriptCfunTests = tasks.register('e2e-javascript-cfun', CapybaraJavaS
     getPrintAvailableTests().convention(false)
 }
 
+def generateE2eJavaScriptCoo = registerCapybaraE2eGenerationTask(
+        'generateE2eJavaScriptCoo',
+        'Compiles object-oriented e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
+        'JAVASCRIPT',
+        e2eCooCapybaraSourceDir,
+        e2eCooLinkedJavaScriptOutputDir,
+        e2eCooGeneratedJavaScriptDir
+)
+
+def e2eJavaScriptCooTests = tasks.register('e2e-javascript-coo', CapybaraJavaScriptTestTask) {
+    description = 'Runs object-oriented Capybara e2e tests on JavaScript.'
+    group = 'verification'
+    dependsOn generateE2eJavaScriptCoo
+
+    runnerFile.set(capybaraJavaScriptTestRunner)
+    generatedDir.set(e2eCooGeneratedJavaScriptDir)
+    outputDir.set(e2eCooJavaScriptTestResultsDir)
+    executionDir.set(layout.projectDirectory)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
+}
+
 e2eJavaScriptTests.configure {
     dependsOn e2eJavaScriptCfunTests
+    dependsOn e2eJavaScriptCooTests
 }
 
 jar {
