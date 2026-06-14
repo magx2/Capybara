@@ -79,11 +79,197 @@ private fun java_script_import(declaration: CompiledImportDeclaration, module: C
         + ");"
         + java_script_newline()
 
+private fun java_script_object_helper_function(function: CompiledFunction): bool =
+    java_script_object_class_schema_function(function) | java_script_object_method_function(function)
+
+private fun java_script_object_helper_code(function: CompiledFunction): String =
+    if java_script_object_class_schema_function(function)
+    then java_script_object_class(function)
+    else if java_script_object_method_function(function)
+    then java_script_object_method(java_script_object_method_class_name(function), function)
+    else ""
+
+private fun java_script_object_class(function: CompiledFunction): String =
+    let className = java_script_object_class_schema_name(function)
+    "function "
+        + java_script_object_runtime_class_name(className)
+        + "(...__capy_args) {"
+        + java_script_newline()
+        + "    this.__type = "
+        + java_script_string_literal(className)
+        + ";"
+        + java_script_newline()
+        + "}"
+        + java_script_newline()
+        + java_script_newline()
+        + "function "
+        + java_script_object_constructor_name(className)
+        + "(...__capy_args) {"
+        + java_script_newline()
+        + "    return delay(() => new "
+        + java_script_object_runtime_class_name(className)
+        + "(...__capy_args));"
+        + java_script_newline()
+        + "}"
+        + java_script_newline()
+        + java_script_newline()
+
+private fun java_script_object_method(className: String, function: CompiledFunction): String =
+    java_script_object_runtime_class_name(className)
+        + ".prototype."
+        + java_script_method_name(java_script_object_method_name(className, function))
+        + " = function("
+        + java_script_parameters(function.parameters)
+        + ") {"
+        + java_script_newline()
+        + "    return "
+        + "pure("
+        + java_script_oo_method_expression_code(function.body, java_script_object_method_bindings(className, function.parameters))
+        + ")"
+        + ";"
+        + java_script_newline()
+        + "};"
+        + java_script_newline()
+        + java_script_newline()
+
+private fun java_script_oo_method_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding]): String =
+    match expression with
+    case CompiledIntLiteral literal -> literal.source
+    case CompiledLongLiteral literal -> java_script_integer_literal(literal.source)
+    case CompiledFloatLiteral literal -> java_script_decimal_literal(literal.source)
+    case CompiledDoubleLiteral literal -> java_script_decimal_literal(literal.source)
+    case CompiledBoolLiteral literal -> if literal.value then "true" else "false"
+    case CompiledStringLiteral literal -> java_script_string_literal(literal.value)
+    case CompiledVariableExpression variable -> java_script_oo_method_variable_code(variable.name, env)
+    case CompiledIfExpression ifExpression ->
+        "("
+            + java_script_truthy_code(java_script_oo_method_expression_code(ifExpression.condition, env))
+            + " ? "
+            + java_script_oo_method_expression_code(ifExpression.thenBranch, env)
+            + " : "
+            + java_script_oo_method_expression_code(ifExpression.elseBranch, env)
+            + ")"
+    case CompiledBinaryExpression binary -> java_script_oo_method_binary_expression_code(binary, env)
+    case _ -> "__capy_unsupported(" + java_script_string_literal("unsupported object method expression") + ")"
+
+private fun java_script_oo_method_binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding]): String =
+    if binary.operator == "+"
+    then java_script_oo_method_binary_runtime_call("__capy_add", binary, env)
+    else if binary.operator == "-"
+    then java_script_oo_method_binary_runtime_call("__capy_sub", binary, env)
+    else if binary.operator == "*"
+    then java_script_oo_method_binary_runtime_call("__capy_mul", binary, env)
+    else if binary.operator == "/"
+    then java_script_oo_method_binary_runtime_call("__capy_div", binary, env)
+    else if binary.operator == "%"
+    then java_script_oo_method_binary_runtime_call("__capy_mod", binary, env)
+    else if binary.operator == "^"
+    then java_script_oo_method_binary_runtime_call("__capy_pow", binary, env)
+    else if binary.operator == "=="
+    then java_script_oo_method_binary_runtime_call("__capy_deep_equal", binary, env)
+    else if binary.operator == "!="
+    then "(!" + java_script_oo_method_binary_runtime_call("__capy_deep_equal", binary, env) + ")"
+    else if binary.operator == "&" | binary.operator == "|"
+    then "("
+        + java_script_truthy_code(java_script_oo_method_expression_code(binary.left, env))
+        + " "
+        + java_script_boolean_operator(binary.operator)
+        + " "
+        + java_script_truthy_code(java_script_oo_method_expression_code(binary.right, env))
+        + ")"
+    else "("
+        + java_script_oo_method_expression_code(binary.left, env)
+        + " "
+        + java_script_binary_operator(binary.operator)
+        + " "
+        + java_script_oo_method_expression_code(binary.right, env)
+        + ")"
+
+private fun java_script_oo_method_binary_runtime_call(name: String, binary: CompiledBinaryExpression, env: List[JavaScriptBinding]): String =
+    name
+        + "("
+        + java_script_oo_method_expression_code(binary.left, env)
+        + ", "
+        + java_script_oo_method_expression_code(binary.right, env)
+        + ")"
+
+private fun java_script_oo_method_variable_code(name: String, env: List[JavaScriptBinding]): String =
+    match java_script_lookup_binding(name, env) with
+    case Some { binding } -> binding.jsName
+    case None -> java_script_identifier(name)
+
+private fun java_script_object_method_bindings(className: String, parameters: List[CompiledFunctionParameter]): List[JavaScriptBinding] =
+    [
+        JavaScriptBinding { name: "this", jsName: "this", typeName: className },
+        JavaScriptBinding { name: "receiver", jsName: "this", typeName: className },
+    ] + java_script_parameter_bindings(parameters)
+
+private fun java_script_object_class_schema_function(function: CompiledFunction): bool =
+    java_script_compiled_schema(function)
+        & java_script_string_has_prefix(function.name, java_script_object_class_schema_prefix())
+
+private fun java_script_object_class_schema_name(function: CompiledFunction): String =
+    function.name[java_script_object_class_schema_prefix().size().value, function.name.size().value]
+
+private fun java_script_object_class_exists(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_class_schema_function(function)
+        then if java_script_object_class_schema_name(function) == name
+            then true
+            else java_script_object_class_exists(name, functions[1:])
+        else java_script_object_class_exists(name, functions[1:])
+
+private fun java_script_object_class_schema_prefix(): String =
+    "__capy_oo_class|"
+
+private fun java_script_object_method_function(function: CompiledFunction): bool =
+    java_script_string_has_prefix(function.name, java_script_object_method_any_prefix())
+
+private fun java_script_object_method_any_prefix(): String =
+    "__capy_oo_method|"
+
+private fun java_script_object_method_prefix(className: String): String =
+    java_script_object_method_any_prefix() + className + "|"
+
+private fun java_script_object_method_class_name(function: CompiledFunction): String =
+    let start = java_script_object_method_any_prefix().size().value
+    let separator = java_script_first_index_of(function.name, "|", start)
+    if separator < 0
+    then ""
+    else function.name[start, separator]
+
+private fun java_script_object_method_function_for_class(className: String, function: CompiledFunction): bool =
+    java_script_string_has_prefix(function.name, java_script_object_method_prefix(className))
+
+private fun java_script_object_method_name(className: String, function: CompiledFunction): String =
+    function.name[java_script_object_method_prefix(className).size().value, function.name.size().value]
+
+private fun java_script_object_method_exists(className: String, methodName: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_method_function_for_class(className, function)
+        then if java_script_object_method_name(className, function) == methodName
+            then true
+            else java_script_object_method_exists(className, methodName, functions[1:])
+        else java_script_object_method_exists(className, methodName, functions[1:])
+
+private fun java_script_object_runtime_class_name(className: String): String =
+    "__capy_oo_class_" + java_script_identifier(className)
+
+private fun java_script_object_constructor_name(className: String): String =
+    java_script_identifier(className)
+
 private fun java_script_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if java_script_skip_function(function)
+        if java_script_object_helper_function(function)
+        then java_script_object_helper_code(function)
+            + java_script_functions(functions[1:], module, allModules)
+        else if java_script_skip_function(function)
         then java_script_functions(functions[1:], module, allModules)
         else java_script_function(function, module, allModules)
             + java_script_newline()
@@ -880,6 +1066,8 @@ private fun java_script_unary_expression_code(unary: CompiledUnaryExpression, en
 private fun java_script_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_stdlib_effect_function_call(call, module)
     then java_script_stdlib_effect_function_call_code(call.name)
+    else if java_script_oo_constructor_call(call.name, module)
+    then java_script_oo_constructor_call_code(call, env, module, allModules)
     else if java_script_stdlib_path_function_call(call, module)
     then java_script_stdlib_path_function_call_code(call, env, module, allModules)
     else if java_script_stdlib_io_function_call(call, module)
@@ -981,9 +1169,26 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_primitive_conversion_code(call, env, module, allModules)
     else if java_script_result_reduce_method_call(call, env, module, allModules)
     then java_script_result_reduce_method_call_code(call, env, module, allModules)
+    else if java_script_oo_method_call(call, env, module, allModules)
+    then java_script_raw_method_call_code(call, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
         case Some { function } -> java_script_extension_method_call_code(function, call, env, module, allModules)
         case None -> java_script_raw_method_call_code(call, env, module, allModules)
+
+private fun java_script_oo_constructor_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_object_constructor_name(call.name)
+        + "("
+        + java_script_expression_list_code(call.arguments, env, module, allModules)
+        + ")"
+
+private fun java_script_oo_constructor_call(name: String, module: CompiledModule): bool =
+    !java_script_qualified_call_name(name) & java_script_object_class_exists(name, module.functions)
+
+private fun java_script_oo_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
+    if receiverType == java_script_unknown_type()
+    then false
+    else java_script_object_method_exists(receiverType, call.name, module.functions)
 
 private fun java_script_callable_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "(" + java_script_expression_code(call.receiver, env, module, allModules) + ")("
@@ -2413,8 +2618,18 @@ private fun java_script_let_binding_name(binding: CompiledLetBinding): String =
 
 private fun java_script_let_binding_type(binding: CompiledLetBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding.typeReference.name.is_empty()
-    then java_script_expression_type(binding.value, env, module, allModules)
+    then if binding.operator == "<-"
+        then java_script_effect_binding_payload_type(binding.value, env, module)
+        else java_script_expression_type(binding.value, env, module, allModules)
     else binding.typeReference.name
+
+private fun java_script_effect_binding_payload_type(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule): String =
+    match expression with
+    case CompiledFunctionCallExpression call ->
+        if java_script_oo_constructor_call(call.name, module)
+        then call.name
+        else java_script_unknown_type()
+    case _ -> java_script_unknown_type()
 
 private fun java_script_truthy_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_truthy_code(java_script_expression_code(expression, env, module, allModules))
@@ -2791,6 +3006,8 @@ private fun java_script_stdlib_duration_method_call_type(name: String): String =
 private fun java_script_function_call_expression_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_runtime_function(name)
     then java_script_runtime_function_type(name)
+    else if java_script_oo_constructor_call(name, module)
+    then "Effect"
     else if java_script_stdlib_effect_function_call_by_name(name, module)
     then java_script_stdlib_effect_function_call_type(name)
     else if java_script_stdlib_path_function_call_by_name(name, module)
@@ -3438,10 +3655,11 @@ private fun java_script_string_list_contains(value: String, values: List[String]
 
 private fun java_script_exports(functions: List[CompiledFunction]): String =
     let dispatchEntries = java_script_export_dispatch_entries(functions, [], true)
+    let functionEntries = java_script_export_entries(functions, dispatchEntries.is_empty())
     "module.exports = {"
         + java_script_newline()
         + dispatchEntries
-        + java_script_export_entries(functions, dispatchEntries.is_empty())
+        + functionEntries
         + "};"
         + java_script_newline()
 
@@ -4167,6 +4385,8 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
         then true
         else if java_script_runtime_function(call.name)
         then true
+        else if java_script_oo_constructor_call(call.name, module)
+        then true
         else if java_script_stdlib_effect_function_call(call, module)
         then true
         else if java_script_stdlib_path_function_call(call, module)
@@ -4264,6 +4484,9 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else if java_script_result_fallback_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+        & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+    else if java_script_oo_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
