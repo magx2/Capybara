@@ -3,6 +3,7 @@ from /dev/capylang/compiler/parser/Expression import { Expression }
 from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
 from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
 from /dev/capylang/compiler/parser/ObjectOrientedField import { ObjectOrientedField }
+from /dev/capylang/compiler/parser/ObjectOrientedInitBlock import { ObjectOrientedInitBlock }
 from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
@@ -14,8 +15,9 @@ data ObjectOrientedClass {
     parameters: List[FunctionParameter],
     parents: List[TypeReference],
     fields: List[ObjectOrientedField],
-    initBlocks: List[Expression],
+    initBlocks: List[ObjectOrientedInitBlock],
     methods: List[ObjectOrientedMethod],
+    documentation: List[String],
     annotations: List[FunctionAnnotationApplication],
     location: SourceLocation
 }

@@ -27,11 +27,12 @@ data AnnotationDeclaration {
     repeatable: bool,
     targets: List[String],
     fields: List[AnnotationFieldDeclaration],
+    documentation: List[String],
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
 data DeriveApplication { name: String, location: SourceLocation }
-data DataFieldDeclaration { name: String, typeReference: TypeReference, annotations: List[AnnotationApplication], location: SourceLocation }
+data DataFieldDeclaration { name: String, typeReference: TypeReference, documentation: List[String], annotations: List[AnnotationApplication], location: SourceLocation }
 data DataParentDeclaration { typeReference: TypeReference, location: SourceLocation }
 data DataDeclaration {
     name: String,
@@ -39,6 +40,7 @@ data DataDeclaration {
     parameters: List[String],
     fields: List[DataFieldDeclaration],
     parents: List[DataParentDeclaration],
+    documentation: List[String],
     annotations: List[AnnotationApplication],
     derives: List[DeriveApplication],
     location: SourceLocation
@@ -47,15 +49,17 @@ data DeriverDeclaration {
     name: String,
     visibility: String,
     methods: List[FunctionDeclaration],
+    documentation: List[String],
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
 data EnumValueDeclaration { name: String, location: SourceLocation }
-data EnumDeclaration { name: String, values: List[EnumValueDeclaration], annotations: List[AnnotationApplication], location: SourceLocation }
+data EnumDeclaration { name: String, values: List[EnumValueDeclaration], documentation: List[String], annotations: List[AnnotationApplication], location: SourceLocation }
 data PrimitiveBackedTypeDeclaration {
     name: String,
     visibility: String,
     backingType: TypeReference,
+    documentation: List[String],
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
@@ -65,6 +69,7 @@ data TypeDeclaration {
     parameters: List[String],
     fields: List[DataFieldDeclaration],
     variants: List[TypeReference],
+    documentation: List[String],
     annotations: List[AnnotationApplication],
     derives: List[DeriveApplication],
     location: SourceLocation

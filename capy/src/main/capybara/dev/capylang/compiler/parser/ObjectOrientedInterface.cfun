@@ -10,6 +10,7 @@ data ObjectOrientedInterface {
     kind: String,
     parents: List[TypeReference],
     methods: List[ObjectOrientedMethod],
+    documentation: List[String],
     annotations: List[FunctionAnnotationApplication],
     location: SourceLocation
 }

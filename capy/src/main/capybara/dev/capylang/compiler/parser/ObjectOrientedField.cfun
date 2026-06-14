@@ -10,6 +10,7 @@ data ObjectOrientedField {
     typeReference: TypeReference,
     value: Expression,
     hasValue: bool,
+    documentation: List[String],
     annotations: List[FunctionAnnotationApplication],
     location: SourceLocation
 }
