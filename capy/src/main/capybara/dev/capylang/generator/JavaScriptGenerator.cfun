@@ -438,11 +438,18 @@ private fun java_script_parameter_tail(parameters: List[CompiledFunctionParamete
 
 private fun java_script_function_bindings(function: CompiledFunction): List[JavaScriptBinding] =
     if java_script_extension_method_function(function)
-    then [JavaScriptBinding {
+    then
+        let receiverType = java_script_method_owner_name(function.name)
+        [JavaScriptBinding {
             name: "this",
             jsName: java_script_identifier("this"),
-            typeName: java_script_method_owner_name(function.name)
+            typeName: receiverType
         }] + java_script_parameter_bindings(function.parameters)
+            + [JavaScriptBinding {
+                name: "receiver",
+                jsName: java_script_identifier("this"),
+                typeName: receiverType
+            }]
     else java_script_parameter_bindings(function.parameters)
 
 private fun java_script_parameter_bindings(parameters: List[CompiledFunctionParameter]): List[JavaScriptBinding] =
@@ -881,6 +888,8 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
     then "Math.sqrt(" + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
     else if java_script_enum_parse_call(call, module, allModules)
     then java_script_enum_parse_call_code(call, env, module, allModules)
+    else if java_script_reflection_function_call(call, module)
+    then java_script_reflection_call_code(call, env, module, allModules)
     else
         let functionName = java_script_function_call_name(call.name, env, module, allModules)
         match java_script_function_call_definition(call.name, env, module, allModules) with
@@ -894,6 +903,30 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
                 + "("
                 + java_script_expression_list_code(call.arguments, env, module, allModules)
                 + ")"
+
+private fun java_script_reflection_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    call.name == "reflection"
+        & java_script_local_function_count("reflection", module.functions) == 0
+        & java_script_reflection_member_imported("reflection", module.imports)
+        & match call.arguments[0] with
+            case None -> false
+            case Some _ -> call.arguments[1:].is_empty()
+
+private fun java_script_reflection_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match call.arguments[0] with
+    case None -> "reflection()"
+    case Some { value } ->
+        let valueType = java_script_expression_type(value, env, module, allModules)
+        if valueType == "data"
+            | valueType == "enum"
+            | valueType == java_script_unknown_type()
+            | java_script_enum_type_exists(java_script_type_unqualified_name(valueType), module, allModules)
+        then "reflection(" + java_script_expression_code(value, env, module, allModules) + ")"
+        else "reflection("
+            + java_script_expression_code(value, env, module, allModules)
+            + ", "
+            + java_script_string_literal(java_script_type_unqualified_name(valueType))
+            + ")"
 
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "__capy_call"
@@ -3386,6 +3419,9 @@ private fun java_script_path_member_imported(member: String, imports: List[Compi
 private fun java_script_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     java_script_module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")
 
+private fun java_script_reflection_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    java_script_module_member_imported(member, imports, "/capy/meta_prog/Reflection", "capy/meta_prog/Reflection")
+
 private fun java_script_module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
     match imports[0] with
     case None -> false
@@ -4864,10 +4900,100 @@ private fun java_script_data_type_fields(name: String, module: CompiledModule, a
     )
 
 private fun java_script_data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    java_script_data_type_schema_values(name, "__capy_schema_field|", module, allModules)
+    if java_script_stdlib_reflection_type(name)
+    then java_script_stdlib_reflection_type_fields(name)
+    else java_script_data_type_schema_values(name, "__capy_schema_field|", module, allModules)
 
 private fun java_script_data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    java_script_data_type_schema_values(name, "__capy_schema_parent|", module, allModules)
+    if java_script_stdlib_reflection_type(name)
+    then java_script_stdlib_reflection_type_parents(name)
+    else java_script_data_type_schema_values(name, "__capy_schema_parent|", module, allModules)
+
+private fun java_script_stdlib_reflection_type(name: String): bool =
+    name == "PackageInfo"
+        | name == "AnyInfo"
+        | name == "CFunInfo"
+        | name == "CooInfo"
+        | name == "AnnotationValue"
+        | name == "AnnotationInfo"
+        | name == "AnnotationArgumentInfo"
+        | name == "DataValueInfo"
+        | name == "FieldValueInfo"
+        | name == "DataInfo"
+        | name == "FunctionTypeInfo"
+        | name == "FieldInfo"
+        | name == "ListInfo"
+        | name == "SetInfo"
+        | name == "DictInfo"
+        | name == "TupleInfo"
+        | name == "InterfaceInfo"
+        | name == "ObjectInfo"
+        | name == "TraitInfo"
+        | name == "MethodInfo"
+        | name == "AnnotationString"
+        | name == "AnnotationInt"
+        | name == "AnnotationLong"
+        | name == "AnnotationDouble"
+        | name == "AnnotationFloat"
+        | name == "AnnotationBool"
+        | name == "AnnotationTypeName"
+        | name == "AnnotationNothing"
+
+private fun java_script_stdlib_reflection_type_parents(name: String): List[String] =
+    if name == "CFunInfo" | name == "CooInfo"
+    then ["AnyInfo"]
+    else if name == "DataInfo" | name == "ListInfo" | name == "SetInfo" | name == "DictInfo" | name == "TupleInfo" | name == "FunctionTypeInfo"
+    then ["CFunInfo"]
+    else if name == "InterfaceInfo" | name == "ObjectInfo" | name == "TraitInfo" | name == "MethodInfo"
+    then ["CooInfo"]
+    else if name == "AnnotationString" | name == "AnnotationInt" | name == "AnnotationLong" | name == "AnnotationDouble" | name == "AnnotationFloat" | name == "AnnotationBool" | name == "AnnotationTypeName" | name == "AnnotationNothing"
+    then ["AnnotationValue"]
+    else []
+
+private fun java_script_stdlib_reflection_type_fields(name: String): List[String] =
+    if name == "PackageInfo"
+    then ["name|String", "path|String"]
+    else if name == "AnyInfo"
+    then ["name|String", "pkg|PackageInfo"]
+    else if name == "AnnotationInfo"
+    then ["name|String", "pkg|PackageInfo", "arguments|List[AnnotationArgumentInfo]"]
+    else if name == "AnnotationArgumentInfo"
+    then ["name|String", "value|AnnotationValue"]
+    else if name == "DataValueInfo"
+    then ["name|String", "pkg|PackageInfo", "fields|List[FieldValueInfo]", "annotations|List[AnnotationInfo]"]
+    else if name == "FieldValueInfo"
+    then ["name|String", "type|AnyInfo", "value|any", "annotations|List[AnnotationInfo]"]
+    else if name == "DataInfo"
+    then ["name|String", "pkg|PackageInfo", "annotations|List[AnnotationInfo]"]
+    else if name == "FunctionTypeInfo"
+    then ["name|String", "pkg|PackageInfo", "params|List[AnyInfo]", "return_type|AnyInfo"]
+    else if name == "FieldInfo"
+    then ["name|String", "type|AnyInfo", "annotations|List[AnnotationInfo]"]
+    else if name == "ListInfo" | name == "SetInfo"
+    then ["name|String", "pkg|PackageInfo", "element_type|AnyInfo"]
+    else if name == "DictInfo"
+    then ["name|String", "pkg|PackageInfo", "value_type|AnyInfo"]
+    else if name == "TupleInfo"
+    then ["name|String", "pkg|PackageInfo", "elements|List[AnyInfo]"]
+    else if name == "InterfaceInfo" | name == "TraitInfo"
+    then ["name|String", "pkg|PackageInfo", "methods|List[MethodInfo]", "parents|Set[AnyInfo]", "annotations|List[AnnotationInfo]"]
+    else if name == "ObjectInfo"
+    then ["name|String", "pkg|PackageInfo", "open|bool", "fields|List[FieldInfo]", "methods|List[MethodInfo]", "parents|Set[AnyInfo]", "annotations|List[AnnotationInfo]"]
+    else if name == "MethodInfo"
+    then ["name|String", "pkg|PackageInfo", "params|List[FieldInfo]", "return_type|AnyInfo", "annotations|List[AnnotationInfo]"]
+    else if name == "AnnotationString" | name == "AnnotationTypeName"
+    then ["value|String"]
+    else if name == "AnnotationInt"
+    then ["value|int"]
+    else if name == "AnnotationLong"
+    then ["value|long"]
+    else if name == "AnnotationDouble"
+    then ["value|double"]
+    else if name == "AnnotationFloat"
+    then ["value|float"]
+    else if name == "AnnotationBool"
+    then ["value|bool"]
+    else []
 
 private fun java_script_data_type_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match parents[0] with
