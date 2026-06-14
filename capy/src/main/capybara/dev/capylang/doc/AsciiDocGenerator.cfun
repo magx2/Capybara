@@ -1,0 +1,41 @@
+from /capy/collection/List import { * }
+from /capy/lang/Seq import { * }
+from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from Documentation import { Documentation }
+
+fun generate_asciidoc_docs(program: CompiledProgram): List[Documentation] =
+    program.modules
+        .map(module => generate_asciidoc_docs_for_module(module))
+        .reduce([], (docs, doc) => docs + doc)
+
+private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documentation =
+    Documentation {
+        path: "/{module.path}/{module.name}.adoc",
+        content: "= Module {module.name}\n\n"
+        + "== Functions\n\n"
+        + generate_function_docs(module.functions)
+    }
+
+private fun generate_function_docs(functions: List[CompiledFunction]): String =
+    functions
+        .map(function => "=== {function.visibility} {function.name}({generate_parameters(function.parameters)}): {type_name(function.returnType)}\n\n")
+        .reduce("", (content, functionDoc) => content + functionDoc)
+
+private fun generate_parameters(parameters: List[CompiledFunctionParameter]): String =
+    parameters
+        .map(parameter => generate_parameter(parameter))
+        .reduce("", (content, parameter) =>
+            if content.is_empty()
+            then parameter
+            else content + ", " + parameter
+        )
+
+private fun generate_parameter(parameter: CompiledFunctionParameter): String =
+    "{parameter.name}: {type_name(parameter.typeReference)}"
+
+private fun type_name(type: CompiledTypeReference): String = type.name
