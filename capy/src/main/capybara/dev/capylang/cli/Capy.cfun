@@ -29,10 +29,9 @@ from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog
 from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
-from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }
-from /dev/capylang/compiler/parser/SourceKind import { FUNCTIONAL, OBJECT_ORIENTED, SourceKind }
+from /dev/capylang/compiler/parser/RawModuleFactory import { functional_raw_module, object_oriented_raw_module }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/Generator import { generate }
@@ -80,7 +79,7 @@ data CompileOptions {
 }
 
 data GenerateOptions {
-    output_type: OutputType,
+    output_type: String,
     input: String,
     output: String,
     include_java_lib_resources: bool,
@@ -88,7 +87,7 @@ data GenerateOptions {
 }
 
 data CompileGenerateOptions {
-    output_type: OutputType,
+    output_type: String,
     input: String,
     output: String,
     linked_output: Option[String],
@@ -220,7 +219,7 @@ private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
         input: None {},
         module: None {},
         capy_overrides: [],
-        log_level: INFO
+        log_level: INFO {}
     }) with
     case UsageError e -> e
     case ParsedArgs { options } ->
@@ -243,7 +242,7 @@ private fun compile_options_from_named(options: NamedOptions): CliArgs[CompileOp
             log_level: options.log_level
         }}
 
-private fun generate_options_from_named(output_type: OutputType, options: NamedOptions): CliArgs[GenerateOptions] =
+private fun generate_options_from_named(output_type: String, options: NamedOptions): CliArgs[GenerateOptions] =
     match required_option(options.output, "output", "generate") with
     case UsageError e -> e
     case ParsedArgs { output } -> ParsedArgs { GenerateOptions {
@@ -254,7 +253,7 @@ private fun generate_options_from_named(output_type: OutputType, options: NamedO
         log_level: options.log_level
     }}
 
-private fun compile_generate_options_from_named(output_type: OutputType, options: NamedOptions): CliArgs[CompileGenerateOptions] =
+private fun compile_generate_options_from_named(output_type: String, options: NamedOptions): CliArgs[CompileGenerateOptions] =
     match required_option(options.input, "input", "compile-generate") with
     case UsageError e -> e
     case ParsedArgs { input } ->
@@ -368,7 +367,7 @@ private fun empty_named_options(): NamedOptions =
         native_wiring: None {},
         compile_tests: false,
         skip_java_lib: false,
-        log_level: INFO
+        log_level: INFO {}
     }
 
 private fun next_value(args: List[String], idx: int, option: String): CliArgs[String] =
@@ -403,19 +402,19 @@ private fun validate_package_inputs(options: PartialPackageOptions): CliArgs[Par
     then ParsedArgs { options }
     else UsageError { message: "Package requires either `--compiled-input` or `--input`." }
 
-private fun parse_output_type(value: String): CliArgs[OutputType] =
+private fun parse_output_type(value: String): CliArgs[String] =
     match value with
-    case "java" | "JAVA" -> ParsedArgs { JAVA }
-    case "javascript" | "JAVASCRIPT" | "js" | "JS" -> ParsedArgs { JAVASCRIPT }
-    case "python" | "PYTHON" | "py" | "PY" -> ParsedArgs { PYTHON }
+    case "java" | "JAVA" -> ParsedArgs { "java" }
+    case "javascript" | "JAVASCRIPT" | "js" | "JS" -> ParsedArgs { "javascript" }
+    case "python" | "PYTHON" | "py" | "PY" -> ParsedArgs { "python" }
     case _ -> UsageError { message: "Unknown output type `" + value + "`. Use java, python, py, javascript, or js." }
 
 private fun parse_log_level(value: String): CliArgs[LogLevel] =
     match value with
-    case "DEBUG" | "debug" -> ParsedArgs { DEBUG }
-    case "INFO" | "info" -> ParsedArgs { INFO }
-    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN }
-    case "ERROR" | "error" -> ParsedArgs { ERROR }
+    case "DEBUG" | "debug" -> ParsedArgs { DEBUG {} }
+    case "INFO" | "info" -> ParsedArgs { INFO {} }
+    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN {} }
+    case "ERROR" | "error" -> ParsedArgs { ERROR {} }
     case _ -> UsageError { message: "Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR." }
 
 private fun print_version(): Effect[/capy/lang/Program] =
@@ -560,7 +559,7 @@ private fun validate_output_directory(path: Path, raw_path: String): Effect[Resu
         )
     )
 
-fun compile_source_directory(inputPath: Path, rawInput: String, configuration: CompileConfiguration): Effect[Either[CompiledProgram, List[CompilerError]]] =
+private fun compile_source_directory(inputPath: Path, rawInput: String, configuration: CompileConfiguration): Effect[Either[CompiledProgram, List[CompilerError]]] =
     validate_input_directory(inputPath, rawInput).flat_map(inputResult =>
         match inputResult with
         case Error { message } -> pure(Right { [CompilerError {
@@ -1147,10 +1146,11 @@ private fun add_modules_to_libraries(libraries: Set[CompiledModule], modules: Li
     case None -> libraries
     case Some { module } -> add_modules_to_libraries(libraries + module, modules[1:])
 
-private fun test_generation_program(outputType: OutputType, mainProgram: CompiledProgram, testProgram: CompiledProgram): CompiledProgram =
+private fun test_generation_program(outputType: String, mainProgram: CompiledProgram, testProgram: CompiledProgram): CompiledProgram =
     match outputType with
-    case JAVASCRIPT | PYTHON -> merge_programs(mainProgram, testProgram)
-    case JAVA -> testProgram
+    case "javascript" | "python" -> merge_programs(mainProgram, testProgram)
+    case "java" -> testProgram
+    case _ -> testProgram
 
 private fun merge_programs(first: CompiledProgram, second: CompiledProgram): CompiledProgram =
     CompiledProgram {
@@ -1204,14 +1204,11 @@ private fun build_raw_module(relative_path: Path, source: String): Result[RawMod
     match last_segment(relative_path.normalize().segments) with
     case None -> Error { message: "Unable to infer module name for source path: " + cli_path_to_string(relative_path) }
     case Some { file_name } ->
-        match source_kind(file_name) with
-        case None -> Error { message: "Unsupported source file extension: " + file_name }
-        case Some { kind } -> Success { RawModule {
-            name: strip_source_extension(file_name),
-            path: module_path(relative_path),
-            input: source,
-            sourceKind: kind
-        }}
+        if file_name.end_with(functional_extension())
+        then Success { functional_raw_module(strip_source_extension(file_name), module_path(relative_path), source) }
+        else if file_name.end_with(object_oriented_extension())
+        then Success { object_oriented_raw_module(strip_source_extension(file_name), module_path(relative_path), source) }
+        else Error { message: "Unsupported source file extension: " + file_name }
 
 private fun list_source_files(path: Path): Effect[Result[List[Path]]] =
     list_entries(path).flat_map(entries_result =>
@@ -1254,16 +1251,7 @@ private fun source_file(path: Path): bool =
     match last_segment(path.normalize().segments) with
     case None -> false
     case Some { file_name } ->
-        match source_kind(file_name) with
-        case None -> false
-        case Some _ -> true
-
-private fun source_kind(file_name: String): Option[SourceKind] =
-    if file_name.end_with(functional_extension())
-    then Some { FUNCTIONAL }
-    else if file_name.end_with(object_oriented_extension())
-    then Some { OBJECT_ORIENTED }
-    else None {}
+        file_name.end_with(functional_extension()) | file_name.end_with(object_oriented_extension())
 
 private fun strip_source_extension(file_name: String): String =
     if file_name.end_with(functional_extension())
@@ -1324,12 +1312,13 @@ private fun cli_path_to_string(path: Path): String =
     case ABSOLUTE -> "/" + body
     case HOME -> if body.is_empty() then "~" else "~/" + body
 
-fun write_compilation_output(output_dir: Path, program: CompiledProgram): Effect[Result[String]] =
+private fun write_compilation_output(output_dir: Path, program: CompiledProgram): Effect[Result[String]] =
     create_directories(output_dir).flat_map(directory_result =>
         match directory_result with
         case Error e -> pure(e)
         case Success _ ->
-            write_json_file(output_dir / "program.json", program).flat_map(program_result =>
+            let program_data: data = program
+            write_json_file(output_dir / "program.json", program_data).flat_map(program_result =>
                 match program_result with
                 case Error e -> pure(e)
                 case Success _ -> write_linked_modules(output_dir, program.modules)
@@ -1348,10 +1337,11 @@ private fun write_linked_modules(output_dir: Path, modules: List[CompiledModule]
 
 private fun write_linked_module(output_dir: Path, module: CompiledModule): Effect[Result[String]] =
     let module_file = linked_module_file(output_dir, module)
+    let module_data: data = module
     create_parent_directories(module_file).flat_map(parent_result =>
         match parent_result with
         case Error e -> pure(e)
-        case Success _ -> write_json_file(module_file, module)
+        case Success _ -> write_json_file(module_file, module_data)
     )
 
 private fun linked_module_file(output_dir: Path, module: CompiledModule): Path =
@@ -1374,7 +1364,7 @@ private fun write_json_file(path: Path, value: data): Effect[Result[String]] =
 private fun print_compiler_errors(errors: List[CompilerError]): Effect[String] =
     println_error(compiler_errors_text(errors))
 
-fun compiler_errors_text(errors: List[CompilerError]): String =
+private fun compiler_errors_text(errors: List[CompilerError]): String =
     "Compilation failed with " + errors.size().value + " error(s):"
     + (errors |> "", (acc, error) => acc + "\n" + compiler_error_text(error))
 
@@ -1413,7 +1403,7 @@ fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
             )
     )
 
-fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
+private fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
     let programFile = inputDir / "program.json"
     read_text(programFile).map(readResult =>
         match readResult with
@@ -1421,7 +1411,7 @@ fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
         case Success _ -> Error { message: "`capy generate` uses the Java facade for linked program deserialization." }
     )
 
-fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
+private fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
     write_generated_modules(outputDir, program.modules)
 
 private fun write_generated_modules(outputDir: Path, modules: List[GeneratedModule]): Effect[Result[String]] =
@@ -1585,7 +1575,8 @@ private fun cli_list_regular_files_from_entries(entries: List[Path]): Effect[Res
         )
 
 private fun package_files_from_program(program: CompiledProgram): Result[List[PackageFile]] =
-    match json_package_file("program.json", program) with
+    let program_data: data = program
+    match json_package_file("program.json", program_data) with
     case Error e -> e
     case Success { programFile } ->
         match package_files_from_modules(program.modules) with
@@ -1596,7 +1587,8 @@ private fun package_files_from_modules(modules: List[CompiledModule]): Result[Li
     match modules[0] with
     case None -> Success { [] }
     case Some { module } ->
-        match json_package_file(cli_path_to_string(linked_module_file(from_string(""), module)), module) with
+        let module_data: data = module
+        match json_package_file(cli_path_to_string(linked_module_file(from_string(""), module)), module_data) with
         case Error e -> e
         case Success { moduleFile } ->
             match package_files_from_modules(modules[1:]) with

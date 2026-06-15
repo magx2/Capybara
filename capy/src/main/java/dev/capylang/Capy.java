@@ -1,6 +1,7 @@
 package dev.capylang;
 
 import capy.lang.Either;
+import capy.lang.Effect;
 import capy.lang.Program;
 import dev.capylang.compiler.CompileConfiguration;
 import dev.capylang.compiler.CompiledModule;
@@ -17,6 +18,7 @@ import dev.capylang.generator.Generator;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -67,7 +69,7 @@ public final class Capy {
     ) {
         try {
             var program = readLinkedProgram(linkedInputDir, true);
-            writeGeneratedProgram(generatedOutputDir, Generator.generate(program, outputType));
+            writeGeneratedProgram(generatedOutputDir, Generator.generate(program, generatorOutputType(outputType)));
             return EXIT_SUCCESS;
         } catch (RuntimeException | IOException exception) {
             errors.println(rootCauseMessage(exception));
@@ -155,7 +157,7 @@ public final class Capy {
             if (linkedOutputPath != null) {
                 writeCompilationOutput(linkedOutputPath, compilation, compilerVersion);
             }
-            writeGeneratedProgram(generatedOutputPath, Generator.generate(compilation.program(), outputType));
+            writeGeneratedProgram(generatedOutputPath, Generator.generate(compilation.program(), generatorOutputType(outputType)));
 
             if (testInputPath != null && testGeneratedOutputPath != null) {
                 var testCompilation = compileSources(
@@ -169,7 +171,7 @@ public final class Capy {
                     return EXIT_COMPILATION_ERROR;
                 }
                 var testProgram = testGenerationProgram(outputType, compilation.program(), testCompilation.program());
-                writeGeneratedProgram(testGeneratedOutputPath, Generator.generate(testProgram, outputType));
+                writeGeneratedProgram(testGeneratedOutputPath, Generator.generate(testProgram, generatorOutputType(outputType)));
             }
             return EXIT_SUCCESS;
         } catch (RuntimeException | IOException exception) {
@@ -204,21 +206,58 @@ public final class Capy {
                 libraries == null ? Set.of() : libraries,
                 nativeProviders == null ? CompiledProgramModule.emptyNativeProviderManifest() : nativeProviders
         );
-        var compilation = dev.capylang.cli.Capy.compileSourceDirectory(
-                PathUtil.fromJavaPath(inputPath),
-                inputPath.toString(),
-                configuration
-        ).unsafeRun();
+        var compilation = cliCompileSourceDirectory(inputPath, configuration).unsafeRun();
         if (compilation instanceof Either.Left<?, ?> left) {
             return new CompilationArtifacts((CompiledProgram) left.value());
         }
         if (compilation instanceof Either.Right<?, ?> right) {
             @SuppressWarnings("unchecked")
             var compilerErrors = (List<CompilerError>) right.value();
-            errors.println(dev.capylang.cli.Capy.compilerErrorsText(compilerErrors));
+            errors.println(cliCompilerErrorsText(compilerErrors));
             return null;
         }
         throw new IllegalStateException("Unexpected compile result: " + compilation);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Effect<Either<CompiledProgram, List<CompilerError>>> cliCompileSourceDirectory(
+            Path inputPath,
+            CompileConfiguration configuration
+    ) {
+        return (Effect<Either<CompiledProgram, List<CompilerError>>>) invokeCliHelper(
+                "compileSourceDirectory",
+                new Class<?>[] {capy.io.Path.class, String.class, CompileConfiguration.class},
+                PathUtil.fromJavaPath(inputPath),
+                inputPath.toString(),
+                configuration
+        );
+    }
+
+    private static String cliCompilerErrorsText(List<CompilerError> compilerErrors) {
+        return (String) invokeCliHelper(
+                "compilerErrorsText",
+                new Class<?>[] {List.class},
+                compilerErrors
+        );
+    }
+
+    private static Object invokeCliHelper(String methodName, Class<?>[] parameterTypes, Object... arguments) {
+        try {
+            var method = dev.capylang.cli.Capy.class.getDeclaredMethod(methodName, parameterTypes);
+            method.setAccessible(true);
+            return method.invoke(null, arguments);
+        } catch (InvocationTargetException exception) {
+            var cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException("Generated Capy helper failed: " + methodName, cause);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Unable to invoke generated Capy helper: " + methodName, exception);
+        }
     }
 
     static void writeCompilationOutput(Path outputDir, CompilationArtifacts compilation, String compilerVersion) throws IOException {
@@ -235,7 +274,7 @@ public final class Capy {
             CompilationArtifacts compilation,
             boolean includeJavaLibResources
     ) throws IOException {
-        writeGeneratedProgram(generatedOutputDir, Generator.generate(compilation.program(), outputType));
+        writeGeneratedProgram(generatedOutputDir, Generator.generate(compilation.program(), generatorOutputType(outputType)));
     }
 
     static Comparator<CompiledModule> compiledModuleComparator() {
@@ -351,6 +390,14 @@ public final class Capy {
             case "PYTHON", "PY" -> OutputType.PYTHON;
             case "JAVASCRIPT", "JS" -> OutputType.JAVASCRIPT;
             default -> throw new IllegalArgumentException("Unknown output type `" + value + "`.");
+        };
+    }
+
+    private static String generatorOutputType(OutputType outputType) {
+        return switch (outputType) {
+            case JAVA -> "java";
+            case PYTHON -> "python";
+            case JAVASCRIPT -> "javascript";
         };
     }
 
