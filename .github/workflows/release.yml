@@ -399,9 +399,9 @@ jobs:
 
           REMOTE_BUMP_SHA="$(git ls-remote --heads origin "${BUMP_BRANCH}" | awk '{ print $1 }')"
           if [[ -n "${REMOTE_BUMP_SHA}" ]]; then
-            git push --force-with-lease="refs/heads/${BUMP_BRANCH}:${REMOTE_BUMP_SHA}" origin "HEAD:${BUMP_BRANCH}"
+            git push --force-with-lease="refs/heads/${BUMP_BRANCH}:${REMOTE_BUMP_SHA}" origin "HEAD:refs/heads/${BUMP_BRANCH}"
           else
-            git push origin "HEAD:${BUMP_BRANCH}"
+            git push origin "HEAD:refs/heads/${BUMP_BRANCH}"
           fi
 
           PR_NUMBER="$(
