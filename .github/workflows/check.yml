@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   build-check:
-    if: ${{ !startsWith(github.ref_name, 'merge-back/') && !startsWith(github.head_ref || '', 'merge-back/') }}
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref_name, 'merge-back/') }}
     runs-on: ubuntu-latest
 
     steps:
