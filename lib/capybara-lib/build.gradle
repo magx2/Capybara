@@ -134,8 +134,8 @@ class CapyRuntimeBridge implements Closeable {
         def runtimeUrls = runtimeClasspathFiles.collect { it.toURI().toURL() } as URL[]
         classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
 
-        def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
-        readLinkedProgramMethod = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
+        def capyClass = Class.forName('dev.capylang.CapyRuntime', true, classLoader)
+        readLinkedProgramMethod = capyClass.getMethod('readLinkedProgram', Path, Boolean.TYPE)
         readLinkedProgramMethod.accessible = true
         compileMethod = capyClass.getMethod(
                 'compile',

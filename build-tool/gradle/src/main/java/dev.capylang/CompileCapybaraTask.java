@@ -152,16 +152,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             TreeSet<CompiledModule> libraries,
             PrintStream errors
     ) throws IOException {
-        var compilation = CapybaraTaskSupport.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
+        var compilation = CapyRuntime.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
         if (compilation == null) {
             return 100;
         }
 
         if (output != null) {
-            CapybaraTaskSupport.writeCompilationOutput(output, compilation, getCompilerVersion().get());
+            CapyRuntime.writeCompilationOutput(output, compilation, getCompilerVersion().get());
         }
         if (generatedOutput != null) {
-            CapybaraTaskSupport.generateCompiledProgram(
+            CapyRuntime.generateCompiledProgram(
                     OutputType.JAVA,
                     generatedOutput,
                     compilation,
@@ -169,16 +169,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             );
         }
         if (testInput != null && generatedTestOutput != null) {
-            var testCompilation = CapybaraTaskSupport.compileSources(
+            var testCompilation = CapyRuntime.compileSources(
                     testInput,
-                    CapybaraTaskSupport.mergeLibraries(libraries, compilation),
+                    CapyRuntime.mergeLibraries(libraries, compilation),
                     true,
                     errors
             );
             if (testCompilation == null) {
                 return 100;
             }
-            CapybaraTaskSupport.generateCompiledProgram(
+            CapyRuntime.generateCompiledProgram(
                     OutputType.JAVA,
                     generatedTestOutput,
                     testCompilation,
@@ -189,12 +189,12 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     }
 
     private TreeSet<CompiledModule> readLibraryModules(Collection<Path> directories) throws IOException {
-        var modules = new TreeSet<CompiledModule>(CapybaraTaskSupport.compiledModuleComparator());
+        var modules = new TreeSet<CompiledModule>(CapyRuntime.compiledModuleComparator());
         for (var directory : directories) {
             if (Files.notExists(directory) || !Files.isDirectory(directory)) {
                 continue;
             }
-            modules.addAll(CapybaraTaskSupport.readLinkedProgram(directory, false).modules());
+            modules.addAll(CapyRuntime.readLinkedProgram(directory, false).modules());
         }
         return modules;
     }
