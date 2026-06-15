@@ -107,11 +107,11 @@ fun compile_options(input: String, output: String, compile_tests: bool): Compile
         libs: None {},
         native_wiring: None {},
         compile_tests: compile_tests,
-        log_level: WARN
+        log_level: WARN {}
     }
 
 fun compile_generate_options(
-    output_type: OutputType,
+    output_type: String,
     input: String,
     output: String,
     linked_output: Option[String],
@@ -131,7 +131,7 @@ fun compile_generate_options(
         native_wiring: None {},
         compile_tests: compile_tests,
         include_java_lib_resources: include_java_lib_resources,
-        log_level: WARN
+        log_level: WARN {}
     }
 
 data PackageOptions {
