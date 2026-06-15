@@ -152,16 +152,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             TreeSet<CompiledModule> libraries,
             PrintStream errors
     ) throws IOException {
-        var compilation = Capy.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
+        var compilation = CapybaraTaskSupport.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
         if (compilation == null) {
             return 100;
         }
 
         if (output != null) {
-            Capy.writeCompilationOutput(output, compilation, getCompilerVersion().get());
+            CapybaraTaskSupport.writeCompilationOutput(output, compilation, getCompilerVersion().get());
         }
         if (generatedOutput != null) {
-            Capy.generateCompiledProgram(
+            CapybaraTaskSupport.generateCompiledProgram(
                     OutputType.JAVA,
                     generatedOutput,
                     compilation,
@@ -169,11 +169,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             );
         }
         if (testInput != null && generatedTestOutput != null) {
-            var testCompilation = Capy.compileSources(testInput, mergeLibraries(libraries, compilation), true, errors);
+            var testCompilation = CapybaraTaskSupport.compileSources(
+                    testInput,
+                    CapybaraTaskSupport.mergeLibraries(libraries, compilation),
+                    true,
+                    errors
+            );
             if (testCompilation == null) {
                 return 100;
             }
-            Capy.generateCompiledProgram(
+            CapybaraTaskSupport.generateCompiledProgram(
                     OutputType.JAVA,
                     generatedTestOutput,
                     testCompilation,
@@ -183,32 +188,15 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         return 0;
     }
 
-    private TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, Capy.CompilationArtifacts compilation) {
-        var mergedLibraries = new TreeSet<>(compiledModuleComparator());
-        mergedLibraries.addAll(libraries);
-        mergedLibraries.addAll(compilation.program().modules());
-        return mergedLibraries;
-    }
-
     private TreeSet<CompiledModule> readLibraryModules(Collection<Path> directories) throws IOException {
-        var modules = new TreeSet<CompiledModule>(compiledModuleComparator());
+        var modules = new TreeSet<CompiledModule>(CapybaraTaskSupport.compiledModuleComparator());
         for (var directory : directories) {
             if (Files.notExists(directory) || !Files.isDirectory(directory)) {
                 continue;
             }
-            modules.addAll(Capy.readLinkedProgram(directory, false).modules());
+            modules.addAll(CapybaraTaskSupport.readLinkedProgram(directory, false).modules());
         }
         return modules;
-    }
-
-    private static Comparator<CompiledModule> compiledModuleComparator() {
-        return Comparator
-                .comparing(CompileCapybaraTask::compiledModulePath)
-                .thenComparing(CompiledModule::name);
-    }
-
-    private static String compiledModulePath(CompiledModule module) {
-        return module.path().isBlank() ? module.name() : module.path() + "/" + module.name();
     }
 
     private static void clearDirectory(Path directory) throws IOException {

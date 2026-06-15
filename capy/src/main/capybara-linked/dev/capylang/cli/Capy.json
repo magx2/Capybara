@@ -1609,50 +1609,7 @@
     },
     "parameters" : [ "java.util.ImmutableCollections$ListN", [ {
       "name" : "output_type",
-      "type" : {
-        "@class" : "dev.capylang.compiler.CompiledDataParentType",
-        "name" : "OutputType",
-        "fields" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-        "subTypes" : [ "java.util.ImmutableCollections$ListN", [ {
-          "name" : "JAVA",
-          "fields" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "typeParameters" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "extendedTypes" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "comments" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "visibility" : null,
-          "singleton" : true,
-          "nativeType" : false,
-          "enumValue" : true,
-          "annotations" : [ "java.util.ImmutableCollections$ListN", [ ] ]
-        }, {
-          "name" : "JAVASCRIPT",
-          "fields" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "typeParameters" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "extendedTypes" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "comments" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "visibility" : null,
-          "singleton" : true,
-          "nativeType" : false,
-          "enumValue" : true,
-          "annotations" : [ "java.util.ImmutableCollections$ListN", [ ] ]
-        }, {
-          "name" : "PYTHON",
-          "fields" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "typeParameters" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "extendedTypes" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "comments" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-          "visibility" : null,
-          "singleton" : true,
-          "nativeType" : false,
-          "enumValue" : true,
-          "annotations" : [ "java.util.ImmutableCollections$ListN", [ ] ]
-        } ] ],
-        "typeParameters" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-        "comments" : [ "java.util.ImmutableCollections$ListN", [ ] ],
-        "visibility" : null,
-        "enumType" : true,
-        "annotations" : [ "java.util.ImmutableCollections$ListN", [ ] ]
-      }
+      "type" : [ "dev.capylang.compiler.PrimitiveLinkedType", "STRING" ]
     }, {
       "name" : "input",
       "type" : [ "dev.capylang.compiler.PrimitiveLinkedType", "STRING" ]

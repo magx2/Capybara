@@ -64,7 +64,7 @@ fun compile_generate(
         run_program(
             /dev/capylang/cli/Capy.run_compile_generate(
                 /dev/capylang/cli/Capy.compile_generate_options(
-                    output_type,
+                    output_type_name(output_type),
                     path_string(input_path),
                     path_string(generated_output_path),
                     optional_path(linked_output_path),
@@ -104,3 +104,9 @@ fun compile_generate(
         compiler_version,
         errors
     )
+
+private fun output_type_name(output_type: OutputType): String =
+    match output_type with
+    case JAVA -> "java"
+    case JAVASCRIPT -> "javascript"
+    case PYTHON -> "python"
