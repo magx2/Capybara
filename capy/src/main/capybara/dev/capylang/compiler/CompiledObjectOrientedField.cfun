@@ -1,3 +1,4 @@
+from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledExpression import { CompiledExpression }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
@@ -5,6 +6,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 data CompiledObjectOrientedField {
     name: String,
     visibility: String,
+    documentation: List[String],
     typeReference: CompiledTypeReference,
     value: CompiledExpression,
     hasValue: bool,

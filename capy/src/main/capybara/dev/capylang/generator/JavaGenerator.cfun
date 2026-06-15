@@ -11,6 +11,7 @@ from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledN
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
 from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
 from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
@@ -435,18 +436,18 @@ private fun java_object_field_assignments(fields: List[CompiledObjectOrientedFie
         else "")
             + java_object_field_assignments(fields[1:], env, module, allModules)
 
-private fun java_object_init_statements(initBlocks: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_object_init_statements(initBlocks: List[CompiledObjectOrientedInitBlock], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match initBlocks[0] with
     case None -> ""
     case Some { initBlock } ->
         java_object_init_statement(initBlock, env, module, allModules)
             + java_object_init_statements(initBlocks[1:], env, module, allModules)
 
-private fun java_object_init_statement(initBlock: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let type = expression_type(initBlock, env, module, allModules)
+private fun java_object_init_statement(initBlock: CompiledObjectOrientedInitBlock, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let type = expression_type(initBlock.body, env, module, allModules)
     if type.name == "Effect"
-    then "            " + expression_code(initBlock, env, type, module, allModules) + ".unsafeRun();" + newline()
-    else "            " + expression_code(initBlock, env, type, module, allModules) + ";" + newline()
+    then "            " + expression_code(initBlock.body, env, type, module, allModules) + ".unsafeRun();" + newline()
+    else "            " + expression_code(initBlock.body, env, type, module, allModules) + ";" + newline()
 
 private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
@@ -522,6 +523,7 @@ private fun compiled_object_interface(function: CompiledFunction, functions: Lis
     CompiledObjectOrientedInterface {
         name: interfaceName,
         visibility: schema_value(function),
+        documentation: function.documentation,
         kind: compiled_object_interface_kind(interfaceName, functions),
         parents: schema_type_references(schema_values("__capy_oo_interface_parent|" + interfaceName + "|", functions)),
         methods: compiled_object_interface_methods(interfaceName, functions),
@@ -553,6 +555,7 @@ private fun compiled_object_interface_method(function: CompiledFunction): Compil
     CompiledObjectOrientedMethod {
         name: compiled_object_interface_method_name(function.name),
         visibility: compiled_object_interface_method_visibility(function.visibility),
+        documentation: function.documentation,
         parameters: function.parameters,
         returnType: function.returnType,
         body: function.body,
@@ -590,6 +593,7 @@ private fun compiled_object_class(function: CompiledFunction, functions: List[Co
     CompiledObjectOrientedClass {
         name: className,
         visibility: schema_value(function),
+        documentation: function.documentation,
         open: compiled_object_class_open(className, functions),
         parameters: compiled_object_class_parameters(className, functions),
         parents: schema_type_references(schema_values("__capy_oo_parent|" + className + "|", functions)),
@@ -648,6 +652,7 @@ private fun compiled_object_field(className: String, function: CompiledFunction,
     CompiledObjectOrientedField {
         name: fieldName,
         visibility: object_field_schema_visibility(value),
+        documentation: function.documentation,
         typeReference: schema_type_reference(object_field_schema_type(value)),
         value: compiled_object_field_value(className, fieldName, functions, function.location),
         hasValue: object_field_schema_has_value(value),
@@ -696,12 +701,16 @@ private fun object_field_schema_second_separator(value: String): int =
 private fun object_field_schema_last_separator(value: String): int =
     last_index_of(value, "|", 0, -1)
 
-private fun compiled_object_init_blocks(className: String, functions: List[CompiledFunction]): List[CompiledExpression] =
+private fun compiled_object_init_blocks(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedInitBlock] =
     match functions[0] with
     case None -> []
     case Some { function } ->
         if compiled_object_init_function_for_class(function, className)
-        then [function.body] + compiled_object_init_blocks(className, functions[1:])
+        then [CompiledObjectOrientedInitBlock {
+            body: function.body,
+            documentation: function.documentation,
+            location: function.location
+        }] + compiled_object_init_blocks(className, functions[1:])
         else compiled_object_init_blocks(className, functions[1:])
 
 private fun compiled_object_init_function(function: CompiledFunction): bool =
@@ -743,6 +752,7 @@ private fun compiled_object_method(function: CompiledFunction): CompiledObjectOr
     CompiledObjectOrientedMethod {
         name: compiled_object_method_name(function.name),
         visibility: compiled_object_method_visibility(function.visibility),
+        documentation: function.documentation,
         parameters: function.parameters,
         returnType: function.returnType,
         body: function.body,
@@ -6543,6 +6553,7 @@ private fun stdlib_annotation_binding(name: String): /capy/lang/Option[Annotatio
         declaration: CompiledAnnotationDeclaration {
             name: "Deprecated",
             visibility: "public",
+            documentation: [],
             repeatable: false,
             targets: ["fun", "method", "const", "data", "union", "enum", "type", "deriver", "class", "interface", "trait", "field", "init"],
             fields: ["message|String|false|nothing:", "since|String|true|string:"],

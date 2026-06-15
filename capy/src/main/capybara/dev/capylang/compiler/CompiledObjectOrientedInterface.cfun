@@ -6,6 +6,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 data CompiledObjectOrientedInterface {
     name: String,
     visibility: String,
+    documentation: List[String],
     kind: String,
     parents: List[CompiledTypeReference],
     methods: List[CompiledObjectOrientedMethod],
