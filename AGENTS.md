@@ -2,8 +2,7 @@
 
 ## Project Structure & Module Organization
 This repository is a Gradle multi-project build (`settings.gradle`) with these main modules:
-- `compiler/`: Capybara parser, linker, and Java generator (`src/main/antlr/Functional.g4`, Java sources, unit tests).
-- `capy/`: CLI entrypoint (`dev.capylang.Capy`) and integration/e2e tests (`src/e2e-cfun` and `src/e2e-coo` source sets).
+- `capy/`: CLI entrypoint (`dev.capylang.Capy`), compiler/parser/generator sources (`src/main/antlr`, `src/main/java`), compiler tests, and integration/e2e tests (`src/e2e-cfun` and `src/e2e-coo` source sets).
 - `lib/java-lib/`: shared Java helpers.
 - `lib/capybara-lib/`: standard library written in Capybara (`src/main/capybara`) plus generated Java tests.
 - `Intellij/`: editor syntax bundle and related docs.
@@ -13,7 +12,7 @@ Do not edit generated outputs under `build/generated/...`; change source `.cfun`
 ## Build, Test, and Development Commands
 Use the wrapper from repository root:
 - `./gradlew clean test`: full build and test for all modules.
-- `./gradlew :compiler:test`: run compiler unit tests only.
+- `./gradlew :capy:test`: run CLI and compiler unit tests.
 - `./gradlew :capy:e2e-cfun`: run functional integration suite.
 - `./gradlew :capy:e2e-coo`: run object-oriented integration suite.
 - `./gradlew :capy:e2eTests`: run both integration suites.
@@ -26,12 +25,12 @@ Use the wrapper from repository root:
 - Use 4-space indentation and standard Java naming: `UpperCamelCase` for types, `lowerCamelCase` for methods/fields.
 - In `.cfun`, keep snake_case function names; Java generator maps exported names as needed.
 - Private Capybara functions start with `_` and should remain distinct in generated code.
-- Keep grammar changes in `compiler/src/main/antlr/Functional.g4` with matching parser/linker/generator updates.
+- Keep grammar changes in `capy/src/main/antlr/Functional.g4` with matching parser/linker/generator updates.
 
 ## Testing Guidelines
 - Frameworks: JUnit 5 + AssertJ.
 - Add/update tests with every behavior change:
-  - compiler behavior: `compiler/src/test/...`
+  - compiler behavior: `capy/src/test/...`
   - language/integration behavior: `capy/src/e2e-cfun/...` and/or `capy/src/e2e-coo/...`
 - Prefer focused test names (e.g., `reduceDict`, `should_dict_of_obj`).
 
@@ -57,4 +56,3 @@ Use the wrapper from repository root:
   - semantic issue -> linker/validator/tests
   - output issue -> generator/tests
 - Do not fix source problems by editing generated Java under `build/generated/...`.
-
