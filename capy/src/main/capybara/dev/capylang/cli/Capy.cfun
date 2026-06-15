@@ -560,7 +560,7 @@ private fun validate_output_directory(path: Path, raw_path: String): Effect[Resu
         )
     )
 
-private fun compile_source_directory(inputPath: Path, rawInput: String, configuration: CompileConfiguration): Effect[Either[CompiledProgram, List[CompilerError]]] =
+fun compile_source_directory(inputPath: Path, rawInput: String, configuration: CompileConfiguration): Effect[Either[CompiledProgram, List[CompilerError]]] =
     validate_input_directory(inputPath, rawInput).flat_map(inputResult =>
         match inputResult with
         case Error { message } -> pure(Right { [CompilerError {
@@ -617,19 +617,24 @@ private fun read_native_implementation_manifest_at(inputPath: Path): Effect[Nati
     )
 
 private fun read_native_java_implementation_manifest(inputPath: Path): Effect[NativeProviderManifest] =
-    read_native_java_implementation_root(inputPath / "native" / "java").flat_map(providers =>
-        if !providers.providers.is_empty()
-        then pure(providers)
-        else match inputPath.parent() with
-            case None -> pure(providers)
-            case Some { parent } ->
-                match last_segment(inputPath.normalize().segments) with
-                case Some { segment } ->
-                    if segment == "capybara"
-                    then read_native_java_implementation_root(parent / "native" / "java")
-                    else pure(providers)
-                case None -> pure(providers)
+    read_native_java_implementation_root(inputPath / "native" / "java").flat_map(inRootProviders =>
+        read_native_java_implementation_manifest_near_capybara_root(inputPath).map(nearRootProviders =>
+            NativeProviderManifest {
+                providers: inRootProviders.providers + nearRootProviders.providers
+            }
+        )
     )
+
+private fun read_native_java_implementation_manifest_near_capybara_root(inputPath: Path): Effect[NativeProviderManifest] =
+    match inputPath.parent() with
+    case None -> pure(empty_native_provider_manifest())
+    case Some { parent } ->
+        match last_segment(inputPath.normalize().segments) with
+        case Some { segment } ->
+            if segment == "capybara"
+            then read_native_java_implementation_root(parent / "native" / "java")
+            else pure(empty_native_provider_manifest())
+        case None -> pure(empty_native_provider_manifest())
 
 private fun read_native_java_implementation_root(nativeJavaPath: Path): Effect[NativeProviderManifest] =
     exists(nativeJavaPath).flat_map(present =>
@@ -638,7 +643,7 @@ private fun read_native_java_implementation_root(nativeJavaPath: Path): Effect[N
         else is_directory(nativeJavaPath).flat_map(directory =>
             if !directory
             then pure(empty_native_provider_manifest())
-            else list_regular_files(nativeJavaPath).flat_map(filesResult =>
+            else cli_list_regular_files(nativeJavaPath).flat_map(filesResult =>
                 match filesResult with
                 case Error _ -> pure(empty_native_provider_manifest())
                 case Success { files } -> read_native_java_provider_bindings(java_source_files(files))
@@ -668,7 +673,7 @@ private fun read_native_python_implementation_root(nativePythonPath: Path): Effe
         else is_directory(nativePythonPath).flat_map(directory =>
             if !directory
             then pure(empty_native_provider_manifest())
-            else list_regular_files(nativePythonPath).flat_map(filesResult =>
+            else cli_list_regular_files(nativePythonPath).flat_map(filesResult =>
                 match filesResult with
                 case Error _ -> pure(empty_native_provider_manifest())
                 case Success { files } -> read_native_python_provider_bindings(nativePythonPath, python_source_files(files))
@@ -688,7 +693,7 @@ private fun read_native_javascript_implementation_root(root: Path): Effect[Nativ
         else is_directory(root).flat_map(directory =>
             if !directory
             then pure(empty_native_provider_manifest())
-            else list_regular_files(root).flat_map(filesResult =>
+            else cli_list_regular_files(root).flat_map(filesResult =>
                 match filesResult with
                 case Error _ -> pure(empty_native_provider_manifest())
                 case Success { files } -> read_native_javascript_provider_bindings(root, javascript_source_files(files))
@@ -700,7 +705,7 @@ private fun java_source_files(files: List[Path]): List[Path] =
     match files[0] with
     case None -> []
     case Some { file } ->
-        if path_to_string(file).end_with(".java")
+        if cli_path_to_string(file).end_with(".java")
         then [file] + java_source_files(files[1:])
         else java_source_files(files[1:])
 
@@ -708,7 +713,7 @@ private fun python_source_files(files: List[Path]): List[Path] =
     match files[0] with
     case None -> []
     case Some { file } ->
-        if path_to_string(file).end_with(".py")
+        if cli_path_to_string(file).end_with(".py")
         then [file] + python_source_files(files[1:])
         else python_source_files(files[1:])
 
@@ -716,7 +721,7 @@ private fun javascript_source_files(files: List[Path]): List[Path] =
     match files[0] with
     case None -> []
     case Some { file } ->
-        if path_to_string(file).end_with(".js")
+        if cli_path_to_string(file).end_with(".js")
         then [file] + javascript_source_files(files[1:])
         else javascript_source_files(files[1:])
 
@@ -745,7 +750,7 @@ private fun read_native_python_provider_bindings(root: Path, files: List[Path]):
             case Success { content } ->
                 read_native_python_provider_bindings(root, files[1:]).map(rest =>
                     NativeProviderManifest {
-                        providers: native_python_provider_bindings(content, native_python_module_name(relative_to(root, file))) + rest.providers
+                        providers: native_python_provider_bindings(content, native_python_module_name(cli_relative_to(root, file))) + rest.providers
                     }
                 )
         )
@@ -762,8 +767,8 @@ private fun read_native_javascript_provider_bindings(root: Path, files: List[Pat
                     NativeProviderManifest {
                         providers: native_javascript_provider_bindings(
                             content,
-                            native_javascript_module_name(relative_to(root, file)),
-                            path_to_string(file.normalize())
+                            native_javascript_module_name(cli_relative_to(root, file)),
+                            cli_path_to_string(file.normalize())
                         ) + rest.providers
                     }
                 )
@@ -862,7 +867,7 @@ private fun native_java_qualifier(source: String): String =
     else ""
 
 private fun native_python_module_name(relativePath: Path): String =
-    let path = path_to_string(relativePath.normalize())
+    let path = cli_path_to_string(relativePath.normalize())
     let withoutExtension =
         if path.end_with(".py")
         then path[0, path.size().value - ".py".size().value]
@@ -904,7 +909,7 @@ private fun native_python_qualifier(source: String): String =
     else ""
 
 private fun native_javascript_module_name(relativePath: Path): String =
-    let path = path_to_string(relativePath.normalize())
+    let path = cli_path_to_string(relativePath.normalize())
     let withoutExtension =
         if path.end_with(".js")
         then path[0, path.size().value - ".js".size().value]
@@ -1185,7 +1190,7 @@ private fun read_source_modules(root: Path, files: List[Path]): Effect[Result[Li
             match read_result with
             case Error e -> pure(e)
             case Success { source } ->
-                match build_raw_module(relative_to(root, file), source) with
+                match build_raw_module(cli_relative_to(root, file), source) with
                 case Error e -> pure(e)
                 case Success { raw_module } ->
                     read_source_modules(root, files[1:]).map(rest_result =>
@@ -1197,7 +1202,7 @@ private fun read_source_modules(root: Path, files: List[Path]): Effect[Result[Li
 
 private fun build_raw_module(relative_path: Path, source: String): Result[RawModule] =
     match last_segment(relative_path.normalize().segments) with
-    case None -> Error { message: "Unable to infer module name for source path: " + path_to_string(relative_path) }
+    case None -> Error { message: "Unable to infer module name for source path: " + cli_path_to_string(relative_path) }
     case Some { file_name } ->
         match source_kind(file_name) with
         case None -> Error { message: "Unsupported source file extension: " + file_name }
@@ -1274,7 +1279,7 @@ private fun object_oriented_extension(): String = ".coo"
 private fun module_path(relative_path: Path): String =
     match relative_path.parent() with
     case None -> ""
-    case Some { parent } -> path_segments_to_string(parent.normalize().segments)
+    case Some { parent } -> cli_path_segments_to_string(parent.normalize().segments)
 
 private fun last_segment(segments: List[String]): Option[String] =
     match segments[0] with
@@ -1284,41 +1289,42 @@ private fun last_segment(segments: List[String]): Option[String] =
         case None -> Some { segment }
         case Some _ -> last_segment(segments[1:])
 
-private fun relative_to(base: Path, path: Path): Path =
-    from_string(path_segments_to_string(drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
+private fun cli_relative_to(base: Path, path: Path): Path =
+    from_string(cli_path_segments_to_string(cli_drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
 
-@Recursive
-private fun drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
-    match prefix[0] with
-    case None -> segments
-    case Some { expected } ->
-        match segments[0] with
-        case None -> []
-        case Some { actual } ->
-            if expected == actual
-            then drop_prefix_segments(prefix[1:], segments[1:])
-            else segments
-
-private fun path_segments_to_string(segments: List[String]): String =
+private fun cli_drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
     @Recursive
-    fun path_segments_to_string(segments: List[String], acc: String): String =
+    fun drop(prefix: List[String], segments: List[String]): List[String] =
+        if prefix.is_empty()
+        then segments
+        else if segments.is_empty()
+        then []
+        else if prefix[0] == segments[0]
+        then drop(prefix[1:], segments[1:])
+        else segments
+    ---
+    drop(prefix, segments)
+
+private fun cli_path_segments_to_string(segments: List[String]): String =
+    @Recursive
+    fun cli_path_segments_to_string(segments: List[String], acc: String): String =
         match segments[0] with
         case None -> acc
         case Some { segment } ->
             let next = if acc.is_empty() then segment else acc + "/" + segment
-            path_segments_to_string(segments[1:], next)
+            cli_path_segments_to_string(segments[1:], next)
     ---
-    path_segments_to_string(segments, "")
+    cli_path_segments_to_string(segments, "")
 
-private fun path_to_string(path: Path): String =
+private fun cli_path_to_string(path: Path): String =
     let normalized = path.normalize()
-    let body = path_segments_to_string(normalized.segments)
+    let body = cli_path_segments_to_string(normalized.segments)
     match normalized.root with
     case RELATIVE -> if body.is_empty() then "." else body
     case ABSOLUTE -> "/" + body
     case HOME -> if body.is_empty() then "~" else "~/" + body
 
-private fun write_compilation_output(output_dir: Path, program: CompiledProgram): Effect[Result[String]] =
+fun write_compilation_output(output_dir: Path, program: CompiledProgram): Effect[Result[String]] =
     create_directories(output_dir).flat_map(directory_result =>
         match directory_result with
         case Error e -> pure(e)
@@ -1362,13 +1368,13 @@ private fun create_parent_directories(path: Path): Effect[Result[Path]] =
 
 private fun write_json_file(path: Path, value: data): Effect[Result[String]] =
     match to_json(value) with
-    case Error { message } -> pure(Error { message: "Unable to serialize linked JSON for `" + path_to_string(path) + "`: " + message })
+    case Error { message } -> pure(Error { message: "Unable to serialize linked JSON for `" + cli_path_to_string(path) + "`: " + message })
     case Success { json } -> write_text(path, serialize(json))
 
 private fun print_compiler_errors(errors: List[CompilerError]): Effect[String] =
     println_error(compiler_errors_text(errors))
 
-private fun compiler_errors_text(errors: List[CompilerError]): String =
+fun compiler_errors_text(errors: List[CompilerError]): String =
     "Compilation failed with " + errors.size().value + " error(s):"
     + (errors |> "", (acc, error) => acc + "\n" + compiler_error_text(error))
 
@@ -1407,90 +1413,15 @@ fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
             )
     )
 
-private fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
+fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
     let programFile = inputDir / "program.json"
     read_text(programFile).map(readResult =>
         match readResult with
-        case Error { message } -> Error { message: "Unable to read linked program `" + path_to_string(programFile) + "`: " + message }
-        case Success { content } ->
-            match deserialize(content) with
-            case Error { message } -> Error { message: "Unable to parse linked program `" + path_to_string(programFile) + "`: " + message }
-            case Success { json } -> parse_linked_program(json)
+        case Error { message } -> Error { message: "Unable to read linked program `" + cli_path_to_string(programFile) + "`: " + message }
+        case Success _ -> Error { message: "`capy generate` uses the Java facade for linked program deserialization." }
     )
 
-private fun parse_linked_program(json: JsonObject): Result[CompiledProgram] =
-    match required_json_array(json, "modules") with
-    case Error e -> e
-    case Success { modulesJson } ->
-        match parse_linked_modules(modulesJson.value) with
-        case Error e -> e
-        case Success { modules } -> Success { CompiledProgram {
-            modules: modules,
-            objectOrientedModules: [],
-            nativeProviders: empty_native_provider_manifest(),
-            nativeProviderCatalog: empty_native_provider_catalog()
-        }}
-
-private fun parse_linked_modules(modules: List[Json]): Result[List[CompiledModule]] =
-    match modules[0] with
-    case None -> Success { [] }
-    case Some { json } ->
-        match parse_linked_module(json) with
-        case Error e -> e
-        case Success { module } ->
-            match parse_linked_modules(modules[1:]) with
-            case Error e -> e
-            case Success { rest } -> Success { [module] + rest }
-
-private fun parse_linked_module(json: Json): Result[CompiledModule] =
-    match json with
-    case JsonObject { moduleFields } -> {
-        match required_json_string(JsonObject { moduleFields }, "name") with
-        case Error { message } -> linked_module_object_error(message)
-        case Success { name } ->
-            match required_json_string(JsonObject { moduleFields }, "path") with
-            case Error { message } -> linked_module_object_error(message)
-            case Success { path } -> Success { CompiledModule {
-                name: name,
-                path: path,
-                types: {:},
-                visiblePrimitiveBackedTypes: {:},
-                functions: [],
-                imports: [],
-                derivers: {:},
-                annotations: {:},
-                staticImports: []
-            }}
-    }
-    case JsonArray _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonString _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonValueObject _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonNumberDouble _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonNumberLong _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonValueArray _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonBool _ -> linked_module_object_error("Linked program `modules` must contain objects.")
-    case JsonNull -> linked_module_object_error("Linked program `modules` must contain objects.")
-
-private fun linked_module_object_error(message: String): Result[CompiledModule] =
-    Error { message: message }
-
-private fun required_json_array(json: JsonObject, fieldName: String): Result[JsonArray] =
-    match json.get(fieldName) with
-    case None -> Error { message: "Linked program is missing required field `" + fieldName + "`." }
-    case Some { value } ->
-        match value with
-        case JsonArray { values } -> Success { JsonArray { values } }
-        case _ -> Error { message: "Linked program field `" + fieldName + "` must be an array." }
-
-private fun required_json_string(json: JsonObject, fieldName: String): Result[String] =
-    match json.get(fieldName) with
-    case None -> Error { message: "Linked module is missing required field `" + fieldName + "`." }
-    case Some { value } ->
-        match value with
-        case JsonString { text } -> Success { text }
-        case _ -> Error { message: "Linked module field `" + fieldName + "` must be a string." }
-
-private fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
+fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
     write_generated_modules(outputDir, program.modules)
 
 private fun write_generated_modules(outputDir: Path, modules: List[GeneratedModule]): Effect[Result[String]] =
@@ -1592,7 +1523,7 @@ private fun find_package_files(options: PackageOptions): Effect[Result[List[Pack
             )
 
 private fun read_package_files(root: Path, rawRoot: String): Effect[Result[List[PackageFile]]] =
-    list_regular_files(root).flat_map(filesResult =>
+    cli_list_regular_files(root).flat_map(filesResult =>
         match filesResult with
         case Error e -> pure(e)
         case Success { files } ->
@@ -1613,43 +1544,43 @@ private fun read_package_files(root: Path, files: List[Path]): Effect[Result[Lis
                     match restResult with
                     case Error e -> e
                     case Success { rest } -> Success { [PackageFile {
-                        path: path_to_string(relative_to(root, file)),
+                        path: cli_path_to_string(cli_relative_to(root, file)),
                         content: content
                     }] + rest }
                 )
         )
 
-private fun list_regular_files(path: Path): Effect[Result[List[Path]]] =
+private fun cli_list_regular_files(path: Path): Effect[Result[List[Path]]] =
     list_entries(path).flat_map(entriesResult =>
         match entriesResult with
         case Error e -> pure(e)
-        case Success { entries } -> list_regular_files_from_entries(entries)
+        case Success { entries } -> cli_list_regular_files_from_entries(entries)
     )
 
-private fun list_regular_files_from_entries(entries: List[Path]): Effect[Result[List[Path]]] =
+private fun cli_list_regular_files_from_entries(entries: List[Path]): Effect[Result[List[Path]]] =
     match entries[0] with
     case None -> pure(Success { [] })
     case Some { entry } ->
         is_file(entry).flat_map(file =>
             if file
-            then list_regular_files_from_entries(entries[1:]).map(restResult =>
+            then cli_list_regular_files_from_entries(entries[1:]).map(restResult =>
                 match restResult with
                 case Error e -> e
                 case Success { rest } -> Success { [entry] + rest }
             )
             else is_directory(entry).flat_map(directory =>
                 if directory
-                then list_regular_files(entry).flat_map(childrenResult =>
+                then cli_list_regular_files(entry).flat_map(childrenResult =>
                     match childrenResult with
                     case Error e -> pure(e)
                     case Success { children } ->
-                        list_regular_files_from_entries(entries[1:]).map(restResult =>
+                        cli_list_regular_files_from_entries(entries[1:]).map(restResult =>
                             match restResult with
                             case Error e -> e
                             case Success { rest } -> Success { children + rest }
                         )
                 )
-                else list_regular_files_from_entries(entries[1:])
+                else cli_list_regular_files_from_entries(entries[1:])
             )
         )
 
@@ -1665,7 +1596,7 @@ private fun package_files_from_modules(modules: List[CompiledModule]): Result[Li
     match modules[0] with
     case None -> Success { [] }
     case Some { module } ->
-        match json_package_file(path_to_string(linked_module_file(from_string(""), module)), module) with
+        match json_package_file(cli_path_to_string(linked_module_file(from_string(""), module)), module) with
         case Error e -> e
         case Success { moduleFile } ->
             match package_files_from_modules(modules[1:]) with

@@ -6,6 +6,7 @@ plugins {
 group = "dev.capylang"
 version = rootProject.version
 
+val capybaraVersion = providers.gradleProperty("capybaraVersion")
 val githubPackagesUser = providers.environmentVariable("GITHUB_ACTOR")
     .orElse(providers.gradleProperty("gpr.user"))
 val githubPackagesKey = providers.environmentVariable("GITHUB_TOKEN")
@@ -16,10 +17,21 @@ val githubPackagesRepository = providers.environmentVariable("GITHUB_REPOSITORY"
 
 repositories {
     mavenCentral()
+    ivy {
+        name = "CapybaraRelease"
+        url = uri("https://github.com/magx2/Capybara/releases/download/release/${capybaraVersion.get()}")
+        patternLayout {
+            artifact("[artifact]-[revision].[ext]")
+        }
+        metadataSources {
+            artifact()
+        }
+    }
 }
 
 dependencies {
     implementation(project(":capy"))
+    compileOnly("dev.capylang:capybara-lib:${capybaraVersion.get()}@jar")
     testImplementation(gradleTestKit())
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
