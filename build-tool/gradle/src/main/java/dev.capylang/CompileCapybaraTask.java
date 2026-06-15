@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -181,13 +182,14 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     }
 
     private TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, Capy.CompilationArtifacts compilation) {
-        var mergedLibraries = new TreeSet<>(libraries);
+        var mergedLibraries = new TreeSet<>(compiledModuleComparator());
+        mergedLibraries.addAll(libraries);
         mergedLibraries.addAll(compilation.program().modules());
         return mergedLibraries;
     }
 
     private TreeSet<CompiledModule> readLibraryModules(Collection<java.nio.file.Path> directories) throws IOException {
-        var modules = new TreeSet<CompiledModule>();
+        var modules = new TreeSet<CompiledModule>(compiledModuleComparator());
         for (var directory : directories) {
             if (Files.notExists(directory) || !Files.isDirectory(directory)) {
                 continue;
@@ -195,6 +197,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             modules.addAll(Capy.readLinkedProgram(directory, false).modules());
         }
         return modules;
+    }
+
+    private static Comparator<CompiledModule> compiledModuleComparator() {
+        return Comparator
+                .comparing(CompileCapybaraTask::compiledModulePath)
+                .thenComparing(CompiledModule::name);
+    }
+
+    private static String compiledModulePath(CompiledModule module) {
+        return module.path().isBlank() ? module.name() : module.path() + "/" + module.name();
     }
 
     @FunctionalInterface

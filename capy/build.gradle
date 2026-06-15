@@ -1,5 +1,6 @@
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Comparator
 import javax.inject.Inject
 import org.gradle.process.ExecOperations
 import org.gradle.api.tasks.Optional
@@ -97,7 +98,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                     PrintStream
             )
 
-            def libraries = new TreeSet()
+            def libraries = new TreeSet(compiledModuleComparator())
             additionalInputDirs.files.each { libraryDir ->
                 Path libraryPath = libraryDir.toPath()
                 if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
@@ -129,6 +130,20 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
             classLoader.close()
         }
     }
+}
+
+private static Comparator compiledModuleComparator() {
+    return { a, b ->
+        def left = compiledModulePath(a)
+        def right = compiledModulePath(b)
+        def compared = left <=> right
+        compared != 0 ? compared : (a.name() <=> b.name())
+    } as Comparator
+}
+
+private static String compiledModulePath(def module) {
+    def path = module.path()
+    return path == null || path.isBlank() ? module.name() : "${path}/${module.name()}"
 }
 
 abstract class CapybaraJavaScriptTestTask extends DefaultTask {
