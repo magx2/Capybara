@@ -147,6 +147,11 @@ jobs:
           github-token: ${{ github.token }}
           native-image-job-reports: "false"
 
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

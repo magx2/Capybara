@@ -132,6 +132,28 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     @Test
+    void shouldDispatchStringBackedCompareMethodsInJavaScriptAndPython() {
+        var program = compileProgram(List.of(new RawModule("Tokens", "/foo", """
+                type token -> String
+
+                fun token.compare(other: token): bool = this.value == other.value
+                fun tokens_match(left: token, right: token): bool = left.compare(right)
+                """)));
+
+        var js = generatedCode(new JavaScriptGenerator(), program, Path.of("foo", "Tokens.js"));
+        var python = generatedCode(new PythonGenerator(), program, Path.of("foo", "Tokens.py"));
+
+        assertThat(js)
+                .contains("function compare__name_compare__token__token(this_, other)")
+                .contains("return compare__name_compare__token__token(left, right);")
+                .doesNotContain("__module_capy_lang_String.compare(left, right)");
+        assertThat(python)
+                .contains("def compare__name_compare__token__token(this_, other):")
+                .contains("return compare__name_compare__token__token(left, right)")
+                .doesNotContain("capy_module_capy_lang_String.compare(left, right)");
+    }
+
+    @Test
     void shouldNotShadowPythonRuntimeWithPrimitiveBackedConstructorAliases() {
         var program = compileProgram(List.of(new RawModule("Numbers", "/foo", """
                 from /capy/lang/Result import { * }
