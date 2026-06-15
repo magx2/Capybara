@@ -607,6 +607,23 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should normalize escaped newlines in concatenated double quoted strings")
+    void parseEscapedNewlinesInConcatenatedDoubleQuotedStrings() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun joined(): String = "first\\n" + "second"
+                """));
+
+        var function = findFunction("joined", module.functional());
+
+        assertThat(function.expression()).isInstanceOfSatisfying(InfixExpression.class, expression -> {
+            assertThat(expression.left()).isInstanceOfSatisfying(StringValue.class, value ->
+                    assertThat(value.stringValue()).isEqualTo("\"first\\n\""));
+            assertThat(expression.right()).isInstanceOfSatisfying(StringValue.class, value ->
+                    assertThat(value.stringValue()).isEqualTo("\"second\""));
+        });
+    }
+
+    @Test
     @DisplayName("should parse native data declaration")
     void parseNativeDataDeclaration() {
         var module = parseSuccess(new RawModule("String", "/capy/lang", "data String { <native> }"));

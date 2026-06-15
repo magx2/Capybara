@@ -10,6 +10,10 @@ fun tests(): Effect[TestFile] =
         test("arithmetic functions evaluate basic integer operations", () => arithmetic_functions_evaluate_basic_integer_operations()),
         test("is_positive returns true only for positive integers", () => is_positive_returns_true_only_for_positive_integers()),
         test("greet prefixes the provided name", () => greet_prefixes_the_provided_name()),
+        test("escaped newline concatenation produces line breaks", () => escaped_newline_concatenation_produces_line_breaks()),
+        test("escaped newline interpolation produces line breaks", () => escaped_newline_interpolation_produces_line_breaks()),
+        test("multiple escaped newline concatenation preserves each break", () => multiple_escaped_newline_concatenation_preserves_each_break()),
+        test("escaped backslash newline stays literal", () => escaped_backslash_newline_stays_literal()),
         test("double_then_classify classifies the doubled integer", () => double_then_classify_classifies_the_doubled_integer()),
         test("order_of_expression preserves grouped expression evaluation order", () => order_of_expression_preserves_grouped_expression_evaluation_order()),
         test("power evaluates integer exponents", () => power_evaluates_integer_exponents()),
@@ -48,6 +52,18 @@ private fun is_positive_returns_true_only_for_positive_integers(): Assert =
 
 private fun greet_prefixes_the_provided_name(): Assert =
     assert_that(greet("World")).is_equal_to("Hello, World")
+
+private fun escaped_newline_concatenation_produces_line_breaks(): Assert =
+    assert_that(escaped_newline_concat()).is_equal_to('first line' + '\n' + 'second line')
+
+private fun escaped_newline_interpolation_produces_line_breaks(): Assert =
+    assert_that(escaped_newline_interpolation("Capybara")).is_equal_to('title: Capybara' + '\n' + 'body')
+
+private fun multiple_escaped_newline_concatenation_preserves_each_break(): Assert =
+    assert_that(multiple_escaped_newline_concat()).is_equal_to('header' + '\n' + '\n' + 'content' + '\n')
+
+private fun escaped_backslash_newline_stays_literal(): Assert =
+    assert_that(escaped_backslash_n_concat()).is_equal_to('literal' + '\\' + 'n' + 'text')
 
 private fun double_then_classify_classifies_the_doubled_integer(): Assert =
     assert_all([
