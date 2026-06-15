@@ -3118,9 +3118,21 @@ public class CapybaraParser {
     }
 
     private static String quoteDoubleQuotedSegment(String content) {
-        return "\"" + content
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"") + "\"";
+        var quoted = new StringBuilder(content.length() + 2);
+        quoted.append('"');
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            switch (ch) {
+                case '\\' -> quoted.append("\\\\");
+                case '"' -> quoted.append("\\\"");
+                case '\n' -> quoted.append("\\n");
+                case '\r' -> quoted.append("\\r");
+                case '\t' -> quoted.append("\\t");
+                default -> quoted.append(ch);
+            }
+        }
+        quoted.append('"');
+        return quoted.toString();
     }
 
     private static String normalizeDoubleQuotedContent(String content) {
@@ -3129,15 +3141,34 @@ public class CapybaraParser {
             var ch = content.charAt(i);
             if (ch == '\\' && i + 1 < content.length()) {
                 var next = content.charAt(i + 1);
-                if (next == '"' || next == '\\') {
-                    normalized.append(next);
-                    i++;
-                    continue;
-                }
-                if (next == '{') {
-                    normalized.append('\\').append('{');
-                    i++;
-                    continue;
+                switch (next) {
+                    case 'n' -> {
+                        normalized.append('\n');
+                        i++;
+                        continue;
+                    }
+                    case 'r' -> {
+                        normalized.append('\r');
+                        i++;
+                        continue;
+                    }
+                    case 't' -> {
+                        normalized.append('\t');
+                        i++;
+                        continue;
+                    }
+                    case '"', '\\' -> {
+                        normalized.append(next);
+                        i++;
+                        continue;
+                    }
+                    case '{' -> {
+                        normalized.append('\\').append('{');
+                        i++;
+                        continue;
+                    }
+                    default -> {
+                    }
                 }
             }
             normalized.append(ch);
@@ -3157,9 +3188,7 @@ public class CapybaraParser {
         }
         if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
             var content = normalizeDoubleQuotedContent(raw.substring(1, raw.length() - 1));
-            return "\"" + content
-                    .replace("\\", "\\\\")
-                    .replace("\"", "\\\"") + "\"";
+            return quoteDoubleQuotedSegment(content);
         }
         if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
             var content = raw.substring(1, raw.length() - 1)
