@@ -21,10 +21,12 @@ from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 data JavaScriptBinding { name: String, jsName: String, typeName: String }
-private data JavaScriptQualifiedFunctionBinding { function: CompiledFunction, binding: String }
-private data JavaScriptEnumTypeBinding { declaration: CompiledImportDeclaration, module: CompiledModule }
-private data JavaScriptAnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
+private data JavaScriptAnnotationBinding { name: String, moduleName: String, modulePath: String, fields: List[String] }
 private data JavaScriptSchemaAnnotationArgument { name: String, kind: String, value: String }
+
+private fun java_script_option_string_identity(value: /capy/lang/Option[String]): /capy/lang/Option[String] = value
+private fun java_script_string_identity(value: String): String = value
+private fun java_script_bool_identity(value: bool): bool = value
 
 fun java_script_generator(program: CompiledProgram): GeneratedProgram =
     GeneratedProgram {
@@ -85,18 +87,23 @@ private fun java_script_import(declaration: CompiledImportDeclaration, module: C
 
 private fun java_script_object_helper_function(function: CompiledFunction): bool =
     java_script_object_class_schema_function(function)
+        | java_script_object_interface_schema_function(function)
         | java_script_object_method_function(function)
         | java_script_object_field_init_function(function)
         | java_script_object_init_function(function)
 
 private fun java_script_object_helper_code(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_object_class_schema_function(function)
-    then java_script_object_class(function, functions)
+    then java_script_object_class(function, functions, module, allModules)
+    else if java_script_object_interface_schema_function(function)
+    then java_script_object_interface(function, functions, module, allModules)
     else if java_script_object_method_function(function)
     then java_script_object_method(
         java_script_object_method_class_name(function),
         function,
-        java_script_object_method_body(function, module, allModules)
+        java_script_object_method_body(function, module, allModules),
+        module,
+        allModules
     )
     else if java_script_object_field_init_function(function)
     then java_script_object_field_init(function, module, allModules)
@@ -104,7 +111,7 @@ private fun java_script_object_helper_code(function: CompiledFunction, functions
     then java_script_object_init(function, module, allModules)
     else ""
 
-private fun java_script_object_class(function: CompiledFunction, functions: List[CompiledFunction]): String =
+private fun java_script_object_class(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     let className = java_script_object_class_schema_name(function)
     "function "
         + java_script_object_runtime_class_name(className)
@@ -130,9 +137,52 @@ private fun java_script_object_class(function: CompiledFunction, functions: List
         + "}"
         + java_script_newline()
         + java_script_newline()
-        + java_script_object_type_function(className)
+        + java_script_object_type_function(className, functions, module, allModules)
 
-private fun java_script_object_type_function(className: String): String =
+private fun java_script_object_interface(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let interfaceName = java_script_object_interface_schema_name(function)
+    "const "
+        + java_script_object_constructor_name(interfaceName)
+        + " = Object.create(null);"
+        + java_script_newline()
+        + java_script_object_interface_type_function(interfaceName, functions, module, allModules)
+
+private fun java_script_object_interface_type_function(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_object_constructor_name(interfaceName)
+        + ".__capy_methods = "
+        + java_script_object_constructor_name(interfaceName)
+        + ".__capy_methods || [];"
+        + java_script_newline()
+        + java_script_object_interface_method_info_statements(interfaceName, functions, module, allModules)
+        + java_script_object_constructor_name(interfaceName)
+        + ".type = function() {"
+        + java_script_newline()
+        + "    return {"
+        + "\"name\": " + java_script_string_literal(interfaceName)
+        + ", \"pkg\": " + java_script_reflection_module_package_metadata_literal(module)
+        + ", \"methods\": " + java_script_object_constructor_name(interfaceName) + ".__capy_methods"
+        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values("__capy_oo_interface_parent|" + interfaceName + "|", functions), module, allModules)
+        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values("__capy_oo_annotation|type|" + interfaceName + "|", functions), module, allModules)
+        + "};"
+        + java_script_newline()
+        + "};"
+        + java_script_newline()
+        + java_script_newline()
+
+private fun java_script_object_interface_method_info_statements(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if java_script_object_interface_method_function_for_interface(interfaceName, function)
+        then java_script_object_constructor_name(interfaceName)
+            + ".__capy_methods.push("
+            + java_script_object_interface_method_info_literal(interfaceName, function, module, allModules)
+            + ");"
+            + java_script_newline()
+            + java_script_string_identity(java_script_object_interface_method_info_statements(interfaceName, functions[1:], module, allModules))
+        else java_script_string_identity(java_script_object_interface_method_info_statements(interfaceName, functions[1:], module, allModules))
+
+private fun java_script_object_type_function(className: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_object_constructor_name(className)
         + ".__capy_methods = "
         + java_script_object_constructor_name(className)
@@ -143,26 +193,69 @@ private fun java_script_object_type_function(className: String): String =
         + java_script_newline()
         + "    return {"
         + "\"name\": " + java_script_string_literal(className)
-        + ", \"pkg\": {\"name\": \"\", \"path\": \"\"}"
-        + ", \"open\": false"
-        + ", \"fields\": []"
+        + ", \"pkg\": " + java_script_reflection_module_package_metadata_literal(module)
+        + ", \"open\": " + java_script_bool_code(java_script_object_class_open(className, functions))
+        + ", \"fields\": " + java_script_object_field_infos_literal(className, java_script_schema_values("__capy_oo_field|" + className + "|", functions), 0, module, allModules)
         + ", \"methods\": " + java_script_object_constructor_name(className) + ".__capy_methods"
-        + ", \"parents\": __capy_set([])"
-        + ", \"annotations\": []"
+        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values("__capy_oo_parent|" + className + "|", functions), module, allModules)
+        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values("__capy_oo_annotation|type|" + className + "|", functions), module, allModules)
         + "};"
         + java_script_newline()
         + "};"
         + java_script_newline()
         + java_script_newline()
 
-private fun java_script_object_method_info_literal(className: String, function: CompiledFunction): String =
-    "{"
-        + "\"name\": " + java_script_string_literal(java_script_object_method_name(className, function))
-        + ", \"pkg\": {\"name\": \"\", \"path\": \"\"}"
-        + ", \"params\": " + java_script_object_method_param_infos_literal(function.parameters)
-        + ", \"return_type\": " + java_script_object_type_info_literal(java_script_type_reference_name(function.returnType))
-        + ", \"annotations\": []"
-        + "}"
+private fun java_script_object_method_info_literal(className: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let methodName = java_script_object_method_name(className, function)
+    java_script_object_method_info_literal_for(className, methodName, function, module, allModules)
+
+private fun java_script_object_interface_method_info_literal(interfaceName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let methodName = java_script_object_interface_method_name(interfaceName, function)
+    java_script_object_method_info_literal_for(interfaceName, methodName, function, module, allModules)
+
+private fun java_script_object_method_info_literal_for(ownerName: String, methodName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(methodName)),
+        java_script_code_object_entry("pkg", java_script_reflection_module_package_metadata_literal(module)),
+        java_script_code_object_entry("params", java_script_object_method_param_infos_literal(function.parameters)),
+        java_script_code_object_entry("return_type", java_script_object_type_info_literal(java_script_type_reference_name(function.returnType))),
+        java_script_code_object_entry("annotations", java_script_object_annotations_literal(
+            java_script_schema_values("__capy_oo_annotation|method|" + ownerName + "|" + methodName + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun java_script_object_field_infos_literal(className: String, fields: List[String], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_list_literal(java_script_object_field_info_literals(className, fields, idx, module, allModules))
+
+private fun java_script_object_field_info_literals(className: String, fields: List[String], idx: int, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [java_script_object_field_info_literal(className, field, idx, module, allModules)]
+            + java_script_object_field_info_literals(className, fields[1:], idx + 1, module, allModules)
+
+private fun java_script_object_field_info_literal(className: String, field: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(java_script_schema_field_name(field))),
+        java_script_code_object_entry("type", java_script_object_type_info_literal(java_script_object_field_schema_type(field))),
+        java_script_code_object_entry("annotations", java_script_object_annotations_literal(
+            java_script_schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", module.functions),
+            module,
+            allModules
+        )),
+    ])
+
+private fun java_script_object_parent_infos_literal(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_set(" + java_script_code_list_literal(java_script_object_parent_info_literals(parents, module, allModules)) + ")"
+
+private fun java_script_object_parent_info_literals(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [java_script_object_type_info_literal(java_script_schema_type_name(parent))]
+            + java_script_object_parent_info_literals(parents[1:], module, allModules)
 
 private fun java_script_object_method_param_infos_literal(parameters: List[CompiledFunctionParameter]): String =
     java_script_code_list_literal(java_script_object_method_param_info_literals(parameters))
@@ -234,7 +327,7 @@ private fun java_script_object_value_function(function: CompiledFunction, classN
         + java_script_newline()
         + java_script_newline()
 
-private fun java_script_object_method(className: String, function: CompiledFunction, bodyCode: String): String =
+private fun java_script_object_method(className: String, function: CompiledFunction, bodyCode: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_object_runtime_class_name(className)
         + ".prototype."
         + java_script_method_name(java_script_object_method_name(className, function))
@@ -244,7 +337,9 @@ private fun java_script_object_method(className: String, function: CompiledFunct
         + java_script_newline()
         + "    return "
         + "pure("
+        + "__capy_unsafe_run("
         + bodyCode
+        + ")"
         + ")"
         + ";"
         + java_script_newline()
@@ -257,7 +352,7 @@ private fun java_script_object_method(className: String, function: CompiledFunct
         + java_script_newline()
         + java_script_object_constructor_name(className)
         + ".__capy_methods.push("
-        + java_script_object_method_info_literal(className, function)
+        + java_script_object_method_info_literal(className, function, module, allModules)
         + ");"
         + java_script_newline()
         + java_script_newline()
@@ -401,6 +496,47 @@ private fun java_script_object_class_exported(name: String, functions: List[Comp
 
 private fun java_script_object_class_schema_prefix(): String =
     "__capy_oo_class|"
+
+private fun java_script_object_class_open(className: String, functions: List[CompiledFunction]): bool =
+    match java_script_schema_value_named("__capy_oo_class_open|" + className, functions) with
+    case Some { value } -> value == "true"
+    case None -> false
+
+private fun java_script_object_interface_schema_function(function: CompiledFunction): bool =
+    java_script_compiled_schema(function)
+        & java_script_string_has_prefix(function.name, java_script_object_interface_schema_prefix())
+
+private fun java_script_object_interface_schema_name(function: CompiledFunction): String =
+    function.name[java_script_object_interface_schema_prefix().size().value, function.name.size().value]
+
+private fun java_script_object_interface_exists(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_interface_schema_function(function)
+        then if java_script_object_interface_schema_name(function) == name
+            then true
+            else java_script_bool_identity(java_script_object_interface_exists(name, functions[1:]))
+        else java_script_bool_identity(java_script_object_interface_exists(name, functions[1:]))
+
+private fun java_script_object_type_exists(name: String, functions: List[CompiledFunction]): bool =
+    java_script_object_class_exists(name, functions) | java_script_object_interface_exists(name, functions)
+
+private fun java_script_object_interface_exported(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_interface_schema_function(function)
+        then if java_script_object_interface_schema_name(function) == name
+            then java_script_schema_value(function) != "private"
+            else java_script_bool_identity(java_script_object_interface_exported(name, functions[1:]))
+        else java_script_bool_identity(java_script_object_interface_exported(name, functions[1:]))
+
+private fun java_script_object_type_exported(name: String, functions: List[CompiledFunction]): bool =
+    java_script_object_class_exported(name, functions) | java_script_object_interface_exported(name, functions)
+
+private fun java_script_object_interface_schema_prefix(): String =
+    "__capy_oo_interface|"
 
 private fun java_script_object_field_init_function(function: CompiledFunction): bool =
     java_script_string_has_prefix(function.name, java_script_object_field_init_prefix())
@@ -1434,12 +1570,12 @@ private fun java_script_object_type_call_name(name: String): bool =
 
 private fun java_script_object_type_call_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverName = java_script_qualified_call_qualifier(name)
-    if java_script_object_class_exists(receiverName, module.functions)
+    if java_script_object_type_exists(receiverName, module.functions)
     then java_script_object_constructor_name(receiverName) + ".type()"
-    else match java_script_find_object_constructor_in_imports(receiverName, module.imports, module, allModules) with
+    else match java_script_find_object_type_in_imports(receiverName, module.imports, module, allModules) with
     case Some { binding } -> binding + ".type()"
     case None ->
-        match java_script_find_qualified_object_constructor_call(receiverName, module, allModules) with
+        match java_script_find_qualified_object_type_call(receiverName, module, allModules) with
         case Some { binding } -> binding + ".type()"
         case None -> java_script_identifier(name) + "()"
 
@@ -1524,7 +1660,10 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then java_script_raw_method_call_code(call, env, module, allModules)
     else match java_script_find_local_extension_method(call, env, module, allModules) with
         case Some { function } -> java_script_extension_method_call_code(function, call, env, module, allModules)
-        case None -> java_script_raw_method_call_code(call, env, module, allModules)
+        case None ->
+            match java_script_find_imported_extension_method(call, env, module, allModules) with
+            case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
+            case None -> java_script_raw_method_call_code(call, env, module, allModules)
 
 private fun java_script_oo_constructor_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match java_script_oo_constructor_call_name(call.name, module, allModules) with
@@ -1572,6 +1711,22 @@ private fun java_script_find_object_constructor_in_import(name: String, declarat
         else java_script_find_object_constructor_in_imports(name, rest, module, allModules)
     case None -> java_script_find_object_constructor_in_imports(name, rest, module, allModules)
 
+private fun java_script_find_object_type_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified | !java_script_import_includes_name(name, declaration)
+        then java_script_option_string_identity(java_script_find_object_type_in_imports(name, imports[1:], module, allModules))
+        else java_script_find_object_type_in_import(name, declaration, imports[1:], module, allModules)
+
+private fun java_script_find_object_type_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if java_script_object_type_exported(name, importedModule.functions)
+        then /capy/lang/Option.Some { java_script_imported_object_constructor_binding(declaration, name, module) }
+        else java_script_option_string_identity(java_script_find_object_type_in_imports(name, rest, module, allModules))
+    case None -> java_script_option_string_identity(java_script_find_object_type_in_imports(name, rest, module, allModules))
+
 private fun java_script_find_qualified_object_constructor_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     let qualifier = java_script_qualified_call_qualifier(name)
     let member = java_script_qualified_call_member(name)
@@ -1599,6 +1754,37 @@ private fun java_script_find_qualified_object_constructor_in_modules(qualifier: 
     match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
     case Some { targetModule } ->
         if java_script_object_class_exported(member, targetModule.functions)
+        then /capy/lang/Option.Some { java_script_module_object_constructor_binding(targetModule, member, module) }
+        else /capy/lang/Option.None {}
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_find_qualified_object_type_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let qualifier = java_script_qualified_call_qualifier(name)
+    let member = java_script_qualified_call_member(name)
+    match java_script_find_qualified_object_type_in_imports(qualifier, member, module.imports, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> java_script_find_qualified_object_type_in_modules(qualifier, member, module, allModules)
+
+private fun java_script_find_qualified_object_type_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
+        then java_script_find_qualified_object_type_in_import(member, declaration, imports[1:], module, allModules)
+        else java_script_option_string_identity(java_script_find_qualified_object_type_in_imports(qualifier, member, imports[1:], module, allModules))
+
+private fun java_script_find_qualified_object_type_in_import(member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if java_script_object_type_exported(member, importedModule.functions)
+        then /capy/lang/Option.Some { java_script_imported_object_constructor_binding(declaration, member, module) }
+        else java_script_option_string_identity(java_script_find_qualified_object_type_in_imports(java_script_module_leaf_name(java_script_import_module_path(declaration.modulePath, module)), member, rest, module, allModules))
+    case None -> java_script_option_string_identity(java_script_find_qualified_object_type_in_imports(java_script_module_leaf_name(java_script_import_module_path(declaration.modulePath, module)), member, rest, module, allModules))
+
+private fun java_script_find_qualified_object_type_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
+    case Some { targetModule } ->
+        if java_script_object_type_exported(member, targetModule.functions)
         then /capy/lang/Option.Some { java_script_module_object_constructor_binding(targetModule, member, module) }
         else /capy/lang/Option.None {}
     case None -> /capy/lang/Option.None {}
@@ -2226,7 +2412,10 @@ private fun java_script_result_reduce_method_call_code(call: CompiledMethodCallE
         + ")"
 
 private fun java_script_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_function_name(function)
+    java_script_extension_method_binding_call_code(java_script_function_name(function), call, env, module, allModules)
+
+private fun java_script_extension_method_binding_call_code(binding: String, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    binding
         + "("
         + java_script_expression_code(call.receiver, env, module, allModules)
         + java_script_extension_method_argument_tail(call.arguments, env, module, allModules)
@@ -3062,9 +3251,7 @@ private fun java_script_effect_binding_payload_type(expression: CompiledExpressi
 
 private fun java_script_effect_payload_type_from_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_qualified_call_name(name)
-    then match java_script_find_qualified_function_definition(name, module, allModules) with
-        case Some { function } -> java_script_effect_payload_type_from_type_reference(function.returnType)
-        case None -> java_script_unknown_type()
+    then java_script_find_qualified_function_effect_payload_type(name, module, allModules)
     else match java_script_find_local_function(name, module.functions) with
     case Some { function } -> java_script_effect_payload_type_from_type_reference(function.returnType)
     case None ->
@@ -3196,7 +3383,34 @@ private fun java_script_field_access_type(access: CompiledFieldAccessExpression,
         let receiverType = java_script_expression_type(access.receiver, env, module, allModules)
         if receiverType == java_script_unknown_type()
         then java_script_unknown_type()
-        else java_script_data_field_type(access.name, java_script_data_type_fields(receiverType, module, allModules))
+        else match java_script_object_field_type(access.name, receiverType, module, allModules) with
+        case Some { typeName } -> typeName
+        case None -> java_script_data_field_type(access.name, java_script_data_type_fields(receiverType, module, allModules))
+
+private fun java_script_object_field_type(name: String, receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let className = java_script_type_unqualified_name(receiverType)
+    match java_script_object_field_type_in_functions(name, className, module.functions) with
+    case Some { typeName } -> /capy/lang/Option.Some { typeName }
+    case None -> java_script_object_field_type_in_modules(name, className, allModules)
+
+private fun java_script_object_field_type_in_modules(name: String, className: String, modules: List[CompiledModule]): /capy/lang/Option[String] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        match java_script_object_field_type_in_functions(name, className, module.functions) with
+        case Some { typeName } -> /capy/lang/Option.Some { typeName }
+        case None -> java_script_object_field_type_in_modules(name, className, modules[1:])
+
+private fun java_script_object_field_type_in_functions(name: String, className: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
+    java_script_object_field_type_in_fields(name, java_script_schema_values("__capy_oo_field|" + className + "|", functions))
+
+private fun java_script_object_field_type_in_fields(name: String, fields: List[String]): /capy/lang/Option[String] =
+    match fields[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { field } ->
+        if java_script_schema_field_name(field) == name
+        then /capy/lang/Option.Some { java_script_object_field_schema_type(field) }
+        else java_script_object_field_type_in_fields(name, fields[1:])
 
 private fun java_script_data_field_type(name: String, fields: List[String]): String =
     match fields[0] with
@@ -3257,7 +3471,10 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then java_script_unknown_type()
     else match java_script_find_local_extension_method(call, env, module, allModules) with
     case Some { function } -> function.returnType.name
-    case None -> java_script_unknown_type()
+    case None ->
+        match java_script_find_imported_extension_method_return_type(call, env, module, allModules) with
+        case Some { returnType } -> returnType
+        case None -> java_script_unknown_type()
 
 private fun java_script_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
@@ -3304,9 +3521,7 @@ private fun java_script_result_payload_type_from_function_call(name: String, mod
     if java_script_enum_parse_call_name(name, module, allModules)
     then java_script_enum_qualified_type_name(name)
     else if java_script_qualified_call_name(name)
-    then match java_script_find_qualified_function_definition(name, module, allModules) with
-        case Some { function } -> java_script_result_payload_type_from_type_reference(function.returnType)
-        case None -> java_script_unknown_type()
+    then java_script_find_qualified_function_result_payload_type(name, module, allModules)
     else match java_script_find_local_function(name, module.functions) with
     case Some { function } -> java_script_result_payload_type_from_type_reference(function.returnType)
     case None ->
@@ -3465,8 +3680,8 @@ private fun java_script_function_call_expression_type(name: String, module: Comp
     else if java_script_enum_parse_call_name(name, module, allModules)
     then "Result"
     else if java_script_qualified_call_name(name)
-    then match java_script_find_qualified_function_definition(name, module, allModules) with
-        case Some { function } -> function.returnType.name
+    then match java_script_find_qualified_function_return_type(name, module, allModules) with
+        case Some { returnType } -> returnType
         case None -> java_script_unknown_type()
     else match java_script_find_local_function(name, module.functions) with
     case Some { function } -> function.returnType.name
@@ -3546,7 +3761,7 @@ private fun java_script_function_call_definition(name: String, env: List[JavaScr
         if java_script_runtime_function(name)
         then /capy/lang/Option.None {}
         else if java_script_qualified_call_name(name)
-        then java_script_find_qualified_function_definition(name, module, allModules)
+        then /capy/lang/Option.None {}
         else match java_script_find_local_function(name, module.functions) with
         case Some { function } -> /capy/lang/Option.Some { function }
         case None -> java_script_find_function_definition_in_imports(name, module.imports, module, allModules)
@@ -3771,34 +3986,36 @@ private fun java_script_enum_value_reference_tail(typeName: String, values: List
 private fun java_script_enum_value_reference_code(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_enum_type_exists_in_functions(typeName, module.functions)
     then java_script_identifier(valueName)
-    else match java_script_enum_type_imported_binding(typeName, module.imports, module, allModules) with
-        case Some { binding } -> java_script_imported_enum_value_binding(valueName, binding, module)
+    else match java_script_imported_enum_value_binding(typeName, valueName, module.imports, module, allModules) with
+        case Some { binding } -> binding
         case None -> java_script_identifier(valueName)
 
-private fun java_script_imported_enum_value_binding(valueName: String, binding: JavaScriptEnumTypeBinding, module: CompiledModule): String =
-    match java_script_find_exported_constant(valueName, binding.module.functions) with
-    case Some { function } ->
-        java_script_import_alias(binding.declaration, module)
-            + "["
-            + java_script_string_literal(java_script_export_name(function))
-            + "]"
-    case None -> java_script_identifier(valueName)
-
-private fun java_script_enum_type_imported_binding(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptEnumTypeBinding] =
+private fun java_script_imported_enum_value_binding(typeName: String, valueName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if java_script_data_import_matches(name, declaration)
-        then java_script_enum_type_imported_binding_from(name, imports[1:], module, allModules, declaration)
-        else java_script_enum_type_imported_binding(name, imports[1:], module, allModules)
+        if java_script_data_import_matches(typeName, declaration)
+        then java_script_imported_enum_value_binding_from(typeName, valueName, imports[1:], module, allModules, declaration)
+        else java_script_option_string_identity(java_script_imported_enum_value_binding(typeName, valueName, imports[1:], module, allModules))
 
-private fun java_script_enum_type_imported_binding_from(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[JavaScriptEnumTypeBinding] =
+private fun java_script_imported_enum_value_binding_from(typeName: String, valueName: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[String] =
     match java_script_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } ->
-        if java_script_enum_type_exists_in_functions(name, importedModule.functions)
-        then /capy/lang/Option.Some { JavaScriptEnumTypeBinding { declaration: declaration, module: importedModule } }
-        else java_script_enum_type_imported_binding(name, rest, module, allModules)
-    case None -> java_script_enum_type_imported_binding(name, rest, module, allModules)
+        if java_script_enum_type_exists_in_functions(typeName, importedModule.functions)
+        then java_script_imported_enum_value_binding_in_module(valueName, declaration, importedModule.functions, module)
+        else java_script_option_string_identity(java_script_imported_enum_value_binding(typeName, valueName, rest, module, allModules))
+    case None -> java_script_option_string_identity(java_script_imported_enum_value_binding(typeName, valueName, rest, module, allModules))
+
+private fun java_script_imported_enum_value_binding_in_module(valueName: String, declaration: CompiledImportDeclaration, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[String] =
+    match java_script_find_exported_constant(valueName, functions) with
+    case Some { function } ->
+        /capy/lang/Option.Some {
+            java_script_import_alias(declaration, module)
+                + "["
+                + java_script_string_literal(java_script_export_name(function))
+                + "]"
+        }
+    case None -> /capy/lang/Option.Some { java_script_identifier(valueName) }
 
 private fun java_script_find_local_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
@@ -3834,59 +4051,138 @@ private fun java_script_find_qualified_module_export_call(name: String, module: 
     case None -> /capy/lang/Option.None {}
 
 private fun java_script_find_qualified_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    match java_script_find_qualified_function_binding(name, module, allModules) with
-    case Some { binding } -> /capy/lang/Option.Some { binding.binding }
-    case None -> /capy/lang/Option.None {}
-
-private fun java_script_find_qualified_function_definition(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match java_script_find_qualified_function_binding(name, module, allModules) with
-    case Some { binding } -> /capy/lang/Option.Some { binding.function }
-    case None -> /capy/lang/Option.None {}
-
-private fun java_script_find_qualified_function_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
     let qualifier = java_script_qualified_call_qualifier(name)
     let member = java_script_qualified_call_member(name)
-    match java_script_find_qualified_function_binding_in_imports(qualifier, member, module.imports, module, allModules) with
+    match java_script_find_qualified_function_call_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { binding } -> /capy/lang/Option.Some { binding }
-    case None -> java_script_find_qualified_function_binding_in_modules(qualifier, member, module, allModules)
+    case None -> java_script_find_qualified_function_call_in_modules(qualifier, member, module, allModules)
 
-private fun java_script_find_qualified_function_binding_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
+private fun java_script_find_qualified_function_call_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
-        then java_script_find_qualified_function_binding_in_import(qualifier, member, declaration, imports[1:], module, allModules)
-        else java_script_find_qualified_function_binding_in_imports(qualifier, member, imports[1:], module, allModules)
+        then java_script_find_qualified_function_call_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else java_script_option_string_identity(java_script_find_qualified_function_call_in_imports(qualifier, member, imports[1:], module, allModules))
 
-private fun java_script_find_qualified_function_binding_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
+private fun java_script_find_qualified_function_call_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     match java_script_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } -> {
         match java_script_find_function(member, importedModule.functions) with
         case Some { function } ->
-            /capy/lang/Option.Some {
-                JavaScriptQualifiedFunctionBinding {
-                    function: function,
-                    binding: java_script_imported_function_binding(declaration, function, importedModule.functions, module)
-                }
-            }
-        case None -> java_script_find_qualified_function_binding_in_imports(qualifier, member, rest, module, allModules)
+            /capy/lang/Option.Some { java_script_imported_function_binding(declaration, function, importedModule.functions, module) }
+        case None -> java_script_option_string_identity(java_script_find_qualified_function_call_in_imports(qualifier, member, rest, module, allModules))
     }
-    case _ -> java_script_find_qualified_function_binding_in_imports(qualifier, member, rest, module, allModules)
+    case _ -> java_script_option_string_identity(java_script_find_qualified_function_call_in_imports(qualifier, member, rest, module, allModules))
 
-private fun java_script_find_qualified_function_binding_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptQualifiedFunctionBinding] =
+private fun java_script_find_qualified_function_call_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
     case Some { targetModule } -> {
         match java_script_find_function(member, targetModule.functions) with
         case Some { function } ->
-            /capy/lang/Option.Some {
-                JavaScriptQualifiedFunctionBinding {
-                    function: function,
-                    binding: java_script_module_function_binding(targetModule, function, module)
-                }
-            }
+            /capy/lang/Option.Some { java_script_module_function_binding(targetModule, function, module) }
         case None -> /capy/lang/Option.None {}
     }
-    case _ -> /capy/lang/Option.None {}
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_find_qualified_function_return_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let qualifier = java_script_qualified_call_qualifier(name)
+    let member = java_script_qualified_call_member(name)
+    match java_script_find_qualified_function_return_type_in_imports(qualifier, member, module.imports, module, allModules) with
+    case Some { returnType } -> /capy/lang/Option.Some { returnType }
+    case None -> java_script_find_qualified_function_return_type_in_modules(qualifier, member, module, allModules)
+
+private fun java_script_find_qualified_function_return_type_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
+        then java_script_find_qualified_function_return_type_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else java_script_option_string_identity(java_script_find_qualified_function_return_type_in_imports(qualifier, member, imports[1:], module, allModules))
+
+private fun java_script_find_qualified_function_return_type_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> {
+        match java_script_find_function(member, importedModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { function.returnType.name }
+        case None -> java_script_option_string_identity(java_script_find_qualified_function_return_type_in_imports(qualifier, member, rest, module, allModules))
+    }
+    case _ -> java_script_option_string_identity(java_script_find_qualified_function_return_type_in_imports(qualifier, member, rest, module, allModules))
+
+private fun java_script_find_qualified_function_return_type_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
+    case Some { targetModule } -> {
+        match java_script_find_function(member, targetModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { function.returnType.name }
+        case None -> /capy/lang/Option.None {}
+    }
+    case None -> /capy/lang/Option.None {}
+
+private fun java_script_find_qualified_function_effect_payload_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let qualifier = java_script_qualified_call_qualifier(name)
+    let member = java_script_qualified_call_member(name)
+    match java_script_find_qualified_function_effect_payload_type_in_imports(qualifier, member, module.imports, module, allModules) with
+    case Some { payloadType } -> payloadType
+    case None -> java_script_find_qualified_function_effect_payload_type_in_modules(qualifier, member, module, allModules)
+
+private fun java_script_find_qualified_function_effect_payload_type_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
+        then java_script_find_qualified_function_effect_payload_type_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else java_script_option_string_identity(java_script_find_qualified_function_effect_payload_type_in_imports(qualifier, member, imports[1:], module, allModules))
+
+private fun java_script_find_qualified_function_effect_payload_type_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> {
+        match java_script_find_function(member, importedModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { java_script_effect_payload_type_from_type_reference(function.returnType) }
+        case None -> java_script_option_string_identity(java_script_find_qualified_function_effect_payload_type_in_imports(qualifier, member, rest, module, allModules))
+    }
+    case _ -> java_script_option_string_identity(java_script_find_qualified_function_effect_payload_type_in_imports(qualifier, member, rest, module, allModules))
+
+private fun java_script_find_qualified_function_effect_payload_type_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
+    case Some { targetModule } -> {
+        match java_script_find_function(member, targetModule.functions) with
+        case Some { function } -> java_script_effect_payload_type_from_type_reference(function.returnType)
+        case None -> java_script_unknown_type()
+    }
+    case None -> java_script_unknown_type()
+
+private fun java_script_find_qualified_function_result_payload_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let qualifier = java_script_qualified_call_qualifier(name)
+    let member = java_script_qualified_call_member(name)
+    match java_script_find_qualified_function_result_payload_type_in_imports(qualifier, member, module.imports, module, allModules) with
+    case Some { payloadType } -> payloadType
+    case None -> java_script_find_qualified_function_result_payload_type_in_modules(qualifier, member, module, allModules)
+
+private fun java_script_find_qualified_function_result_payload_type_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
+        then java_script_find_qualified_function_result_payload_type_in_import(qualifier, member, declaration, imports[1:], module, allModules)
+        else java_script_option_string_identity(java_script_find_qualified_function_result_payload_type_in_imports(qualifier, member, imports[1:], module, allModules))
+
+private fun java_script_find_qualified_function_result_payload_type_in_import(qualifier: String, member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> {
+        match java_script_find_function(member, importedModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { java_script_result_payload_type_from_type_reference(function.returnType) }
+        case None -> java_script_option_string_identity(java_script_find_qualified_function_result_payload_type_in_imports(qualifier, member, rest, module, allModules))
+    }
+    case _ -> java_script_option_string_identity(java_script_find_qualified_function_result_payload_type_in_imports(qualifier, member, rest, module, allModules))
+
+private fun java_script_find_qualified_function_result_payload_type_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
+    case Some { targetModule } -> {
+        match java_script_find_function(member, targetModule.functions) with
+        case Some { function } -> java_script_result_payload_type_from_type_reference(function.returnType)
+        case None -> java_script_unknown_type()
+    }
+    case None -> java_script_unknown_type()
 
 private fun java_script_imported_function_binding(declaration: CompiledImportDeclaration, function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule): String =
     java_script_import_alias(declaration, module) + "[" + java_script_string_literal(java_script_imported_function_export_name(function, functions)) + "]"
@@ -3980,6 +4276,77 @@ private fun java_script_find_local_extension_method(call: CompiledMethodCallExpr
     if receiverType == java_script_unknown_type()
     then /capy/lang/Option.None {}
     else java_script_find_local_method_function(receiverType, call.name, module.functions)
+
+private fun java_script_find_imported_extension_method(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    if receiverType == java_script_unknown_type()
+    then /capy/lang/Option.None {}
+    else java_script_find_imported_method_function(receiverType, call.name, module.imports, module, allModules)
+
+private fun java_script_find_imported_extension_method_return_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    if receiverType == java_script_unknown_type()
+    then /capy/lang/Option.None {}
+    else java_script_find_imported_method_function_return_type(receiverType, call.name, module.imports, module, allModules)
+
+private fun java_script_find_imported_method_function(receiverType: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified
+        then java_script_option_string_identity(java_script_find_imported_method_function(receiverType, methodName, imports[1:], module, allModules))
+        else java_script_find_imported_method_function_in_import(receiverType, methodName, declaration, imports[1:], module, allModules)
+
+private fun java_script_find_imported_method_function_in_import(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> {
+        match java_script_find_imported_method_function_binding_in_functions(receiverType, methodName, declaration, importedModule.functions, importedModule.functions, module) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> java_script_option_string_identity(java_script_find_imported_method_function(receiverType, methodName, rest, module, allModules))
+    }
+    case None -> java_script_option_string_identity(java_script_find_imported_method_function(receiverType, methodName, rest, module, allModules))
+
+private fun java_script_find_imported_method_function_return_type(receiverType: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified
+        then java_script_option_string_identity(java_script_find_imported_method_function_return_type(receiverType, methodName, imports[1:], module, allModules))
+        else java_script_find_imported_method_function_return_type_in_import(receiverType, methodName, declaration, imports[1:], module, allModules)
+
+private fun java_script_find_imported_method_function_return_type_in_import(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> {
+        match java_script_find_imported_method_function_return_type_in_functions(receiverType, methodName, declaration, importedModule.functions) with
+        case Some { returnType } -> /capy/lang/Option.Some { returnType }
+        case None -> java_script_option_string_identity(java_script_find_imported_method_function_return_type(receiverType, methodName, rest, module, allModules))
+    }
+    case None -> java_script_option_string_identity(java_script_find_imported_method_function_return_type(receiverType, methodName, rest, module, allModules))
+
+private fun java_script_find_imported_method_function_binding_in_functions(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, functions: List[CompiledFunction], allFunctions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[String] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if java_script_imported_method_function_matches(receiverType, methodName, declaration, function)
+        then /capy/lang/Option.Some { java_script_imported_function_binding(declaration, function, allFunctions, module) }
+        else java_script_option_string_identity(java_script_find_imported_method_function_binding_in_functions(receiverType, methodName, declaration, functions[1:], allFunctions, module))
+
+private fun java_script_find_imported_method_function_return_type_in_functions(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, functions: List[CompiledFunction]): /capy/lang/Option[String] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if java_script_imported_method_function_matches(receiverType, methodName, declaration, function)
+        then /capy/lang/Option.Some { function.returnType.name }
+        else java_script_option_string_identity(java_script_find_imported_method_function_return_type_in_functions(receiverType, methodName, declaration, functions[1:]))
+
+private fun java_script_imported_method_function_matches(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
+    java_script_callable_function(function)
+        & java_script_method_function_matches(receiverType, methodName, function)
+        & java_script_import_includes_method_function(methodName, declaration, function)
+
+private fun java_script_import_includes_method_function(methodName: String, declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
+    java_script_import_includes_name(function.name, declaration)
+        | java_script_import_includes_name(methodName, declaration)
 
 private fun java_script_find_local_binary_extension_operator_with_left_type(binary: CompiledBinaryExpression, leftType: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     if leftType == java_script_unknown_type()
@@ -4119,13 +4486,13 @@ private fun java_script_string_list_contains(value: String, values: List[String]
     case Some { item } -> item == value | java_script_string_list_contains(value, values[1:])
 
 private fun java_script_exports(functions: List[CompiledFunction]): String =
-    let dispatchEntries = java_script_export_dispatch_entries(functions, [], true)
-    let functionEntries = java_script_export_entries(functions, dispatchEntries.is_empty())
+    let functionEntries = java_script_export_entries(functions, true)
+    let dispatchEntries = java_script_export_dispatch_entries(functions, [], functionEntries.is_empty())
     let objectEntries = java_script_object_export_entries(functions, dispatchEntries.is_empty() & functionEntries.is_empty())
     "module.exports = {"
         + java_script_newline()
-        + dispatchEntries
         + functionEntries
+        + dispatchEntries
         + objectEntries
         + "};"
         + java_script_newline()
@@ -4185,6 +4552,9 @@ private fun java_script_object_export_entries(functions: List[CompiledFunction],
         if java_script_exported_object_class(function)
         then java_script_object_export_entry(java_script_object_class_schema_name(function), first)
             + java_script_object_export_entries(functions[1:], false)
+        else if java_script_exported_object_interface(function)
+        then java_script_object_export_entry(java_script_object_interface_schema_name(function), first)
+            + java_script_object_export_entries(functions[1:], false)
         else java_script_object_export_entries(functions[1:], first)
 
 private fun java_script_object_export_entry(className: String, first: bool): String =
@@ -4197,6 +4567,11 @@ private fun java_script_object_export_entry(className: String, first: bool): Str
 
 private fun java_script_exported_object_class(function: CompiledFunction): bool =
     if java_script_object_class_schema_function(function)
+    then java_script_schema_value(function) != "private"
+    else false
+
+private fun java_script_exported_object_interface(function: CompiledFunction): bool =
+    if java_script_object_interface_schema_function(function)
     then java_script_schema_value(function) != "private"
     else false
 
@@ -4968,7 +5343,7 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
         else if java_script_stdlib_math_sqrt_call(call, module)
         then true
         else if java_script_qualified_call_name(call.name)
-        then match java_script_find_qualified_function_definition(call.name, module, allModules) with
+        then match java_script_find_qualified_function_call(call.name, module, allModules) with
             case Some _ -> true
             case None ->
                 match java_script_find_qualified_module_export_call(call.name, module, allModules) with
@@ -5066,7 +5441,12 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         case Some _ ->
             java_script_expression_gatherable(call.receiver, env, module, allModules)
                 & java_script_expressions_gatherable(call.arguments, env, module, allModules)
-        case None -> false
+        case None ->
+            match java_script_find_imported_extension_method(call, env, module, allModules) with
+            case Some _ ->
+                java_script_expression_gatherable(call.receiver, env, module, allModules)
+                    & java_script_expressions_gatherable(call.arguments, env, module, allModules)
+            case None -> false
 
 private fun java_script_result_fallback_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "or_else" | call.name == "or"
@@ -5409,9 +5789,9 @@ private fun java_script_reflection_annotation_metadata_literal(value: String, us
     match java_script_find_annotation_binding(name, usageModule, allModules) with
     case Some { binding } ->
         java_script_code_object([
-            java_script_code_object_entry("name", java_script_string_literal(binding.declaration.name)),
-            java_script_code_object_entry("pkg", java_script_reflection_module_package_metadata_literal(binding.module)),
-            java_script_code_object_entry("arguments", java_script_reflection_annotation_arguments_literal(explicitArguments, binding.declaration.fields)),
+            java_script_code_object_entry("name", java_script_string_literal(binding.name)),
+            java_script_code_object_entry("pkg", java_script_reflection_package_metadata_literal(binding.moduleName, binding.modulePath)),
+            java_script_code_object_entry("arguments", java_script_reflection_annotation_arguments_literal(explicitArguments, binding.fields)),
         ])
     case None ->
         java_script_code_object([
@@ -5419,6 +5799,99 @@ private fun java_script_reflection_annotation_metadata_literal(value: String, us
             java_script_code_object_entry("pkg", java_script_reflection_module_package_metadata_literal(usageModule)),
             java_script_code_object_entry("arguments", java_script_code_list_literal(java_script_explicit_annotation_argument_metadata_literals(explicitArguments))),
         ])
+
+private fun java_script_object_annotations_literal(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_code_list_literal(java_script_object_annotation_literals(values, usageModule, allModules))
+
+private fun java_script_object_annotation_literals(values: List[String], usageModule: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [java_script_object_annotation_literal(value, usageModule, allModules)]
+            + java_script_object_annotation_literals(values[1:], usageModule, allModules)
+
+private fun java_script_object_annotation_literal(value: String, usageModule: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = java_script_annotation_schema_name(value)
+    let explicitArguments = java_script_annotation_schema_arguments(java_script_annotation_schema_arguments_source(value))
+    match java_script_find_annotation_binding(name, usageModule, allModules) with
+    case Some { binding } ->
+        java_script_data_info_literal("AnnotationInfo", [
+            java_script_code_object_entry("name", java_script_string_literal(binding.name)),
+            java_script_code_object_entry("pkg", java_script_package_info_data_literal(binding.moduleName, binding.modulePath)),
+            java_script_code_object_entry("arguments", java_script_object_annotation_arguments_literal(explicitArguments, binding.fields)),
+        ])
+    case None ->
+        java_script_data_info_literal("AnnotationInfo", [
+            java_script_code_object_entry("name", java_script_string_literal(java_script_annotation_display_name(name))),
+            java_script_code_object_entry("pkg", java_script_package_info_data_literal(usageModule.name, usageModule.path)),
+            java_script_code_object_entry("arguments", java_script_code_list_literal(java_script_object_explicit_annotation_argument_literals(explicitArguments))),
+        ])
+
+private fun java_script_object_annotation_arguments_literal(arguments: List[JavaScriptSchemaAnnotationArgument], fields: List[String]): String =
+    java_script_code_list_literal(java_script_object_explicit_annotation_argument_literals(arguments) + java_script_object_default_annotation_argument_literals(fields, arguments))
+
+private fun java_script_object_explicit_annotation_argument_literals(arguments: List[JavaScriptSchemaAnnotationArgument]): List[String] =
+    match arguments[0] with
+    case None -> []
+    case Some { argument } ->
+        [java_script_object_annotation_argument_literal(argument.name, java_script_object_annotation_value_literal(argument.kind, argument.value))]
+            + java_script_object_explicit_annotation_argument_literals(arguments[1:])
+
+private fun java_script_object_default_annotation_argument_literals(fields: List[String], explicitArguments: List[JavaScriptSchemaAnnotationArgument]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        let fieldName = java_script_annotation_field_schema_name(field)
+        if java_script_annotation_field_schema_has_default(field) & !java_script_schema_annotation_argument_exists(fieldName, explicitArguments)
+        then [java_script_object_annotation_argument_literal(fieldName, java_script_object_annotation_field_schema_default_value_literal(field))]
+            + java_script_object_default_annotation_argument_literals(fields[1:], explicitArguments)
+        else java_script_object_default_annotation_argument_literals(fields[1:], explicitArguments)
+
+private fun java_script_object_annotation_argument_literal(name: String, valueCode: String): String =
+    java_script_data_info_literal("AnnotationArgumentInfo", [
+        java_script_code_object_entry("name", java_script_string_literal(name)),
+        java_script_code_object_entry("value", valueCode),
+    ])
+
+private fun java_script_package_info_data_literal(name: String, path: String): String =
+    java_script_data_info_literal("PackageInfo", [
+        java_script_code_object_entry("name", java_script_string_literal(name)),
+        java_script_code_object_entry("path", java_script_string_literal(path)),
+    ])
+
+private fun java_script_data_info_literal(name: String, entries: List[String]): String =
+    "__capy_data(" + java_script_string_literal(name) + ", " + java_script_code_object(entries) + ")"
+
+private fun java_script_object_annotation_value_literal(kind: String, value: String): String =
+    if kind == "string"
+    then java_script_data_info_literal("AnnotationString", [java_script_code_object_entry("value", java_script_string_literal(value))])
+    else if kind == "int"
+    then java_script_data_info_literal("AnnotationInt", [java_script_code_object_entry("value", java_script_numeric_annotation_value(value, "0"))])
+    else if kind == "long"
+    then java_script_data_info_literal("AnnotationLong", [java_script_code_object_entry("value", "__capy_long(BigInt(" + java_script_string_literal(if value.is_empty() then "0" else value) + "))")])
+    else if kind == "double"
+    then java_script_data_info_literal("AnnotationDouble", [java_script_code_object_entry("value", java_script_numeric_annotation_value(value, "0"))])
+    else if kind == "float"
+    then java_script_data_info_literal("AnnotationFloat", [java_script_code_object_entry("value", java_script_numeric_annotation_value(value, "0"))])
+    else if kind == "bool"
+    then java_script_data_info_literal("AnnotationBool", [java_script_code_object_entry("value", java_script_bool_code(value == "true"))])
+    else if kind == "type"
+    then java_script_data_info_literal("AnnotationTypeName", [java_script_code_object_entry("value", java_script_string_literal(value))])
+    else java_script_data_info_literal("AnnotationNothing", [])
+
+private fun java_script_numeric_annotation_value(value: String, fallback: String): String =
+    if value.is_empty() then fallback else value
+
+private fun java_script_object_annotation_field_schema_default_value_literal(value: String): String =
+    let third = java_script_annotation_field_schema_third_separator(value)
+    if third < 0
+    then java_script_object_annotation_value_literal("nothing", "")
+    else
+        let payload = value[third + 1, value.size().value]
+        let colon = java_script_first_index_of(payload, ":", 0)
+        if colon < 0
+        then java_script_object_annotation_value_literal("nothing", "")
+        else java_script_object_annotation_value_literal(payload[0, colon], payload[colon + 1, payload.size().value])
 
 private fun java_script_annotation_display_name(name: String): String =
     if java_script_qualified_call_name(name) then java_script_qualified_call_member(name) else name
@@ -5530,7 +6003,12 @@ private fun java_script_find_annotation_binding(name: String, module: CompiledMo
     then java_script_find_qualified_annotation_binding(name, module, allModules)
     else
         match module.annotations.get(name) with
-        case Some { declaration } -> /capy/lang/Option.Some { JavaScriptAnnotationBinding { declaration: declaration, module: module } }
+        case Some { declaration } -> /capy/lang/Option.Some { JavaScriptAnnotationBinding {
+            name: declaration.name,
+            moduleName: module.name,
+            modulePath: module.path,
+            fields: declaration.fields
+        } }
         case None ->
             match java_script_find_annotation_binding_in_imports(name, module.imports, module, allModules) with
             case Some { binding } -> /capy/lang/Option.Some { binding }
@@ -5604,7 +6082,12 @@ private fun java_script_find_annotation_binding_in_modules(name: String, modules
 
 private fun java_script_annotation_binding_in_module(name: String, module: CompiledModule): /capy/lang/Option[JavaScriptAnnotationBinding] =
     match module.annotations.get(name) with
-    case Some { declaration } -> /capy/lang/Option.Some { JavaScriptAnnotationBinding { declaration: declaration, module: module } }
+    case Some { declaration } -> /capy/lang/Option.Some { JavaScriptAnnotationBinding {
+        name: declaration.name,
+        moduleName: module.name,
+        modulePath: module.path,
+        fields: declaration.fields
+    } }
     case None -> /capy/lang/Option.None {}
 
 private fun java_script_annotation_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
@@ -5622,30 +6105,12 @@ private fun java_script_stdlib_annotation_binding_in_import(name: String, declar
 private fun java_script_stdlib_annotation_binding(name: String): /capy/lang/Option[JavaScriptAnnotationBinding] =
     if name == "Deprecated"
     then /capy/lang/Option.Some { JavaScriptAnnotationBinding {
-        declaration: CompiledAnnotationDeclaration {
-            name: "Deprecated",
-            visibility: "public",
-            repeatable: false,
-            targets: ["fun", "method", "const", "data", "union", "enum", "type", "deriver", "class", "interface", "trait", "field", "init"],
-            fields: ["message|String|false|nothing:", "since|String|true|string:"],
-            location: CompiledSourceLocation { line: 2, column: 0 }
-        },
-        module: java_script_stdlib_annotations_module()
+        name: "Deprecated",
+        moduleName: "Annotations",
+        modulePath: "capy/meta_prog",
+        fields: ["message|String|false|nothing:", "since|String|true|string:"]
     }}
     else /capy/lang/Option.None {}
-
-private fun java_script_stdlib_annotations_module(): CompiledModule =
-    CompiledModule {
-        name: "Annotations",
-        path: "capy/meta_prog",
-        types: {:},
-        visiblePrimitiveBackedTypes: {:},
-        functions: [],
-        imports: [],
-        derivers: {:},
-        annotations: {:},
-        staticImports: []
-    }
 
 private fun java_script_stdlib_annotations_class(className: String): bool =
     className == "capy.meta_prog.Annotations" | className == "capy/meta_prog/Annotations"
@@ -5654,9 +6119,12 @@ private fun java_script_stdlib_annotations_module_path(path: String): bool =
     path == "/capy/meta_prog/Annotations" | path == "capy/meta_prog/Annotations"
 
 private fun java_script_reflection_module_package_metadata_literal(module: CompiledModule): String =
+    java_script_reflection_package_metadata_literal(module.name, module.path)
+
+private fun java_script_reflection_package_metadata_literal(moduleName: String, modulePath: String): String =
     java_script_code_object([
-        java_script_code_object_entry("name", java_script_string_literal(module.name)),
-        java_script_code_object_entry("path", java_script_string_literal(module.path)),
+        java_script_code_object_entry("name", java_script_string_literal(moduleName)),
+        java_script_code_object_entry("path", java_script_string_literal(modulePath)),
     ])
 
 private fun java_script_reflection_data_package_metadata_literal(module: CompiledModule): String =
@@ -5937,6 +6405,23 @@ private fun java_script_schema_field_type_name(value: String): String =
     if separator < 0
     then java_script_unknown_type()
     else java_script_schema_type_name(value[separator + 1, value.size().value])
+
+private fun java_script_object_field_schema_type(value: String): String =
+    let second = java_script_object_field_schema_second_separator(value)
+    let third = java_script_object_field_schema_third_separator(value)
+    if second < 0
+    then java_script_unknown_type()
+    else if third < 0
+    then java_script_schema_type_name(value[second + 1, value.size().value])
+    else java_script_schema_type_name(value[second + 1, third])
+
+private fun java_script_object_field_schema_second_separator(value: String): int =
+    let first = java_script_first_index_of(value, "|", 0)
+    if first < 0 then -1 else java_script_first_index_of(value, "|", first + 1)
+
+private fun java_script_object_field_schema_third_separator(value: String): int =
+    let second = java_script_object_field_schema_second_separator(value)
+    if second < 0 then -1 else java_script_first_index_of(value, "|", second + 1)
 
 private fun java_script_schema_type_name(value: String): String =
     let trimmed = value.trim()
