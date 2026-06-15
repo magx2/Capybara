@@ -100,7 +100,10 @@ tasks.named('saveSdkImportConfig') {
 // The Python plugin installs Miniforge and environments under the root .gradle/python
 // directory by default. Keep the shared install/cache, but avoid concurrent first-time
 // setup from multiple modules.
-def capyPythonSetupTasks = [':capy:condaSetup', ':capy:envSetup']
+def capyPythonSetupTasks = {
+    [tasks.findByPath(':capy:condaSetup'), tasks.findByPath(':capy:envSetup')]
+            .findAll { it != null }
+}
 
 tasks.named('condaDownload') {
     mustRunAfter(capyPythonSetupTasks)
