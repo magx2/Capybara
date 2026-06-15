@@ -1,11 +1,9 @@
 from /capy/collection/List import { List }
-from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledExpression import { CompiledExpression }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 
-data CompiledDeriverDeclaration {
-    name: String,
-    visibility: String,
+data CompiledObjectOrientedInitBlock {
+    body: CompiledExpression,
     documentation: List[String],
-    methods: List[CompiledFunction],
     location: CompiledSourceLocation
 }

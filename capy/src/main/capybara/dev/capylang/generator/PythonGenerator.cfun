@@ -11,6 +11,7 @@ from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativ
 from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
 from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
@@ -378,16 +379,16 @@ private fun python_object_field_assignments(fields: List[CompiledObjectOrientedF
         else "")
             + python_object_field_assignments(fields[1:], env, module, allModules)
 
-private fun python_object_init_statements(initBlocks: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_init_statements(initBlocks: List[CompiledObjectOrientedInitBlock], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match initBlocks[0] with
     case None -> ""
     case Some { initBlock } ->
         python_object_init_statement(initBlock, env, module, allModules)
             + python_object_init_statements(initBlocks[1:], env, module, allModules)
 
-private fun python_object_init_statement(initBlock: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let code = python_expression_code(initBlock, env, module, allModules)
-    if python_expression_type(initBlock, env, module, allModules) == python_effect_type()
+private fun python_object_init_statement(initBlock: CompiledObjectOrientedInitBlock, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = python_expression_code(initBlock.body, env, module, allModules)
+    if python_expression_type(initBlock.body, env, module, allModules) == python_effect_type()
     then "        _unsafe_run(" + code + ")" + python_newline()
     else "        " + code + python_newline()
 
@@ -3964,6 +3965,7 @@ private fun python_compiled_object_class(function: CompiledFunction, functions: 
     CompiledObjectOrientedClass {
         name: className,
         visibility: python_schema_value(function),
+        documentation: function.documentation,
         open: python_compiled_object_class_open(className, functions),
         parameters: python_compiled_object_class_parameters(className, functions),
         parents: python_object_schema_type_references(python_schema_values("__capy_oo_parent|" + className + "|", functions)),
@@ -4029,6 +4031,7 @@ private fun python_compiled_object_field(className: String, function: CompiledFu
     CompiledObjectOrientedField {
         name: fieldName,
         visibility: python_object_field_schema_visibility(value),
+        documentation: function.documentation,
         typeReference: python_object_schema_type_reference(python_object_field_schema_type(value)),
         value: python_compiled_object_field_value(className, fieldName, functions, function.location),
         hasValue: python_object_field_schema_has_value(value),
@@ -4077,12 +4080,16 @@ private fun python_object_field_schema_second_separator(value: String): int =
 private fun python_object_field_schema_last_separator(value: String): int =
     python_last_index_of(value, "|")
 
-private fun python_compiled_object_init_blocks(className: String, functions: List[CompiledFunction]): List[CompiledExpression] =
+private fun python_compiled_object_init_blocks(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedInitBlock] =
     match functions[0] with
     case None -> []
     case Some { function } ->
         if python_compiled_object_init_function_for_class(function, className)
-        then [function.body] + python_compiled_object_init_blocks(className, functions[1:])
+        then [CompiledObjectOrientedInitBlock {
+            body: function.body,
+            documentation: function.documentation,
+            location: function.location
+        }] + python_compiled_object_init_blocks(className, functions[1:])
         else python_compiled_object_init_blocks(className, functions[1:])
 
 private fun python_compiled_object_init_function_for_class(function: CompiledFunction, className: String): bool =
@@ -4110,6 +4117,7 @@ private fun python_compiled_object_method(function: CompiledFunction): CompiledO
     CompiledObjectOrientedMethod {
         name: python_compiled_object_method_name(function.name),
         visibility: python_compiled_object_method_visibility(function.visibility),
+        documentation: function.documentation,
         parameters: function.parameters,
         returnType: function.returnType,
         body: function.body,
@@ -7005,6 +7013,7 @@ private fun python_stdlib_annotation_binding(name: String): /capy/lang/Option[Py
         declaration: CompiledAnnotationDeclaration {
             name: "Deprecated",
             visibility: "public",
+            documentation: [],
             repeatable: false,
             targets: ["fun", "method", "const", "data", "union", "enum", "type", "deriver", "class", "interface", "trait", "field", "init"],
             fields: ["message|String|false|nothing:", "since|String|true|string:"],

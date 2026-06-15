@@ -7,6 +7,7 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 data CompiledFunction {
     name: String,
     visibility: String,
+    documentation: List[String],
     parameters: List[CompiledFunctionParameter],
     returnType: CompiledTypeReference,
     body: CompiledExpression,

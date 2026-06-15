@@ -4,6 +4,7 @@ from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocati
 data CompiledAnnotationDeclaration {
     name: String,
     visibility: String,
+    documentation: List[String],
     repeatable: bool,
     targets: List[String],
     fields: List[String],
