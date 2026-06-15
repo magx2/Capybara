@@ -16,6 +16,7 @@ from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledN
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
 from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
 from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
@@ -138,6 +139,7 @@ private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclar
     CompiledPrimitiveBackedType {
         name: declaration.name,
         visibility: declaration.visibility,
+        documentation: declaration.documentation,
         backingType: compile_type_in_module(declaration.backingType, module, allModules),
         location: compile_location(declaration.location)
     }
@@ -283,6 +285,7 @@ private fun compile_object_interface(interface: ObjectOrientedInterface, module:
     CompiledObjectOrientedInterface {
         name: interface.name,
         visibility: interface.visibility,
+        documentation: interface.documentation,
         kind: interface.kind,
         parents: compile_types_in_module(interface.parents, module, allModules),
         methods: compile_object_methods(interface.name, interface.methods, module, allModules),
@@ -298,6 +301,7 @@ private fun compile_object_class(class: ObjectOrientedClass, module: ParsedModul
     CompiledObjectOrientedClass {
         name: class.name,
         visibility: class.visibility,
+        documentation: class.documentation,
         open: class.open,
         parameters: compile_parameters_in_module(class.parameters, module, allModules),
         parents: compile_types_in_module(class.parents, module, allModules),
@@ -316,16 +320,21 @@ private fun compile_object_field(className: String, field: ObjectOrientedField, 
     CompiledObjectOrientedField {
         name: field.name,
         visibility: field.visibility,
+        documentation: field.documentation,
         typeReference: compile_type_in_module(field.typeReference, module, allModules),
         value: compile_expression_in_function(field.value, className + "." + field.name),
         hasValue: field.hasValue,
         location: compile_location(field.location)
     }
 
-private fun compile_object_init_blocks(className: String, initBlocks: List[ObjectOrientedInitBlock]): List[CompiledExpression] =
+private fun compile_object_init_blocks(className: String, initBlocks: List[ObjectOrientedInitBlock]): List[CompiledObjectOrientedInitBlock] =
     match initBlocks[0] with
     case None -> []
-    case Some { initBlock } -> [compile_expression_in_function(initBlock.body, className + ".init")] + compile_object_init_blocks(className, initBlocks[1:])
+    case Some { initBlock } -> [CompiledObjectOrientedInitBlock {
+        body: compile_expression_in_function(initBlock.body, className + ".init"),
+        documentation: initBlock.documentation,
+        location: compile_location(initBlock.location)
+    }] + compile_object_init_blocks(className, initBlocks[1:])
 
 private fun compile_object_methods(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedMethod] =
     match methods[0] with
@@ -337,6 +346,7 @@ private fun compile_object_method(className: String, method: ObjectOrientedMetho
     CompiledObjectOrientedMethod {
         name: method.name,
         visibility: method.visibility,
+        documentation: method.documentation,
         parameters: compile_parameters_in_module(method.parameters, module, allModules),
         returnType: compile_type_in_module(method.returnType, module, allModules),
         body: compile_expression_in_function(method.body, functionName),
@@ -355,9 +365,10 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
             + compile_object_interface_functions(interfaces[1:], module, allModules)
 
 private fun compile_object_interface_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
-    compile_schema_constant(
+    compile_documented_schema_constant(
         object_interface_schema_key(interface.name),
         interface.visibility,
+        interface.documentation,
         interface.location
     )
 
@@ -390,6 +401,7 @@ private fun compile_object_interface_method_function(interfaceName: String, meth
     CompiledFunction {
         name: object_interface_method_schema_key(interfaceName, method.name),
         visibility: "oo_interface_method:" + method.visibility,
+        documentation: method.documentation,
         parameters: compile_parameters_in_module(method.parameters, module, allModules),
         returnType: compile_type_in_module(method.returnType, module, allModules),
         body: compile_expression_in_function(method.body, interfaceName + "." + method.name),
@@ -413,9 +425,10 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
             + compile_object_class_functions(classes[1:], module, allModules)
 
 private fun compile_object_class_schema_function(class: ObjectOrientedClass): CompiledFunction =
-    compile_schema_constant(
+    compile_documented_schema_constant(
         object_class_schema_key(class.name),
         class.visibility,
+        class.documentation,
         class.location
     )
 
@@ -440,7 +453,7 @@ private fun compile_object_field_schema_functions(className: String, fields: Lis
     match fields[0] with
     case None -> []
     case Some { field } ->
-        [compile_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, module, allModules), field.location)]
+        [compile_documented_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, module, allModules), field.documentation, field.location)]
             + compile_object_field_schema_functions(className, fields[1:], module, allModules, idx + 1)
 
 private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
@@ -468,6 +481,7 @@ private fun compile_object_field_init_function(className: String, parameters: Li
     CompiledFunction {
         name: object_field_init_schema_key(className, field.name),
         visibility: "oo_field_init",
+        documentation: [],
         parameters: compile_parameters_in_module(parameters, module, allModules),
         returnType: compile_type_in_module(field.typeReference, module, allModules),
         body: compile_expression_in_function(field.value, className + "." + field.name),
@@ -485,6 +499,7 @@ private fun compile_object_init_function(className: String, parameters: List[Fun
     CompiledFunction {
         name: object_indexed_schema_key(object_init_schema_prefix(), className, idx),
         visibility: "oo_init",
+        documentation: initBlock.documentation,
         parameters: compile_parameters_in_module(parameters, module, allModules),
         returnType: compile_type(compiler_any_type()),
         body: compile_expression_in_function(initBlock.body, className + ".init"),
@@ -504,6 +519,7 @@ private fun compile_object_method_function(className: String, method: ObjectOrie
     CompiledFunction {
         name: object_method_schema_key(className, method.name),
         visibility: "oo:" + method.visibility,
+        documentation: method.documentation,
         parameters: compile_parameters_in_module(method.parameters, module, allModules),
         returnType: compile_type_in_module(method.returnType, module, allModules),
         body: compile_expression_in_function(method.body, functionName),
@@ -603,6 +619,7 @@ private fun compile_deriver_declaration(declaration: DeriverDeclaration): Compil
     CompiledDeriverDeclaration {
         name: declaration.name,
         visibility: declaration.visibility,
+        documentation: declaration.documentation,
         methods: compile_deriver_methods(declaration.methods),
         location: compile_location(declaration.location)
     }
@@ -643,6 +660,7 @@ private fun compile_derived_method(typeName: String, method: FunctionDeclaration
     CompiledFunction {
         name: functionName,
         visibility: method.visibility,
+        documentation: method.documentation,
         parameters: compile_parameters(method.parameters),
         returnType: compile_type(method.returnType),
         body: compile_expression_in_function(method.body, functionName),
@@ -662,6 +680,7 @@ private fun compile_annotation_declaration(declaration: AnnotationDeclaration): 
     CompiledAnnotationDeclaration {
         name: declaration.name,
         visibility: declaration.visibility,
+        documentation: declaration.documentation,
         repeatable: declaration.repeatable,
         targets: declaration.targets,
         fields: compile_annotation_fields(declaration.fields),
@@ -718,6 +737,7 @@ private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
     CompiledFunction {
         name: constant.name,
         visibility: "const:" + constant.visibility,
+        documentation: constant.documentation,
         parameters: [],
         returnType: compile_type(constant.typeReference),
         body: compile_expression_in_function(constant.expression, constant.name),
@@ -728,6 +748,7 @@ private fun compile_constant_in_module(constant: ConstantDeclaration, module: Pa
     CompiledFunction {
         name: constant.name,
         visibility: "const:" + constant.visibility,
+        documentation: constant.documentation,
         parameters: [],
         returnType: compile_type_in_module(constant.typeReference, module, allModules),
         body: compile_expression_in_function(constant.expression, constant.name),
@@ -752,7 +773,7 @@ private fun compile_functions(definitions: List[Definition], allDefinitions: Lis
         case _ -> compile_functions(definitions[1:], allDefinitions, module, allModules)
 
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
-    [compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location)]
+    [compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location)]
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
         + compile_data_schema_fields(declaration.name, declaration.fields, 0)
         + compile_data_schema_parents(declaration.name, declaration.parents, 0)
@@ -761,7 +782,7 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
 
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
     [
-        compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location),
+        compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|0", "name|String", declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|1", "order|int", declaration.location),
     ] + compile_annotation_application_schema("__capy_schema_annotation|enum|" + declaration.name + "|", declaration.annotations, 0)
@@ -779,6 +800,7 @@ private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclar
     CompiledFunction {
         name: value.name,
         visibility: "const:public",
+        documentation: [],
         parameters: [],
         returnType: CompiledTypeReference { name: enumName, arguments: [] },
         body: CompiledDataLiteral {
@@ -821,7 +843,7 @@ private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldD
     match fields[0] with
     case None -> []
     case Some { field } ->
-        [compile_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.location)]
+        [compile_documented_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.documentation, field.location)]
             + compile_data_schema_fields(dataName, fields[1:], idx + 1)
 
 private fun compile_data_field_annotation_schema(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
@@ -1046,9 +1068,13 @@ private fun compile_native_provider_bindings(providers: List[NativeProviderBindi
     }] + compile_native_provider_bindings(providers[1:])
 
 private fun compile_schema_constant(name: String, value: String, location: SourceLocation): CompiledFunction =
+    compile_documented_schema_constant(name, value, [], location)
+
+private fun compile_documented_schema_constant(name: String, value: String, documentation: List[String], location: SourceLocation): CompiledFunction =
     CompiledFunction {
         name: name,
         visibility: "const:schema",
+        documentation: documentation,
         parameters: [],
         returnType: compile_type(compiler_string_type()),
         body: CompiledStringLiteral {
@@ -1063,6 +1089,7 @@ private fun compile_function(function: FunctionDeclaration): CompiledFunction =
     CompiledFunction {
         name: function.name,
         visibility: function.visibility,
+        documentation: function.documentation,
         parameters: compile_parameters(function.parameters),
         returnType: compile_return_type(function.returnType, function.parameters, function.body),
         body: compile_expression_in_function(function.body, function.name),
@@ -1073,6 +1100,7 @@ private fun compile_function_in_module(function: FunctionDeclaration, module: Pa
     CompiledFunction {
         name: function.name,
         visibility: function.visibility,
+        documentation: function.documentation,
         parameters: compile_parameters_in_module(function.parameters, module, allModules),
         returnType: compile_return_type_in_module(function.returnType, function.parameters, function.body, module, allModules),
         body: compile_expression_in_function(function.body, function.name),

@@ -84,6 +84,7 @@ private fun example_module(): CompiledModule =
             CompiledFunction {
                 name: "greeting",
                 visibility: "public",
+                documentation: [],
                 parameters: [],
                 returnType: doc_string_type(),
                 body: CompiledStringLiteral {
@@ -96,6 +97,7 @@ private fun example_module(): CompiledModule =
             CompiledFunction {
                 name: "repeat",
                 visibility: "public",
+                documentation: [],
                 parameters: [
                     doc_parameter("message", doc_string_type()),
                     doc_parameter("times", doc_int_type())
@@ -111,6 +113,7 @@ private fun example_module(): CompiledModule =
             CompiledFunction {
                 name: "_default_count",
                 visibility: "private",
+                documentation: [],
                 parameters: [],
                 returnType: doc_int_type(),
                 body: CompiledIntLiteral {
