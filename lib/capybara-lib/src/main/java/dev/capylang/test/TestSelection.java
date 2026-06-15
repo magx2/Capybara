@@ -1,23 +1,22 @@
 package dev.capylang.test;
 
-import capy.test.CapyTest;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class TestSelection {
     private TestSelection() {
     }
 
-    static List<String> availableTests(List<CapyTest.TestFile> testFiles) {
+    static List<String> availableTests(List<Object> testFiles) {
         return testFiles.stream()
-                .flatMap(testFile -> testFile.test_cases().stream()
+                .flatMap(testFile -> testCases(testFile).stream()
                         .map(testCase -> testId(testFile, testCase)))
                 .toList();
     }
 
-    static List<CapyTest.TestFile> filterTestFiles(
-            List<CapyTest.TestFile> testFiles,
+    static List<Object> filterTestFiles(
+            List<Object> testFiles,
             List<String> testSelectors
     ) {
         if (testSelectors == null || testSelectors.isEmpty()) {
@@ -28,20 +27,20 @@ public final class TestSelection {
                 .map(Selector::parse)
                 .toList();
         var matched = new boolean[selectors.size()];
-        var filteredFiles = new ArrayList<CapyTest.TestFile>();
+        var filteredFiles = new ArrayList<Object>();
 
         for (var testFile : testFiles) {
             for (int i = 0; i < selectors.size(); i++) {
-                if (!selectors.get(i).hasTestName() && selectors.get(i).matchesFile(testFile.file_name())) {
+                if (!selectors.get(i).hasTestName() && selectors.get(i).matchesFile(fileName(testFile))) {
                     matched[i] = true;
                 }
             }
 
-            var filteredCases = new ArrayList<CapyTest.TestCase>();
-            for (var testCase : testFile.test_cases()) {
+            var filteredCases = new ArrayList<Object>();
+            for (var testCase : testCases(testFile)) {
                 var include = false;
                 for (int i = 0; i < selectors.size(); i++) {
-                    if (selectors.get(i).matches(testFile.file_name(), testCase.name())) {
+                    if (selectors.get(i).matches(fileName(testFile), testName(testCase))) {
                         matched[i] = true;
                         include = true;
                     }
@@ -52,10 +51,11 @@ public final class TestSelection {
             }
 
             if (!filteredCases.isEmpty()) {
-                filteredFiles.add(new CapyTest.TestFile(
-                        testFile.file_name(),
-                        filteredCases,
-                        testFile.timestamp_millis()
+                filteredFiles.add(Map.of(
+                        "__type", "TestFile",
+                        "file_name", fileName(testFile),
+                        "test_cases", List.copyOf(filteredCases),
+                        "timestamp_millis", field(testFile, "timestamp_millis")
                 ));
             }
         }
@@ -80,8 +80,26 @@ public final class TestSelection {
         return filteredFiles;
     }
 
-    private static String testId(CapyTest.TestFile testFile, CapyTest.TestCase testCase) {
-        return normalizedTestFileName(testFile.file_name()) + ".\"" + escapeTestName(testCase.name()) + "\"";
+    private static String testId(Object testFile, Object testCase) {
+        return normalizedTestFileName(fileName(testFile)) + ".\"" + escapeTestName(testName(testCase)) + "\"";
+    }
+
+    private static String fileName(Object testFile) {
+        return String.valueOf(field(testFile, "file_name"));
+    }
+
+    private static String testName(Object testCase) {
+        return String.valueOf(field(testCase, "name"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> testCases(Object testFile) {
+        return (List<Object>) field(testFile, "test_cases");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object field(Object value, String name) {
+        return ((Map<String, Object>) value).get(name);
     }
 
     private static String normalizedTestFileName(String fileName) {

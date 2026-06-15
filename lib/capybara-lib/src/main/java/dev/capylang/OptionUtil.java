@@ -1,26 +1,24 @@
 package dev.capylang;
 
-import capy.lang.Option;
-
+import java.util.Map;
 import java.util.Optional;
 
 public final class OptionUtil {
     private OptionUtil() {
     }
 
-    public static <T> Option<T> toCapyOption(Optional<T> optional) {
-        return optional.<Option<T>>map(Option.Some::new).orElseGet(OptionUtil::none);
-    }
-
-    public static <T> Optional<T> toJavaOptional(Option<T> option) {
-        return switch (option) {
-            case Option.Some<T> some -> Optional.ofNullable(some.value());
-            case Option.None ignored -> Optional.empty();
-        };
+    public static <T> Optional<T> toCapyOption(Optional<T> optional) {
+        return optional;
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> Option<T> none() {
-        return (Option<T>) Option.None.INSTANCE;
+    public static <T> Optional<T> toJavaOptional(Object option) {
+        if (option instanceof Optional<?> optional) {
+            return (Optional<T>) optional;
+        }
+        if (option instanceof Map<?, ?> map && "Some".equals(map.get("__type"))) {
+            return Optional.ofNullable((T) map.get("value"));
+        }
+        return Optional.empty();
     }
 }
