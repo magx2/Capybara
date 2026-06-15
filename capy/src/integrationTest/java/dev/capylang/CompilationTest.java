@@ -38,11 +38,19 @@ class CompilationTest {
                 .parallel()
                 .map(type -> {
                     var linkedProgram = (CompiledProgram) ((Either.Left<?, ?>) link).value();
-                    var compiled = Generator.generate(linkedProgram, type);
+                    var compiled = Generator.generate(linkedProgram, generatorOutputType(type));
                     return "\t === " + type + " === \n" + compiled;
                 })
                 .forEach(System.out::println);
 
+    }
+
+    private static String generatorOutputType(OutputType outputType) {
+        return switch (outputType) {
+            case JAVA -> "java";
+            case PYTHON -> "python";
+            case JAVASCRIPT -> "javascript";
+        };
     }
 
     private static RawModule rawModule(String name, String path, String input) {

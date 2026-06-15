@@ -1,16 +1,15 @@
 from /dev/capylang/compiler/CompiledProgram import { * }
-from /dev/capylang/compiler/OutputType import { OutputType, JAVA, JAVASCRIPT, PYTHON }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/JavaGenerator import { java_generator }
 from /dev/capylang/generator/JavaScriptGenerator import { java_script_generator }
 from /dev/capylang/generator/PythonGenerator import { python_generator }
 
-fun generate(program: CompiledProgram, output_type: OutputType): GeneratedProgram =
+fun generate(program: CompiledProgram, output_type: String): GeneratedProgram =
     let generator = find_generator(output_type)
     generator(program)
 
-private fun find_generator(output_type: OutputType): CompiledProgram => GeneratedProgram =
+private fun find_generator(output_type: String): CompiledProgram => GeneratedProgram =
     match output_type with
-    case JAVA -> :java_generator
-    case JAVASCRIPT -> :java_script_generator
-    case PYTHON -> :python_generator
+    case "javascript" | "JAVASCRIPT" | "js" | "JS" -> :java_script_generator
+    case "python" | "PYTHON" | "py" | "PY" -> :python_generator
+    case _ -> :java_generator
