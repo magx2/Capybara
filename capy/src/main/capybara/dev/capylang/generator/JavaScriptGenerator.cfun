@@ -161,8 +161,8 @@ private fun java_script_object_interface_type_function(interfaceName: String, fu
         + "\"name\": " + java_script_string_literal(interfaceName)
         + ", \"pkg\": " + java_script_reflection_module_package_metadata_literal(module)
         + ", \"methods\": " + java_script_object_constructor_name(interfaceName) + ".__capy_methods"
-        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values("__capy_oo_interface_parent|" + interfaceName + "|", functions), module, allModules)
-        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values("__capy_oo_annotation|type|" + interfaceName + "|", functions), module, allModules)
+        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values(java_script_object_interface_parent_schema_prefix(interfaceName), functions), module, allModules)
+        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values(java_script_object_type_annotation_schema_prefix(interfaceName), functions), module, allModules)
         + "};"
         + java_script_newline()
         + "};"
@@ -195,10 +195,10 @@ private fun java_script_object_type_function(className: String, functions: List[
         + "\"name\": " + java_script_string_literal(className)
         + ", \"pkg\": " + java_script_reflection_module_package_metadata_literal(module)
         + ", \"open\": " + java_script_bool_code(java_script_object_class_open(className, functions))
-        + ", \"fields\": " + java_script_object_field_infos_literal(className, java_script_schema_values("__capy_oo_field|" + className + "|", functions), 0, module, allModules)
+        + ", \"fields\": " + java_script_object_field_infos_literal(className, java_script_schema_values(java_script_object_field_schema_prefix(className), functions), 0, module, allModules)
         + ", \"methods\": " + java_script_object_constructor_name(className) + ".__capy_methods"
-        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values("__capy_oo_parent|" + className + "|", functions), module, allModules)
-        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values("__capy_oo_annotation|type|" + className + "|", functions), module, allModules)
+        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values(java_script_object_class_parent_schema_prefix(className), functions), module, allModules)
+        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values(java_script_object_type_annotation_schema_prefix(className), functions), module, allModules)
         + "};"
         + java_script_newline()
         + "};"
@@ -220,7 +220,7 @@ private fun java_script_object_method_info_literal_for(ownerName: String, method
         java_script_code_object_entry("params", java_script_object_method_param_infos_literal(function.parameters)),
         java_script_code_object_entry("return_type", java_script_object_type_info_literal(java_script_type_reference_name(function.returnType))),
         java_script_code_object_entry("annotations", java_script_object_annotations_literal(
-            java_script_schema_values("__capy_oo_annotation|method|" + ownerName + "|" + methodName + "|", module.functions),
+            java_script_schema_values(java_script_object_method_annotation_schema_prefix(ownerName, methodName), module.functions),
             module,
             allModules
         )),
@@ -241,7 +241,7 @@ private fun java_script_object_field_info_literal(className: String, field: Stri
         java_script_code_object_entry("name", java_script_string_literal(java_script_schema_field_name(field))),
         java_script_code_object_entry("type", java_script_object_type_info_literal(java_script_object_field_schema_type(field))),
         java_script_code_object_entry("annotations", java_script_object_annotations_literal(
-            java_script_schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", module.functions),
+            java_script_schema_values(java_script_object_field_annotation_schema_prefix(className, idx), module.functions),
             module,
             allModules
         )),
@@ -498,9 +498,15 @@ private fun java_script_object_class_schema_prefix(): String =
     "__capy_oo_class|"
 
 private fun java_script_object_class_open(className: String, functions: List[CompiledFunction]): bool =
-    match java_script_schema_value_named("__capy_oo_class_open|" + className, functions) with
+    match java_script_schema_value_named(java_script_object_class_open_schema_key(className), functions) with
     case Some { value } -> value == "true"
     case None -> false
+
+private fun java_script_object_class_open_schema_key(className: String): String =
+    java_script_object_class_open_schema_prefix() + className
+
+private fun java_script_object_class_open_schema_prefix(): String =
+    "__capy_oo_class_open|"
 
 private fun java_script_object_interface_schema_function(function: CompiledFunction): bool =
     java_script_compiled_schema(function)
@@ -537,6 +543,29 @@ private fun java_script_object_type_exported(name: String, functions: List[Compi
 
 private fun java_script_object_interface_schema_prefix(): String =
     "__capy_oo_interface|"
+
+private fun java_script_object_class_parent_schema_prefix(className: String): String =
+    "__capy_oo_parent|" + className + "|"
+
+private fun java_script_object_interface_parent_schema_prefix(interfaceName: String): String =
+    "__capy_oo_interface_parent|" + interfaceName + "|"
+
+private fun java_script_object_field_schema_prefix(className: String): String =
+    "__capy_oo_field|" + className + "|"
+
+private fun java_script_object_type_annotation_schema_prefix(ownerName: String): String =
+    java_script_object_annotation_schema_prefix("type", ownerName, "")
+
+private fun java_script_object_method_annotation_schema_prefix(ownerName: String, methodName: String): String =
+    java_script_object_annotation_schema_prefix("method", ownerName, methodName)
+
+private fun java_script_object_field_annotation_schema_prefix(ownerName: String, idx: int): String =
+    java_script_object_annotation_schema_prefix("field", ownerName, "" + idx)
+
+private fun java_script_object_annotation_schema_prefix(target: String, ownerName: String, memberName: String): String =
+    if memberName.is_empty()
+    then "__capy_oo_annotation|" + target + "|" + ownerName + "|"
+    else "__capy_oo_annotation|" + target + "|" + ownerName + "|" + memberName + "|"
 
 private fun java_script_object_field_init_function(function: CompiledFunction): bool =
     java_script_string_has_prefix(function.name, java_script_object_field_init_prefix())
@@ -615,8 +644,14 @@ private fun java_script_object_method_exists(className: String, methodName: Stri
             else java_script_object_method_exists(className, methodName, functions[1:])
         else java_script_object_method_exists(className, methodName, functions[1:])
 
+private fun java_script_object_interface_method_function(function: CompiledFunction): bool =
+    java_script_string_has_prefix(function.name, java_script_object_interface_method_any_prefix())
+
+private fun java_script_object_interface_method_any_prefix(): String =
+    "__capy_oo_interface_method|"
+
 private fun java_script_object_interface_method_prefix(interfaceName: String): String =
-    "__capy_oo_interface_method|" + interfaceName + "|"
+    java_script_object_interface_method_any_prefix() + interfaceName + "|"
 
 private fun java_script_object_interface_method_function_for_interface(interfaceName: String, function: CompiledFunction): bool =
     java_script_string_has_prefix(function.name, java_script_object_interface_method_prefix(interfaceName))
@@ -800,10 +835,10 @@ private fun java_script_imported_function(function: CompiledFunction): bool =
     function.visibility == "imported"
 
 private fun java_script_compiled_object_helper_function(function: CompiledFunction): bool =
-    java_script_string_has_prefix(function.name, "__capy_oo_method|")
-        | java_script_string_has_prefix(function.name, "__capy_oo_interface_method|")
-        | java_script_string_has_prefix(function.name, "__capy_oo_field_init|")
-        | java_script_string_has_prefix(function.name, "__capy_oo_init|")
+    java_script_object_method_function(function)
+        | java_script_object_interface_method_function(function)
+        | java_script_object_field_init_function(function)
+        | java_script_object_init_function(function)
 
 private fun java_script_constants(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
@@ -3402,7 +3437,7 @@ private fun java_script_object_field_type_in_modules(name: String, className: St
         case None -> java_script_object_field_type_in_modules(name, className, modules[1:])
 
 private fun java_script_object_field_type_in_functions(name: String, className: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
-    java_script_object_field_type_in_fields(name, java_script_schema_values("__capy_oo_field|" + className + "|", functions))
+    java_script_object_field_type_in_fields(name, java_script_schema_values(java_script_object_field_schema_prefix(className), functions))
 
 private fun java_script_object_field_type_in_fields(name: String, fields: List[String]): /capy/lang/Option[String] =
     match fields[0] with
