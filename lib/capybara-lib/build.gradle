@@ -440,15 +440,21 @@ tasks.withType(InProcessCapybaraTestTask).configureEach {
 }
 
 def capyProject = project(':capy')
-def compilerProject = project(':compiler')
 def capyRuntimeDependencies = capyProject.configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
 def capyRuntimeClasspath = files(
         capyProject.sourceSets.main.output.classesDirs,
-        compilerProject.sourceSets.main.output.classesDirs,
         capyRuntimeDependencies
 )
+
+tasks.withType(InProcessCapybaraCompileTask).configureEach {
+    dependsOn capyProject.tasks.named('compileJava')
+}
+
+tasks.withType(InProcessCapybaraTestTask).configureEach {
+    dependsOn capyProject.tasks.named('compileJava')
+}
 
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')

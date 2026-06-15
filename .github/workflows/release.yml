@@ -147,6 +147,11 @@ jobs:
           github-token: ${{ github.token }}
           native-image-job-reports: "false"
 
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -167,7 +172,7 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.release-metadata.outputs.release_version }}"
           mkdir -p dist
-          find capy compiler lib build-tool -path '*/build/libs/*.jar' -type f -exec cp {} dist/ \;
+          find capy lib build-tool -path '*/build/libs/*.jar' -type f -exec cp {} dist/ \;
           find capy -path '*/build/distributions/*' -type f -exec cp {} dist/ \;
           cp "capy/build/native/nativeCompile/capyc-${VERSION}" "dist/capyc-${VERSION}-linux-x64"
           tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C "capy/build/native/nativeCompile" "capyc-${VERSION}"

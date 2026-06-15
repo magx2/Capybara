@@ -11,6 +11,5 @@ plugins {
 }
 
 rootProject.name = 'Capybara'
-include('capy', 'compiler', 'lib:capybara-lib', 'build-tool:gradle')
-
+include('capy', 'lib:capybara-lib', 'build-tool:gradle')
 
