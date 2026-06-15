@@ -720,7 +720,7 @@ private fun python_unbound_variable_code(name: String, module: CompiledModule, a
     if python_qualified_enum_value_name(name, module, allModules)
     then python_enum_qualified_value_code(name, module, allModules)
     else match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
-        case Some { binding } -> python_module_import_name(binding.module) + "." + python_identifier(binding.function.name)
+        case Some { binding } -> python_module_import_expression(binding.module) + "." + python_identifier(binding.function.name)
         case None ->
             match python_imported_stdlib_constant(name, module.imports) with
             case Some { value } -> value.pythonName
@@ -852,6 +852,12 @@ private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: Li
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_function_call_code(call.name)
+    else if python_stdlib_parse_function_call(call, module)
+    then python_stdlib_parse_function_call_code(call, env, module, allModules)
+    else if python_stdlib_path_function_call(call, module)
+    then python_stdlib_path_function_call_code(call, env, module, allModules)
+    else if python_stdlib_io_function_call(call, module)
+    then python_stdlib_io_function_call_code(call, env, module, allModules)
     else if python_reflection_function_call(call)
     then python_reflection_function_call_code(call, env, module, allModules)
     else if python_object_type_function_call(call, module, allModules)
@@ -2766,11 +2772,94 @@ private fun python_stdlib_effect_function_call_code(name: String): String =
 private fun python_stdlib_effect_function_call_type(name: String): String =
     python_effect_type()
 
+private fun python_stdlib_parse_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    python_one_method_argument(call.arguments)
+        & python_local_function_count(call.name, module.functions) == 0
+        & python_string_parse_method_name(call.name)
+        & python_primitives_member_imported(call.name, module.imports)
+
+private fun python_stdlib_parse_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_string_parse_helper(call.name)
+        + "("
+        + python_first_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
+
+private fun python_stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    python_one_method_argument(call.arguments)
+        & python_local_function_count(call.name, module.functions) == 0
+        & call.name == "from_string"
+        & python_path_member_imported("from_string", module.imports)
+
+private fun python_stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "from_string("
+        + python_expression_list_code(call.arguments, env, module, allModules)
+        + ")"
+
+private fun python_stdlib_io_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    python_stdlib_io_function_call_by_name(call.name, module)
+        & python_stdlib_io_function_argument_count(call.name, call.arguments)
+
+private fun python_stdlib_io_function_call_by_name(name: String, module: CompiledModule): bool =
+    python_local_function_count(name, module.functions) == 0
+        & python_io_function_name(name)
+        & python_io_member_imported(name, module.imports)
+
+private fun python_stdlib_io_function_argument_count(name: String, arguments: List[CompiledExpression]): bool =
+    if python_io_unary_function_name(name)
+    then python_one_method_argument(arguments)
+    else if python_io_binary_function_name(name)
+    then python_two_method_arguments(arguments)
+    else false
+
+private fun python_io_unary_function_name(name: String): bool =
+    name == "read_text"
+        | name == "read_lines"
+        | name == "read_bytes"
+        | name == "exists"
+        | name == "is_file"
+        | name == "is_directory"
+        | name == "size"
+        | name == "create_file"
+        | name == "create_directory"
+        | name == "create_directories"
+        | name == "list_entries"
+        | name == "delete"
+
+private fun python_io_binary_function_name(name: String): bool =
+    name == "write_text"
+        | name == "write_lines"
+        | name == "write_bytes"
+        | name == "append_text"
+        | name == "append_lines"
+        | name == "append_bytes"
+        | name == "copy"
+        | name == "copy_replace"
+        | name == "move"
+        | name == "move_replace"
+
+private fun python_io_function_name(name: String): bool =
+    python_io_unary_function_name(name) | python_io_binary_function_name(name)
+
+private fun python_stdlib_io_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    call.name
+        + "("
+        + python_expression_list_code(call.arguments, env, module, allModules)
+        + ")"
+
 private fun python_system_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     python_module_member_imported(member, imports, "/capy/lang/System", "capy/lang/System")
 
 private fun python_clock_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     python_module_member_imported(member, imports, "/capy/date_time/Clock", "capy/date_time/Clock")
+
+private fun python_primitives_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    python_module_member_imported(member, imports, "/capy/lang/Primitives", "capy/lang/Primitives")
+
+private fun python_path_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    python_module_member_imported(member, imports, "/capy/io/Path", "capy/io/Path")
+
+private fun python_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    python_module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")
 
 private fun python_module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
     match imports[0] with
@@ -3449,7 +3538,7 @@ private fun python_function_call_name(name: String, module: CompiledModule, allM
     case Some { function } -> python_function_name(function)
     case None ->
         match python_find_function_binding_in_imports(name, module.imports, module, allModules) with
-        case Some { binding } -> python_module_import_name(binding.module) + "." + python_function_name(binding.function)
+        case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
         case None -> python_identifier(name)
 
 private fun python_runtime_function(name: String): bool =
@@ -3578,7 +3667,7 @@ private fun python_enum_value_reference_code(typeName: String, valueName: String
     if python_enum_type_exists_in_functions(typeName, module.functions)
     then python_identifier(valueName)
     else match python_enum_type_imported_module(typeName, module.imports, module, allModules) with
-        case Some { importedModule } -> python_module_import_name(importedModule) + "." + python_identifier(valueName)
+        case Some { importedModule } -> python_module_import_expression(importedModule) + "." + python_identifier(valueName)
         case None -> python_identifier(valueName)
 
 private fun python_enum_type_imported_module(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
@@ -4178,7 +4267,7 @@ private fun python_find_object_method_in_methods(name: String, methods: List[Com
 private fun python_object_class_reference(binding: PythonObjectClassBinding, module: CompiledModule): String =
     if python_same_module(binding.module, module)
     then python_identifier(binding.objectClass.name)
-    else python_module_import_name(binding.module) + "." + python_identifier(binding.objectClass.name)
+    else python_module_import_expression(binding.module) + "." + python_identifier(binding.objectClass.name)
 
 private fun python_same_module(first: CompiledModule, second: CompiledModule): bool =
     first.name == second.name & first.path == second.path
@@ -4211,7 +4300,7 @@ private fun python_find_method_function(ownerName: String, methodName: String, f
         else python_find_method_function(ownerName, methodName, functions[1:])
 
 private fun python_method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
-    if python_skip_function(function)
+    if python_skip_function(function) | !python_extension_method_function(function)
     then false
     else
         let idx = python_last_dot_index(function.name)
@@ -4285,7 +4374,7 @@ private fun python_module_path(module: CompiledModule): String =
     else module.path + "/" + module.name
 
 private fun python_extension_method_function(function: CompiledFunction): bool =
-    python_last_dot_index(function.name) >= 0
+    python_last_dot_index(function.name) >= 0 & !(function.name ? "__local__")
 
 private fun python_method_owner_name(name: String): String =
     let idx = python_last_dot_index(name)
