@@ -141,5 +141,3 @@ jobs:
               --body "Automated merge-back from \`${RELEASE_BRANCH}\` into \`${DEFAULT_BRANCH}\`. The \`${STATE_BRANCH}\` branch preserves merge ancestry, while this PR branch stays linear for \`${DEFAULT_BRANCH}\`.")"
             echo "Created merge-back pull request: ${PR_URL}"
           fi
-
-          gh workflow run check.yml --ref "${BACK_BRANCH}"
