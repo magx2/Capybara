@@ -1,8 +1,6 @@
 package dev.capylang.test;
 
 import capy.test.CapyTest;
-import capy.lang.Result;
-import capy.test.CapyTest.TestRun;
 import dev.capylang.PathUtil;
 
 import java.lang.reflect.InvocationTargetException;
@@ -12,13 +10,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class TestRunner {
 
     public static final String CAPY_TEST_RUNTIME_CLASS = "capy.test.CapyTestRuntime";
     public static final String CAPY_TEST_CLASS = "capy.test.CapyTest";
     public static final String GATHER_TESTS_METHOD_NAME = "gatherTests";
-    public static final String RUN_TESTS_METHOD_NAME = "runTests";
 
     public static void main(String[] args) {
         try {
@@ -34,18 +32,18 @@ public class TestRunner {
         var gatherTestsMethod = loadGatherTestsMethod(capyTestRuntimeClass);
         var testFiles = invokeGatherTests(gatherTestsMethod);
         if (arguments.availableTests()) {
-            availableTests(testFiles).forEach(System.out::println);
+            TestSelection.availableTests(testFiles).forEach(System.out::println);
             return 0;
         }
-        testFiles = filterTestFiles(testFiles, arguments.testSelectors());
+        testFiles = TestSelection.filterTestFiles(testFiles, arguments.testSelectors());
         var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), arguments.logType(), testFiles);
-        return testRun.failed() ? 1 : 0;
+        return failed(testRun) ? 1 : 0;
     }
 
     public static Arguments parseArguments(String[] args) {
         Path outputDir = null;
         ReportType reportType = null;
-        CapyTest.LogType logType = CapyTest.LogType.NONE;
+        LogType logType = LogType.NONE;
         var testSelectors = new ArrayList<String>();
         var availableTests = false;
         for (int i = 0; i < args.length; i++) {
@@ -88,15 +86,15 @@ public class TestRunner {
     public record Arguments(
             Path outputDir,
             ReportType reportType,
-            CapyTest.LogType logType,
+            LogType logType,
             List<String> testSelectors,
             boolean availableTests
     ) {
         public Arguments(Path outputDir, ReportType reportType) {
-            this(outputDir, reportType, CapyTest.LogType.NONE, List.of(), false);
+            this(outputDir, reportType, LogType.NONE, List.of(), false);
         }
 
-        public Arguments(Path outputDir, ReportType reportType, CapyTest.LogType logType) {
+        public Arguments(Path outputDir, ReportType reportType, LogType logType) {
             this(outputDir, reportType, logType, List.of(), false);
         }
 
@@ -114,7 +112,7 @@ public class TestRunner {
                 throw new IllegalArgumentException("Report type is null");
             }
             if (logType == null) {
-                logType = CapyTest.LogType.NONE;
+                logType = LogType.NONE;
             }
             if (testSelectors == null) {
                 testSelectors = List.of();
@@ -135,6 +133,12 @@ public class TestRunner {
         JEST
     }
 
+    public enum LogType {
+        NONE,
+        LOG,
+        TEAM_CITY
+    }
+
     private static void printHelp() {
         System.out.println("""
                 Usage: java -jar test-runner.jar [options]
@@ -148,21 +152,10 @@ public class TestRunner {
                 """);
     }
 
-    static List<String> availableTests(List<CapyTest.TestFile> testFiles) {
-        return TestSelection.availableTests(testFiles);
-    }
-
-    static List<CapyTest.TestFile> filterTestFiles(
-            List<CapyTest.TestFile> testFiles,
-            List<String> testSelectors
-    ) {
-        return TestSelection.filterTestFiles(testFiles, testSelectors);
-    }
-
-    private static CapyTest.LogType parseLogType(String value) {
+    private static LogType parseLogType(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
-            case "LOG" -> CapyTest.LogType.LOG;
-            case "TC", "TEAM_CITY" -> CapyTest.LogType.TEAM_CITY;
+            case "LOG" -> LogType.LOG;
+            case "TC", "TEAM_CITY" -> LogType.TEAM_CITY;
             default -> throw new IllegalArgumentException("Unknown log type `" + value + "`. Use LOG, TC, or TEAM_CITY.");
         };
     }
@@ -183,7 +176,7 @@ public class TestRunner {
         }
     }
 
-    private static List<CapyTest.TestFile> invokeGatherTests(Method gatherTestsMethod) {
+    private static List<Object> invokeGatherTests(Method gatherTestsMethod) {
         try {
             var result = gatherTestsMethod.invoke(null);
             var root = unsafeRunEffect(result);
@@ -215,9 +208,9 @@ public class TestRunner {
         return List.of(value);
     }
 
-    private static CapyTest.TestFile asTestFile(Object value) {
-        if (value instanceof CapyTest.TestFile testFile) {
-            return testFile;
+    private static Object asTestFile(Object value) {
+        if (value instanceof Map<?, ?> map && "TestFile".equals(map.get("__type"))) {
+            return value;
         }
         var valueType = value == null ? "null" : value.getClass().getCanonicalName();
         throw new IllegalStateException("Method `%s()` should return `TestFile` values, but it returned `%s`"
@@ -250,20 +243,48 @@ public class TestRunner {
         return isEffectClass(type.getSuperclass());
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static TestRun invokeRunTests(
+    private static Object invokeRunTests(
             ReportType reportType,
             Path outputDir,
-            CapyTest.LogType logType,
-            List<CapyTest.TestFile> testFiles
+            LogType logType,
+            List<Object> testFiles
     ) {
-        var result = (Result<TestRun>) CapyTest.runTestsAndPrintSummary(
-                capy.test.CapyTest.ReportType.valueOf(reportType.name()),
+        var result = invokeGeneratedCapyTest(
+                "run_tests_and_print_summary",
+                generatedConstant(reportType.name()),
                 PathUtil.fromJavaPath(outputDir),
-                logType,
-                (List) testFiles
-        ).unsafeRun();
-        return unwrapResult(result, "Cannot run Capybara tests");
+                generatedConstant(logType.name()),
+                testFiles
+        );
+        return unwrapResult(unsafeRunEffect(result), "Cannot run Capybara tests");
+    }
+
+    private static Object invokeGeneratedCapyTest(String namePrefix, Object... arguments) {
+        var method = findGeneratedMethod(CapyTest.class, namePrefix, arguments.length);
+        try {
+            return method.invoke(null, arguments);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Generated method `%s` should be public".formatted(method.getName()), e);
+        } catch (InvocationTargetException e) {
+            throw new IllegalStateException("Cannot invoke generated method `%s`".formatted(method.getName()), e);
+        }
+    }
+
+    private static Method findGeneratedMethod(Class<?> type, String namePrefix, int parameterCount) {
+        for (var method : type.getMethods()) {
+            if (method.getName().startsWith(namePrefix) && method.getParameterCount() == parameterCount) {
+                return method;
+            }
+        }
+        throw new IllegalStateException("Cannot find generated method `%s` with %d parameters".formatted(namePrefix, parameterCount));
+    }
+
+    private static Object generatedConstant(String name) {
+        try {
+            return CapyTest.class.getField(name).get(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Cannot read generated CapyTest constant `%s`".formatted(name), e);
+        }
     }
 
     private static ClassLoader contextClassLoader() {
@@ -272,15 +293,20 @@ public class TestRunner {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T unwrapResult(Result<T> result, String message) {
-        if (result instanceof Result.Success<?> success) {
-            return (T) success.value();
+    private static Object unwrapResult(Object result, String message) {
+        if (result instanceof Map<?, ?> map && "Success".equals(map.get("__type"))) {
+            return ((Map<String, Object>) map).get("value");
         }
-        if (result instanceof Result.Error<?> error) {
-            var cause = error.ex();
-            var detail = cause == null ? "unknown error" : cause.getMessage();
-            throw new IllegalStateException(message + ": " + detail, cause);
+        if (result instanceof Map<?, ?> map && "Error".equals(map.get("__type"))) {
+            var rawDetail = map.get("message");
+            var detail = String.valueOf(rawDetail == null ? "unknown error" : rawDetail);
+            throw new IllegalStateException(message + ": " + detail);
         }
         throw new IllegalStateException(message + ": unknown result type `%s`".formatted(result == null ? "null" : result.getClass().getCanonicalName()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static boolean failed(Object testRun) {
+        return Boolean.TRUE.equals(((Map<String, Object>) testRun).get("failed"));
     }
 }
