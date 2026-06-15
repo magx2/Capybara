@@ -297,7 +297,20 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --no-daemon
+        shell: bash
+        run: |
+          set -o pipefail
+          PUBLISH_LOG="${RUNNER_TEMP:-/tmp}/publish-java-artifacts.log"
+          if ./gradlew publishAllPublicationsToGitHubPackagesRepository --no-daemon 2>&1 | tee "${PUBLISH_LOG}"; then
+            exit 0
+          fi
+
+          if grep -Eiq '409|conflict|already exists|cannot be updated|package version already exists' "${PUBLISH_LOG}"; then
+            echo "Java artifacts already exist for this release version; continuing."
+            exit 0
+          fi
+
+          exit 1
 
       - name: Bump patch version
         shell: bash
@@ -318,13 +331,11 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Push release commits and tag
+      - name: Push release tag
         shell: bash
         run: |
           set -euo pipefail
-          BRANCH="${{ needs.release-metadata.outputs.release_branch }}"
           TAG="${{ needs.release-metadata.outputs.tag }}"
-          git push origin "HEAD:${BRANCH}"
           if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} is already pushed."
           else
@@ -367,4 +378,45 @@ jobs:
               --verify-tag \
               --title "Capybara ${VERSION}" \
               --notes "Release ${VERSION}"
+          fi
+
+      - name: Create patch bump pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_BRANCH="${{ needs.release-metadata.outputs.release_branch }}"
+          RELEASE_VERSION="${{ needs.release-metadata.outputs.release_version }}"
+          NEXT_PATCH_VERSION="${{ needs.release-metadata.outputs.next_patch_version }}"
+          BUMP_BRANCH="automation/post-release-${RELEASE_VERSION}"
+
+          REMOTE_BUMP_SHA="$(git ls-remote --heads origin "${BUMP_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${REMOTE_BUMP_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${BUMP_BRANCH}:${REMOTE_BUMP_SHA}" origin "HEAD:${BUMP_BRANCH}"
+          else
+            git push origin "HEAD:${BUMP_BRANCH}"
+          fi
+
+          PR_NUMBER="$(
+            gh pr list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${RELEASE_BRANCH}" \
+              --head "${BUMP_BRANCH}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -n "${PR_NUMBER}" ]]; then
+            echo "Patch bump pull request already exists: ${PR_NUMBER}"
+          else
+            PR_URL="$(
+              gh pr create \
+                --repo "${GITHUB_REPOSITORY}" \
+                --base "${RELEASE_BRANCH}" \
+                --head "${BUMP_BRANCH}" \
+                --title "chore: bump version to ${NEXT_PATCH_VERSION}" \
+                --body "Bumps \`${RELEASE_BRANCH}\` to \`${NEXT_PATCH_VERSION}\` after release \`${RELEASE_VERSION}\`."
+            )"
+            echo "Created patch bump pull request: ${PR_URL}"
           fi
