@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+      - "!merge-back/**"
     paths:
       - ".github/workflows/**"
       - "build-tool/**"
@@ -36,6 +37,7 @@ permissions:
 
 jobs:
   build-check:
+    if: ${{ !startsWith(github.ref_name, 'merge-back/') && !startsWith(github.head_ref || '', 'merge-back/') }}
     runs-on: ubuntu-latest
 
     steps:
