@@ -349,32 +349,32 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
         [compile_object_interface_schema_function(interface)]
             + [compile_object_interface_kind_schema_function(interface)]
             + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0, interface.location)
-            + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + interface.name + "|", interface.annotations, 0)
+            + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(interface.name), interface.annotations, 0)
             + compile_object_interface_method_functions(interface.name, interface.methods, module, allModules)
             + compile_object_interface_functions(interfaces[1:], module, allModules)
 
 private fun compile_object_interface_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
     compile_schema_constant(
-        "__capy_oo_interface|" + interface.name,
+        object_interface_schema_key(interface.name),
         interface.visibility,
         interface.location
     )
 
 private fun compile_object_interface_kind_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
     compile_schema_constant(
-        "__capy_oo_interface_kind|" + interface.name,
+        object_interface_kind_schema_key(interface.name),
         interface.kind,
         interface.location
     )
 
 private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
-    compile_object_parent_schema_functions("__capy_oo_interface_parent|", interfaceName, parents, module, allModules, idx, location)
+    compile_object_parent_schema_functions(object_interface_parent_schema_prefix(), interfaceName, parents, module, allModules, idx, location)
 
 private fun compile_object_parent_schema_functions(prefix: String, ownerName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parents[0] with
     case None -> []
     case Some { parent } ->
-        [compile_schema_constant(prefix + ownerName + "|" + idx, compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
+        [compile_schema_constant(object_indexed_schema_key(prefix, ownerName, idx), compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
             + compile_object_parent_schema_functions(prefix, ownerName, parents[1:], module, allModules, idx + 1, location)
 
 private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
@@ -382,12 +382,12 @@ private fun compile_object_interface_method_functions(interfaceName: String, met
     case None -> []
     case Some { method } ->
         [compile_object_interface_method_function(interfaceName, method, module, allModules)]
-            + compile_function_annotation_application_schema("__capy_oo_annotation|method|" + interfaceName + "|" + method.name + "|", method.annotations, 0)
+            + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(interfaceName, method.name), method.annotations, 0)
             + compile_object_interface_method_functions(interfaceName, methods[1:], module, allModules)
 
 private fun compile_object_interface_method_function(interfaceName: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
-        name: "__capy_oo_interface_method|" + interfaceName + "|" + method.name,
+        name: object_interface_method_schema_key(interfaceName, method.name),
         visibility: "oo_interface_method:" + method.visibility,
         parameters: compile_parameters_in_module(method.parameters, module, allModules),
         returnType: compile_type_in_module(method.returnType, module, allModules),
@@ -403,7 +403,7 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
             + [compile_object_class_open_schema_function(class)]
             + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
             + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0, class.location)
-            + compile_function_annotation_application_schema("__capy_oo_annotation|type|" + class.name + "|", class.annotations, 0)
+            + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(class.name), class.annotations, 0)
             + compile_object_field_schema_functions(class.name, class.fields, module, allModules, 0)
             + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
             + compile_object_field_init_functions(class.name, class.parameters, class.fields, module, allModules)
@@ -413,14 +413,14 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
 
 private fun compile_object_class_schema_function(class: ObjectOrientedClass): CompiledFunction =
     compile_schema_constant(
-        "__capy_oo_class|" + class.name,
+        object_class_schema_key(class.name),
         class.visibility,
         class.location
     )
 
 private fun compile_object_class_open_schema_function(class: ObjectOrientedClass): CompiledFunction =
     compile_schema_constant(
-        "__capy_oo_class_open|" + class.name,
+        object_class_open_schema_key(class.name),
         if class.open then "true" else "false",
         class.location
     )
@@ -429,24 +429,24 @@ private fun compile_object_class_parameter_schema_functions(className: String, p
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [compile_schema_constant("__capy_oo_param|" + className + "|" + idx, parameter.name + "|" + compiled_type_reference_schema(compile_type_in_module(parameter.typeReference, module, allModules)), parameter.location)]
+        [compile_schema_constant(object_indexed_schema_key(object_class_parameter_schema_prefix(), className, idx), parameter.name + "|" + compiled_type_reference_schema(compile_type_in_module(parameter.typeReference, module, allModules)), parameter.location)]
             + compile_object_class_parameter_schema_functions(className, parameters[1:], module, allModules, idx + 1)
 
 private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
-    compile_object_parent_schema_functions("__capy_oo_parent|", className, parents, module, allModules, idx, location)
+    compile_object_parent_schema_functions(object_class_parent_schema_prefix(), className, parents, module, allModules, idx, location)
 
 private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        [compile_schema_constant("__capy_oo_field|" + className + "|" + idx, object_field_schema(field, module, allModules), field.location)]
+        [compile_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, module, allModules), field.location)]
             + compile_object_field_schema_functions(className, fields[1:], module, allModules, idx + 1)
 
 private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        compile_function_annotation_application_schema("__capy_oo_annotation|field|" + className + "|" + idx + "|", field.annotations, 0)
+        compile_function_annotation_application_schema(object_field_annotation_schema_prefix(className, idx), field.annotations, 0)
             + compile_object_field_annotation_schema_functions(className, fields[1:], idx + 1)
 
 private fun object_field_schema(field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): String =
@@ -465,7 +465,7 @@ private fun compile_object_field_init_functions(className: String, parameters: L
 
 private fun compile_object_field_init_function(className: String, parameters: List[FunctionParameter], field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
-        name: "__capy_oo_field_init|" + className + "|" + field.name,
+        name: object_field_init_schema_key(className, field.name),
         visibility: "oo_field_init",
         parameters: compile_parameters_in_module(parameters, module, allModules),
         returnType: compile_type_in_module(field.typeReference, module, allModules),
@@ -482,7 +482,7 @@ private fun compile_object_init_functions(className: String, parameters: List[Fu
 
 private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: Expression, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
     CompiledFunction {
-        name: "__capy_oo_init|" + className + "|" + idx,
+        name: object_indexed_schema_key(object_init_schema_prefix(), className, idx),
         visibility: "oo_init",
         parameters: compile_parameters_in_module(parameters, module, allModules),
         returnType: compile_type(compiler_any_type()),
@@ -495,19 +495,99 @@ private fun compile_object_method_functions(className: String, methods: List[Obj
     case None -> []
     case Some { method } ->
         [compile_object_method_function(className, method, module, allModules)]
-            + compile_function_annotation_application_schema("__capy_oo_annotation|method|" + className + "|" + method.name + "|", method.annotations, 0)
+            + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(className, method.name), method.annotations, 0)
             + compile_object_method_functions(className, methods[1:], module, allModules)
 
 private fun compile_object_method_function(className: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     let functionName = className + "." + method.name
     CompiledFunction {
-        name: "__capy_oo_method|" + className + "|" + method.name,
+        name: object_method_schema_key(className, method.name),
         visibility: "oo:" + method.visibility,
         parameters: compile_parameters_in_module(method.parameters, module, allModules),
         returnType: compile_type_in_module(method.returnType, module, allModules),
         body: compile_expression_in_function(method.body, functionName),
         location: compile_location(method.location)
     }
+
+private fun object_class_schema_key(className: String): String =
+    object_schema_key(object_class_schema_prefix(), className)
+
+private fun object_interface_schema_key(interfaceName: String): String =
+    object_schema_key(object_interface_schema_prefix(), interfaceName)
+
+private fun object_class_open_schema_key(className: String): String =
+    object_schema_key(object_class_open_schema_prefix(), className)
+
+private fun object_interface_kind_schema_key(interfaceName: String): String =
+    object_schema_key(object_interface_kind_schema_prefix(), interfaceName)
+
+private fun object_method_schema_key(ownerName: String, methodName: String): String =
+    object_member_schema_key(object_method_schema_prefix(), ownerName, methodName)
+
+private fun object_interface_method_schema_key(ownerName: String, methodName: String): String =
+    object_member_schema_key(object_interface_method_schema_prefix(), ownerName, methodName)
+
+private fun object_field_init_schema_key(className: String, fieldName: String): String =
+    object_member_schema_key(object_field_init_schema_prefix(), className, fieldName)
+
+private fun object_type_annotation_schema_prefix(ownerName: String): String =
+    object_annotation_schema_prefix("type", ownerName, "")
+
+private fun object_method_annotation_schema_prefix(ownerName: String, methodName: String): String =
+    object_annotation_schema_prefix("method", ownerName, methodName)
+
+private fun object_field_annotation_schema_prefix(ownerName: String, idx: int): String =
+    object_annotation_schema_prefix("field", ownerName, "" + idx)
+
+private fun object_schema_key(prefix: String, ownerName: String): String =
+    prefix + ownerName
+
+private fun object_indexed_schema_key(prefix: String, ownerName: String, idx: int): String =
+    object_schema_key(prefix, ownerName) + "|" + idx
+
+private fun object_member_schema_key(prefix: String, ownerName: String, memberName: String): String =
+    object_schema_key(prefix, ownerName) + "|" + memberName
+
+private fun object_annotation_schema_prefix(target: String, ownerName: String, memberName: String): String =
+    if memberName.is_empty()
+    then "__capy_oo_annotation|" + target + "|" + ownerName + "|"
+    else "__capy_oo_annotation|" + target + "|" + ownerName + "|" + memberName + "|"
+
+private fun object_class_schema_prefix(): String =
+    "__capy_oo_class|"
+
+private fun object_interface_schema_prefix(): String =
+    "__capy_oo_interface|"
+
+private fun object_class_open_schema_prefix(): String =
+    "__capy_oo_class_open|"
+
+private fun object_interface_kind_schema_prefix(): String =
+    "__capy_oo_interface_kind|"
+
+private fun object_class_parameter_schema_prefix(): String =
+    "__capy_oo_param|"
+
+private fun object_class_parent_schema_prefix(): String =
+    "__capy_oo_parent|"
+
+private fun object_interface_parent_schema_prefix(): String =
+    "__capy_oo_interface_parent|"
+
+private fun object_field_schema_prefix(): String =
+    "__capy_oo_field|"
+
+private fun object_method_schema_prefix(): String =
+    "__capy_oo_method|"
+
+private fun object_interface_method_schema_prefix(): String =
+    "__capy_oo_interface_method|"
+
+private fun object_field_init_schema_prefix(): String =
+    "__capy_oo_field_init|"
+
+private fun object_init_schema_prefix(): String =
+    "__capy_oo_init|"
 
 private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDeriverDeclaration] =
     match definitions[0] with
