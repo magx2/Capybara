@@ -19,7 +19,9 @@ import dev.capylang.compiler.CompiledModule;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.TreeSet;
@@ -94,13 +96,13 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                 .toList());
 
         if (output != null) {
-            Files.createDirectories(output);
+            clearDirectory(output);
         }
         if (generatedOutput != null) {
-            Files.createDirectories(generatedOutput);
+            clearDirectory(generatedOutput);
         }
         if (generatedTestOutput != null) {
-            Files.createDirectories(generatedTestOutput);
+            clearDirectory(generatedTestOutput);
         }
         var errors = new ByteArrayOutputStream();
         var exitCode = withJulLogLevel(
@@ -142,11 +144,11 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     }
 
     private int compileAndGenerate(
-            java.nio.file.Path input,
-            java.nio.file.Path output,
-            java.nio.file.Path generatedOutput,
-            java.nio.file.Path testInput,
-            java.nio.file.Path generatedTestOutput,
+            Path input,
+            Path output,
+            Path generatedOutput,
+            Path testInput,
+            Path generatedTestOutput,
             TreeSet<CompiledModule> libraries,
             PrintStream errors
     ) throws IOException {
@@ -188,7 +190,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         return mergedLibraries;
     }
 
-    private TreeSet<CompiledModule> readLibraryModules(Collection<java.nio.file.Path> directories) throws IOException {
+    private TreeSet<CompiledModule> readLibraryModules(Collection<Path> directories) throws IOException {
         var modules = new TreeSet<CompiledModule>(compiledModuleComparator());
         for (var directory : directories) {
             if (Files.notExists(directory) || !Files.isDirectory(directory)) {
@@ -207,6 +209,27 @@ public abstract class CompileCapybaraTask extends DefaultTask {
 
     private static String compiledModulePath(CompiledModule module) {
         return module.path().isBlank() ? module.name() : module.path() + "/" + module.name();
+    }
+
+    private static void clearDirectory(Path directory) throws IOException {
+        if (Files.notExists(directory)) {
+            Files.createDirectories(directory);
+            return;
+        }
+        try (var paths = Files.walk(directory)) {
+            paths.sorted(Comparator.reverseOrder())
+                    .filter(path -> !path.equals(directory))
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException exception) {
+                            throw new UncheckedIOException(exception);
+                        }
+                    });
+        } catch (UncheckedIOException exception) {
+            throw exception.getCause();
+        }
+        Files.createDirectories(directory);
     }
 
     @FunctionalInterface
