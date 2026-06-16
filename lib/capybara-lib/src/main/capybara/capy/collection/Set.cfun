@@ -1,6 +1,6 @@
 from /capy/collection/List import { * }
 from /capy/collection/CollectionTypes import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 
 /// Native unique-value collection type backed by the runtime Set implementation.
 /// Set literals use braces with values: {1, 2, 3}.

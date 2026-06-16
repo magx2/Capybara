@@ -1,6 +1,6 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/collection/Dict import { * }
 from /capy/test/CapyTest import { * }
@@ -85,6 +85,7 @@ fun dict_should_reduce_entries(): Assert =
     assert_all([
         assert_that({"a": 1, "b": 2} |> "", (acc, key, value) => acc + key + value).is_equal_to("a1b2"),
         assert_that(empty.reduce("seed", (acc, key, value) => acc + key + value)).is_equal_to("seed"),
+        assert_that({"a": 1, "b": 2} |> "values:", (acc, key, value) => acc + " " + key + ":" + value).is_equal_to("values: a:1 b:2"),
     ])
 
 fun dict_should_map_entries(): Assert =

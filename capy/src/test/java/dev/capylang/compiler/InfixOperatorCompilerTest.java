@@ -107,7 +107,7 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/List import { * }
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 union Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
@@ -133,7 +133,7 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/List import { * }
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 union Result[T] = Success[T] | Error
                 data Success[T] { value: T }
@@ -174,7 +174,7 @@ class InfixOperatorCompilerTest {
 
         var compiled = compileProgram(
                 List.of(new RawModule("Consumer", "/foo/boo", """
-                        from /capy/lang/Seq import { * }
+                        from /capy/collection/Seq import { * }
 
                         fun has_even(): Option[int] =
                             let seq = to_seq([1, 3, 4, 7])
@@ -199,7 +199,7 @@ class InfixOperatorCompilerTest {
 
         var compiled = compileProgram(
                 List.of(new RawModule("Consumer", "/foo/boo", """
-                        from /capy/lang/Seq import { * }
+                        from /capy/collection/Seq import { * }
 
                         fun make_seq() =
                             to_seq([1, 3, 4, 7])
@@ -224,7 +224,7 @@ class InfixOperatorCompilerTest {
     void shouldAllowStringFilterNamedMethod() {
         var compiled = compileProgram("""
                 from /capy/lang/String import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 fun keep_non_b(value: String): Seq[String] =
                     value.filter(ch => ch != "b")
@@ -244,7 +244,7 @@ class InfixOperatorCompilerTest {
     void shouldAllowStringFilterSymbolicMethod() {
         var compiled = compileProgram("""
                 from /capy/lang/String import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 fun keep_non_b(value: String): Seq[String] =
                     value.`|-`(ch => ch != "b")
