@@ -228,8 +228,6 @@ fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
 
 fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
-fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
-
 /// Zips two sequences into a sequence of tuples.
 ///
 /// If lengths differ, the result length matches the shorter input.
