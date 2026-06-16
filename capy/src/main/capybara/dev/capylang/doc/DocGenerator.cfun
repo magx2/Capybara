@@ -84,7 +84,10 @@ private fun example_module(): CompiledModule =
             CompiledFunction {
                 name: "greeting",
                 visibility: "public",
-                documentation: [],
+                documentation: [
+                    "Returns a tiny greeting for sleepy example readers.",
+                    "Useful when a documentation sample needs a friendly string."
+                ],
                 parameters: [],
                 returnType: doc_string_type(),
                 body: CompiledStringLiteral {
@@ -97,7 +100,10 @@ private fun example_module(): CompiledModule =
             CompiledFunction {
                 name: "repeat",
                 visibility: "public",
-                documentation: [],
+                documentation: [
+                    "Pretends to repeat a message a requested number of times.",
+                    "The example body stays intentionally simple for generator demos."
+                ],
                 parameters: [
                     doc_parameter("message", doc_string_type()),
                     doc_parameter("times", doc_int_type())
@@ -113,7 +119,9 @@ private fun example_module(): CompiledModule =
             CompiledFunction {
                 name: "_default_count",
                 visibility: "private",
-                documentation: [],
+                documentation: [
+                    "Keeps the sample count small enough for quick examples."
+                ],
                 parameters: [],
                 returnType: doc_int_type(),
                 body: CompiledIntLiteral {
