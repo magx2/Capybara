@@ -290,15 +290,8 @@ fun Set[T].power_set(): Set[Set[T]] =
 fun Set[T].`℘`(): Set[Set[T]] = this.power_set()
 
 /// Combines all values from left to right.
-fun Set[T].reduce(initial: String, reducer: (String, T) => String): String =
-    this.to_list().reduce(initial, reducer)
-
-/// Combines all values from left to right.
 fun Set[T].reduce(initial: R, reducer: (R, T) => R): R =
     this.to_list().reduce(initial, reducer)
-
-/// Combines all values from left to right.
-fun Set[T].`|>`(initial: String, reducer: (String, T) => String): String = this.reduce(initial, reducer)
 
 /// Combines all values from left to right.
 fun Set[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)

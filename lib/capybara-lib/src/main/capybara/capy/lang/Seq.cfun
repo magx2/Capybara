@@ -223,23 +223,10 @@ fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
     ---
     flat_map(this, map)
 
-fun Seq[T].reduce(initial: String, reducer: (String, T) => String): String =
+fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
     this.as_list().reduce(initial, reducer)
 
-fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
-    @Recursive
-    fun reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
-        match seq with
-        case End -> acc
-        case Cons { value, rest } -> reduce(rest(), reducer(acc, value), reducer)
-    ---
-    reduce(this, initial, reducer)
-
-fun Seq[T].`|>`(initial: String, reducer: (String, T) => String): String = this.reduce(initial, reducer)
-
 fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
-
-fun Seq[T].reduce_left(initial: String, reducer: (String, T) => String): String = this.reduce(initial, reducer)
 
 fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 

@@ -75,6 +75,10 @@ fun list_should_reduce_values(): Assert =
     assert_all([
         assert_that([1, 2, 3] |> 0, (acc, value) => acc + value).is_equal_to(6),
         assert_that(empty.reduce(10, (acc, value) => acc + value)).is_equal_to(10),
+        assert_that([1, 2, 3].reduce("", (acc, value) => acc + ", " + value)).is_equal_to("1, 2, 3"),
+        assert_that([1, 2, 3] |> "", (acc, value) => acc + " | " + value).is_equal_to("1 | 2 | 3"),
+        assert_that([1, 2, 3].reduce("values: ", (acc, value) => acc + " :: " + value)).is_equal_to("values: 1 :: 2 :: 3"),
+        assert_that([",1", ",2"].reduce("", (acc, value) => acc + value)).is_equal_to(",1,2"),
     ])
 
 fun list_should_map_values(): Assert =
