@@ -297,7 +297,7 @@ new_list: LBRACK (expression (COMMA expression)* COMMA?)? RBRACK;
 new_set: LBRACE (expression (COMMA expression)* COMMA?)? RBRACE;
 new_dict: LBRACE (dict_entry (COMMA dict_entry)* COMMA? | COLON) RBRACE;
 dict_entry: expression COLON expression;
-fieldAssignmentList: fieldAssignment (COMMA fieldAssignment)*;
+fieldAssignmentList: fieldAssignment (COMMA fieldAssignment)* COMMA?;
 fieldAssignment
     : namedFieldAssignment
     | spreadFieldAssignment
