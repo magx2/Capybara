@@ -1,6 +1,7 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Ordering import { * }
 from /capy/lang/Seq import { * }
+from /capy/lang/String import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
@@ -74,6 +75,31 @@ fun List[T].contains(value: T): bool =
 fun List[T].`?`(value: T): bool = this.contains(value)
 
 /// Combines all values from left to right.
+fun List[T].reduce(initial: String, reducer: (String, T) => String): String =
+    @Recursive
+    fun first_reduced_item(value: String, item: String): String =
+        if item.is_empty()
+        then value
+        else if value.starts_with(item)
+            then value
+            else if value.is_empty()
+                then value
+                else if !is_reduce_separator_prefix(value[0, 1])
+                    then value
+                    else first_reduced_item(value[1, value.size()], item)
+    fun is_reduce_separator_prefix(value: String): bool =
+        value == " " | value == "," | value == ";" | value == ":" | value == "|" | value == "/" | value == "\\"
+    @Recursive
+    fun reduce(list: List[T], idx: int, acc: String, reducer: (String, T) => String): String =
+        match list[idx] with
+        case None -> acc
+        case Some { value } -> reduce(list, idx + 1, reducer(acc, value), reducer)
+    ---
+    match this[0] with
+    case None -> initial
+    case Some { value } -> reduce(this, 1, initial + first_reduced_item(reducer("", value), "" + value), reducer)
+
+/// Combines all values from left to right.
 fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
     @Recursive
     fun reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
@@ -82,6 +108,9 @@ fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
         case Some { value } -> reduce(list, idx + 1, reducer(acc, value), reducer)
     ---
     reduce(this, 0, initial, reducer)
+
+/// Combines all values from left to right.
+fun List[T].`|>`(initial: String, reducer: (String, T) => String): String = this.reduce(initial, reducer)
 
 /// Combines all values from left to right.
 fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)

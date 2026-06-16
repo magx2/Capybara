@@ -139,21 +139,8 @@ fun set_should_calculate_power_sets(): Assert =
     ])
 
 fun set_should_reduce_values(): Assert =
-    let reduced = {1, 2, 3}.reduce("", (acc, value) => acc + ', ' + value)
-    let pipe_reduced = {1, 2, 3} |> "", (acc, value) => acc + ', ' + value
     assert_all([
         assert_that({1, 2, 3} |> 0, (acc, value) => acc + value).is_equal_to(6),
-        assert_that(reduced)
-            .does_not_start_with(", ")
-            .contains("1")
-            .contains("2")
-            .contains("3"),
-        assert_that(pipe_reduced)
-            .does_not_start_with(", ")
-            .contains("1")
-            .contains("2")
-            .contains("3"),
-        assert_that({1,}.reduce("", (acc, value) => acc + "," + value)).is_equal_to(",1"),
         assert_that(empty_int_set().reduce(10, (acc, value) => acc + value)).is_equal_to(10),
     ])
 

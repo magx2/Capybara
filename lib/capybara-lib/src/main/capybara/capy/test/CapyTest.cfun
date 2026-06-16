@@ -261,19 +261,21 @@ private fun create_test_output_parent(path: Path): Effect[Result[Path]] =
 const OUTPUT_MANIFEST_FILE = '.capy-test-output-manifest'
 
 fun failure_summary(test_files: List[TestFile]): String =
-    let failures = test_files |> '', (acc, test_file) => acc + failure_summary_file(test_file)
+    let failures = (test_files | test_file => failure_summary_file(test_file)).as_list()
+        |> '', (acc, failure) => acc + failure
     if failures.is_empty()
     then ''
     else '\nFailures:\n\n' + failures
 
 private fun failure_summary_file(test_file: TestFile): String =
-    test_file.test_cases |> '', (acc, test_case) =>
+    let failures = (test_file.test_cases | test_case =>
         if test_case.failed()
-        then acc
-            + '  ' + test_file.file_name + ' > ' + test_case.name + '()\n'
+        then '  ' + test_file.file_name + ' > ' + test_case.name + '()\n'
             + failure_summary_message(test_case)
             + '\n\n'
-        else acc
+        else ''
+    ).as_list()
+    failures |> '', (acc, failure) => acc + failure
 
 private fun failure_summary_message(test_case: TestCase): String =
     match test_case.result with

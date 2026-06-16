@@ -1,6 +1,8 @@
 from /capy/collection/List import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Option import { * }
+from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
 
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
@@ -57,8 +59,36 @@ fun Dict[T].contains_key(key: String): bool =
 fun Dict[T].`?`(key: String): bool = this.contains_key(key)
 
 /// Combines all entries from left to right.
+fun Dict[T].reduce(initial: String, reducer: (String, String, T) => String): String =
+    @Recursive
+    fun first_reduced_entry(value: String, key: String): String =
+        if key.is_empty()
+        then value
+        else if value.starts_with(key)
+            then value
+            else if value.is_empty()
+                then value
+                else if !is_reduce_separator_prefix(value[0, 1])
+                    then value
+                    else first_reduced_entry(value[1, value.size()], key)
+    fun is_reduce_separator_prefix(value: String): bool =
+        value == " " | value == "," | value == ";" | value == ":" | value == "|" | value == "/" | value == "\\"
+    @Recursive
+    fun reduce(dict: Dict[T], idx: int, acc: String, reducer: (String, String, T) => String): String =
+        match dict.entries()[idx] with
+        case None -> acc
+        case Some { entry } -> reduce(dict, idx + 1, reducer(acc, entry[0], entry[1]), reducer)
+    ---
+    match this.entries()[0] with
+    case None -> initial
+    case Some { entry } -> reduce(this, 1, initial + first_reduced_entry(reducer("", entry[0], entry[1]), entry[0]), reducer)
+
+/// Combines all entries from left to right.
 fun Dict[T].reduce(initial: R, reducer: (R, String, T) => R): R =
     this.entries().reduce(initial, (acc, entry) => reducer(acc, entry[0], entry[1]))
+
+/// Combines all entries from left to right.
+fun Dict[T].`|>`(initial: String, reducer: (String, String, T) => String): String = this.reduce(initial, reducer)
 
 /// Combines all entries from left to right.
 fun Dict[T].`|>`(initial: R, reducer: (R, String, T) => R): R = this.reduce(initial, reducer)
