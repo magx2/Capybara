@@ -934,6 +934,9 @@ public final class PythonGenerator implements Generator {
             if (("reduce".equals(methodName) || "|>".equals(methodName) || "pipe_greater".equals(methodName)) && tailArgs.size() >= 2 && isCollectionType(receiverType)) {
                 return "capy.reduce_collection(" + receiver + ", " + tailArgs.get(0) + ", " + tailArgs.get(1) + ")";
             }
+            if ("fold".equals(methodName) && tailArgs.size() == 1 && receiverType instanceof CollectionLinkedType.CompiledList) {
+                return "capy.fold_collection(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
             if ("sort".equals(methodName) && tailArgs.size() == 1 && receiverType instanceof CollectionLinkedType.CompiledList) {
                 require("capy.collection.List");
                 return moduleVar("capy.collection.List") + ".sort(" + receiver + ", " + tailArgs.getFirst() + ")";
@@ -2773,7 +2776,7 @@ public final class PythonGenerator implements Generator {
                     "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
                     "RoundMode", "FLOOR", "CEILING", "HALF_UP", "HALF_DOWN", "HALF_EVEN", "round"
             ));
-            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce", "sort"));
+            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce", "fold", "sort"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
             exports.put("capy.collection.Tuple", Set.of("get"));
@@ -3126,6 +3129,7 @@ public final class PythonGenerator implements Generator {
                     flat_map = capy.flat_map_collection
                     flatMap = capy.flat_map_collection
                     reduce = capy.reduce_collection
+                    fold = capy.fold_collection
                     sort = capy.list_sort
                     """;
         }
@@ -4132,6 +4136,7 @@ public final class PythonGenerator implements Generator {
                         def pipe_minus(self, predicate): return self.pipeMinus(predicate)
                         def reject(self, predicate): return reject_collection(self, predicate)
                         def reduce(self, initial, reducer): return reduce_collection(self, initial, reducer)
+                        def fold(self, reducer): return fold_collection(self, reducer)
                         def reduceLeft(self, initial, reducer): return self.reduce(initial, reducer)
                         def reduce_left(self, initial, reducer): return self.reduce(initial, reducer)
                         def pipeGreater(self, initial, reducer): return reduce_collection(self, initial, reducer)
@@ -4225,6 +4230,7 @@ public final class PythonGenerator implements Generator {
                             value.first_match = value.firstMatch
                             value.flatMap = lambda mapper: value
                             value.flat_map = value.flatMap
+                            value.fold = lambda reducer: None_
                             value.map = lambda mapper: value
                             value.pipe = value.map
                             value.pipeStar = value.flatMap
@@ -4450,6 +4456,15 @@ public final class PythonGenerator implements Generator {
                         for index, item in enumerate(entries(value)):
                             acc = invoke(reducer, acc, item, index)
                         return acc
+
+                    def fold_collection(value, reducer):
+                        values = entries(value)
+                        if len(values) == 0:
+                            return None_
+                        acc = values[0]
+                        for index, item in enumerate(values[1:], start=1):
+                            acc = invoke(reducer, acc, item, index)
+                        return Some({'value': acc})
 
                     def option_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_
                     def option_flat_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_

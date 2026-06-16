@@ -223,10 +223,34 @@ fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
     ---
     flat_map(this, map)
 
+/// Combines all elements from left to right.
 fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
-    this.as_list().reduce(initial, reducer)
+    @Recursive
+    fun reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
+        match seq with
+        case End -> acc
+        case Cons { value, rest } -> reduce(rest(), reducer(acc, value), reducer)
+    ---
+    reduce(this, initial, reducer)
 
 fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all elements from left to right.
+fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines elements from left to right using the first element as the accumulator.
+///
+/// Empty sequences return `None`. Non-empty sequences return `Some` with the folded value.
+fun Seq[T].fold(reducer: (T, T) => T): /capy/lang/Option[T] =
+    @Recursive
+    fun fold(seq: Seq[T], current: T, reducer: (T, T) => T): T =
+        match seq with
+        case End -> current
+        case Cons { value, rest } -> fold(rest(), reducer(current, value), reducer)
+    ---
+    match this with
+    case End -> /capy/lang/Option.None {}
+    case Cons { value, rest } -> /capy/lang/Option.Some { fold(rest(), value, reducer) }
 
 /// Zips two sequences into a sequence of tuples.
 ///

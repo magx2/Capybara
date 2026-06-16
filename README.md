@@ -261,8 +261,10 @@ fun dict_sum(values: Dict[int]): int =
 ```
 
 Named methods such as `.map(...)`, `.filter(...)`, `.flat_map(...)`,
-`.reduce(...)`, `.any(...)`, and `.all(...)` are available through the standard
-library.
+`.reduce(...)`, `.fold(...)`, `.any(...)`, and `.all(...)` are available through
+the standard library. Use `.reduce(initial, reducer)` when you have an explicit
+initial accumulator. Use `.fold(reducer)` on non-empty values when the first
+element should be the initial accumulator; empty values return `None`.
 
 ### Methods And Operators
 

@@ -59,27 +59,6 @@ fun Dict[T].contains_key(key: String): bool =
 fun Dict[T].`?`(key: String): bool = this.contains_key(key)
 
 /// Combines all entries from left to right.
-fun Dict[T].reduce(initial: R, reducer: (String, String, T) => String): String =
-    @Recursive
-    fun trim_until_key(value: String, key: String): String =
-        if key.is_empty()
-        then value
-        else if value.starts_with(key)
-            then value
-            else if value.is_empty()
-                then value
-                else trim_until_key(value[1, value.size()], key)
-    @Recursive
-    fun reduce(dict: Dict[T], idx: int, acc: String, reducer: (String, String, T) => String): String =
-        match dict.entries()[idx] with
-        case None -> acc
-        case Some { entry } -> reduce(dict, idx + 1, reducer(acc, entry[0], entry[1]), reducer)
-    ---
-    match this.entries()[0] with
-    case None -> "" + initial
-    case Some { entry } -> reduce(this, 1, "" + initial + trim_until_key(reducer("", entry[0], entry[1]), entry[0]), reducer)
-
-/// Combines all entries from left to right.
 fun Dict[T].reduce(initial: R, reducer: (R, String, T) => R): R =
     @Recursive
     fun reduce(dict: Dict[T], idx: int, acc: R, reducer: (R, String, T) => R): R =
