@@ -1,6 +1,7 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Ordering import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
+from /capy/lang/String import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
@@ -85,6 +86,20 @@ fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
 
 /// Combines all values from left to right.
 fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines values from left to right using the first value as the accumulator.
+///
+/// Empty lists return `None`. Non-empty lists return `Some` with the folded value.
+fun List[T].fold(reducer: (T, T) => T): Option[T] =
+    @Recursive
+    fun reduce(list: List[T], idx: int, current: T, reducer: (T, T) => T): T =
+        match list[idx] with
+        case None -> current
+        case Some { value } -> reduce(list, idx + 1, reducer(current, value), reducer)
+    ---
+    match this[0] with
+    case None -> None {}
+    case Some { value } -> Some { reduce(this, 1, value, reducer) }
 
 /// Transforms each value using `map`.
 fun List[T].map(map: T => Y): Seq[Y] =

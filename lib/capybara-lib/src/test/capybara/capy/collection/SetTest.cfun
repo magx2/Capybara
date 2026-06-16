@@ -1,6 +1,6 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/collection/Set import { * }
 from /capy/test/CapyTest import { * }
 
@@ -142,6 +142,7 @@ fun set_should_reduce_values(): Assert =
     assert_all([
         assert_that({1, 2, 3} |> 0, (acc, value) => acc + value).is_equal_to(6),
         assert_that(empty_int_set().reduce(10, (acc, value) => acc + value)).is_equal_to(10),
+        assert_that({1, 2, 3}.reduce("values:", (acc, value) => acc + " " + value)).starts_with("values:"),
     ])
 
 fun set_should_map_values(): Assert =

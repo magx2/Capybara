@@ -18,7 +18,7 @@ class TupleDestructuringCompilerTest {
                         from /capy/collection/List import { * }
                         from /capy/collection/Set import { * }
                         from /capy/collection/Dict import { * }
-                        from /capy/lang/Seq import { * }
+                        from /capy/collection/Seq import { * }
 
                         fun map_pairs(values: List[Tuple[int, int]]): Seq[String] = values | (number, expected) => "digits(" + number + ") should return " + expected
                         """
@@ -45,7 +45,7 @@ class TupleDestructuringCompilerTest {
                         from /capy/collection/List import { * }
                         from /capy/collection/Set import { * }
                         from /capy/collection/Dict import { * }
-                        from /capy/lang/Seq import { * }
+                        from /capy/collection/Seq import { * }
 
                         fun filter_pairs(values: List[Tuple[int, int]]): Seq[Tuple[int, int]] = values |- (left, right) => left == right
                         """
