@@ -109,6 +109,24 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse trailing comma in data constructor field assignments from .coo")
+    void parseTrailingCommaInDataConstructorFieldAssignments() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Builder",
+                "/parser",
+                """
+                        class Builder {
+                            def direct(): Outer =
+                                Outer { inner: Inner { value: 1, }, label: "ok", }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+    }
+
+    @Test
     @DisplayName("should parse class trait and interface declarations from .coo source")
     void parseObjectOrientedModule() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(

@@ -322,7 +322,7 @@ new_list: (LBRACK | LINE_START_LBRACK) (expression (',' expression)* ','?)? RBRA
 new_set: '{' (expression (',' expression)* ','?)? '}';
 new_dict: '{' (dict_entry (',' dict_entry)* ','? | COLON) '}';
 dict_entry: expression ':' expression;
-fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
+fieldAssignmentList: fieldAssignment (',' fieldAssignment)* ','?;
 fieldAssignment: namedFieldAssignment
                | spreadFieldAssignment
                | positionalFieldAssignment;

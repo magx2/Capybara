@@ -339,6 +339,39 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse trailing comma in data constructor field assignments")
+    void parseTrailingCommaInDataConstructorFieldAssignments() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                data Inner { value: int }
+                data Outer { inner: Inner, label: String } with constructor {
+                    * { inner: inner, label: label, }
+                }
+
+                fun direct(): Outer =
+                    Outer { inner: Inner { value: 1, }, label: "ok", }
+                """));
+
+        var direct = findFunction("direct", module.functional());
+        assertThat(direct.expression()).isInstanceOf(NewData.class);
+        var outer = (NewData) direct.expression();
+        assertThat(outer.assignments()).extracting(NewData.FieldAssignment::name)
+                .containsExactly("inner", "label");
+        assertThat(outer.assignments().getFirst().value()).isInstanceOf(NewData.class);
+        var inner = (NewData) outer.assignments().getFirst().value();
+        assertThat(inner.assignments()).singleElement()
+                .extracting(NewData.FieldAssignment::name)
+                .isEqualTo("value");
+
+        var data = findDefinition(DataDeclaration.class, "Outer", module.functional());
+        assertThat(data.constructor()).hasValueSatisfying(constructor -> {
+            assertThat(constructor).isInstanceOf(ConstructorData.class);
+            var constructorData = (ConstructorData) constructor;
+            assertThat(constructorData.assignments()).extracting(NewData.FieldAssignment::name)
+                    .containsExactly("inner", "label");
+        });
+    }
+
+    @Test
     @DisplayName("should parse primitive-backed type declarations")
     void parsePrimitiveBackedTypeDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
