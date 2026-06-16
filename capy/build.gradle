@@ -76,8 +76,8 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
         URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
         try {
-            def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
-            def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
+            def capyClass = Class.forName('dev.capylang.CapyRuntime', true, classLoader)
+            def readLinkedProgram = capyClass.getMethod('readLinkedProgram', Path, Boolean.TYPE)
             readLinkedProgram.accessible = true
             def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
             def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName.getOrElse('JAVA') }
@@ -131,20 +131,20 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
             classLoader.close()
         }
     }
-}
 
-private static Comparator compiledModuleComparator() {
-    return { a, b ->
-        def left = compiledModulePath(a)
-        def right = compiledModulePath(b)
-        def compared = left <=> right
-        compared != 0 ? compared : (a.name() <=> b.name())
-    } as Comparator
-}
+    private static Comparator compiledModuleComparator() {
+        return { a, b ->
+            def left = compiledModulePath(a)
+            def right = compiledModulePath(b)
+            def compared = left <=> right
+            compared != 0 ? compared : (a.name() <=> b.name())
+        } as Comparator
+    }
 
-private static String compiledModulePath(def module) {
-    def path = module.path()
-    return path == null || path.isBlank() ? module.name() : "${path}/${module.name()}"
+    private static String compiledModulePath(def module) {
+        def path = module.path()
+        return path == null || path.isBlank() ? module.name() : "${path}/${module.name()}"
+    }
 }
 
 abstract class CapybaraJavaScriptTestTask extends DefaultTask {

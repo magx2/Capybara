@@ -166,7 +166,8 @@ public final class CapyRuntime {
             if (linkedOutputPath != null) {
                 writeCompilationOutput(linkedOutputPath, compilation, compilerVersion);
             }
-            generateCompiledProgram(outputType, generatedOutputPath, compilation, includeJavaLibResources);
+            var generatedProgram = generationProgram(outputType, libraries, compilation.program());
+            writeGeneratedProgram(generatedOutputPath, Generator.generate(generatedProgram, generatorOutputType(outputType)));
 
             if (testInputPath != null && testGeneratedOutputPath != null) {
                 var testCompilation = compileSources(
@@ -179,7 +180,7 @@ public final class CapyRuntime {
                 if (testCompilation == null) {
                     return EXIT_COMPILATION_ERROR;
                 }
-                var testProgram = testGenerationProgram(outputType, compilation.program(), testCompilation.program());
+                var testProgram = testGenerationProgram(outputType, generatedProgram, testCompilation.program());
                 writeGeneratedProgram(testGeneratedOutputPath, Generator.generate(testProgram, generatorOutputType(outputType)));
             }
             return EXIT_SUCCESS;
@@ -296,6 +297,25 @@ public final class CapyRuntime {
         }
         mergedLibraries.addAll(compilation.program().modules());
         return mergedLibraries;
+    }
+
+    private static CompiledProgram generationProgram(
+            OutputType outputType,
+            TreeSet<CompiledModule> libraries,
+            CompiledProgram program
+    ) {
+        if (outputType == OutputType.JAVA || libraries == null || libraries.isEmpty()) {
+            return program;
+        }
+        return mergePrograms(
+                new CompiledProgram(
+                        List.copyOf(libraries),
+                        List.of(),
+                        CompiledProgramModule.emptyNativeProviderManifest(),
+                        CompiledProgramModule.emptyNativeProviderCatalog()
+                ),
+                program
+        );
     }
 
     private static CompiledProgram testGenerationProgram(OutputType outputType, CompiledProgram mainProgram, CompiledProgram testProgram) {
