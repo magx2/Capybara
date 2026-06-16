@@ -1,16 +1,25 @@
+/// Optional value that is either present as Some or absent as None.
 union Option[T] = Some[T] | None
+
+/// Present Option value.
 data Some[T] { value: T }
+
+/// Absent Option value.
 data None {}
 
+/// Transforms a present value using `map`; equivalent to `this.map(map)`.
 fun Option[T].`|`(map: T => Y): Option[Y] = this.map(map)
 
+/// Transforms a present value using `map`, or returns None when empty.
 fun Option[T].map(map: T => Y): Option[Y] =
     match this with
     case None -> None {}
     case Some s -> Some { map(s.value) }
 
+/// Applies `flatmap` to a present value; equivalent to `this.flat_map(flatmap)`.
 fun Option[T].`|*`(flatmap: T => Option[Y]): Option[Y] = this.flat_map(flatmap)
 
+/// Applies `flatmap` to a present value, or returns None when empty.
 fun Option[T].flat_map(flatmap: T => Option[Y]): Option[Y] =
     match this with
     case None -> None {}

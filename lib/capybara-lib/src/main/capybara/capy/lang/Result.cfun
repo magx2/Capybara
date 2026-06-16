@@ -1,36 +1,50 @@
+/// Fallible value that is either a Success with a value or an Error with a message.
 union Result[T] = Success[T] | Error
+
+/// Successful Result value.
 data Success[T] { value: T }
+
+/// Failed Result value.
 data Error { message: String }
 
+/// Transforms a successful value using `map`; equivalent to `this.map(map)`.
 fun Result[T].`|`(map: T => Y): Result[Y] = this.map(map)
 
+/// Transforms a successful value using `map`, or propagates an Error unchanged.
 fun Result[T].map(map: T => Y): Result[Y] =
     match this with
     case Error e -> e
     case Success s -> Success { map(s.value) }
 
+/// Applies `flatmap` to a successful value; equivalent to `this.flat_map(flatmap)`.
 fun Result[T].`|*`(flatmap: T => Result[Y]): Result[Y] = this.flat_map(flatmap)
 
+/// Applies `flatmap` to a successful value, or propagates an Error unchanged.
 fun Result[T].flat_map(flatmap: T => Result[Y]): Result[Y] =
     match this with
     case Error e -> e
     case Success s -> flatmap(s.value)
 
+/// Returns the successful value, or `v` when this Result is an Error.
 fun Result[T].or_else(v: T): T =
     match this with
     case Error _ -> v
     case Success { v } -> v
 
+/// Returns this Result when successful, or `r` when this Result is an Error.
 fun Result[T].or(r: Result[T]): Result[T] =
     match this with
     case Error _ -> r
     case Success s -> s
 
+/// Reduces a Result by applying the first function to Success or the second function to Error.
 fun Result[T].`|>`(reduce: Tuple[T => R, String => R]): R =
     match this with
     case Success { v } -> reduce[0](v)
     case Error { msg } -> reduce[1](msg)
 
+/// Reduces a Result by applying `on_success` to Success or `on_error` to Error.
 fun Result[T].reduce(on_success: T => R, on_error: String => R): R = this |> (on_success, on_error)
 
+/// Reduces a Result by applying `on_success` to Success or `on_error` to Error.
 fun Result[T].reduce_left(on_success: T => R, on_error: String => R): R = this.reduce(on_success, on_error)
