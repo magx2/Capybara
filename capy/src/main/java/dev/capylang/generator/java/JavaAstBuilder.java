@@ -849,7 +849,7 @@ public class JavaAstBuilder {
             return withTypeParametersIfGeneric(type, "capy.lang.Program");
         }
         if (shouldUseStandardSeqTypeName(rawTypeName)) {
-            return withTypeParametersIfGeneric(type, "capy.lang.Seq");
+            return withTypeParametersIfGeneric(type, "capy.collection.Seq");
         }
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
             return withTypeParametersIfGeneric(type, "capy.lang.Result");
@@ -1026,7 +1026,7 @@ public class JavaAstBuilder {
             return "capy.lang.Program";
         }
         if (shouldUseStandardSeqTypeName(rawTypeName)) {
-            return "capy.lang.Seq";
+            return "capy.collection.Seq";
         }
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
             return "capy.lang.Result";
@@ -1159,9 +1159,9 @@ public class JavaAstBuilder {
     private boolean isSeqTypeName(String name) {
         var normalized = normalizeQualifiedTypeName(name);
         return normalized.equals("/cap/lang/Seq")
-               || normalized.equals("/capy/lang/Seq")
+               || normalized.equals("/capy/collection/Seq")
                || normalized.equals("/cap/lang/Seq.Seq")
-               || normalized.equals("/capy/lang/Seq.Seq")
+               || normalized.equals("/capy/collection/Seq.Seq")
                || normalized.endsWith("/Seq")
                || normalized.endsWith("/Seq.Seq");
     }

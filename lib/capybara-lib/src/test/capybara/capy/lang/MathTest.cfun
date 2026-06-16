@@ -4,7 +4,7 @@ from /capy/lang/Math import { CEILING, FLOOR, HALF_DOWN, HALF_EVEN, HALF_UP, Rou
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =

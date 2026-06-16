@@ -1,6 +1,6 @@
 from /capy/lang/Regex import { * }
 from /capy/lang/Option import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 
 fun matches_named(input: String): bool = regex/foo/.matches(input)
 fun matches_alias(input: String): bool = regex/foo/ ? input

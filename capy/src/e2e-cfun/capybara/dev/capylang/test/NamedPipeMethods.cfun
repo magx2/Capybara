@@ -1,6 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
@@ -57,7 +57,6 @@ fun seq_flat_map_named(values: List[int]): List[int] = to_seq(values).flat_map(x
 fun seq_flat_map_operator(values: List[int]): List[int] = (to_seq(values) |* x => expand_seq(x)).as_list()
 
 fun seq_reduce_named(values: List[int]): int = to_seq(values).reduce(0, :sum_int)
-fun seq_reduce_left_named(values: List[int]): int = to_seq(values).reduce_left(0, :sum_int)
 
 fun string_filter_named(value: String): Seq[String] = value.filter(ch => ch == "b")
 fun string_filter_symbolic(value: String): Seq[String] = value.`|-`(ch => ch == "b")

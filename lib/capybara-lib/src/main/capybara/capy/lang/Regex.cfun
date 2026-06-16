@@ -3,7 +3,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
@@ -61,8 +61,8 @@ fun Regex.find(input: String): Option[Match] =
     case Some { value } -> Some { value }
     case None -> None {}
 
-fun Regex.find_all(input: String): /capy/lang/Seq[Match] =
-    /capy/lang/Seq.to_seq(find_all(this.pattern, input, []))
+fun Regex.find_all(input: String): /capy/collection/Seq[Match] =
+    /capy/collection/Seq.to_seq(find_all(this.pattern, input, []))
 
 fun Regex.replace(replacement: String): String => String = value => value.replace(this.pattern, replacement)
 
@@ -71,7 +71,7 @@ fun Regex.split(input: String): List[String] =
 
 fun Regex.`?`(input: String): bool = this.matches(input)
 fun Regex.`~`(input: String): Option[Match] = this.find(input)
-fun Regex.`~~`(input: String): /capy/lang/Seq[Match] = this.find_all(input)
+fun Regex.`~~`(input: String): /capy/collection/Seq[Match] = this.find_all(input)
 fun Regex.`~>`(replacement: String): String => String = this.replace(replacement)
 fun Regex.`/>`(input: String): List[String] = this.split(input)
 
