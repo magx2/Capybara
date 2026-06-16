@@ -49,8 +49,10 @@ from /dev/capylang/compiler/parser/RawModule import { RawModule }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
+/// Captured placeholders and original arguments for expanding a partially applied call.
 private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
 
+/// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
     rawModules: List[RawModule],
     libraries: Set[CompiledModule],
@@ -68,6 +70,7 @@ fun compile(
         let capybara_parser <- parser()
         capybara_parser.parse(rawModules).map(program => compiled_program(program, libraries, nativeProviders, nativeImplementationProviders))
 
+/// Converts parsed modules and provider manifests into whole-program compiler output.
 private fun compiled_program(
     program: /dev/capylang/compiler/parser/ParsedProgram,
     libraries: Set[CompiledModule],
@@ -81,11 +84,13 @@ private fun compiled_program(
         nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
     }}
 
+/// Compiles parsed modules and merges module fragments that share the same name and path.
 private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraries: List[CompiledModule]): List[CompiledModule] =
     match modules[0] with
     case None -> []
     case Some { module } -> merge_compiled_module(compile_module_with_libraries(module, allModules, libraries), compile_modules(modules[1:], allModules, libraries))
 
+/// Adds one compiled module to the result list, merging it with an existing module for the same source path.
 private fun merge_compiled_module(module: CompiledModule, modules: List[CompiledModule]): List[CompiledModule] =
     match modules[0] with
     case None -> [module]
@@ -94,9 +99,11 @@ private fun merge_compiled_module(module: CompiledModule, modules: List[Compiled
         then [merge_compiled_modules(module, existing)] + modules[1:]
         else [existing] + merge_compiled_module(module, modules[1:])
 
+/// Checks whether two compiled module values identify the same entity.
 private fun same_compiled_module(first: CompiledModule, second: CompiledModule): bool =
     first.name == second.name & first.path == second.path
 
+/// Combines declarations, functions, imports, and schema metadata from two fragments of the same module.
 private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule): CompiledModule =
     CompiledModule {
         name: first.name,
@@ -110,6 +117,7 @@ private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule
         staticImports: first.staticImports + second.staticImports
     }
 
+/// Converts a parsed module into compiled metadata.
 private fun compile_module(module: ParsedModule, allModules: List[ParsedModule]): CompiledModule =
     let derivers = compile_derivers(module.definitions)
     CompiledModule {
@@ -126,6 +134,7 @@ private fun compile_module(module: ParsedModule, allModules: List[ParsedModule])
         staticImports: []
     }
 
+/// Converts parsed primitive backed types into compiled metadata.
 private fun compile_primitive_backed_types(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): Dict[CompiledPrimitiveBackedType] =
     match definitions[0] with
     case None -> {:}
@@ -135,6 +144,7 @@ private fun compile_primitive_backed_types(definitions: List[Definition], module
             compile_primitive_backed_types(definitions[1:], module, allModules) + (declaration.name, compile_primitive_backed_type(declaration, module, allModules))
         case _ -> compile_primitive_backed_types(definitions[1:], module, allModules)
 
+/// Converts a parsed primitive backed type into compiled metadata.
 private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledPrimitiveBackedType =
     CompiledPrimitiveBackedType {
         name: declaration.name,
@@ -144,6 +154,7 @@ private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclar
         location: compile_location(declaration.location)
     }
 
+/// Compiles a parsed module and appends functions and static imports made visible by library imports.
 private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraries: List[CompiledModule]): CompiledModule =
     let compiled = compile_module(module, allModules)
     compiled.with(
@@ -151,6 +162,7 @@ private fun compile_module_with_libraries(module: ParsedModule, allModules: List
         staticImports: library_static_imports(compiled.imports, libraries)
     )
 
+/// Collects library functions imported unqualified into a compiled module.
 private fun imported_library_functions(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[CompiledFunction] =
     match imports[0] with
     case None -> []
@@ -159,11 +171,13 @@ private fun imported_library_functions(imports: List[CompiledImportDeclaration],
         then imported_library_functions(imports[1:], libraries)
         else imported_library_functions_for_import(declaration, libraries) + imported_library_functions(imports[1:], libraries)
 
+/// Collects library functions made visible by one compiled import declaration.
 private fun imported_library_functions_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[CompiledFunction] =
     match find_imported_library(declaration, libraries) with
     case Some { library } -> imported_library_functions_from_module(declaration, library.functions)
     case None -> []
 
+/// Filters exported library functions against the names requested by an import.
 private fun imported_library_functions_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction]): List[CompiledFunction] =
     match functions[0] with
     case None -> []
@@ -172,12 +186,14 @@ private fun imported_library_functions_from_module(declaration: CompiledImportDe
         then [function.with(visibility: "imported")] + imported_library_functions_from_module(declaration, functions[1:])
         else imported_library_functions_from_module(declaration, functions[1:])
 
+/// Checks whether a library function is exported and selected by an import declaration.
 private fun imported_library_function(declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
     compiled_import_includes_name(function.name, declaration)
         & function.visibility != "private"
         & function.visibility != "const:private"
         & !compiler_string_has_prefix(function.visibility, "const:schema")
 
+/// Collects Java static imports needed for unqualified library imports.
 private fun library_static_imports(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[StaticImport] =
     match imports[0] with
     case None -> []
@@ -186,6 +202,7 @@ private fun library_static_imports(imports: List[CompiledImportDeclaration], lib
         then library_static_imports(imports[1:], libraries)
         else library_static_imports_for_import(declaration, libraries) + library_static_imports(imports[1:], libraries)
 
+/// Creates static import entries for one library import declaration.
 private fun library_static_imports_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[StaticImport] =
     match find_imported_library(declaration, libraries) with
     case Some { library } ->
@@ -194,6 +211,7 @@ private fun library_static_imports_for_import(declaration: CompiledImportDeclara
         else explicit_library_static_imports(declaration, library, library.functions)
     case None -> []
 
+/// Creates member-level static imports when a library import cannot use a wildcard import.
 private fun explicit_library_static_imports(declaration: CompiledImportDeclaration, library: CompiledModule, functions: List[CompiledFunction]): List[StaticImport] =
     match functions[0] with
     case None -> []
@@ -203,6 +221,7 @@ private fun explicit_library_static_imports(declaration: CompiledImportDeclarati
             + explicit_library_static_imports(declaration, library, functions[1:])
         else explicit_library_static_imports(declaration, library, functions[1:])
 
+/// Finds an imported library in available declarations, imports, or modules.
 private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     match libraries[0] with
     case None -> /capy/lang/Option.None {}
@@ -211,6 +230,7 @@ private fun find_imported_library(declaration: CompiledImportDeclaration, librar
         then /capy/lang/Option.Some { library }
         else find_imported_library(declaration, libraries[1:])
 
+/// Collects imported library matches visible to the current module.
 private fun imported_library_matches(modulePath: String, library: CompiledModule): bool =
     let className = compiled_module_class_name(library)
     modulePath == library.name
@@ -218,22 +238,27 @@ private fun imported_library_matches(modulePath: String, library: CompiledModule
         | normalize_import_module_path(modulePath) == compiled_module_path(library)
         | modulePath == className
 
+/// Converts a compiled module path into a Java-style package path.
 private fun compiled_module_path(module: CompiledModule): String =
     if module.path.is_empty()
     then module.name
     else module.path + "/" + module.name
 
+/// Computes the generated Java class name for a compiled module.
 private fun compiled_module_class_name(module: CompiledModule): String =
     compiled_module_path(module).replace("/", ".")
 
+/// Checks whether an import path targets the Capybara standard library.
 private fun compiler_stdlib_import(modulePath: String): bool =
     compiler_string_has_prefix(modulePath, "/capy/") | compiler_string_has_prefix(modulePath, "capy/")
 
+/// Checks whether a compiled import selects a name after exclusions are applied.
 private fun compiled_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
     if declaration.wildcard
     then !compiler_string_list_contains(declaration.excludedNames, name)
     else compiler_string_list_contains(declaration.importedNames, name)
 
+/// Computes the Java method name used for a compiled function in compiler-generated metadata.
 private fun compiler_java_function_name(function: CompiledFunction): String =
     if function.name == "tests"
     then "tests"
@@ -241,6 +266,7 @@ private fun compiler_java_function_name(function: CompiledFunction): String =
     then "main"
     else compiler_java_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
 
+/// Sanitizes a Capybara name into a Java identifier for compiler-generated symbols.
 private fun compiler_java_identifier(name: String): String =
     let sanitized = compiler_java_identifier_chars(name, 0, "")
     let nonEmpty = if sanitized.is_empty() then "_" else sanitized
@@ -248,6 +274,7 @@ private fun compiler_java_identifier(name: String): String =
     case None -> "_"
     case Some { char } -> if compiler_java_identifier_start_char(char) then nonEmpty else "_" + nonEmpty
 
+/// Sanitizes the remaining characters of a Capybara name into Java identifier text.
 private fun compiler_java_identifier_chars(name: String, idx: int, acc: String): String =
     if idx >= name.size().value
     then acc
@@ -257,12 +284,15 @@ private fun compiler_java_identifier_chars(name: String, idx: int, acc: String):
             let next = if compiler_java_identifier_part_char(char) then char else "_"
             compiler_java_identifier_chars(name, idx + 1, acc + next)
 
+/// Checks whether a character can start a Java identifier.
 private fun compiler_java_identifier_start_char(char: String): bool =
     ("ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char) | ("abcdefghijklmnopqrstuvwxyz" ? char) | char == "_" | char == "$"
 
+/// Checks whether a character can appear after the first character in a Java identifier.
 private fun compiler_java_identifier_part_char(char: String): bool =
     compiler_java_identifier_start_char(char) | ("0123456789" ? char)
 
+/// Converts parsed object-oriented modules into compiled metadata.
 private fun compile_object_oriented_modules(modules: List[ParsedModule], allModules: List[ParsedModule]): List[CompiledObjectOrientedUnit] =
     match modules[0] with
     case None -> []
@@ -276,11 +306,13 @@ private fun compile_object_oriented_modules(modules: List[ParsedModule], allModu
             classes: compile_object_classes(module.objectOriented.classes, module, allModules)
         }] + compile_object_oriented_modules(modules[1:], allModules)
 
+/// Converts parsed object interfaces into compiled metadata.
 private fun compile_object_interfaces(interfaces: List[ObjectOrientedInterface], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedInterface] =
     match interfaces[0] with
     case None -> []
     case Some { interface } -> [compile_object_interface(interface, module, allModules)] + compile_object_interfaces(interfaces[1:], module, allModules)
 
+/// Converts a parsed object interface into compiled metadata.
 private fun compile_object_interface(interface: ObjectOrientedInterface, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedInterface =
     CompiledObjectOrientedInterface {
         name: interface.name,
@@ -292,11 +324,13 @@ private fun compile_object_interface(interface: ObjectOrientedInterface, module:
         location: compile_location(interface.location)
     }
 
+/// Converts parsed object classes into compiled metadata.
 private fun compile_object_classes(classes: List[ObjectOrientedClass], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedClass] =
     match classes[0] with
     case None -> []
     case Some { class } -> [compile_object_class(class, module, allModules)] + compile_object_classes(classes[1:], module, allModules)
 
+/// Converts a parsed object class into compiled metadata.
 private fun compile_object_class(class: ObjectOrientedClass, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedClass =
     CompiledObjectOrientedClass {
         name: class.name,
@@ -311,11 +345,13 @@ private fun compile_object_class(class: ObjectOrientedClass, module: ParsedModul
         location: compile_location(class.location)
     }
 
+/// Converts parsed object fields into compiled metadata.
 private fun compile_object_fields(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedField] =
     match fields[0] with
     case None -> []
     case Some { field } -> [compile_object_field(className, field, module, allModules)] + compile_object_fields(className, fields[1:], module, allModules)
 
+/// Converts a parsed object field into compiled metadata.
 private fun compile_object_field(className: String, field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedField =
     CompiledObjectOrientedField {
         name: field.name,
@@ -327,6 +363,7 @@ private fun compile_object_field(className: String, field: ObjectOrientedField, 
         location: compile_location(field.location)
     }
 
+/// Converts parsed object initializer blocks into compiled metadata.
 private fun compile_object_init_blocks(className: String, initBlocks: List[ObjectOrientedInitBlock]): List[CompiledObjectOrientedInitBlock] =
     match initBlocks[0] with
     case None -> []
@@ -336,11 +373,13 @@ private fun compile_object_init_blocks(className: String, initBlocks: List[Objec
         location: compile_location(initBlock.location)
     }] + compile_object_init_blocks(className, initBlocks[1:])
 
+/// Converts parsed object methods into compiled metadata.
 private fun compile_object_methods(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedMethod] =
     match methods[0] with
     case None -> []
     case Some { method } -> [compile_object_method(className, method, module, allModules)] + compile_object_methods(className, methods[1:], module, allModules)
 
+/// Converts a parsed object method into compiled metadata.
 private fun compile_object_method(className: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedMethod =
     let functionName = className + "." + method.name
     CompiledObjectOrientedMethod {
@@ -353,6 +392,7 @@ private fun compile_object_method(className: String, method: ObjectOrientedMetho
         location: compile_location(method.location)
     }
 
+/// Converts parsed object interface functions into compiled metadata.
 private fun compile_object_interface_functions(interfaces: List[ObjectOrientedInterface], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match interfaces[0] with
     case None -> []
@@ -364,6 +404,7 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
             + compile_object_interface_method_functions(interface.name, interface.methods, module, allModules)
             + compile_object_interface_functions(interfaces[1:], module, allModules)
 
+/// Converts a parsed object interface schema function into compiled metadata.
 private fun compile_object_interface_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
     compile_documented_schema_constant(
         object_interface_schema_key(interface.name),
@@ -372,6 +413,7 @@ private fun compile_object_interface_schema_function(interface: ObjectOrientedIn
         interface.location
     )
 
+/// Converts a parsed object interface kind schema function into compiled metadata.
 private fun compile_object_interface_kind_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
     compile_schema_constant(
         object_interface_kind_schema_key(interface.name),
@@ -379,9 +421,11 @@ private fun compile_object_interface_kind_schema_function(interface: ObjectOrien
         interface.location
     )
 
+/// Converts parsed object interface parent schema functions into compiled metadata.
 private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     compile_object_parent_schema_functions(object_interface_parent_schema_prefix(), interfaceName, parents, module, allModules, idx, location)
 
+/// Converts parsed object parent schema functions into compiled metadata.
 private fun compile_object_parent_schema_functions(prefix: String, ownerName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parents[0] with
     case None -> []
@@ -389,6 +433,7 @@ private fun compile_object_parent_schema_functions(prefix: String, ownerName: St
         [compile_schema_constant(object_indexed_schema_key(prefix, ownerName, idx), compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
             + compile_object_parent_schema_functions(prefix, ownerName, parents[1:], module, allModules, idx + 1, location)
 
+/// Converts parsed object interface method functions into compiled metadata.
 private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
@@ -397,6 +442,7 @@ private fun compile_object_interface_method_functions(interfaceName: String, met
             + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(interfaceName, method.name), method.annotations, 0)
             + compile_object_interface_method_functions(interfaceName, methods[1:], module, allModules)
 
+/// Converts a parsed object interface method function into compiled metadata.
 private fun compile_object_interface_method_function(interfaceName: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: object_interface_method_schema_key(interfaceName, method.name),
@@ -408,6 +454,7 @@ private fun compile_object_interface_method_function(interfaceName: String, meth
         location: compile_location(method.location)
     }
 
+/// Converts parsed object class functions into compiled metadata.
 private fun compile_object_class_functions(classes: List[ObjectOrientedClass], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match classes[0] with
     case None -> []
@@ -424,6 +471,7 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
             + compile_object_method_functions(class.name, class.methods, module, allModules)
             + compile_object_class_functions(classes[1:], module, allModules)
 
+/// Converts a parsed object class schema function into compiled metadata.
 private fun compile_object_class_schema_function(class: ObjectOrientedClass): CompiledFunction =
     compile_documented_schema_constant(
         object_class_schema_key(class.name),
@@ -432,6 +480,7 @@ private fun compile_object_class_schema_function(class: ObjectOrientedClass): Co
         class.location
     )
 
+/// Converts a parsed object class open schema function into compiled metadata.
 private fun compile_object_class_open_schema_function(class: ObjectOrientedClass): CompiledFunction =
     compile_schema_constant(
         object_class_open_schema_key(class.name),
@@ -439,6 +488,7 @@ private fun compile_object_class_open_schema_function(class: ObjectOrientedClass
         class.location
     )
 
+/// Converts parsed object class parameter schema functions into compiled metadata.
 private fun compile_object_class_parameter_schema_functions(className: String, parameters: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match parameters[0] with
     case None -> []
@@ -446,9 +496,11 @@ private fun compile_object_class_parameter_schema_functions(className: String, p
         [compile_schema_constant(object_indexed_schema_key(object_class_parameter_schema_prefix(), className, idx), parameter.name + "|" + compiled_type_reference_schema(compile_type_in_module(parameter.typeReference, module, allModules)), parameter.location)]
             + compile_object_class_parameter_schema_functions(className, parameters[1:], module, allModules, idx + 1)
 
+/// Converts parsed object class parent schema functions into compiled metadata.
 private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     compile_object_parent_schema_functions(object_class_parent_schema_prefix(), className, parents, module, allModules, idx, location)
 
+/// Converts parsed object field schema functions into compiled metadata.
 private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
@@ -456,6 +508,7 @@ private fun compile_object_field_schema_functions(className: String, fields: Lis
         [compile_documented_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, module, allModules), field.documentation, field.location)]
             + compile_object_field_schema_functions(className, fields[1:], module, allModules, idx + 1)
 
+/// Converts parsed object field annotation schema functions into compiled metadata.
 private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
@@ -463,12 +516,15 @@ private fun compile_object_field_annotation_schema_functions(className: String, 
         compile_function_annotation_application_schema(object_field_annotation_schema_prefix(className, idx), field.annotations, 0)
             + compile_object_field_annotation_schema_functions(className, fields[1:], idx + 1)
 
+/// Encodes schema metadata for object field.
 private fun object_field_schema(field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): String =
     field.name + "|" + field.visibility + "|" + compiled_type_reference_schema(compile_type_in_module(field.typeReference, module, allModules)) + "|" + object_field_has_value_schema(field)
 
+/// Encodes schema metadata for object field has value.
 private fun object_field_has_value_schema(field: ObjectOrientedField): String =
     if field.hasValue then "true" else "false"
 
+/// Converts parsed object field initializer functions into compiled metadata.
 private fun compile_object_field_init_functions(className: String, parameters: List[FunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match fields[0] with
     case None -> []
@@ -477,6 +533,7 @@ private fun compile_object_field_init_functions(className: String, parameters: L
         then [compile_object_field_init_function(className, parameters, field, module, allModules)] + compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
         else compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
 
+/// Converts a parsed object field initializer function into compiled metadata.
 private fun compile_object_field_init_function(className: String, parameters: List[FunctionParameter], field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: object_field_init_schema_key(className, field.name),
@@ -488,6 +545,7 @@ private fun compile_object_field_init_function(className: String, parameters: Li
         location: compile_location(field.location)
     }
 
+/// Converts parsed object initializer functions into compiled metadata.
 private fun compile_object_init_functions(className: String, parameters: List[FunctionParameter], initBlocks: List[ObjectOrientedInitBlock], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match initBlocks[0] with
     case None -> []
@@ -495,6 +553,7 @@ private fun compile_object_init_functions(className: String, parameters: List[Fu
         [compile_object_init_function(className, parameters, initBlock, module, allModules, idx)]
             + compile_object_init_functions(className, parameters, initBlocks[1:], module, allModules, idx + 1)
 
+/// Converts a parsed object initializer function into compiled metadata.
 private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: ObjectOrientedInitBlock, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
     CompiledFunction {
         name: object_indexed_schema_key(object_init_schema_prefix(), className, idx),
@@ -506,6 +565,7 @@ private fun compile_object_init_function(className: String, parameters: List[Fun
         location: compile_location(initBlock.location)
     }
 
+/// Converts parsed object method functions into compiled metadata.
 private fun compile_object_method_functions(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
@@ -514,6 +574,7 @@ private fun compile_object_method_functions(className: String, methods: List[Obj
             + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(className, method.name), method.annotations, 0)
             + compile_object_method_functions(className, methods[1:], module, allModules)
 
+/// Converts a parsed object method function into compiled metadata.
 private fun compile_object_method_function(className: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     let functionName = className + "." + method.name
     CompiledFunction {
@@ -526,86 +587,113 @@ private fun compile_object_method_function(className: String, method: ObjectOrie
         location: compile_location(method.location)
     }
 
+/// Formats the encoded schema key for object class metadata.
 private fun object_class_schema_key(className: String): String =
     object_schema_key(object_class_schema_prefix(), className)
 
+/// Formats the encoded schema key for object interface metadata.
 private fun object_interface_schema_key(interfaceName: String): String =
     object_schema_key(object_interface_schema_prefix(), interfaceName)
 
+/// Formats the encoded schema key for object class open metadata.
 private fun object_class_open_schema_key(className: String): String =
     object_schema_key(object_class_open_schema_prefix(), className)
 
+/// Formats the encoded schema key for object interface kind metadata.
 private fun object_interface_kind_schema_key(interfaceName: String): String =
     object_schema_key(object_interface_kind_schema_prefix(), interfaceName)
 
+/// Formats the encoded schema key for object method metadata.
 private fun object_method_schema_key(ownerName: String, methodName: String): String =
     object_member_schema_key(object_method_schema_prefix(), ownerName, methodName)
 
+/// Formats the encoded schema key for object interface method metadata.
 private fun object_interface_method_schema_key(ownerName: String, methodName: String): String =
     object_member_schema_key(object_interface_method_schema_prefix(), ownerName, methodName)
 
+/// Formats the encoded schema key for object field initializer metadata.
 private fun object_field_init_schema_key(className: String, fieldName: String): String =
     object_member_schema_key(object_field_init_schema_prefix(), className, fieldName)
 
+/// Returns the encoded schema-key prefix for object type annotation metadata.
 private fun object_type_annotation_schema_prefix(ownerName: String): String =
     object_annotation_schema_prefix("type", ownerName, "")
 
+/// Returns the encoded schema-key prefix for object method annotation metadata.
 private fun object_method_annotation_schema_prefix(ownerName: String, methodName: String): String =
     object_annotation_schema_prefix("method", ownerName, methodName)
 
+/// Returns the encoded schema-key prefix for object field annotation metadata.
 private fun object_field_annotation_schema_prefix(ownerName: String, idx: int): String =
     object_annotation_schema_prefix("field", ownerName, "" + idx)
 
+/// Formats the encoded schema key for object metadata.
 private fun object_schema_key(prefix: String, ownerName: String): String =
     prefix + ownerName
 
+/// Formats the encoded schema key for object indexed metadata.
 private fun object_indexed_schema_key(prefix: String, ownerName: String, idx: int): String =
     object_schema_key(prefix, ownerName) + "|" + idx
 
+/// Formats the encoded schema key for object member metadata.
 private fun object_member_schema_key(prefix: String, ownerName: String, memberName: String): String =
     object_schema_key(prefix, ownerName) + "|" + memberName
 
+/// Returns the encoded schema-key prefix for object annotation metadata.
 private fun object_annotation_schema_prefix(target: String, ownerName: String, memberName: String): String =
     if memberName.is_empty()
     then "__capy_oo_annotation|" + target + "|" + ownerName + "|"
     else "__capy_oo_annotation|" + target + "|" + ownerName + "|" + memberName + "|"
 
+/// Returns the encoded schema-key prefix for object class metadata.
 private fun object_class_schema_prefix(): String =
     "__capy_oo_class|"
 
+/// Returns the encoded schema-key prefix for object interface metadata.
 private fun object_interface_schema_prefix(): String =
     "__capy_oo_interface|"
 
+/// Returns the encoded schema-key prefix for object class open metadata.
 private fun object_class_open_schema_prefix(): String =
     "__capy_oo_class_open|"
 
+/// Returns the encoded schema-key prefix for object interface kind metadata.
 private fun object_interface_kind_schema_prefix(): String =
     "__capy_oo_interface_kind|"
 
+/// Returns the encoded schema-key prefix for object class parameter metadata.
 private fun object_class_parameter_schema_prefix(): String =
     "__capy_oo_param|"
 
+/// Returns the encoded schema-key prefix for object class parent metadata.
 private fun object_class_parent_schema_prefix(): String =
     "__capy_oo_parent|"
 
+/// Returns the encoded schema-key prefix for object interface parent metadata.
 private fun object_interface_parent_schema_prefix(): String =
     "__capy_oo_interface_parent|"
 
+/// Returns the encoded schema-key prefix for object field metadata.
 private fun object_field_schema_prefix(): String =
     "__capy_oo_field|"
 
+/// Returns the encoded schema-key prefix for object method metadata.
 private fun object_method_schema_prefix(): String =
     "__capy_oo_method|"
 
+/// Returns the encoded schema-key prefix for object interface method metadata.
 private fun object_interface_method_schema_prefix(): String =
     "__capy_oo_interface_method|"
 
+/// Returns the encoded schema-key prefix for object field initializer metadata.
 private fun object_field_init_schema_prefix(): String =
     "__capy_oo_field_init|"
 
+/// Returns the encoded schema-key prefix for object initializer metadata.
 private fun object_init_schema_prefix(): String =
     "__capy_oo_init|"
 
+/// Converts parsed derivers into compiled metadata.
 private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDeriverDeclaration] =
     match definitions[0] with
     case None -> {:}
@@ -615,6 +703,7 @@ private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDerive
             compile_derivers(definitions[1:]) + (declaration.name, compile_deriver_declaration(declaration))
         case _ -> compile_derivers(definitions[1:])
 
+/// Converts a parsed deriver declaration into compiled metadata.
 private fun compile_deriver_declaration(declaration: DeriverDeclaration): CompiledDeriverDeclaration =
     CompiledDeriverDeclaration {
         name: declaration.name,
@@ -624,11 +713,13 @@ private fun compile_deriver_declaration(declaration: DeriverDeclaration): Compil
         location: compile_location(declaration.location)
     }
 
+/// Converts parsed deriver methods into compiled metadata.
 private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
     case Some { method } -> [compile_function(method)] + compile_deriver_methods(methods[1:])
 
+/// Converts parsed derived functions for a type into compiled metadata.
 private fun compile_derived_functions_for_type(typeName: String, derives: List[DeriveApplication], definitions: List[Definition]): List[CompiledFunction] =
     match derives[0] with
     case None -> []
@@ -639,6 +730,7 @@ private fun compile_derived_functions_for_type(typeName: String, derives: List[D
                 + compile_derived_functions_for_type(typeName, derives[1:], definitions)
         case None -> compile_derived_functions_for_type(typeName, derives[1:], definitions)
 
+/// Finds a deriver in available declarations, imports, or modules.
 private fun find_deriver(name: String, definitions: List[Definition]): /capy/lang/Option[DeriverDeclaration] =
     match definitions[0] with
     case None -> /capy/lang/Option.None {}
@@ -650,11 +742,13 @@ private fun find_deriver(name: String, definitions: List[Definition]): /capy/lan
             else find_deriver(name, definitions[1:])
         case _ -> find_deriver(name, definitions[1:])
 
+/// Converts parsed derived methods into compiled metadata.
 private fun compile_derived_methods(typeName: String, methods: List[FunctionDeclaration]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
     case Some { method } -> [compile_derived_method(typeName, method)] + compile_derived_methods(typeName, methods[1:])
 
+/// Converts a parsed derived method into compiled metadata.
 private fun compile_derived_method(typeName: String, method: FunctionDeclaration): CompiledFunction =
     let functionName = typeName + "." + method.name
     CompiledFunction {
@@ -667,6 +761,7 @@ private fun compile_derived_method(typeName: String, method: FunctionDeclaration
         location: compile_location(method.location)
     }
 
+/// Converts parsed annotations into compiled metadata.
 private fun compile_annotations(definitions: List[Definition]): Dict[CompiledAnnotationDeclaration] =
     match definitions[0] with
     case None -> {:}
@@ -676,6 +771,7 @@ private fun compile_annotations(definitions: List[Definition]): Dict[CompiledAnn
             compile_annotations(definitions[1:]) + (declaration.name, compile_annotation_declaration(declaration))
         case _ -> compile_annotations(definitions[1:])
 
+/// Converts a parsed annotation declaration into compiled metadata.
 private fun compile_annotation_declaration(declaration: AnnotationDeclaration): CompiledAnnotationDeclaration =
     CompiledAnnotationDeclaration {
         name: declaration.name,
@@ -687,25 +783,30 @@ private fun compile_annotation_declaration(declaration: AnnotationDeclaration): 
         location: compile_location(declaration.location)
     }
 
+/// Converts parsed annotation fields into compiled metadata.
 private fun compile_annotation_fields(fields: List[AnnotationFieldDeclaration]): List[String] =
     match fields[0] with
     case None -> []
     case Some { field } -> [compile_annotation_field(field)] + compile_annotation_fields(fields[1:])
 
+/// Converts a parsed annotation field into compiled metadata.
 private fun compile_annotation_field(field: AnnotationFieldDeclaration): String =
     field.name
         + "|" + type_reference_schema(field.typeReference)
         + "|" + annotation_default_present_schema(field.hasDefault)
         + "|" + annotation_value_schema(field.defaultValue)
 
+/// Encodes schema metadata for annotation default present.
 private fun annotation_default_present_schema(hasDefault: bool): String =
     if hasDefault then "true" else "false"
 
+/// Normalizes module path into the path or name form expected by later compiler stages.
 private fun normalize_module_path(path: String): String =
     if compiler_string_has_prefix(path, "/")
     then normalize_module_path(path[1, path.size()])
     else path
 
+/// Normalizes import module path into the path or name form expected by later compiler stages.
 private fun normalize_import_module_path(path: String): String =
     let normalized = normalize_module_path(path)
     if compiler_string_has_prefix(normalized, "dev/capylang/capybara/")
@@ -714,14 +815,17 @@ private fun normalize_import_module_path(path: String): String =
     then normalize_capybara_import_suffix(normalized["capybara/".size(), normalized.size()], "")
     else normalized
 
+/// Normalizes Capybara import suffix into the path or name form expected by later compiler stages.
 private fun normalize_capybara_import_suffix(suffix: String, prefix: String): String =
     if compiler_string_has_prefix(suffix, "test/")
     then prefix + suffix
     else prefix + "test/" + suffix
 
+/// Checks whether a string starts with the requested prefix.
 private fun compiler_string_has_prefix(value: String, prefix: String): bool =
     compiler_string_has_prefix_at(value, prefix, 0)
 
+/// Checks whether a string has the requested prefix at the given index.
 private fun compiler_string_has_prefix_at(value: String, prefix: String, idx: int): bool =
     match prefix[idx] with
     case None -> true
@@ -733,6 +837,7 @@ private fun compiler_string_has_prefix_at(value: String, prefix: String, idx: in
             then compiler_string_has_prefix_at(value, prefix, idx + 1)
             else false
 
+/// Converts a parsed constant into compiled metadata.
 private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
     CompiledFunction {
         name: constant.name,
@@ -744,6 +849,7 @@ private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
         location: compile_location(constant.location)
     }
 
+/// Converts a parsed constant in a module into compiled metadata.
 private fun compile_constant_in_module(constant: ConstantDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: constant.name,
@@ -755,6 +861,7 @@ private fun compile_constant_in_module(constant: ConstantDeclaration, module: Pa
         location: compile_location(constant.location)
     }
 
+/// Converts parsed functions into compiled metadata.
 private fun compile_functions(definitions: List[Definition], allDefinitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match definitions[0] with
     case None -> []
@@ -772,6 +879,7 @@ private fun compile_functions(definitions: List[Definition], allDefinitions: Lis
         case FunctionDefinition { function } -> [compile_function_in_module(function, module, allModules)] + compile_functions(definitions[1:], allDefinitions, module, allModules)
         case _ -> compile_functions(definitions[1:], allDefinitions, module, allModules)
 
+/// Converts parsed data declaration into compiled metadata.
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
     [compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location)]
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
@@ -780,6 +888,7 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
         + compile_annotation_application_schema("__capy_schema_annotation|data|" + declaration.name + "|", declaration.annotations, 0)
         + compile_data_field_annotation_schema(declaration.name, declaration.fields, 0)
 
+/// Converts parsed enum declaration into compiled metadata.
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
     [
         compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
@@ -788,6 +897,7 @@ private fun compile_enum_declaration(declaration: EnumDeclaration): List[Compile
     ] + compile_annotation_application_schema("__capy_schema_annotation|enum|" + declaration.name + "|", declaration.annotations, 0)
         + compile_enum_values(declaration.name, declaration.values, 0)
 
+/// Converts parsed enum values into compiled metadata.
 private fun compile_enum_values(enumName: String, values: List[EnumValueDeclaration], idx: int): List[CompiledFunction] =
     match values[0] with
     case None -> []
@@ -796,6 +906,7 @@ private fun compile_enum_values(enumName: String, values: List[EnumValueDeclarat
             compile_enum_value_constant(enumName, value, idx)]
             + compile_enum_values(enumName, values[1:], idx + 1)
 
+/// Converts a parsed enum value constant into compiled metadata.
 private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclaration, idx: int): CompiledFunction =
     CompiledFunction {
         name: value.name,
@@ -832,6 +943,7 @@ private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclar
         location: compile_location(value.location)
     }
 
+/// Converts parsed data schema parameters into compiled metadata.
 private fun compile_data_schema_parameters(dataName: String, parameters: List[String], idx: int, location: SourceLocation): List[CompiledFunction] =
     match parameters[0] with
     case None -> []
@@ -839,6 +951,7 @@ private fun compile_data_schema_parameters(dataName: String, parameters: List[St
         [compile_schema_constant("__capy_schema_param|" + dataName + "|" + idx, parameter, location)]
             + compile_data_schema_parameters(dataName, parameters[1:], idx + 1, location)
 
+/// Converts parsed data schema fields into compiled metadata.
 private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
@@ -846,6 +959,7 @@ private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldD
         [compile_documented_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.documentation, field.location)]
             + compile_data_schema_fields(dataName, fields[1:], idx + 1)
 
+/// Converts parsed data field annotation schema into compiled metadata.
 private fun compile_data_field_annotation_schema(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
     match fields[0] with
     case None -> []
@@ -856,6 +970,7 @@ private fun compile_data_field_annotation_schema(dataName: String, fields: List[
             0
         ) + compile_data_field_annotation_schema(dataName, fields[1:], idx + 1)
 
+/// Converts parsed annotation application schema into compiled metadata.
 private fun compile_annotation_application_schema(prefix: String, annotations: List[AnnotationApplication], idx: int): List[CompiledFunction] =
     match annotations[0] with
     case None -> []
@@ -863,22 +978,27 @@ private fun compile_annotation_application_schema(prefix: String, annotations: L
         [compile_schema_constant(prefix + idx, annotation_application_schema(annotation), annotation.location)]
             + compile_annotation_application_schema(prefix, annotations[1:], idx + 1)
 
+/// Encodes schema metadata for annotation application.
 private fun annotation_application_schema(annotation: AnnotationApplication): String =
     annotation.name + "|" + annotation_arguments_schema(annotation.arguments)
 
+/// Encodes schema metadata for annotation arguments.
 private fun annotation_arguments_schema(arguments: List[AnnotationArgument]): String =
     match arguments[0] with
     case None -> ""
     case Some { argument } -> annotation_argument_schema(argument) + annotation_argument_schema_tail(arguments[1:])
 
+/// Formats the recursive tail segment for annotation argument schema.
 private fun annotation_argument_schema_tail(arguments: List[AnnotationArgument]): String =
     match arguments[0] with
     case None -> ""
     case Some _ -> ";" + annotation_arguments_schema(arguments)
 
+/// Encodes schema metadata for annotation argument.
 private fun annotation_argument_schema(argument: AnnotationArgument): String =
     argument.name + "=" + annotation_value_schema(argument.value)
 
+/// Encodes schema metadata for annotation value.
 private fun annotation_value_schema(value: AnnotationValue): String =
     match value with
     case AnnotationStringValue literal -> "string:" + literal.value
@@ -890,6 +1010,7 @@ private fun annotation_value_schema(value: AnnotationValue): String =
     case AnnotationTypeNameValue literal -> "type:" + literal.value
     case AnnotationNothingValue _ -> "nothing:"
 
+/// Converts parsed function annotation application schema into compiled metadata.
 private fun compile_function_annotation_application_schema(prefix: String, annotations: List[FunctionAnnotationApplication], idx: int): List[CompiledFunction] =
     match annotations[0] with
     case None -> []
@@ -897,22 +1018,27 @@ private fun compile_function_annotation_application_schema(prefix: String, annot
         [compile_schema_constant(prefix + idx, function_annotation_application_schema(annotation), annotation.location)]
             + compile_function_annotation_application_schema(prefix, annotations[1:], idx + 1)
 
+/// Encodes schema metadata for function annotation application.
 private fun function_annotation_application_schema(annotation: FunctionAnnotationApplication): String =
     annotation.name + "|" + function_annotation_arguments_schema(annotation.arguments)
 
+/// Encodes schema metadata for function annotation arguments.
 private fun function_annotation_arguments_schema(arguments: List[FunctionAnnotationArgument]): String =
     match arguments[0] with
     case None -> ""
     case Some { argument } -> function_annotation_argument_schema(argument) + function_annotation_argument_schema_tail(arguments[1:])
 
+/// Formats the recursive tail segment for function annotation argument schema.
 private fun function_annotation_argument_schema_tail(arguments: List[FunctionAnnotationArgument]): String =
     match arguments[0] with
     case None -> ""
     case Some _ -> ";" + function_annotation_arguments_schema(arguments)
 
+/// Encodes schema metadata for function annotation argument.
 private fun function_annotation_argument_schema(argument: FunctionAnnotationArgument): String =
     argument.name + "=" + function_annotation_value_schema(argument.value)
 
+/// Encodes schema metadata for function annotation value.
 private fun function_annotation_value_schema(value: FunctionAnnotationValue): String =
     match value with
     case FunctionAnnotationStringValue literal -> "string:" + literal.value
@@ -924,6 +1050,7 @@ private fun function_annotation_value_schema(value: FunctionAnnotationValue): St
     case FunctionAnnotationTypeNameValue literal -> "type:" + literal.value
     case FunctionAnnotationNothingValue _ -> "nothing:"
 
+/// Converts parsed data schema parents into compiled metadata.
 private fun compile_data_schema_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
     match parents[0] with
     case None -> []
@@ -931,56 +1058,68 @@ private fun compile_data_schema_parents(dataName: String, parents: List[DataPare
         [compile_schema_constant("__capy_schema_parent|" + dataName + "|" + idx, type_reference_schema(parent.typeReference), parent.location)]
             + compile_data_schema_parents(dataName, parents[1:], idx + 1)
 
+/// Encodes schema metadata for data declaration field.
 private fun data_declaration_field_schema(field: DataFieldDeclaration): String =
     field.name + "|" + type_reference_schema(field.typeReference)
 
+/// Encodes schema metadata for type reference.
 private fun type_reference_schema(type: TypeReference): String =
     type.name + type_reference_arguments_schema(type.arguments)
 
+/// Encodes schema metadata for type reference arguments.
 private fun type_reference_arguments_schema(arguments: List[TypeReference]): String =
     if arguments.is_empty()
     then ""
     else "[" + type_reference_list_schema(arguments) + "]"
 
+/// Encodes schema metadata for type reference list.
 private fun type_reference_list_schema(arguments: List[TypeReference]): String =
     match arguments[0] with
     case None -> ""
     case Some { argument } -> type_reference_schema(argument) + type_reference_list_tail_schema(arguments[1:])
 
+/// Encodes schema metadata for type reference list tail.
 private fun type_reference_list_tail_schema(arguments: List[TypeReference]): String =
     match arguments[0] with
     case None -> ""
     case Some { argument } -> ", " + type_reference_schema(argument) + type_reference_list_tail_schema(arguments[1:])
 
+/// Extracts compiled metadata for type reference schema.
 private fun compiled_type_reference_schema(type: CompiledTypeReference): String =
     type.name + compiled_type_reference_arguments_schema(type.arguments)
 
+/// Extracts compiled metadata for type reference arguments schema.
 private fun compiled_type_reference_arguments_schema(arguments: List[CompiledTypeReference]): String =
     if arguments.is_empty()
     then ""
     else "[" + compiled_type_reference_list_schema(arguments) + "]"
 
+/// Extracts compiled metadata for type reference list schema.
 private fun compiled_type_reference_list_schema(arguments: List[CompiledTypeReference]): String =
     match arguments[0] with
     case None -> ""
     case Some { argument } -> compiled_type_reference_schema(argument) + compiled_type_reference_list_tail_schema(arguments[1:])
 
+/// Extracts compiled metadata for type reference list tail schema.
 private fun compiled_type_reference_list_tail_schema(arguments: List[CompiledTypeReference]): String =
     match arguments[0] with
     case None -> ""
     case Some { argument } -> ", " + compiled_type_reference_schema(argument) + compiled_type_reference_list_tail_schema(arguments[1:])
 
+/// Converts a parsed native provider catalog into compiled metadata.
 private fun compile_native_provider_catalog(modules: List[ParsedModule], nativeImplementationProviders: NativeProviderManifest): NativeProviderCatalog =
     NativeProviderCatalog {
         declarations: compile_native_provider_declarations(modules, modules),
         bindings: compile_native_provider_bindings(nativeImplementationProviders.providers)
     }
 
+/// Converts parsed native provider declarations into compiled metadata.
 private fun compile_native_provider_declarations(modules: List[ParsedModule], allModules: List[ParsedModule]): List[CompiledNativeProviderDeclaration] =
     match modules[0] with
     case None -> []
     case Some { module } -> compile_native_provider_declarations_in_module(module.definitions, module, allModules) + compile_native_provider_declarations(modules[1:], allModules)
 
+/// Converts parsed native provider declarations in a module into compiled metadata.
 private fun compile_native_provider_declarations_in_module(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledNativeProviderDeclaration] =
     match definitions[0] with
     case None -> []
@@ -992,18 +1131,22 @@ private fun compile_native_provider_declarations_in_module(definitions: List[Def
             else compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
         case _ -> compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
 
+/// Checks whether a function matches the native provider function metadata.
 private fun native_provider_function(function: FunctionDeclaration): bool =
     native_provider_annotations(function.annotations)
 
+/// Checks whether annotation metadata matches the native provider annotations rule.
 private fun native_provider_annotations(annotations: List[FunctionAnnotationApplication]): bool =
     match annotations[0] with
     case None -> false
     case Some { annotation } ->
         native_provider_annotation_name(annotation.name) | native_provider_annotations(annotations[1:])
 
+/// Checks whether annotation metadata matches the native provider annotation name rule.
 private fun native_provider_annotation_name(name: String): bool =
     compiler_unqualified_type_name(name) == "NativeProvider"
 
+/// Converts a parsed native provider declaration into compiled metadata.
 private fun compile_native_provider_declaration(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledNativeProviderDeclaration =
     let returnType = compile_type_in_module(function.returnType, module, allModules)
     let targetType = native_provider_target_type(returnType)
@@ -1017,6 +1160,7 @@ private fun compile_native_provider_declaration(function: FunctionDeclaration, m
         sourceFile: native_provider_source_file(module)
     }
 
+/// Computes the compiled type for native provider target.
 private fun native_provider_target_type(returnType: CompiledTypeReference): CompiledTypeReference =
     if returnType.name == "Effect"
     then match returnType.arguments[0] with
@@ -1024,11 +1168,13 @@ private fun native_provider_target_type(returnType: CompiledTypeReference): Comp
         case None -> CompiledTypeReference { name: "", arguments: [] }
     else returnType
 
+/// Formats source text for native provider interface id.
 private fun native_provider_interface_id(type: CompiledTypeReference): String =
     if compiler_string_has_prefix(type.name, "__capy_oo|")
     then type.name["__capy_oo|".size().value, type.name.size().value]
     else type.name
 
+/// Formats source text for native provider qualifier.
 private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplication]): String =
     match annotations[0] with
     case None -> ""
@@ -1037,6 +1183,7 @@ private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplic
         then native_provider_qualifier_argument(annotation.arguments)
         else native_provider_qualifier(annotations[1:])
 
+/// Formats one native provider qualifier argument for generated emission.
 private fun native_provider_qualifier_argument(arguments: List[FunctionAnnotationArgument]): String =
     match arguments[0] with
     case None -> ""
@@ -1045,17 +1192,20 @@ private fun native_provider_qualifier_argument(arguments: List[FunctionAnnotatio
         then function_annotation_string_value(argument.value)
         else native_provider_qualifier_argument(arguments[1:])
 
+/// Computes value metadata for function annotation string value.
 private fun function_annotation_string_value(value: FunctionAnnotationValue): String =
     match value with
     case FunctionAnnotationStringValue literal -> literal.value
     case _ -> ""
 
+/// Formats source text for native provider source file.
 private fun native_provider_source_file(module: ParsedModule): String =
     let path = normalize_module_path(module.path)
     if path.is_empty()
     then module.name + ".cfun"
     else path + "/" + module.name + ".cfun"
 
+/// Converts parsed native provider bindings into compiled metadata.
 private fun compile_native_provider_bindings(providers: List[NativeProviderBinding]): List[CompiledNativeProviderBinding] =
     match providers[0] with
     case None -> []
@@ -1067,9 +1217,11 @@ private fun compile_native_provider_bindings(providers: List[NativeProviderBindi
         pythonBinding: provider.pythonBinding
     }] + compile_native_provider_bindings(providers[1:])
 
+/// Converts a parsed schema constant into compiled metadata.
 private fun compile_schema_constant(name: String, value: String, location: SourceLocation): CompiledFunction =
     compile_documented_schema_constant(name, value, [], location)
 
+/// Converts a parsed documented schema constant into compiled metadata.
 private fun compile_documented_schema_constant(name: String, value: String, documentation: List[String], location: SourceLocation): CompiledFunction =
     CompiledFunction {
         name: name,
@@ -1085,6 +1237,7 @@ private fun compile_documented_schema_constant(name: String, value: String, docu
         location: compile_location(location)
     }
 
+/// Converts a parsed function into compiled metadata.
 private fun compile_function(function: FunctionDeclaration): CompiledFunction =
     CompiledFunction {
         name: function.name,
@@ -1096,6 +1249,7 @@ private fun compile_function(function: FunctionDeclaration): CompiledFunction =
         location: compile_location(function.location)
     }
 
+/// Converts a parsed function in a module into compiled metadata.
 private fun compile_function_in_module(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: function.name,
@@ -1107,16 +1261,19 @@ private fun compile_function_in_module(function: FunctionDeclaration, module: Pa
         location: compile_location(function.location)
     }
 
+/// Converts a parsed return type into compiled metadata.
 private fun compile_return_type(type: TypeReference, parameters: List[FunctionParameter], body: Expression): CompiledTypeReference =
     if type.name.is_empty()
     then compile_type(infer_return_type(body, parameters, 0))
     else compile_type(type)
 
+/// Converts a parsed return type in a module into compiled metadata.
 private fun compile_return_type_in_module(type: TypeReference, parameters: List[FunctionParameter], body: Expression, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
     if type.name.is_empty()
     then compile_type_in_module(infer_return_type_in_module(body, parameters, module, allModules, 0), module, allModules)
     else compile_type_in_module(type, module, allModules)
 
+/// Infers the compiled type for return type in a module.
 private fun infer_return_type_in_module(expression: Expression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     if depth > 16
     then missing_type()
@@ -1126,6 +1283,7 @@ private fun infer_return_type_in_module(expression: Expression, env: List[Functi
     case BlockExpression block -> infer_return_type_in_module(block.result, block_type_env_in_module(block.bindings, env, module, allModules, depth + 1), module, allModules, depth + 1)
     case _ -> infer_return_type(expression, env, depth + 1)
 
+/// Infers the compiled type for if type in a module.
 private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     let thenType = infer_return_type_in_module(ifExpression.thenBranch, env, module, allModules, depth + 1)
     let elseType = infer_return_type_in_module(ifExpression.elseBranch, env, module, allModules, depth + 1)
@@ -1137,6 +1295,7 @@ private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[Functi
     then compiler_preferred_data_object_type(thenType, elseType)
     else missing_type()
 
+/// Collects block type environmentironment in a module for compiler processing.
 private fun block_type_env_in_module(bindings: List[LetBinding], env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): List[FunctionParameter] =
     match bindings[0] with
     case None -> env
@@ -1148,16 +1307,19 @@ private fun block_type_env_in_module(bindings: List[LetBinding], env: List[Funct
             location: binding.location
         }] + env, module, allModules, depth + 1)
 
+/// Infers the compiled type for function call type.
 private fun infer_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     if compiler_qualified_name(call.name)
     then infer_qualified_function_call_type(call, module, allModules, depth + 1)
     else infer_function_call_type_in_module(compiler_qualified_member_name("." + call.name), module, allModules, depth + 1)
 
+/// Infers the compiled type for qualified function call type.
 private fun infer_qualified_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     match find_parsed_module_by_class(compiler_qualified_class_name(call.name, module), allModules) with
     case Some { targetModule } -> infer_function_call_type_in_module(compiler_qualified_member_name(call.name), targetModule, allModules, depth + 1)
     case None -> missing_type()
 
+/// Infers the compiled type for function call type in a module.
 private fun infer_function_call_type_in_module(name: String, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     match find_function_declaration(name, module.definitions) with
     case Some { function } ->
@@ -1166,6 +1328,7 @@ private fun infer_function_call_type_in_module(name: String, module: ParsedModul
         else function.returnType
     case None -> missing_type()
 
+/// Finds a function declaration in available declarations, imports, or modules.
 private fun find_function_declaration(name: String, definitions: List[Definition]): /capy/lang/Option[FunctionDeclaration] =
     match definitions[0] with
     case None -> /capy/lang/Option.None {}
@@ -1177,6 +1340,7 @@ private fun find_function_declaration(name: String, definitions: List[Definition
             else find_function_declaration(name, definitions[1:])
         case _ -> find_function_declaration(name, definitions[1:])
 
+/// Infers the compiled type for return type.
 private fun infer_return_type(expression: Expression, env: List[FunctionParameter], depth: int): TypeReference =
     if depth > 16
     then missing_type()
@@ -1208,6 +1372,7 @@ private fun infer_return_type(expression: Expression, env: List[FunctionParamete
     case MatchExpression matchExpression -> compiler_match_expression_type(matchExpression.cases, env, depth + 1)
     case BlockExpression block -> infer_return_type(block.result, block_type_env(block.bindings, env, depth + 1), depth + 1)
 
+/// Collects block type environmentironment for compiler processing.
 private fun block_type_env(bindings: List[LetBinding], env: List[FunctionParameter], depth: int): List[FunctionParameter] =
     match bindings[0] with
     case None -> env
@@ -1219,6 +1384,7 @@ private fun block_type_env(bindings: List[LetBinding], env: List[FunctionParamet
             location: binding.location
         }] + env, depth + 1)
 
+/// Computes the compiled type for lookup inferred.
 private fun lookup_inferred_type(name: String, env: List[FunctionParameter]): TypeReference =
     match env[0] with
     case None -> missing_type()
@@ -1227,6 +1393,7 @@ private fun lookup_inferred_type(name: String, env: List[FunctionParameter]): Ty
         then binding.typeReference
         else lookup_inferred_type(name, env[1:])
 
+/// Infers the compiled type for if type.
 private fun infer_if_type(ifExpression: IfExpression, env: List[FunctionParameter], depth: int): TypeReference =
     let thenType = infer_return_type(ifExpression.thenBranch, env, depth + 1)
     let elseType = infer_return_type(ifExpression.elseBranch, env, depth + 1)
@@ -1238,6 +1405,7 @@ private fun infer_if_type(ifExpression: IfExpression, env: List[FunctionParamete
     then compiler_preferred_data_object_type(thenType, elseType)
     else missing_type()
 
+/// Checks whether a type reference matches the data object type rule.
 private fun compiler_data_object_type(type: TypeReference): bool =
     !type.name.is_empty()
         & !compiler_numeric_type(type)
@@ -1251,18 +1419,21 @@ private fun compiler_data_object_type(type: TypeReference): bool =
         & type.name != "Assert"
         & compiler_uppercase_type_name(type.name)
 
+/// Checks whether a type reference matches the uppercase type name rule.
 private fun compiler_uppercase_type_name(name: String): bool =
     let member = compiler_unqualified_type_name(name)
     match member[0] with
     case None -> false
     case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
 
+/// Computes the type name for unqualified.
 private fun compiler_unqualified_type_name(name: String): String =
     let dot = compiler_last_index_of(name, ".", 0, -1)
     let slash = compiler_last_index_of(name, "/", 0, -1)
     let idx = if dot > slash then dot else slash
     if idx < 0 then name else name[idx + 1, name.size().value]
 
+/// Computes the index used to split or rank last index of.
 private fun compiler_last_index_of(value: String, needle: String, idx: int, found: int): int =
     if idx >= value.size().value
     then found
@@ -1271,11 +1442,13 @@ private fun compiler_last_index_of(value: String, needle: String, idx: int, foun
         case Some { char } ->
             compiler_last_index_of(value, needle, idx + 1, if char == needle then idx else found)
 
+/// Computes the compiled type for preferred data object.
 private fun compiler_preferred_data_object_type(first: TypeReference, second: TypeReference): TypeReference =
     if first.arguments.is_empty() & !second.arguments.is_empty()
     then second
     else first
 
+/// Infers the compiled type for binary type.
 private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
     let leftType = infer_return_type(binary.left, env, depth + 1)
     if compiler_collection_pipe_expression(binary, leftType)
@@ -1286,21 +1459,26 @@ private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParame
         infer_return_type(binary.right, env, depth + 1)
     )
 
+/// Checks whether an expression has the collection pipe expression shape.
 private fun compiler_collection_pipe_expression(binary: BinaryExpression, leftType: TypeReference): bool =
     compiler_collection_pipe_operator(binary.operator) & compiler_collection_receiver_type(leftType) & compiler_lambda_expression(binary.right)
 
+/// Checks whether an operator belongs to the collection pipe operator category.
 private fun compiler_collection_pipe_operator(operator: String): bool =
     operator == "|" | operator == "|-" | operator == "|*"
 
+/// Checks whether a type reference matches the collection receiver type rule.
 private fun compiler_collection_receiver_type(type: TypeReference): bool =
     type.name == "List" | type.name == "Set" | type.name == "Dict" | type.name == "Seq" | type.name == "String"
 
+/// Checks whether an expression has the lambda expression shape.
 private fun compiler_lambda_expression(expression: Expression): bool =
     match expression with
     case LambdaExpression _ -> true
     case FunctionReferenceExpression _ -> true
     case _ -> false
 
+/// Infers the compiled type for unary type.
 private fun infer_unary_type(unary: UnaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
     if unary.operator == "!"
     then compiler_bool_type()
@@ -1310,31 +1488,37 @@ private fun infer_unary_type(unary: UnaryExpression, env: List[FunctionParameter
         if compiler_integer_type(type) then type else missing_type()
     else infer_return_type(unary.expression, env, depth + 1)
 
+/// Infers the compiled type for method call type.
 private fun infer_method_call_type(call: MethodCallExpression, env: List[FunctionParameter], depth: int): TypeReference =
     if call.name == "size"
     then compiler_int_type()
     else missing_type()
 
+/// Infers the expression type for first.
 private fun compiler_first_expression_type(expressions: List[Expression], env: List[FunctionParameter], depth: int): TypeReference =
     match expressions[0] with
     case None -> compiler_any_type()
     case Some { expression } -> infer_return_type(expression, env, depth + 1)
 
+/// Computes the compiled type for first dict value.
 private fun compiler_first_dict_value_type(entries: List[DictEntry], env: List[FunctionParameter], depth: int): TypeReference =
     match entries[0] with
     case None -> compiler_any_type()
     case Some { entry } -> infer_return_type(entry.value, env, depth + 1)
 
+/// Collects expression types for compiler processing.
 private fun compiler_expression_types(expressions: List[Expression], env: List[FunctionParameter], depth: int): List[TypeReference] =
     match expressions[0] with
     case None -> []
     case Some { expression } -> [infer_return_type(expression, env, depth + 1)] + compiler_expression_types(expressions[1:], env, depth + 1)
 
+/// Infers the expression type for match.
 private fun compiler_match_expression_type(cases: List[MatchCase], env: List[FunctionParameter], depth: int): TypeReference =
     match cases[0] with
     case None -> missing_type()
     case Some { matchCase } -> infer_return_type(matchCase.body, env, depth + 1)
 
+/// Computes the compiled type for binary result.
 private fun compiler_binary_result_type(operator: String, leftType: TypeReference, rightType: TypeReference): TypeReference =
     if compiler_boolean_binary_operator(operator)
     then compiler_bool_type()
@@ -1350,21 +1534,27 @@ private fun compiler_binary_result_type(operator: String, leftType: TypeReferenc
     then compiler_promoted_numeric_type(leftType, rightType)
     else missing_type()
 
+/// Checks whether an operator belongs to the binary operator category.
 private fun compiler_boolean_binary_operator(operator: String): bool =
     operator == "&" | operator == "|"
 
+/// Checks whether an operator belongs to the operator category.
 private fun compiler_comparison_operator(operator: String): bool =
     operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
 
+/// Checks whether an operator belongs to the binary operator category.
 private fun compiler_numeric_binary_operator(operator: String): bool =
     operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
 
+/// Checks whether an operator belongs to the binary operator category.
 private fun compiler_bitwise_binary_operator(operator: String): bool =
     operator == ".and." | operator == ".nand." | operator == ".or." | operator == ".xor."
 
+/// Checks whether an operator belongs to the string left numeric operator category.
 private fun compiler_string_left_numeric_operator(operator: String, leftType: TypeReference, rightType: TypeReference): bool =
     (operator == "-" | operator == "*" | operator == "/" | operator == "^") & leftType.name == "String" & compiler_numeric_type(rightType)
 
+/// Computes the compiled type for promoted numeric.
 private fun compiler_promoted_numeric_type(leftType: TypeReference, rightType: TypeReference): TypeReference =
     if leftType.name == "double" | rightType.name == "double"
     then compiler_double_type()
@@ -1376,15 +1566,19 @@ private fun compiler_promoted_numeric_type(leftType: TypeReference, rightType: T
     then compiler_int_type()
     else compiler_byte_type()
 
+/// Checks whether a type reference matches the numeric type rule.
 private fun compiler_numeric_type(type: TypeReference): bool =
     type.name == "byte" | type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
 
+/// Checks whether a type reference matches the integer type rule.
 private fun compiler_integer_type(type: TypeReference): bool =
     type.name == "byte" | type.name == "int" | type.name == "long"
 
+/// Checks whether two type values identify the same entity.
 private fun compiler_same_type(first: TypeReference, second: TypeReference): bool =
     first.name == second.name & compiler_same_type_arguments(first.arguments, second.arguments)
 
+/// Checks whether two type arguments values identify the same entity.
 private fun compiler_same_type_arguments(first: List[TypeReference], second: List[TypeReference]): bool =
     match first[0] with
     case None -> second.is_empty()
@@ -1393,51 +1587,67 @@ private fun compiler_same_type_arguments(first: List[TypeReference], second: Lis
         case None -> false
         case Some { secondType } -> compiler_same_type(firstType, secondType) & compiler_same_type_arguments(first[1:], second[1:])
 
+/// Computes the compiled type for missing.
 private fun missing_type(): TypeReference =
     TypeReference { name: "", arguments: [] }
 
+/// Computes the compiled type for byte.
 private fun compiler_byte_type(): TypeReference =
     TypeReference { name: "byte", arguments: [] }
 
+/// Computes the compiled type for int.
 private fun compiler_int_type(): TypeReference =
     TypeReference { name: "int", arguments: [] }
 
+/// Computes the compiled type for long.
 private fun compiler_long_type(): TypeReference =
     TypeReference { name: "long", arguments: [] }
 
+/// Computes the compiled type for float.
 private fun compiler_float_type(): TypeReference =
     TypeReference { name: "float", arguments: [] }
 
+/// Computes the compiled type for double.
 private fun compiler_double_type(): TypeReference =
     TypeReference { name: "double", arguments: [] }
 
+/// Computes the compiled type for boolean.
 private fun compiler_bool_type(): TypeReference =
     TypeReference { name: "bool", arguments: [] }
 
+/// Computes the compiled type for string.
 private fun compiler_string_type(): TypeReference =
     TypeReference { name: "String", arguments: [] }
 
+/// Computes the compiled type for any.
 private fun compiler_any_type(): TypeReference =
     TypeReference { name: "any", arguments: [] }
 
+/// Returns the canonical compiler type reference for `Nothing`.
 private fun nothing_type(): TypeReference =
     TypeReference { name: "nothing", arguments: [] }
 
+/// Computes the compiled type for list.
 private fun compiler_list_type(argument: TypeReference): TypeReference =
     TypeReference { name: "List", arguments: [argument] }
 
+/// Computes the compiled type for set.
 private fun compiler_set_type(argument: TypeReference): TypeReference =
     TypeReference { name: "Set", arguments: [argument] }
 
+/// Computes the compiled type for dict.
 private fun compiler_dict_type(argument: TypeReference): TypeReference =
     TypeReference { name: "Dict", arguments: [argument] }
 
+/// Computes the compiled type for tuple.
 private fun compiler_tuple_type(arguments: List[TypeReference]): TypeReference =
     TypeReference { name: "Tuple", arguments: arguments }
 
+/// Checks whether an expression uses the placeholder source placeholder form.
 private fun placeholder_source(source: String): bool =
     source == "???" | source == "_"
 
+/// Converts parsed imports into compiled metadata.
 private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
     match imports[0] with
     case None -> []
@@ -1450,6 +1660,7 @@ private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImpo
         location: compile_location(declaration.location)
     }] + compile_imports(imports[1:])
 
+/// Converts parsed parameters into compiled metadata.
 private fun compile_parameters(parameters: List[FunctionParameter]): List[CompiledFunctionParameter] =
     match parameters[0] with
     case None -> []
@@ -1459,6 +1670,7 @@ private fun compile_parameters(parameters: List[FunctionParameter]): List[Compil
         location: compile_location(parameter.location)
     }] + compile_parameters(parameters[1:])
 
+/// Converts parsed parameters in a module into compiled metadata.
 private fun compile_parameters_in_module(parameters: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunctionParameter] =
     match parameters[0] with
     case None -> []
@@ -1468,12 +1680,14 @@ private fun compile_parameters_in_module(parameters: List[FunctionParameter], mo
         location: compile_location(parameter.location)
     }] + compile_parameters_in_module(parameters[1:], module, allModules)
 
+/// Converts a parsed type into compiled metadata.
 private fun compile_type(type: TypeReference): CompiledTypeReference =
     CompiledTypeReference {
         name: type.name,
         arguments: compile_types(type.arguments)
     }
 
+/// Converts a parsed type in a module into compiled metadata.
 private fun compile_type_in_module(type: TypeReference, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
     let objectTypeName = object_type_reference_name(type.name, module, allModules)
     if objectTypeName.is_empty()
@@ -1486,22 +1700,26 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
         arguments: []
     }
 
+/// Converts parsed types into compiled metadata.
 private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =
     match types[0] with
     case None -> []
     case Some { type } -> [compile_type(type)] + compile_types(types[1:])
 
+/// Converts parsed types in a module into compiled metadata.
 private fun compile_types_in_module(types: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledTypeReference] =
     match types[0] with
     case None -> []
     case Some { type } -> [compile_type_in_module(type, module, allModules)] + compile_types_in_module(types[1:], module, allModules)
 
+/// Computes the name for object type reference.
 private fun object_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     let interfaceType = object_interface_type_reference_name(name, module, allModules)
     if interfaceType.is_empty()
     then object_class_type_reference_name(name, module, allModules)
     else interfaceType
 
+/// Computes the name for object interface type reference.
 private fun object_interface_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     if compiler_qualified_name(name)
     then object_interface_type_reference_name_qualified(name, module, allModules)
@@ -1509,6 +1727,7 @@ private fun object_interface_type_reference_name(name: String, module: ParsedMod
         case true -> compiler_java_object_type_name(object_interface_java_name(module, name))
         case false -> object_interface_type_reference_name_in_imports(name, module.imports, module, allModules)
 
+/// Computes the name for object class type reference.
 private fun object_class_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     if compiler_qualified_name(name)
     then object_class_type_reference_name_qualified(name, module, allModules)
@@ -1516,6 +1735,7 @@ private fun object_class_type_reference_name(name: String, module: ParsedModule,
         case true -> compiler_java_object_type_name(object_class_java_name(module, name))
         case false -> object_class_type_reference_name_in_imports(name, module.imports, module, allModules)
 
+/// Computes the name for object interface type reference name qualified.
 private fun object_interface_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     let className = compiler_qualified_class_name(name, module)
     let member = compiler_qualified_member_name(name)
@@ -1526,6 +1746,7 @@ private fun object_interface_type_reference_name_qualified(name: String, module:
         else ""
     case None -> ""
 
+/// Computes the name for object class type reference name qualified.
 private fun object_class_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     let className = compiler_qualified_class_name(name, module)
     let member = compiler_qualified_member_name(name)
@@ -1536,6 +1757,7 @@ private fun object_class_type_reference_name_qualified(name: String, module: Par
         else ""
     case None -> ""
 
+/// Emits import statements for object interface type reference name in.
 private fun object_interface_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =
     match imports[0] with
     case None -> ""
@@ -1550,6 +1772,7 @@ private fun object_interface_type_reference_name_in_imports(name: String, import
             case None -> object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
         else object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
 
+/// Emits import statements for object class type reference name in.
 private fun object_class_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =
     match imports[0] with
     case None -> ""
@@ -1564,22 +1787,27 @@ private fun object_class_type_reference_name_in_imports(name: String, imports: L
             case None -> object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
         else object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
 
+/// Finds an object interface in a module in available declarations, imports, or modules.
 private fun find_object_interface_in_module(name: String, module: ParsedModule): bool =
     find_object_interface_in_interfaces(name, module.objectOriented.interfaces)
 
+/// Finds an object interface in interfaces in available declarations, imports, or modules.
 private fun find_object_interface_in_interfaces(name: String, interfaces: List[ObjectOrientedInterface]): bool =
     match interfaces[0] with
     case None -> false
     case Some { interface } -> interface.name == name | find_object_interface_in_interfaces(name, interfaces[1:])
 
+/// Finds an object class in a module in available declarations, imports, or modules.
 private fun find_object_class_in_module(name: String, module: ParsedModule): bool =
     find_object_class_in_classes(name, module.objectOriented.classes)
 
+/// Finds an object class in classes in available declarations, imports, or modules.
 private fun find_object_class_in_classes(name: String, classes: List[ObjectOrientedClass]): bool =
     match classes[0] with
     case None -> false
     case Some { class } -> class.name == name | find_object_class_in_classes(name, classes[1:])
 
+/// Finds a parsed module by class in available declarations, imports, or modules.
 private fun find_parsed_module_by_class(className: String, modules: List[ParsedModule]): /capy/lang/Option[ParsedModule] =
     match modules[0] with
     case None -> /capy/lang/Option.None {}
@@ -1588,6 +1816,7 @@ private fun find_parsed_module_by_class(className: String, modules: List[ParsedM
         then /capy/lang/Option.Some { module }
         else find_parsed_module_by_class(className, modules[1:])
 
+/// Checks whether an import matches the import includes name rule.
 private fun compiler_import_includes_name(name: String, declaration: ImportDeclaration): bool =
     if declaration.qualified
     then false
@@ -1595,18 +1824,22 @@ private fun compiler_import_includes_name(name: String, declaration: ImportDecla
     then !compiler_string_list_contains(declaration.excludedNames, name)
     else compiler_string_list_contains(declaration.importedNames, name)
 
+/// Checks whether string list contains the requested value.
 private fun compiler_string_list_contains(values: List[String], expected: String): bool =
     match values[0] with
     case None -> false
     case Some { value } -> value == expected | compiler_string_list_contains(values[1:], expected)
 
+/// Checks whether the current value satisfies the qualified name rule for compiler processing.
 private fun compiler_qualified_name(name: String): bool =
     let idx = compiler_last_index_of(name, ".", 0, -1)
     idx > 0 & idx < name.size().value - 1
 
+/// Computes the name for qualified member.
 private fun compiler_qualified_member_name(name: String): String =
     name[compiler_last_index_of(name, ".", 0, -1) + 1, name.size().value]
 
+/// Computes the name for qualified class.
 private fun compiler_qualified_class_name(name: String, module: ParsedModule): String =
     let qualifier = name[0, compiler_last_index_of(name, ".", 0, -1)]
     if compiler_string_has_prefix(qualifier, "/")
@@ -1615,6 +1848,7 @@ private fun compiler_qualified_class_name(name: String, module: ParsedModule): S
     then normalize_import_module_path(qualifier).replace("/", ".")
     else compiler_imported_module_class(module, qualifier)
 
+/// Collects imported module class visible to the current module.
 private fun compiler_imported_module_class(module: ParsedModule, modulePath: String): String =
     if compiler_string_has_prefix(modulePath, "/")
     then normalize_import_module_path(modulePath).replace("/", ".")
@@ -1624,29 +1858,35 @@ private fun compiler_imported_module_class(module: ParsedModule, modulePath: Str
     then modulePath
     else normalize_module_path(module.path).replace("/", ".") + "." + modulePath
 
+/// Formats source text for parsed module fully qualified class name.
 private fun parsed_module_fqcn(module: ParsedModule): String =
     if module.path.is_empty()
     then module.name
     else normalize_module_path(module.path).replace("/", ".") + "." + module.name
 
+/// Computes the name for object interface Java.
 private fun object_interface_java_name(module: ParsedModule, name: String): String =
     let path = normalize_module_path(module.path)
     if path.is_empty()
     then name
     else path.replace("/", ".") + "." + name
 
+/// Computes the name for object class Java.
 private fun object_class_java_name(module: ParsedModule, name: String): String =
     parsed_module_fqcn(module) + "." + name
 
+/// Computes the Java type name for object.
 private fun compiler_java_object_type_name(javaName: String): String =
     "__capy_oo|" + javaName
 
+/// Converts a parsed location into compiled metadata.
 private fun compile_location(location: SourceLocation): CompiledSourceLocation =
     CompiledSourceLocation {
         line: location.line,
         column: location.column
     }
 
+/// Resolves expression metadata for expression location.
 private fun expression_location(expression: Expression): SourceLocation =
     match expression with
     case UnsupportedExpression value -> value.location
@@ -1676,6 +1916,7 @@ private fun expression_location(expression: Expression): SourceLocation =
     case MatchExpression value -> value.location
     case BlockExpression value -> value.location
 
+/// Converts a parsed expression in function into compiled metadata.
 private fun compile_expression_in_function(expression: Expression, functionName: String): CompiledExpression =
     match expression with
     case UnsupportedExpression { source, location } -> CompiledUnsupportedExpression {
@@ -1799,11 +2040,13 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         location: compile_location(location)
     }
 
+/// Extracts compiled metadata for method call.
 private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
     let receiver = compile_expression_in_function(call.receiver, functionName)
     let arguments = compile_expressions(call.arguments, functionName)
     compiled_method_call_with_receiver(call, receiver, arguments)
 
+/// Extracts compiled metadata for method call with receiver.
 private fun compiled_method_call_with_receiver(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
     match receiver with
     case CompiledUnaryExpression { operator, expression, location } ->
@@ -1821,6 +2064,7 @@ private fun compiled_method_call_with_receiver(call: MethodCallExpression, recei
         else compiled_method_call_expression(call, receiver, arguments)
     case _ -> compiled_method_call_expression(call, receiver, arguments)
 
+/// Extracts compiled metadata for method call expression.
 private fun compiled_method_call_expression(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
     let location = compile_location(call.location)
     let methodCall = CompiledMethodCallExpression {
@@ -1833,6 +2077,7 @@ private fun compiled_method_call_expression(call: MethodCallExpression, receiver
     then compiled_partial_application(arguments, methodCall, location)
     else methodCall
 
+/// Extracts compiled metadata for function call.
 private fun compiled_function_call(name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation): CompiledExpression =
     let functionCall = CompiledFunctionCallExpression {
         name: name,
@@ -1843,6 +2088,7 @@ private fun compiled_function_call(name: String, arguments: List[CompiledExpress
     then compiled_partial_application(arguments, functionCall, location)
     else functionCall
 
+/// Extracts compiled metadata for partial application.
 private fun compiled_partial_application(arguments: List[CompiledExpression], body: CompiledExpression, location: CompiledSourceLocation): CompiledExpression =
     let partial = compiled_partial_arguments(arguments, 1)
     CompiledLambdaExpression {
@@ -1851,12 +2097,14 @@ private fun compiled_partial_application(arguments: List[CompiledExpression], bo
         location: location
     }
 
+/// Extracts compiled metadata for partial body.
 private fun compiled_partial_body(body: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
     match body with
     case CompiledFunctionCallExpression call -> call.with(arguments: arguments)
     case CompiledMethodCallExpression call -> call.with(arguments: arguments)
     case _ -> body
 
+/// Extracts compiled metadata for partial arguments.
 private fun compiled_partial_arguments(arguments: List[CompiledExpression], idx: int): CompiledPartialArguments =
     match arguments[0] with
     case None -> CompiledPartialArguments { parameters: [], arguments: [] }
@@ -1883,22 +2131,27 @@ private fun compiled_partial_arguments(arguments: List[CompiledExpression], idx:
             arguments: [argument] + rest.arguments
         }
 
+/// Extracts compiled metadata for expressions have placeholders.
 private fun compiled_expressions_have_placeholders(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case None -> false
     case Some { argument } -> compiled_placeholder_expression(argument) | compiled_expressions_have_placeholders(arguments[1:])
 
+/// Extracts compiled metadata for placeholder expression.
 private fun compiled_placeholder_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledUnsupportedExpression unsupported -> compiler_compiled_placeholder_source(unsupported.source)
     case _ -> false
 
+/// Extracts compiled metadata for placeholder source.
 private fun compiler_compiled_placeholder_source(source: String): bool =
     compiler_string_has_prefix(source, "__capy_placeholder__|")
 
+/// Extracts compiled metadata for partial parameter name.
 private fun compiled_partial_parameter_name(location: CompiledSourceLocation, idx: int): String =
     "__capy_partial_" + location.line + "_" + location.column + "_" + idx
 
+/// Converts a parsed field access into compiled metadata.
 private fun compile_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
     match access.receiver with
     case UnaryExpression { operator, expression, location } ->
@@ -1915,6 +2168,7 @@ private fun compile_field_access(access: FieldAccessExpression, functionName: St
         else compiled_field_access(access, functionName)
     case _ -> compiled_field_access(access, functionName)
 
+/// Extracts compiled metadata for field access.
 private fun compiled_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
     CompiledFieldAccessExpression {
         receiver: compile_expression_in_function(access.receiver, functionName),
@@ -1922,11 +2176,13 @@ private fun compiled_field_access(access: FieldAccessExpression, functionName: S
         location: compile_location(access.location)
     }
 
+/// Converts parsed expressions into compiled metadata.
 private fun compile_expressions(expressions: List[Expression], functionName: String): List[CompiledExpression] =
     match expressions[0] with
     case None -> []
     case Some { expression } -> [compile_expression_in_function(expression, functionName)] + compile_expressions(expressions[1:], functionName)
 
+/// Converts parsed dict entries into compiled metadata.
 private fun compile_dict_entries(entries: List[DictEntry], functionName: String): List[CompiledDictEntry] =
     match entries[0] with
     case None -> []
@@ -1936,6 +2192,7 @@ private fun compile_dict_entries(entries: List[DictEntry], functionName: String)
         location: compile_location(entry.location)
     }] + compile_dict_entries(entries[1:], functionName)
 
+/// Converts parsed expression data fields into compiled metadata.
 private fun compile_expression_data_fields(fields: List[DataField], functionName: String): List[CompiledDataField] =
     match fields[0] with
     case None -> []
@@ -1946,6 +2203,7 @@ private fun compile_expression_data_fields(fields: List[DataField], functionName
         location: compile_location(field.location)
     }] + compile_expression_data_fields(fields[1:], functionName)
 
+/// Converts parsed match cases into compiled metadata.
 private fun compile_match_cases(cases: List[MatchCase], functionName: String): List[CompiledMatchCase] =
     match cases[0] with
     case None -> []
@@ -1962,6 +2220,7 @@ private fun compile_match_cases(cases: List[MatchCase], functionName: String): L
         location: compile_location(matchCase.location)
     }] + compile_match_cases(cases[1:], functionName)
 
+/// Converts parsed let bindings into compiled metadata.
 private fun compile_let_bindings(bindings: List[LetBinding], functionName: String): List[CompiledLetBinding] =
     match bindings[0] with
     case None -> []
@@ -1973,6 +2232,7 @@ private fun compile_let_bindings(bindings: List[LetBinding], functionName: Strin
         location: compile_location(binding.location)
     }] + compile_let_bindings(bindings[1:], functionName)
 
+/// Extracts compiled metadata for unsupported source.
 private fun compiled_unsupported_source(source: String, functionName: String): String =
     if placeholder_source(source)
     then "__capy_placeholder__|" + functionName

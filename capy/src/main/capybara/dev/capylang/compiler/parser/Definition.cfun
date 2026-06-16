@@ -4,16 +4,27 @@ from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclarat
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
+/// Parsed annotation argument pairing a field name with a literal annotation value.
 data AnnotationArgument { name: String, value: AnnotationValue, location: SourceLocation }
+/// Parsed annotation use with name, argument list, and source position.
 data AnnotationApplication { name: String, arguments: List[AnnotationArgument], location: SourceLocation }
+/// Parsed annotation string literal, preserving source text and location.
 data AnnotationStringValue { value: String, source: String, location: SourceLocation }
+/// Parsed annotation int literal, preserving source text and location.
 data AnnotationIntValue { value: int, source: String, location: SourceLocation }
+/// Parsed annotation long literal, preserving source text and location.
 data AnnotationLongValue { value: long, source: String, location: SourceLocation }
+/// Parsed annotation double literal, preserving source text and location.
 data AnnotationDoubleValue { value: double, source: String, location: SourceLocation }
+/// Parsed annotation float literal, preserving source text and location.
 data AnnotationFloatValue { value: float, source: String, location: SourceLocation }
+/// Parsed annotation boolean literal, preserving source text and location.
 data AnnotationBoolValue { value: bool, source: String, location: SourceLocation }
+/// Parsed annotation type-name literal, preserving source text and location.
 data AnnotationTypeNameValue { value: String, source: String, location: SourceLocation }
+/// Parsed annotation nothing literal with source text and location.
 data AnnotationNothingValue { source: String, location: SourceLocation }
+/// Parsed annotation field declaration with declared type, optional default, documentation, and location.
 data AnnotationFieldDeclaration {
     name: String,
     typeReference: TypeReference,
@@ -21,6 +32,7 @@ data AnnotationFieldDeclaration {
     hasDefault: bool,
     location: SourceLocation
 }
+/// Parsed annotation declaration with fields, documentation, visibility, and source location.
 data AnnotationDeclaration {
     name: String,
     visibility: String,
@@ -31,9 +43,13 @@ data AnnotationDeclaration {
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
+/// Parsed derive clause entry naming a deriver to apply at a source location.
 data DeriveApplication { name: String, location: SourceLocation }
+/// Parsed data field declaration with type, documentation, annotations, and source location.
 data DataFieldDeclaration { name: String, typeReference: TypeReference, documentation: List[String], annotations: List[AnnotationApplication], location: SourceLocation }
+/// Parsed parent type reference for a data declaration.
 data DataParentDeclaration { typeReference: TypeReference, location: SourceLocation }
+/// Parsed data type declaration with fields, parents, derives, documentation, annotations, and visibility.
 data DataDeclaration {
     name: String,
     visibility: String,
@@ -45,6 +61,7 @@ data DataDeclaration {
     derives: List[DeriveApplication],
     location: SourceLocation
 }
+/// Parsed deriver declaration with type parameters, generated methods, documentation, and visibility.
 data DeriverDeclaration {
     name: String,
     visibility: String,
@@ -53,8 +70,11 @@ data DeriverDeclaration {
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
+/// Parsed enum value name with its source location.
 data EnumValueDeclaration { name: String, location: SourceLocation }
+/// Parsed enum declaration with values, documentation, annotations, and source location.
 data EnumDeclaration { name: String, values: List[EnumValueDeclaration], documentation: List[String], annotations: List[AnnotationApplication], location: SourceLocation }
+/// Parsed primitive-backed type declaration with backing type, documentation, annotations, and visibility.
 data PrimitiveBackedTypeDeclaration {
     name: String,
     visibility: String,
@@ -63,6 +83,7 @@ data PrimitiveBackedTypeDeclaration {
     annotations: List[AnnotationApplication],
     location: SourceLocation
 }
+/// Parsed type alias declaration with aliased type, documentation, annotations, and visibility.
 data TypeDeclaration {
     name: String,
     visibility: String,
@@ -74,10 +95,14 @@ data TypeDeclaration {
     derives: List[DeriveApplication],
     location: SourceLocation
 }
+/// Sentinel for parser output that could not be classified as a supported top-level definition.
 data UnsupportedDefinition {}
+/// Top-level definition wrapper for a parsed constant declaration.
 data ConstantDefinition { constant: ConstantDeclaration }
+/// Top-level definition wrapper for a parsed function declaration.
 data FunctionDefinition { function: FunctionDeclaration }
 
+/// Union of supported top-level functional definitions produced by the parser.
 union Definition = AnnotationDeclaration
                  | ConstantDefinition
                  | DataDeclaration
@@ -88,6 +113,7 @@ union Definition = AnnotationDeclaration
                  | TypeDeclaration
                  | UnsupportedDefinition
 
+/// Union of literal value forms accepted in annotation arguments.
 union AnnotationValue = AnnotationBoolValue
                       | AnnotationDoubleValue
                       | AnnotationFloatValue

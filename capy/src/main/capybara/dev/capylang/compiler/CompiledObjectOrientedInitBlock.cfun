@@ -2,6 +2,7 @@ from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledExpression import { CompiledExpression }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 
+/// compiled object initializer block with owner class, generated body, and source location.
 data CompiledObjectOrientedInitBlock {
     body: CompiledExpression,
     documentation: List[String],

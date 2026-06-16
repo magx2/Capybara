@@ -10,6 +10,7 @@ from /dev/capylang/compiler/StaticImport import { StaticImport }
 
 data Compiled {}
 
+/// compiled module payload with normalized path, visible types, functions, imports, schema metadata, and static imports.
 data CompiledModule {
     name: String,
     path: String,

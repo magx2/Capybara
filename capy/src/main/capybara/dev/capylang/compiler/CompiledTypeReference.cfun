@@ -1,3 +1,4 @@
 from /capy/collection/List import { List }
 
+/// Resolved type reference with normalized type name and recursively compiled type arguments.
 data CompiledTypeReference { name: String, arguments: List[CompiledTypeReference] }

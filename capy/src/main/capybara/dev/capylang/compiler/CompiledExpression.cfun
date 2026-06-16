@@ -2,6 +2,7 @@ from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 
+/// Union of expression variants used by the compiler pipeline.
 union CompiledExpression =
     CompiledUnsupportedExpression
     | CompiledIntLiteral
@@ -30,33 +31,63 @@ union CompiledExpression =
     | CompiledMatchExpression
     | CompiledBlockExpression
 
+/// compiled AST node for unsupported expression semantics.
 data CompiledUnsupportedExpression { source: String, location: CompiledSourceLocation }
+/// compiled AST node for an int literal, retaining source text and location.
 data CompiledIntLiteral { value: int, source: String, location: CompiledSourceLocation }
+/// compiled AST node for a long literal, retaining source text and location.
 data CompiledLongLiteral { value: long, source: String, location: CompiledSourceLocation }
+/// compiled AST node for a float literal, retaining source text and location.
 data CompiledFloatLiteral { value: float, source: String, location: CompiledSourceLocation }
+/// compiled AST node for a double literal, retaining source text and location.
 data CompiledDoubleLiteral { value: double, source: String, location: CompiledSourceLocation }
+/// compiled AST node for a boolean literal, retaining source text and location.
 data CompiledBoolLiteral { value: bool, source: String, location: CompiledSourceLocation }
+/// compiled AST node for a string literal, retaining source text and location.
 data CompiledStringLiteral { value: String, source: String, location: CompiledSourceLocation }
+/// compiled AST node for variable expression semantics.
 data CompiledVariableExpression { name: String, location: CompiledSourceLocation }
+/// compiled AST node for if expression semantics.
 data CompiledIfExpression { condition: CompiledExpression, thenBranch: CompiledExpression, elseBranch: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for binary expression semantics.
 data CompiledBinaryExpression { operator: String, left: CompiledExpression, right: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for unary expression semantics.
 data CompiledUnaryExpression { operator: String, expression: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for function call expression semantics.
 data CompiledFunctionCallExpression { name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
+/// compiled AST node for function reference expression semantics.
 data CompiledFunctionReferenceExpression { name: String, location: CompiledSourceLocation }
+/// compiled AST node for method call expression semantics.
 data CompiledMethodCallExpression { receiver: CompiledExpression, name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation }
+/// compiled AST node for with expression semantics.
 data CompiledWithExpression { receiver: CompiledExpression, fields: List[CompiledDataField], location: CompiledSourceLocation }
+/// compiled AST node for lambda expression semantics.
 data CompiledLambdaExpression { parameters: List[String], body: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for a list literal, retaining source text and location.
 data CompiledListLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
+/// compiled AST node for a set literal, retaining source text and location.
 data CompiledSetLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
+/// compiled AST helper node for one dict entry.
 data CompiledDictEntry { key: CompiledExpression, value: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for a dict literal, retaining source text and location.
 data CompiledDictLiteral { entries: List[CompiledDictEntry], location: CompiledSourceLocation }
+/// compiled AST node for a tuple literal, retaining source text and location.
 data CompiledTupleLiteral { values: List[CompiledExpression], location: CompiledSourceLocation }
+/// compiled AST node for index expression semantics.
 data CompiledIndexExpression { receiver: CompiledExpression, index: CompiledExpression, endIndex: CompiledExpression, hasEndIndex: bool, location: CompiledSourceLocation }
+/// compiled AST helper node for one data field.
 data CompiledDataField { name: String, value: CompiledExpression, spread: bool, location: CompiledSourceLocation }
+/// compiled AST node for a data literal, retaining source text and location.
 data CompiledDataLiteral { typeName: String, fields: List[CompiledDataField], location: CompiledSourceLocation }
+/// compiled AST node for field access expression semantics.
 data CompiledFieldAccessExpression { receiver: CompiledExpression, name: String, location: CompiledSourceLocation }
+/// compiled AST node for reduce expression semantics.
 data CompiledReduceExpression { receiver: CompiledExpression, initial: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, body: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST helper node for one match case.
 data CompiledMatchCase { typeName: String, bindings: List[String], bindsWholeValue: bool, literal: CompiledExpression, hasLiteral: bool, wildcard: bool, guard: CompiledExpression, hasGuard: bool, body: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for match expression semantics.
 data CompiledMatchExpression { value: CompiledExpression, cases: List[CompiledMatchCase], location: CompiledSourceLocation }
+/// compiled AST helper node for one let binding.
 data CompiledLetBinding { name: String, typeReference: CompiledTypeReference, operator: String, value: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for block expression semantics.
 data CompiledBlockExpression { bindings: List[CompiledLetBinding], result: CompiledExpression, location: CompiledSourceLocation }

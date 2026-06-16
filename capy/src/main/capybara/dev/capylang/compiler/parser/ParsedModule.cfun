@@ -5,8 +5,10 @@ from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration 
 from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
 from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
 
+/// Marker type for values that have passed through the parser layer.
 data Parsed {}
 
+/// Parsed source module with functional and object-oriented declarations, imports, path, and source kind.
 data ParsedModule {
     name: String,
     path: String,

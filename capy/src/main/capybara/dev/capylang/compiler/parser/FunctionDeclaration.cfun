@@ -5,6 +5,7 @@ from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter 
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
+/// Parsed function declaration with receiver metadata, parameters, return type, body, docs, annotations, and location.
 data FunctionDeclaration {
     name: String,
     visibility: String,
