@@ -1787,11 +1787,12 @@ public class JavaExpressionEvaluator {
         var restExSc = evaluateExpression(scopeExpression.expression(), scopeExpression.scope()).popExpression();
         var addedStatements = addedStatements(scope, restExSc.scope());
         var statements = String.join("; ", addedStatements);
+        var restExpression = castEffectExpressionForExpectedType(restExSc.expression(), bind.effectType());
         return scope.addExpression(
                 "capy.lang.Effect.delay(() -> { "
                 + statements
                 + "; return (("
-                + restExSc.expression()
+                + restExpression
                 + ").unsafeRun()); })"
         );
     }
@@ -2002,6 +2003,94 @@ public class JavaExpressionEvaluator {
             case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
                     genericTypeParameter.name();
             default -> "java.lang.Object";
+        };
+    }
+
+    private static String castEffectExpressionForExpectedType(
+            String expression,
+            dev.capylang.compiler.CompiledType expectedEffectType
+    ) {
+        if (!(expectedEffectType instanceof dev.capylang.compiler.GenericDataType genericDataType)) {
+            return expression;
+        }
+        var raw = normalizeJavaTypeReference(genericDataType.name());
+        var typed = javaGenericDataTypeReference(genericDataType);
+        if (raw.equals(typed)) {
+            return "((" + raw + ") (" + expression + "))";
+        }
+        return "((" + typed + ") ((" + raw + "<?>) (" + expression + ")))";
+    }
+
+    private static String javaGenericDataTypeReference(dev.capylang.compiler.GenericDataType type) {
+        var raw = normalizeJavaTypeReference(type.name());
+        var typeParameters = switch (type) {
+            case dev.capylang.compiler.CompiledDataType dataType -> dataType.typeParameters();
+            case dev.capylang.compiler.CompiledDataParentType parentType -> parentType.typeParameters();
+            case dev.capylang.compiler.CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case dev.capylang.compiler.CompiledObjectType ignored -> List.<String>of();
+        };
+        if (typeParameters.isEmpty()) {
+            return raw;
+        }
+        var mappedTypeParameters = typeParameters.stream()
+                .map(JavaExpressionEvaluator::javaGenericTypeParameterReference)
+                .toList();
+        return raw + "<" + String.join(", ", mappedTypeParameters) + ">";
+    }
+
+    private static String javaGenericTypeParameterReference(String descriptor) {
+        var normalized = descriptor == null ? "" : descriptor.trim();
+        if (normalized.isEmpty()) {
+            return "java.lang.Object";
+        }
+        var primitiveBackedType = primitiveBackedType(normalized);
+        if (primitiveBackedType.isPresent()) {
+            return javaBoxedPrimitiveType(primitiveBackedType.orElseThrow());
+        }
+        return switch (normalized) {
+            case "byte" -> "java.lang.Byte";
+            case "int" -> "java.lang.Integer";
+            case "long" -> "java.lang.Long";
+            case "float" -> "java.lang.Float";
+            case "double" -> "java.lang.Double";
+            case "String" -> "java.lang.String";
+            case "bool" -> "java.lang.Boolean";
+            case "enum" -> "java.lang.Enum<?>";
+            case "any", "nothing", "data" -> "java.lang.Object";
+            default -> {
+                if ("Error".equals(normalized)
+                    || normalizeQualifiedTypeName(normalized).endsWith("/Result.Error")) {
+                    yield resultErrorJavaTypeReference(normalized);
+                }
+                if (normalized.matches("[A-Z]")) {
+                    yield normalized;
+                }
+                if (normalized.startsWith("List[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("List[".length(), normalized.length() - 1);
+                    yield "java.util.List<" + javaGenericTypeParameterReference(inner) + ">";
+                }
+                if (normalized.startsWith("Set[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Set[".length(), normalized.length() - 1);
+                    yield "java.util.Set<" + javaGenericTypeParameterReference(inner) + ">";
+                }
+                if (normalized.startsWith("Dict[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Dict[".length(), normalized.length() - 1);
+                    yield "java.util.Map<java.lang.String, " + javaGenericTypeParameterReference(inner) + ">";
+                }
+                if (normalized.startsWith("Tuple[") && normalized.endsWith("]")) {
+                    yield "java.util.List<?>";
+                }
+                var genericStart = normalized.indexOf('[');
+                if (genericStart > 0 && normalized.endsWith("]")) {
+                    var rawType = normalized.substring(0, genericStart).trim();
+                    var argsDescriptor = normalized.substring(genericStart + 1, normalized.length() - 1);
+                    var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
+                            .map(JavaExpressionEvaluator::javaGenericTypeParameterReference)
+                            .toList();
+                    yield normalizeJavaTypeReference(rawType) + "<" + String.join(", ", javaArgs) + ">";
+                }
+                yield normalizeJavaTypeReference(normalized);
+            }
         };
     }
 
