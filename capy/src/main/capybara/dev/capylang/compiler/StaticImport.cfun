@@ -1,3 +1,4 @@
+/// Static Java import request derived from a Capybara import and consumed by Java generation.
 data StaticImport {
     className: String,
     memberName: String,

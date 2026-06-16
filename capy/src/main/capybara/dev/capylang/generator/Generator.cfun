@@ -4,10 +4,12 @@ from /dev/capylang/generator/JavaGenerator import { java_generator }
 from /dev/capylang/generator/JavaScriptGenerator import { java_script_generator }
 from /dev/capylang/generator/PythonGenerator import { python_generator }
 
+/// Dispatches a compiled program to the generator selected by the requested output target.
 fun generate(program: CompiledProgram, output_type: String): GeneratedProgram =
     let generator = find_generator(output_type)
     generator(program)
 
+/// Selects the backend generator function for an output target.
 private fun find_generator(output_type: String): CompiledProgram => GeneratedProgram =
     match output_type with
     case "javascript" | "JAVASCRIPT" | "js" | "JS" -> :java_script_generator

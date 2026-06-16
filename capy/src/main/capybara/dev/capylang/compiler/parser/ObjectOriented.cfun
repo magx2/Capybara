@@ -2,6 +2,7 @@ from /capy/collection/List import { List }
 from /dev/capylang/compiler/parser/ObjectOrientedClass import { ObjectOrientedClass }
 from /dev/capylang/compiler/parser/ObjectOrientedInterface import { ObjectOrientedInterface }
 
+/// Parsed object-oriented module section containing interfaces and classes.
 data ObjectOriented {
     interfaces: List[ObjectOrientedInterface],
     classes: List[ObjectOrientedClass]

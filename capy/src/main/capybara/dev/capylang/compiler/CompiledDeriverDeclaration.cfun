@@ -2,6 +2,7 @@ from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 
+/// compiled deriver metadata with its type parameters, generated methods, documentation, and source location.
 data CompiledDeriverDeclaration {
     name: String,
     visibility: String,
