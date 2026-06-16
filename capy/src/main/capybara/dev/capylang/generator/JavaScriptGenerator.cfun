@@ -86,7 +86,7 @@ private fun java_script_runtime_excluded_symbols(module: CompiledModule): List[S
     then ["digits"]
     else if path == "capy/lang/Program"
     then ["DEFAULT_FAILED_EXIT_CODE"]
-    else if path == "capy/lang/Seq"
+    else if path == "capy/collection/Seq"
     then ["to_seq"]
     else []
 

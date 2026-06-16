@@ -85,7 +85,7 @@ private fun java_modules(modules: List[CompiledModule], allModules: List[Compile
 private fun java_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     if module.path == "capy/lang" & module.name == "Effect"
     then java_effect_module_code(module)
-    else if module.path == "capy/lang" & module.name == "Seq"
+    else if module.path == "capy/collection" & module.name == "Seq"
     then java_seq_module_code(module)
     else if module.path == "capy/lang" & module.name == "System"
     then java_system_module_code(module)
@@ -181,15 +181,7 @@ private fun java_seq_module_code(module: CompiledModule): String =
     + "        }" + newline()
     + "        return new Seq<>(java.util.List.of((T) value));" + newline()
     + "    }" + newline() + newline()
-    + "    public static <T> Seq<T> to_seq__73_0(java.lang.Object value) {" + newline()
-    + "        return toSeq(value);" + newline()
-    + "    }" + newline() + newline()
-    + "    public static <T> Seq<T> to_seq__78_0(java.lang.Object value) {" + newline()
-    + "        return toSeq(value);" + newline()
-    + "    }" + newline() + newline()
-    + "    public static <T> Seq<T> to_seq__83_0(java.lang.Object value) {" + newline()
-    + "        return toSeq(value);" + newline()
-    + "    }" + newline() + newline()
+    + java_seq_to_seq_aliases(module.functions)
     + "    public java.util.List<T> asList() {" + newline()
     + "        return values;" + newline()
     + "    }" + newline() + newline()
@@ -220,6 +212,19 @@ private fun java_seq_module_code(module: CompiledModule): String =
     + "        return values.stream().allMatch(pred);" + newline()
     + "    }" + newline()
     + "}" + newline()
+
+private fun java_seq_to_seq_aliases(functions: List[CompiledFunction]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if function.name == "to_seq"
+        then java_seq_to_seq_alias(function) + java_seq_to_seq_aliases(functions[1:])
+        else java_seq_to_seq_aliases(functions[1:])
+
+private fun java_seq_to_seq_alias(function: CompiledFunction): String =
+    "    public static <T> Seq<T> " + java_function_name(function) + "(java.lang.Object value) {" + newline()
+    + "        return toSeq(value);" + newline()
+    + "    }" + newline() + newline()
 
 private fun java_system_module_code(module: CompiledModule): String =
     java_package(module)
@@ -2415,12 +2420,12 @@ private fun dict_pipe_result_name(binary: CompiledBinaryExpression): String =
 private fun seq_receiver_code(expression: CompiledExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverCode = expression_code(expression, env, receiverType, module, allModules)
     if receiverType.name == "String"
-    then "((capy.lang.Seq<java.lang.String>) (capy.lang.Seq<?>) capy.lang.Seq.toSeq(__capy_string_chars(" + receiverCode + ")))"
+    then "((capy.collection.Seq<java.lang.String>) (capy.collection.Seq<?>) capy.collection.Seq.toSeq(__capy_string_chars(" + receiverCode + ")))"
     else if receiverType.name == "List"
-    then "((capy.lang.Seq<" + boxed_java_type(first_type_argument(receiverType)) + ">) (capy.lang.Seq<?>) capy.lang.Seq.toSeq(" + receiverCode + "))"
+    then "((capy.collection.Seq<" + boxed_java_type(first_type_argument(receiverType)) + ">) (capy.collection.Seq<?>) capy.collection.Seq.toSeq(" + receiverCode + "))"
     else if seq_type_name(receiverType.name)
-    then "((" + java_seq_type(receiverType) + ") (capy.lang.Seq<?>) " + receiverCode + ")"
-    else "capy.lang.Seq.toSeq(" + receiverCode + ")"
+    then "((" + java_seq_type(receiverType) + ") (capy.collection.Seq<?>) " + receiverCode + ")"
+    else "capy.collection.Seq.toSeq(" + receiverCode + ")"
 
 private fun int_literal_code(literal: CompiledIntLiteral, expectedType: CompiledTypeReference): String =
     if expectedType.name == "byte" & byte_literal_source(literal.source)
@@ -3394,7 +3399,7 @@ private fun stdlib_to_seq_call(call: CompiledFunctionCallExpression, module: Com
 private fun stdlib_to_seq_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let argumentExpression = argument(call.arguments, 0)
     let argumentType = expression_type(argumentExpression, env, module, allModules)
-    "capy.lang.Seq.toSeq(" + expression_code(argumentExpression, env, argumentType, module, allModules) + ")"
+    "capy.collection.Seq.toSeq(" + expression_code(argumentExpression, env, argumentType, module, allModules) + ")"
 
 private fun enum_parse_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let typeName = enum_qualified_type_name(call.name)
@@ -9343,7 +9348,7 @@ private fun function_type_parameter_at(parameters: List[CompiledTypeReference], 
     case None -> object_type()
 
 private fun java_seq_type(type: CompiledTypeReference): String =
-    "capy.lang.Seq<" + boxed_java_type(first_type_argument(type)) + ">"
+    "capy.collection.Seq<" + boxed_java_type(first_type_argument(type)) + ">"
 
 private fun first_type_argument(type: CompiledTypeReference): CompiledTypeReference =
     match type.arguments[0] with
@@ -9397,7 +9402,7 @@ private fun result_member_imported(member: String, imports: List[CompiledImportD
     module_member_imported(member, imports, "/capy/lang/Result", "capy/lang/Result")
 
 private fun seq_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
-    module_member_imported(member, imports, "/capy/lang/Seq", "capy/lang/Seq")
+    module_member_imported(member, imports, "/capy/collection/Seq", "capy/collection/Seq")
 
 private fun reflection_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/meta_prog/Reflection", "capy/meta_prog/Reflection")
@@ -9908,8 +9913,8 @@ private fun java_regex_helpers(): String =
         + "        }" + newline()
         + "        return java.util.List.copyOf(result);" + newline()
         + "    }" + newline() + newline()
-        + "    private static capy.lang.Seq<java.lang.Object> __capy_regex_find_all_seq(java.lang.Object regex, java.lang.String input) {" + newline()
-        + "        return capy.lang.Seq.toSeq(__capy_regex_find_all(regex, input));" + newline()
+        + "    private static capy.collection.Seq<java.lang.Object> __capy_regex_find_all_seq(java.lang.Object regex, java.lang.String input) {" + newline()
+        + "        return capy.collection.Seq.toSeq(__capy_regex_find_all(regex, input));" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.String __capy_regex_replace(java.lang.Object regex, java.lang.String replacement, java.lang.String input) {" + newline()
         + "        return __capy_regex_compile(regex).matcher(input).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement));" + newline()
