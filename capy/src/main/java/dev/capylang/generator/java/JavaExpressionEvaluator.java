@@ -325,13 +325,8 @@ public class JavaExpressionEvaluator {
                 .anyMatch(pattern ->
                         pattern instanceof CompiledMatchExpression.WildcardPattern
                         || pattern instanceof CompiledMatchExpression.WildcardBindingPattern);
-        if (optionMatch && !hasWildcard) {
-            code.append("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + ")
-                    .append(switchTarget)
-                    .append(");\n");
-        }
-        if (matchExpression.matchWith().type() == dev.capylang.compiler.PrimitiveLinkedType.BOOL && !hasWildcard) {
-            code.append("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value: \" + ")
+        if (!hasWildcard) {
+            code.append("default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + ")
                     .append(switchTarget)
                     .append(");\n");
         }
@@ -2245,16 +2240,78 @@ public class JavaExpressionEvaluator {
                         pattern instanceof CompiledMatchExpression.WildcardPattern
                         || pattern instanceof CompiledMatchExpression.WildcardBindingPattern);
         var hasDefaultCase = cases.stream().anyMatch(caseRule -> caseRule.startsWith("default"));
-        if (optionMatch && !hasWildcard && !hasDefaultCase) {
-            cases.add("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
-        }
-        if (matchExpression.matchWith().type() == dev.capylang.compiler.PrimitiveLinkedType.BOOL
-            && !hasWildcard
-            && !hasDefaultCase) {
-            cases.add("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value: \" + " + switchTarget + ");");
+        var hasUnconditionalCase = matchExpression.cases().stream()
+                .anyMatch(matchCase -> isUnconditionalMatchCase(matchExpression, matchCase));
+        if (!hasWildcard && !hasDefaultCase && !hasUnconditionalCase) {
+            cases.add("default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
         }
 
         return current.addExpression("switch (" + switchTarget + ") { " + String.join(" ", cases) + " }");
+    }
+
+    private static boolean isUnconditionalMatchCase(
+            CompiledMatchExpression matchExpression,
+            CompiledMatchExpression.MatchCase matchCase
+    ) {
+        return matchCase.guard().isEmpty()
+               && isUnconditionalPattern(matchCase.pattern(), matchExpression.matchWith().type());
+    }
+
+    private static boolean isUnconditionalPattern(
+            CompiledMatchExpression.Pattern pattern,
+            dev.capylang.compiler.CompiledType matchType
+    ) {
+        return switch (pattern) {
+            case CompiledMatchExpression.WildcardPattern ignored -> true;
+            case CompiledMatchExpression.WildcardBindingPattern ignored -> true;
+            case CompiledMatchExpression.TypedPattern typedPattern -> isSameSwitchType(typedPattern.type(), matchType);
+            case CompiledMatchExpression.VariablePattern variablePattern -> isUnconditionalVariablePattern(variablePattern, matchType);
+            case CompiledMatchExpression.ConstructorPattern constructorPattern ->
+                    isUnconditionalConstructorPattern(constructorPattern, matchType);
+            default -> false;
+        };
+    }
+
+    private static boolean isUnconditionalVariablePattern(
+            CompiledMatchExpression.VariablePattern variablePattern,
+            dev.capylang.compiler.CompiledType matchType
+    ) {
+        if (matchType instanceof CompiledDataType dataType) {
+            return typeNameMatches(dataType.name(), variablePattern.name());
+        }
+        if (matchType instanceof CompiledDataParentType parentType && parentType.subTypes().size() == 1) {
+            return typeNameMatches(parentType.subTypes().getFirst().name(), variablePattern.name());
+        }
+        return false;
+    }
+
+    private static boolean isUnconditionalConstructorPattern(
+            CompiledMatchExpression.ConstructorPattern constructorPattern,
+            dev.capylang.compiler.CompiledType matchType
+    ) {
+        if (matchType instanceof CompiledDataType dataType) {
+            return typeNameMatches(dataType.name(), constructorPattern.constructorName());
+        }
+        if (matchType instanceof CompiledDataParentType parentType && parentType.subTypes().size() == 1) {
+            return typeNameMatches(parentType.subTypes().getFirst().name(), constructorPattern.constructorName());
+        }
+        return false;
+    }
+
+    private static boolean isSameSwitchType(
+            dev.capylang.compiler.CompiledType patternType,
+            dev.capylang.compiler.CompiledType matchType
+    ) {
+        if (patternType == matchType || patternType.equals(matchType)) {
+            return true;
+        }
+        if (patternType instanceof CompiledDataType patternDataType && matchType instanceof CompiledDataType matchDataType) {
+            return typeNameMatches(matchDataType.name(), patternDataType.name());
+        }
+        if (patternType instanceof CompiledDataParentType patternParentType && matchType instanceof CompiledDataParentType matchParentType) {
+            return typeNameMatches(matchParentType.name(), patternParentType.name());
+        }
+        return false;
     }
 
     private static PreparedMatchCase prepareMatchCase(
@@ -2269,22 +2326,31 @@ public class JavaExpressionEvaluator {
         var caseBindingNames = new java.util.HashMap<String, String>();
         if (matchCase.pattern() instanceof CompiledMatchExpression.ConstructorPattern constructorPattern) {
             var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
+            var constructorValueName = constructorPatternValueName(constructorPattern, caseBindingNames);
+            var fieldExpressions = constructorPatternFieldExpressions(
+                    matchExpression.matchWith().type(),
+                    constructorPattern,
+                    constructorValueName
+            );
             var bindingCastTypes = constructorBindingCastTypes(matchExpression.matchWith().type(), constructorPattern);
             for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
                 var fieldPattern = constructorPattern.fieldPatterns().get(i);
                 var bindingName = bindingNames.get(i);
+                var fieldExpression = fieldExpressions.get(i);
                 if (fieldPattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
                     branchScope = branchScope.addLocalValue(variablePattern.name());
-                    branchScope = branchScope.addValueOverride(variablePattern.name(), bindingName);
+                    branchScope = branchScope.addValueOverride(bindingName, fieldExpression);
+                    branchScope = branchScope.addValueOverride(variablePattern.name(), fieldExpression);
                     var castType = bindingCastTypes.get(i);
                     if (castType != null && !"java.lang.Object".equals(castType)) {
-                        branchScope = branchScope.addValueOverride(bindingName, "((" + castType + ") " + bindingName + ")");
-                        branchScope = branchScope.addValueOverride(variablePattern.name(), "((" + castType + ") " + bindingName + ")");
+                        var castValue = "((" + castType + ") " + fieldExpression + ")";
+                        branchScope = branchScope.addValueOverride(bindingName, castValue);
+                        branchScope = branchScope.addValueOverride(variablePattern.name(), castValue);
                     }
                 }
                 if (fieldPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
                     branchScope = branchScope.addLocalValue(typedPattern.name());
-                    var typedValue = "((" + javaPatternBindingCastType(typedPattern.type()) + ") " + bindingName + ")";
+                    var typedValue = "((" + javaPatternBindingCastType(typedPattern.type()) + ") " + fieldExpression + ")";
                     branchScope = branchScope.addValueOverride(bindingName, typedValue);
                     branchScope = branchScope.addValueOverride(typedPattern.name(), typedValue);
                 }
@@ -2312,13 +2378,6 @@ public class JavaExpressionEvaluator {
                             "((" + castType + ") " + optionSomeBindingExpression(switchTarget + ".orElse(null)") + ")"
                     );
                 }
-            }
-            if (isResultErrorConstructor(matchExpression.matchWith().type(), constructorPattern)
-                && constructorPattern.fieldPatterns().size() == 1
-                && constructorPattern.fieldPatterns().getFirst() instanceof CompiledMatchExpression.VariablePattern variablePattern) {
-                var valueName = variablePattern.name();
-                var generatedName = caseBindingNames.getOrDefault(valueName, valueName);
-                branchScope = branchScope.addValueOverride(valueName, "((" + generatedName + ") == null ? null : " + generatedName + ".getMessage())");
             }
         }
         if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern) {
@@ -2415,7 +2474,7 @@ public class JavaExpressionEvaluator {
                 .map(field -> {
                     var fieldType = field.type();
                     if (fieldType instanceof dev.capylang.compiler.CompiledFunctionType) {
-                        return null;
+                        return javaConstructorFieldCastType(fieldType, genericCasts);
                     }
                     var resolvedDescriptorCast = sanitizePatternCastType(genericCasts.get(capyTypeDescriptor(fieldType)));
                     if (resolvedDescriptorCast != null) {
@@ -2434,6 +2493,83 @@ public class JavaExpressionEvaluator {
                     return sanitizePatternCastType(javaCastType(fieldType));
                 })
                 .toList();
+    }
+
+    private static String javaConstructorFieldCastType(
+            dev.capylang.compiler.CompiledType type,
+            java.util.Map<String, String> genericCasts
+    ) {
+        return switch (type) {
+            case dev.capylang.compiler.CompiledFunctionType functionType ->
+                    functionType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING
+                            ? "java.util.function.Supplier<"
+                              + javaConstructorFieldCastType(functionType.returnType(), genericCasts)
+                              + ">"
+                            : "java.util.function.Function<"
+                              + javaConstructorFieldCastType(functionType.argumentType(), genericCasts)
+                              + ", "
+                              + javaConstructorFieldCastType(functionType.returnType(), genericCasts)
+                              + ">";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList listType ->
+                    "java.util.List<" + javaConstructorFieldCastType(listType.elementType(), genericCasts) + ">";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType ->
+                    "java.util.Set<" + javaConstructorFieldCastType(setType.elementType(), genericCasts) + ">";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType ->
+                    "java.util.Map<java.lang.String, "
+                    + javaConstructorFieldCastType(dictType.valueType(), genericCasts)
+                    + ">";
+            case dev.capylang.compiler.CompiledTupleType ignored -> "java.util.List<?>";
+            case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
+                    constructorTypeParameterCast(genericTypeParameter.name(), genericCasts);
+            case dev.capylang.compiler.CompiledDataType dataType when isOptionSomeTypeName(dataType.name()) ||
+                                                               isOptionNoneTypeName(dataType.name()) ->
+                    javaConstructorOptionalCastType(dataType.typeParameters(), genericCasts);
+            case dev.capylang.compiler.CompiledDataParentType parentType when isOptionType(parentType) ->
+                    javaConstructorOptionalCastType(parentType.typeParameters(), genericCasts);
+            case dev.capylang.compiler.CompiledDataType dataType ->
+                    javaConstructorGenericDataTypeCastType(dataType, genericCasts);
+            case dev.capylang.compiler.CompiledDataParentType parentType ->
+                    javaConstructorGenericDataTypeCastType(parentType, genericCasts);
+            default -> javaCastType(type);
+        };
+    }
+
+    private static String javaConstructorGenericDataTypeCastType(
+            dev.capylang.compiler.GenericDataType type,
+            java.util.Map<String, String> genericCasts
+    ) {
+        var raw = normalizeJavaTypeReference(type.name());
+        var typeParameters = switch (type) {
+            case dev.capylang.compiler.CompiledDataType dataType -> dataType.typeParameters();
+            case dev.capylang.compiler.CompiledDataParentType parentType -> parentType.typeParameters();
+            case dev.capylang.compiler.CompiledPrimitiveBackedType ignored -> List.<String>of();
+            case dev.capylang.compiler.CompiledObjectType ignored -> List.<String>of();
+        };
+        if (typeParameters.isEmpty()) {
+            return raw;
+        }
+        var mappedTypeParameters = typeParameters.stream()
+                .map(parameter -> constructorTypeParameterCast(parameter, genericCasts))
+                .toList();
+        return raw + "<" + String.join(", ", mappedTypeParameters) + ">";
+    }
+
+    private static String javaConstructorOptionalCastType(
+            List<String> typeParameters,
+            java.util.Map<String, String> genericCasts
+    ) {
+        if (typeParameters.isEmpty()) {
+            return "java.util.Optional";
+        }
+        return "java.util.Optional<" + constructorTypeParameterCast(typeParameters.getFirst(), genericCasts) + ">";
+    }
+
+    private static String constructorTypeParameterCast(
+            String descriptor,
+            java.util.Map<String, String> genericCasts
+    ) {
+        var resolved = sanitizePatternCastType(genericCasts.get(descriptor));
+        return resolved != null ? resolved : javaGenericTypeParameterReference(descriptor);
     }
 
     private static String capyTypeDescriptor(dev.capylang.compiler.CompiledType type) {
@@ -2826,11 +2962,10 @@ public class JavaExpressionEvaluator {
                     }
                     yield "case " + patternType + " __ignored";
                 }
-                var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
-                var constructorCasePattern = "case " + patternType + "("
-                                             + bindingNames.stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
-                                             + ")";
-                var guard = constructorPatternGuard(constructorPattern, bindingNames);
+                var constructorValueName = constructorPatternValueName(constructorPattern, caseBindingNames);
+                var constructorCasePattern = "case " + patternType + " " + constructorValueName;
+                var fieldExpressions = constructorPatternFieldExpressions(matchType, constructorPattern, constructorValueName);
+                var guard = constructorPatternGuard(constructorPattern, fieldExpressions);
                 yield guard.map(s -> constructorCasePattern + " when " + s).orElse(constructorCasePattern);
             }
         };
@@ -3186,6 +3321,46 @@ public class JavaExpressionEvaluator {
             }
         }
         return names;
+    }
+
+    private static String constructorPatternValueName(
+            CompiledMatchExpression.ConstructorPattern constructorPattern,
+            java.util.Map<String, String> caseBindingNames
+    ) {
+        var key = "__capybaraConstructorPattern:" + System.identityHashCode(constructorPattern);
+        return caseBindingNames.computeIfAbsent(
+                key,
+                ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+        );
+    }
+
+    private static List<String> constructorPatternFieldExpressions(
+            dev.capylang.compiler.CompiledType matchType,
+            CompiledMatchExpression.ConstructorPattern constructorPattern,
+            String constructorValueName
+    ) {
+        var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
+        var expressions = new ArrayList<String>(constructorPattern.fieldPatterns().size());
+        for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
+            if (constructorType == null || i >= constructorType.fields().size()) {
+                expressions.add(constructorValueName);
+                continue;
+            }
+            expressions.add(constructorFieldAccessExpression(constructorType, constructorType.fields().get(i), constructorValueName));
+        }
+        return List.copyOf(expressions);
+    }
+
+    private static String constructorFieldAccessExpression(
+            CompiledDataType constructorType,
+            CompiledDataType.CompiledField field,
+            String constructorValueName
+    ) {
+        if (isResultErrorDataType(constructorType) && "message".equals(field.name())) {
+            return "((" + constructorValueName + ").ex() == null ? null : ("
+                   + constructorValueName + ").ex().getMessage())";
+        }
+        return "(" + constructorValueName + ")." + field.name() + "()";
     }
 
     private static java.util.Optional<String> constructorPatternGuard(

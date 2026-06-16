@@ -74,9 +74,9 @@ fun to_json(obj: data): Result[JsonObject] =
         }
         case Dict d -> {
             let initial: Result[Dict[Json]] = Success { {:} }
-            d
+            let values <- d
                 |> initial, (acc, key, item) => merge_json_entry(acc, JsonEntry { key, any_to_json(item) })
-                | values => Success { JsonObject { values } }
+            JsonObject { values }
         }
         case Option o -> {
             match o with
@@ -89,7 +89,10 @@ fun to_json(obj: data): Result[JsonObject] =
             case Error { message } -> any_to_json(message)
         }
         case enum e -> Success { JsonString { e.name() } }
-        case data d -> to_json(d) | object => Success { object }
+        case data d -> {
+            let object <- to_json(d)
+            object
+        }
         case _ -> Error { "unsupported value" }
     ---
     let initial: Result[Dict[Json]] = Success { {:} }
@@ -170,11 +173,10 @@ private fun escape_string(value: String): String =
     value |> '', (acc, char) => acc + escape_char(char)
 
 fun deserialize(json: String): Result[JsonObject] =
-    deserialize_json_object(json)
-    | parse =>
-        if parse.parsing_string.size() == 0
-        then Success { value: parse.value }
-        else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
+    let parse <- deserialize_json_object(json)
+    if parse.parsing_string.size() == 0
+    then Success { value: parse.value }
+    else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
 
 private data Parse[T] { value: T, parsing_string: String }
 private fun Parse[T].pop(): Tuple[Option[String], Parse[T]] = (this.parsing_string[0], Parse { this.value, this.parsing_string[1, this.parsing_string.size()] })
@@ -211,12 +213,13 @@ private fun deserialize_json_array(json: String): Result[Parse[JsonArray]] =
     ---
     if json.starts_with('[]')
     then Success { Parse { JsonArray { [] }, json[2, json.size()] } }
-    else
-        deserialize_json(json[1, json.size()])
-            | parse => deserialize_json_array(Parse {
-                value: JsonArray {[parse.value]},
-                parsing_string: parse.parsing_string
-            })
+    else {
+        let parse <- deserialize_json(json[1, json.size()])
+        deserialize_json_array(Parse {
+            value: JsonArray {[parse.value]},
+            parsing_string: parse.parsing_string
+        })
+    }
 
 private fun deserialize_json_null(json: String): Result[Parse[JsonNull]] =
     if json.starts_with('null')
@@ -279,17 +282,16 @@ private fun deserialize_json_number(json: String): Result[Parse[JsonNumber]] =
                     case Some { v2 } -> Error { 'Expected `}`, `]` or `,`, but got `' + v2 + '`!' }
             }
     ---
-    parse_number(Parse {'', drop_white_space(json)})
-    | parse =>
-        if parse.value ? '.'
-        then {
-            let parsed_double <- parse.value.to_double()
-            Parse { JsonNumberDouble { parsed_double }, drop_white_space(parse.parsing_string) }
-        }
-        else {
-            let parsed_long <- parse.value.to_long()
-            Parse { JsonNumberLong { parsed_long }, drop_white_space(parse.parsing_string) }
-        }
+    let parse <- parse_number(Parse {'', drop_white_space(json)})
+    if parse.value ? '.'
+    then {
+        let parsed_double <- parse.value.to_double()
+        Parse { JsonNumberDouble { parsed_double }, drop_white_space(parse.parsing_string) }
+    }
+    else {
+        let parsed_long <- parse.value.to_long()
+        Parse { JsonNumberLong { parsed_long }, drop_white_space(parse.parsing_string) }
+    }
 
 private fun deserialize_json_string(json: String): Result[Parse[JsonString]] =
     let parse <- parse_string(json)
@@ -302,12 +304,11 @@ private fun deserialize_json_object(json: String): Result[Parse[JsonObject]] =
     match json[0] with
     case None -> Error { "message": "Expected JSON object, but got empty string!" }
     case Some { "{" } -> {
-        deserialize_key_values(drop_white_space(json[1, json.size()]))
-        | parse  =>
-            Success { Parse {
-                value: JsonObject { parse.value },
-                parsing_string: parse.parsing_string
-            }}
+        let parse <- deserialize_key_values(drop_white_space(json[1, json.size()]))
+        Parse {
+            value: JsonObject { parse.value },
+            parsing_string: parse.parsing_string
+        }
     }
     case Some { v } -> Error { message: "Expected `{`, but got `" + v + "`."}
 
@@ -340,20 +341,17 @@ private fun deserialize_key_values(json: String): Result[Parse[Dict[Json]]] =
 private data KeyValue { key: String, value: Json }
 
 private fun deserialize_key_value(json: String): Result[Parse[KeyValue]] =
-    parse_string(json)
-    | parse =>
-        match parse.parsing_string[0] with
-        case None -> Error { "Expected `:`, but got end of string!" }
-        case Some { ":" } -> {
-            deserialize_json(drop_white_space(parse.parsing_string[1, parse.parsing_string.size()]))
-            | parse_json => Success {
-                Parse {
-                    KeyValue { parse.value, parse_json.value },
-                    drop_white_space(parse_json.parsing_string)
-                }
-            }
+    let parse <- parse_string(json)
+    match parse.parsing_string[0] with
+    case None -> Error { "Expected `:`, but got end of string!" }
+    case Some { ":" } -> {
+        let parse_json <- deserialize_json(drop_white_space(parse.parsing_string[1, parse.parsing_string.size()]))
+        Parse {
+            KeyValue { parse.value, parse_json.value },
+            drop_white_space(parse_json.parsing_string)
         }
-        case Some { v } ->  Error { "Expected `:`, but got `" + v + "`!" }
+    }
+    case Some { v } ->  Error { "Expected `:`, but got `" + v + "`!" }
 
 private fun parse_string(json: String): Result[Parse[String]] =
     const escape_chars: Set[String] = { '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u' }
@@ -436,6 +434,6 @@ fun deserialize(dict: Dict[any]): Result[JsonObject] =
         parsed_dict + { key : json }
     ---
     let initial_result: Result[Dict[Json]] = initial_result()
-    dict
+    let d <- dict
         |> initial_result, (acc, k, v) => merge(acc, k, v)
-        | d => Success { JsonObject { d } }
+    JsonObject { d }
