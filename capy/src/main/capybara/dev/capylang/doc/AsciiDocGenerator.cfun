@@ -20,7 +20,7 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documenta
         + "== Functions\n\n"
         + generate_function_docs(module.functions) + "\n\n"
         + "== Types\n\n"
-        + generate_type_docs(module.types)
+        + generate_type_docs(module.types, module.functions)
     }
 
 private fun generate_function_docs(functions: List[CompiledFunction]): String =
@@ -41,8 +41,15 @@ private fun generate_parameter(parameter: CompiledFunctionParameter): String =
 
 private fun type_name(type: CompiledTypeReference): String = type.name
 
-private fun generate_type_docs(types: Dict[GenericDataType]): String =
+private fun generate_type_docs(types: List[String], functions: List[CompiledFunction]): String =
     types
-        .values()
-        .map(type => "=== {type.name}\n\n{type.documentation.reduce('', (content, docLine) => content + docLine + '\n')}\n\n")
+        .map(type => "=== {type}\n\n{type_documentation(type, functions)}\n\n")
         .reduce("", (content, typeDoc) => content + typeDoc)
+
+private fun type_documentation(type: String, functions: List[CompiledFunction]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if function.name == "__capy_schema_type|" + type
+        then generate_documentation(function)
+        else type_documentation(type, functions[1:])
