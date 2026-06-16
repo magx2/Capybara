@@ -1084,6 +1084,50 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldPreserveEffectProgramTypeThroughBindContinuationMatch() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("EffectProgramMatch", "/foo/bar", """
+                from /capy/lang/Effect import { * }
+                from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+                from /capy/lang/Result import { * }
+                from /capy/collection/List import { * }
+
+                fun write_docs(): Effect[Result[String]] =
+                    pure(Success { value: "ok" })
+
+                fun main(args: List[String]): Effect[/capy/lang/Program] =
+                    let result <- write_docs()
+                    match result with
+                    case Success _ -> /capy/lang/Program.Success {}
+                    case Error _ -> /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE }
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("capy.lang.Effect<capy.lang.Program>");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldEraseOptionConstructorsInEffectBindContinuationCast() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("EffectOptionConstructor", "/foo/bar", """
+                from /capy/lang/Effect import { * }
+                from /capy/lang/Option import { Some }
+
+                fun effect_some(): Effect[Some[int]] =
+                    let x <- pure(1)
+                    Some { value: x }
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("capy.lang.Effect<java.util.Optional<java.lang.Integer>>");
+        assertThat(generated).doesNotContain("capy.lang.Effect<Some");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldCompileImportedConstructorPatternsNestedInOwnerInterface() {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
                 new RawModule("EitherLike", "/foo/types", """
