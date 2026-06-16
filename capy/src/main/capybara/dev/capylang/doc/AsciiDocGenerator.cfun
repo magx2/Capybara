@@ -18,7 +18,9 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documenta
         path: "/{module.path}/{module.name}.adoc",
         content: "= Module {module.name}\n\n"
         + "== Functions\n\n"
-        + generate_function_docs(module.functions)
+        + generate_function_docs(module.functions) + "\n\n"
+        + "== Types\n\n"
+        + generate_type_docs(module.types)
     }
 
 private fun generate_function_docs(functions: List[CompiledFunction]): String =
@@ -38,3 +40,9 @@ private fun generate_parameter(parameter: CompiledFunctionParameter): String =
     "{parameter.name}: {type_name(parameter.typeReference)}"
 
 private fun type_name(type: CompiledTypeReference): String = type.name
+
+private fun generate_type_docs(types: Dict[GenericDataType]): String =
+    types
+        .values()
+        .map(type => "=== {type.name}\n\n{type.documentation.reduce('', (content, docLine) => content + docLine + '\n')}\n\n")
+        .reduce("", (content, typeDoc) => content + typeDoc)
