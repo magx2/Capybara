@@ -126,7 +126,7 @@ private fun test_to_seconds(): List[TestCase] =
         (3, 0, 0, 10800),
     ] | (hour, minute, second, expected) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_seconds() should return the {expected} seconds",
-        () => assert_that(local_time(hour, minute, second) | t => Success { t.to_seconds() }).succeeds(expected))).as_list()
+        () => assert_that(local_time(hour, minute, second) | t => t.to_seconds()).succeeds(expected))).as_list()
 
 private fun test_to_minutes(): List[TestCase] =
     ([
@@ -135,7 +135,7 @@ private fun test_to_minutes(): List[TestCase] =
         (3, 0, 0, 180),
     ] | (hour, minute, second, expected) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_minutes() should return the {expected} minutes",
-        () => assert_that(local_time(hour, minute, second) | t => Success { t.to_minutes() }).succeeds(expected))).as_list()
+        () => assert_that(local_time(hour, minute, second) | t => t.to_minutes()).succeeds(expected))).as_list()
 
 private fun test_to_hours(): List[TestCase] =
     ([
@@ -144,7 +144,7 @@ private fun test_to_hours(): List[TestCase] =
         (3, 0, 0, 3),
     ] | (hour, minute, second, expected) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_hours() should return the {expected} hours",
-        () => assert_that(local_time(hour, minute, second) | t => Success { t.to_hours() }).succeeds(expected))).as_list()
+        () => assert_that(local_time(hour, minute, second) | t => t.to_hours()).succeeds(expected))).as_list()
 
 private fun test_round_to_minutes(): TestCase =
     test(

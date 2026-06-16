@@ -940,7 +940,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).contains("case java.lang.Boolean");
         assertThat(generated).contains("java.util.Objects.equals");
-        assertThat(generated).contains("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value:");
+        assertThat(generated).contains("default -> throw new java.lang.IllegalStateException(\"Unexpected value:");
         assertThat(generated).doesNotContain("case true ->");
         assertThat(generated).doesNotContain("case false ->");
     }
@@ -1080,7 +1080,7 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("assert_.apply(((T) __capybaraMatchBinding");
+        assertThat(generated).contains("assert_.apply(((T) (__capybaraMatchBinding");
     }
 
     @Test
@@ -1149,8 +1149,8 @@ class JavaExpressionEvaluatorTest {
                 .collect(joining("\n"));
 
         assertThat(generated).contains("import static foo.types.EitherLike.*;");
-        assertThat(generated).contains("case Left(var");
-        assertThat(generated).contains("case Right(var");
+        assertThat(generated).contains("case Left __capybaraMatchBinding");
+        assertThat(generated).contains("case Right __capybaraMatchBinding");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
@@ -1170,8 +1170,8 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("case Passed(var");
-        assertThat(generated).contains("case Failed(var");
+        assertThat(generated).contains("case Passed __capybaraMatchBinding");
+        assertThat(generated).contains("case Failed __capybaraMatchBinding");
         assertThat(generated).doesNotContain("case Outcome.Passed");
         assertThat(generated).doesNotContain("case Outcome.Failed");
         assertGeneratedJavaCompiles(generatedProgram);

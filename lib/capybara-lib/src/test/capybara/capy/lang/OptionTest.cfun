@@ -1,0 +1,40 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/OptionTest.cfun", [
+        test("should map some", () => should_map_some()),
+        test("should map none", () => should_map_none()),
+        test("should flatmap some", () => should_flatmap_some()),
+        test("should flatmap none", () => should_flatmap_none()),
+    ])
+
+fun should_map_some(): Assert =
+    let option: Option[String] = Some { "value" }
+    assert_all([
+        assert_that(option.map(value => "mapped_" + value)).contains("mapped_value"),
+        assert_that(option | value => "mapped_" + value).contains("mapped_value"),
+    ])
+
+fun should_map_none(): Assert =
+    let option: Option[String] = None {}
+    assert_all([
+        assert_that(option.map(value => "mapped_" + value)).is_empty(),
+        assert_that(option | value => "mapped_" + value).is_empty(),
+    ])
+
+fun should_flatmap_some(): Assert =
+    let option: Option[String] = Some { "value" }
+    assert_all([
+        assert_that(option.flat_map(value => Some { "mapped_" + value })).contains("mapped_value"),
+        assert_that(option |* value => Some { "mapped_" + value }).contains("mapped_value"),
+    ])
+
+fun should_flatmap_none(): Assert =
+    let option: Option[String] = None {}
+    assert_all([
+        assert_that(option.flat_map(value => Some { "mapped_" + value })).is_empty(),
+        assert_that(option |* value => Some { "mapped_" + value }).is_empty(),
+    ])

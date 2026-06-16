@@ -208,8 +208,8 @@ fun parse_semver(version: String): Result[SemVer] =
             case Some ->
                 parse_alphanumeric_identifier(version)
                     .or(parse_numeric_identifier(version)
-                        | parse => Success { Parse { buffer: parse.buffer, value: "" + parse.value } })
-                    | parse => Success { parse }
+                        | parse => Parse { buffer: parse.buffer, value: "" + parse.value })
+                    | parse => parse
         /// ```
         /// <build> ::= <dot-separated build identifiers>
         /// ```
@@ -237,7 +237,7 @@ fun parse_semver(version: String): Result[SemVer] =
         fun parse_dot_separated_build_identifier(version: String): Result[Parse[String]] =
             parse_alphanumeric_identifier(version)
                 .or(parse_digits_as_string(version)
-                    | parse => Success { Parse { buffer: parse.buffer, value: "" + parse.value } })
+                    | parse => Parse { buffer: parse.buffer, value: "" + parse.value })
 
         /// ```
         /// <alphanumeric identifier> ::= <non-digit>
@@ -252,20 +252,19 @@ fun parse_semver(version: String): Result[SemVer] =
                 parse_non_digit(version)
                 | (parse_non_digit => {
                     match parse_identifier_characters(parse_non_digit.buffer) with
-                    case Error -> Success { parse_non_digit }
-                    case Success { parse_identifier_characters } -> Success { Parse {
+                    case Error -> parse_non_digit
+                    case Success { parse_identifier_characters } -> Parse {
                         buffer: parse_identifier_characters.buffer,
                         value: parse_non_digit.value + parse_identifier_characters.value
-                    }}})
-                .or(
-                    parse_identifier_characters(version)
-                    | pic => { parse_non_digit(pic.buffer) | pnd => Success { Parse { buffer: pnd.buffer, pic.value + pnd.value }} }
-                    | parse_non_digit => {
-                        match parse_identifier_characters(parse_non_digit.buffer) with
-                        case Error -> Success { parse_non_digit }
-                        case Success { parse_identifier_characters } -> Success { Parse {
-                            buffer: parse_identifier_characters.buffer,
-                            value: pic.value + parse_non_digit.value + parse_identifier_characters.value }}
+                    }})
+                .or({
+                    let pic <- parse_identifier_characters(version)
+                    let parsed_non_digit <- parse_non_digit(pic.buffer)
+                    match parse_identifier_characters(parsed_non_digit.buffer) with
+                    case Error -> Success { Parse { buffer: parsed_non_digit.buffer, value: pic.value + parsed_non_digit.value } }
+                    case Success { parse_identifier_characters } -> Success { Parse {
+                        buffer: parse_identifier_characters.buffer,
+                        value: pic.value + parsed_non_digit.value + parse_identifier_characters.value }}
                     })
         /// ```
         // <identifier characters> ::= <identifier character>
@@ -285,7 +284,7 @@ fun parse_semver(version: String): Result[SemVer] =
         /// ```
         fun parse_identifier_character(version: String): Result[Parse[String]] =
             (parse_digit(version)
-                | parse => Success { Parse { buffer: parse.buffer, value: "" + parse.value } })
+                | parse => Parse { buffer: parse.buffer, value: "" + parse.value })
                 .or(parse_non_digit(version))
         /// ```
         /// <non-digit> ::= <letter>
@@ -338,7 +337,7 @@ fun parse_semver(version: String): Result[SemVer] =
                 match value with
                 case '0' -> Success { Parse { tail(version), '0' } }
                 case _ -> parse_positive_digit(version)
-                    | parse => Success { Parse { buffer: parse.buffer, value: parse.value + '' } }
+                    | parse => Parse { buffer: parse.buffer, value: parse.value + '' }
         /// ```
         /// <positive digit> ::= "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
         /// ```
@@ -379,7 +378,7 @@ fun parse_semver(version: String): Result[SemVer] =
                 case _ -> Error { "Expected A-Z or a-z, but got `" + value + "`!" }
     ---
     parse_version_core(version)
-    | version_parse =>
+    |* version_parse =>
         if !version_parse.buffer.is_empty()
         then Error { 'Unexpected characters after patch version: `' + version_parse.buffer + '`!' }
         else Success { version_parse.value }
