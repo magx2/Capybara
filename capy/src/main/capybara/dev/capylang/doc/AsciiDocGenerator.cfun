@@ -29,11 +29,7 @@ private fun generate_function_docs(functions: List[CompiledFunction]): String =
 private fun generate_parameters(parameters: List[CompiledFunctionParameter]): String =
     parameters
         .map(parameter => generate_parameter(parameter))
-        .reduce("", (content, parameter) =>
-            if content.is_empty()
-            then parameter
-            else content + ", " + parameter
-        )
+        .reduce("", (content, parameter) => content + ", " + parameter)
 
 private fun generate_documentation(function: CompiledFunction): String =
     function.documentation.reduce("", (content, docLine) => content + docLine + "\n")
