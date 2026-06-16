@@ -71,7 +71,6 @@ private fun seq_aliases_produce_expected_results(): Assert =
         assert_that(seq_flat_map_named(values)).is_equal_to(seq_flat_map_operator(values)),
         assert_that(seq_flat_map_named(values)).is_equal_to([1, 2, 2, 3, 3, 4]),
         assert_that(seq_reduce_named(values)).is_equal_to(6),
-        assert_that(seq_reduce_left_named(values)).is_equal_to(6),
     ])
 
 private fun string_filter_and_reject_produce_expected_results(): Assert =

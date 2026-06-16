@@ -2,6 +2,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Option import { Option, None, Some }
 from /capy/meta_prog/Recursive import { Recursive }
 
 union Seq[T] = Cons[T] | End
@@ -235,13 +236,10 @@ fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
 
 fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
-/// Combines all elements from left to right.
-fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
-
 /// Combines elements from left to right using the first element as the accumulator.
 ///
 /// Empty sequences return `None`. Non-empty sequences return `Some` with the folded value.
-fun Seq[T].fold(reducer: (T, T) => T): /capy/lang/Option[T] =
+fun Seq[T].fold(reducer: (T, T) => T): Option[T] =
     @Recursive
     fun fold(seq: Seq[T], current: T, reducer: (T, T) => T): T =
         match seq with
@@ -249,8 +247,8 @@ fun Seq[T].fold(reducer: (T, T) => T): /capy/lang/Option[T] =
         case Cons { value, rest } -> fold(rest(), reducer(current, value), reducer)
     ---
     match this with
-    case End -> /capy/lang/Option.None {}
-    case Cons { value, rest } -> /capy/lang/Option.Some { fold(rest(), value, reducer) }
+    case End -> None {}
+    case Cons { value, rest } -> Some { fold(rest(), value, reducer) }
 
 /// Zips two sequences into a sequence of tuples.
 ///
@@ -274,15 +272,15 @@ fun Seq[T].zip(other: Seq[Y]): Seq[Tuple[T,Y]] =
 /// Returns the first element wrapped in `Option`.
 ///
 /// Returns `None` for an empty sequence.
-fun Seq[T].first(): /capy/lang/Option[T] =
+fun Seq[T].first(): Option[T] =
     match this with
-    case End -> /capy/lang/Option.None {}
-    case Cons { value, _ } -> /capy/lang/Option.Some { value }
+    case End -> None {}
+    case Cons { value, _ } -> Some { value }
 
 /// Returns the first element matching `pred`, wrapped in `Option`.
 ///
 /// Returns `None` when no element matches.
-fun Seq[T].first_match(pred: T => bool): /capy/lang/Option[T] = this.filter(pred).first()
+fun Seq[T].first_match(pred: T => bool): Option[T] = this.filter(pred).first()
 
 /// Returns `true` if at least one element satisfies `pred`.
 ///
