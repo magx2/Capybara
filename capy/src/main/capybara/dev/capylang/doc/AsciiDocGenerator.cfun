@@ -23,7 +23,7 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documenta
 
 private fun generate_function_docs(functions: List[CompiledFunction]): String =
     functions
-        .map(function => "=== {function.visibility} {function.name}({generate_parameters(function.parameters)}): {type_name(function.returnType)}\n\n")
+        .map(function => "=== {function.visibility} {function.name}({generate_parameters(function.parameters)}): {type_name(function.returnType)}\n\n{generate_documentation(function)}\n\n")
         .reduce("", (content, functionDoc) => content + functionDoc)
 
 private fun generate_parameters(parameters: List[CompiledFunctionParameter]): String =
@@ -34,6 +34,9 @@ private fun generate_parameters(parameters: List[CompiledFunctionParameter]): St
             then parameter
             else content + ", " + parameter
         )
+
+private fun generate_documentation(function: CompiledFunction): String =
+    function.documentation.reduce("", (content, docLine) => content + docLine + "\n")
 
 private fun generate_parameter(parameter: CompiledFunctionParameter): String =
     "{parameter.name}: {type_name(parameter.typeReference)}"
