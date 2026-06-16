@@ -6598,9 +6598,6 @@ public final class JavaScriptGenerator implements Generator {
                         if (result.startsWith(', ')) {
                             return result.substring(2);
                         }
-                        if (result.startsWith(',')) {
-                            return result.substring(1);
-                        }
                         return result;
                     }
 

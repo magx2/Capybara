@@ -676,23 +676,35 @@ public class JavaExpressionEvaluator {
 
     private static String trimLeadingReduceSeparatorExpression(String valueExpression) {
         return "(" + valueExpression + ".startsWith(\", \") ? "
-               + valueExpression + ".substring(2) : ("
-               + valueExpression + ".startsWith(\",\") ? "
-               + valueExpression + ".substring(1) : "
-               + valueExpression + "))";
+               + valueExpression + ".substring(2) : "
+               + valueExpression + ")";
     }
 
-    private static String trimLeadingReduceSeparatorInvocation(String target, java.util.List<String> callArgs) {
+    private static String trimLeadingReduceSeparatorResult(
+            String initialExpression,
+            java.util.function.Function<String, String> reduceExpression
+    ) {
         var lambdaInitial = "__capybaraReduceInitial";
         var lambdaReduced = "__capybaraReduced";
-        var wrappedCallArgs = new java.util.ArrayList<>(callArgs);
-        wrappedCallArgs.set(1, lambdaInitial);
-        var invocation = target + "(" + String.join(", ", wrappedCallArgs) + ")";
         return "((java.util.function.Function<java.lang.String, java.lang.String>) (" + lambdaInitial + " -> "
                + "((java.util.function.Function<java.lang.String, java.lang.String>) (" + lambdaReduced + " -> "
                + "(" + lambdaInitial + ".isEmpty() ? "
                + trimLeadingReduceSeparatorExpression(lambdaReduced)
-               + " : " + lambdaReduced + "))).apply(" + invocation + "))).apply(" + callArgs.get(1) + ")";
+               + " : " + lambdaReduced + "))).apply(" + reduceExpression.apply(lambdaInitial) + "))).apply(" + initialExpression + ")";
+    }
+
+    private static String trimLeadingReduceSeparatorInvocation(String target, java.util.List<String> callArgs) {
+        return trimLeadingReduceSeparatorResult(callArgs.get(1), lambdaInitial -> {
+            var wrappedCallArgs = new java.util.ArrayList<>(callArgs);
+            wrappedCallArgs.set(1, lambdaInitial);
+            return target + "(" + String.join(", ", wrappedCallArgs) + ")";
+        });
+    }
+
+    private static boolean shouldTrimLeadingReduceSeparator(CompiledPipeReduceExpression pipeReduceExpression) {
+        return pipeReduceExpression.source().type() instanceof dev.capylang.compiler.CollectionLinkedType
+               && pipeReduceExpression.initialValue().type() == dev.capylang.compiler.PrimitiveLinkedType.STRING
+               && pipeReduceExpression.type() == dev.capylang.compiler.PrimitiveLinkedType.STRING;
     }
 
     private static Optional<Scope> evaluateNativeGetMethod(
@@ -1412,31 +1424,31 @@ public class JavaExpressionEvaluator {
                 );
             }
             if (pipeReduceExpression.initialValue().type() == dev.capylang.compiler.PrimitiveLinkedType.STRING) {
-                var perEntryReducerExSc = evaluateExpression(
+                var reducerBaseScope = initialExSc.scope()
+                        .addLocalValue(pipeReduceExpression.accumulatorName())
+                        .addValueOverride(keyName, entryVar + ".getKey()")
+                        .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()");
+                var reducerExSc = evaluateExpression(
                         pipeReduceExpression.reducerExpression(),
-                        initialExSc.scope()
-                                .addValueOverride(pipeReduceExpression.accumulatorName(), "\"\"")
-                                .addValueOverride(keyName, entryVar + ".getKey()")
-                                .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
+                        reducerBaseScope
                 ).popExpression();
-                var reducedValueName = "__capybaraReducedValue";
-                var maybeTrimLeadingComma = "\"\"".equals(initialExSc.expression())
-                        ? ""
-                        : ".map(" + reducedValueName + " -> ("
-                          + reducedValueName + ".startsWith(\", \") ? " + reducedValueName + ".substring(2) : ("
-                          + reducedValueName + ".startsWith(\",\") ? " + reducedValueName + ".substring(1) : " + reducedValueName + ")))";
-                var maybeMapPrefix = "\"\"".equals(initialExSc.expression())
-                        ? ""
-                        : ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))";
-                return perEntryReducerExSc.scope().addExpression(
-                        sourceExSc.expression()
-                        + ".entrySet().stream()"
-                        + ".map(" + entryVar + " -> (" + perEntryReducerExSc.expression() + "))"
-                        + ".reduce((left, right) -> ((left+\", \")+right))"
-                        + maybeTrimLeadingComma
-                        + maybeMapPrefix
-                        + ".orElseGet(() -> " + initialExSc.expression() + ")"
+                var reducerLambda = biLambdaExpression(
+                        pipeReduceExpression.accumulatorName(),
+                        entryVar,
+                        reducerBaseScope,
+                        reducerExSc.scope(),
+                        reducerExSc.expression()
                 );
+                java.util.function.Function<String, String> reduceExpression = reduceInitial ->
+                        sourceExSc.expression()
+                        + ".entrySet().stream().reduce("
+                        + reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), reduceInitial)
+                        + ", " + reducerLambda
+                        + ", (left, right) -> left)";
+                var expression = shouldTrimLeadingReduceSeparator(pipeReduceExpression)
+                        ? trimLeadingReduceSeparatorResult(initialExSc.expression(), reduceExpression)
+                        : reduceExpression.apply(initialExSc.expression());
+                return reducerExSc.scope().withStatements(initialExSc.scope().getStatements()).addExpression(expression);
             }
             var reducerBaseScope = initialExSc.scope()
                     .addLocalValue(pipeReduceExpression.accumulatorName())
@@ -1500,13 +1512,16 @@ public class JavaExpressionEvaluator {
             );
         }
 
-        return reducerExSc.scope().withStatements(initialExSc.scope().getStatements()).addExpression(
+        java.util.function.Function<String, String> reduceExpression = reduceInitial ->
                 sourceStreamExSc.streamExpression()
                 + ".reduce("
-                + reduceInitialExpression
+                + reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), reduceInitial)
                 + ", " + reducerLambda
-                + ", (left, right) -> left)"
-        );
+                + ", (left, right) -> left)";
+        var expression = shouldTrimLeadingReduceSeparator(pipeReduceExpression)
+                ? trimLeadingReduceSeparatorResult(initialExSc.expression(), reduceExpression)
+                : reduceExpression.apply(initialExSc.expression());
+        return reducerExSc.scope().withStatements(initialExSc.scope().getStatements()).addExpression(expression);
     }
 
     private static java.util.Optional<dev.capylang.compiler.CompiledType> streamElementType(dev.capylang.compiler.CompiledType sourceType) {

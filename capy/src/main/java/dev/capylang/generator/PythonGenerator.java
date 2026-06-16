@@ -4456,8 +4456,6 @@ public final class PythonGenerator implements Generator {
                             return result
                         if result.startswith(', '):
                             return result[2:]
-                        if result.startswith(','):
-                            return result[1:]
                         return result
 
                     def option_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_
