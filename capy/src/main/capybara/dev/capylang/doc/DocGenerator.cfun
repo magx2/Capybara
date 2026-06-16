@@ -16,7 +16,6 @@ from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimiti
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
-from /dev/capylang/compiler/GenericDataType import { GenericDataType }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from Documentation import { Documentation }
 from AsciiDocGenerator import { generate_asciidoc_docs }
@@ -78,7 +77,7 @@ private fun example_module(): CompiledModule =
     CompiledModule {
         name: "ExampleDocs",
         path: "dev/capylang/example",
-        types: {:},
+        types: [],
         visiblePrimitiveBackedTypes: {:},
         functions: [
             CompiledFunction {
