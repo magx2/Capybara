@@ -5663,12 +5663,21 @@ public class CapybaraExpressionCompiler {
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
             if (expression.right() instanceof FunctionReference functionReference) {
                 return resolvePipeFunctionReference(functionReference, elementType)
-                        .map(linked -> (CompiledExpression) new CompiledPipeExpression(
-                                left,
-                                linked.argumentName(),
-                                linked.expression(),
-                                left.type()
-                        ));
+                        .flatMap(linked -> {
+                            var optionType = optionTypeFor(linked.expression().type());
+                            if (optionType == null) {
+                                return withPosition(
+                                        Result.error("Option type is not defined"),
+                                        expression.position()
+                                );
+                            }
+                            return Result.success((CompiledExpression) new CompiledPipeExpression(
+                                    left,
+                                    linked.argumentName(),
+                                    linked.expression(),
+                                    optionType
+                            ));
+                        });
             }
             return withPosition(
                     Result.error("Right side of `|` has to be a lambda expression or function reference"),
@@ -5677,12 +5686,21 @@ public class CapybaraExpressionCompiler {
         }
         return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|")
                 .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
-                .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
-                        left,
-                        lambdaBinding.argumentName(),
-                        mapper,
-                        left.type()
-                )));
+                .flatMap(mapper -> {
+                    var optionType = optionTypeFor(mapper.type());
+                    if (optionType == null) {
+                        return withPosition(
+                                Result.error("Option type is not defined"),
+                                expression.position()
+                        );
+                    }
+                    return Result.success((CompiledExpression) new CompiledPipeExpression(
+                            left,
+                            lambdaBinding.argumentName(),
+                            mapper,
+                            optionType
+                    ));
+                }));
     }
 
     private Result<CompiledExpression> linkCollectionPipeExpression(

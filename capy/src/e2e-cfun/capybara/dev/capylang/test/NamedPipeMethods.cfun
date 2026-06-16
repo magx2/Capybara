@@ -64,6 +64,8 @@ fun string_reject_named(value: String): Seq[String] = value.reject(ch => ch == "
 
 fun option_map_named(value: Option[String]): Option[String] = value.map(text => text + "!")
 fun option_map_operator(value: Option[String]): Option[String] = value | text => text + "!"
+fun option_map_named_type_change(value: Option[int]): Option[String] = value.map(number => "v=" + number)
+fun option_map_operator_type_change(value: Option[int]): Option[String] = value | number => "v=" + number
 
 fun option_filter_named(value: Option[String]): Option[String] = value.filter(text => text == "drop")
 fun option_filter_operator(value: Option[String]): Option[String] = value |- text => text == "drop"

@@ -4464,7 +4464,7 @@ public final class PythonGenerator implements Generator {
                             acc = invoke(reducer, acc, item, index)
                         return Some({'value': acc})
 
-                    def option_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_
+                    def option_map(option, mapper): return Some({'value': mapper(option.value)}) if is_type(option, 'Some') else None_
                     def option_flat_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_
                     def option_filter_out(option, predicate): return None_ if is_type(option, 'Some') and predicate(option.value) else option
 

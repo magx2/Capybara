@@ -6610,7 +6610,7 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function optionMap(option, mapper) {
-                        return isType(option, 'Some') ? mapper(option.value) : None;
+                        return isType(option, 'Some') ? new Some({ value: mapper(option.value) }) : None;
                     }
 
                     function optionFlatMap(option, mapper) {
