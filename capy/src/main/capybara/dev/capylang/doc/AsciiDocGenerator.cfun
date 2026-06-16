@@ -1,9 +1,12 @@
 from /capy/collection/List import { * }
+from /capy/collection/Dict import { * }
 from /capy/lang/Seq import { * }
 from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from Documentation import { Documentation }
@@ -19,12 +22,17 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documenta
         content: "= Module {module.name}\n\n"
         + "== Functions\n\n"
         + generate_function_docs(module.functions) + "\n\n"
+        + "== Annotations\n\n"
+        + generate_annotation_docs(module.annotations) + "\n\n"
+        //+ "== Types\n\n"
+        //+ generate_type_docs(module.types, module.functions)
         + "== Types\n\n"
-        + generate_type_docs(module.types, module.functions)
+        + generate_backend_type_docs(module.visiblePrimitiveBackedTypes)
     }
 
 private fun generate_function_docs(functions: List[CompiledFunction]): String =
     functions
+        .sort((a,b) => a.name.compare(b.name))
         .map(function => "=== {function.visibility} {function.name}({generate_parameters(function.parameters)}): {type_name(function.returnType)}\n\n{generate_documentation(function)}\n\n")
         .reduce("", (content, functionDoc) => content + functionDoc)
 
@@ -36,15 +44,18 @@ private fun generate_parameters(parameters: List[CompiledFunctionParameter]): St
 private fun generate_documentation(function: CompiledFunction): String =
     function.documentation.reduce("", (content, docLine) => content + docLine + "\n")
 
+private fun generate_documentation_for_annotation(annotation: CompiledAnnotationDeclaration): String =
+    annotation.documentation.reduce("", (content, docLine) => content + docLine + "\n")
+
 private fun generate_parameter(parameter: CompiledFunctionParameter): String =
     "{parameter.name}: {type_name(parameter.typeReference)}"
 
 private fun type_name(type: CompiledTypeReference): String = type.name
 
-private fun generate_type_docs(types: List[String], functions: List[CompiledFunction]): String =
-    types
-        .map(type => "=== {type}\n\n{type_documentation(type, functions)}\n\n")
-        .reduce("", (content, typeDoc) => content + typeDoc)
+private fun generate_type_docs(types: List[String], functions: List[CompiledFunction]): String = ''
+    //types
+    //    .map(type => "=== {type}\n\n{type_documentation(type, functions)}\n\n")
+    //    .reduce("", (content, typeDoc) => content + typeDoc)
 
 private fun type_documentation(type: String, functions: List[CompiledFunction]): String =
     match functions[0] with
@@ -53,3 +64,100 @@ private fun type_documentation(type: String, functions: List[CompiledFunction]):
         if function.name == "__capy_schema_type|" + type
         then generate_documentation(function)
         else type_documentation(type, functions[1:])
+
+private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType]): String =
+    types
+        .reduce("", (content, name, type) => content + "=== {type.visibility} {type.name}: {type_name(type.backingType)}\n\n{generate_documentation_for_backend_type(type)}\n\n")
+
+private fun generate_documentation_for_backend_type(type: CompiledPrimitiveBackedType): String =
+    type.documentation.reduce("", (content, docLine) => content + docLine + "\n")
+
+private fun generate_annotation_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
+    annotations
+        .reduce("", (content, name, annotation) => content + generate_annotation_doc(annotation))
+
+private fun generate_annotation_doc(annotation: CompiledAnnotationDeclaration): String =
+    "=== {annotation.visibility} @{annotation.name}\n\n"
+    + generate_documentation_for_annotation(annotation)
+    + "\n"
+    + "* Repeatable: {annotation_repeatable_value(annotation)}\n"
+    + "* Targets: " + join_strings(annotation.targets, ", ") + "\n"
+    + generate_annotation_fields(annotation.fields)
+    + "\n"
+
+private fun annotation_repeatable_value(annotation: CompiledAnnotationDeclaration): String =
+    if annotation.repeatable then "yes" else "no"
+
+private fun generate_annotation_fields(fields: List[String]): String =
+    match fields[0] with
+    case None -> ""
+    case Some _ -> "\n==== Fields\n\n" + fields.reduce("", (content, field) => content + annotation_field_doc(field)) + "\n"
+
+private fun annotation_field_doc(field: String): String =
+    "* `{annotation_field_name(field)}`: `{annotation_field_type(field)}` ({annotation_field_presence(field)})\n"
+
+private fun annotation_field_presence(field: String): String =
+    if annotation_field_has_default(field)
+    then "optional, default " + annotation_field_default_value(field)
+    else "required"
+
+private fun annotation_field_name(value: String): String =
+    let separator = asciidoc_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun annotation_field_type(value: String): String =
+    let first = asciidoc_first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else asciidoc_first_index_of(value, "|", first + 1)
+    if first < 0
+    then "any"
+    else if second < 0
+    then value[first + 1, value.size().value]
+    else value[first + 1, second]
+
+private fun annotation_field_has_default(value: String): bool =
+    let second = annotation_field_second_separator(value)
+    let third = annotation_field_third_separator(value)
+    if second < 0 | third < 0
+    then false
+    else value[second + 1, third] == "true"
+
+private fun annotation_field_default_value(value: String): String =
+    let third = annotation_field_third_separator(value)
+    if third < 0
+    then "`nothing`"
+    else
+        let payload = value[third + 1, value.size().value]
+        let colon = asciidoc_first_index_of(payload, ":", 0)
+        if colon < 0
+        then "`nothing`"
+        else if payload[0, colon] == "nothing"
+        then "`nothing`"
+        else "`" + payload[colon + 1, payload.size().value] + "`"
+
+private fun annotation_field_second_separator(value: String): int =
+    let first = asciidoc_first_index_of(value, "|", 0)
+    if first < 0 then -1 else asciidoc_first_index_of(value, "|", first + 1)
+
+private fun annotation_field_third_separator(value: String): int =
+    let second = annotation_field_second_separator(value)
+    if second < 0 then -1 else asciidoc_first_index_of(value, "|", second + 1)
+
+private fun join_strings(values: List[String], separator: String): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> value + join_strings_tail(values[1:], separator)
+
+private fun join_strings_tail(values: List[String], separator: String): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> separator + value + join_strings_tail(values[1:], separator)
+
+private fun asciidoc_first_index_of(value: String, needle: String, idx: int): int =
+    match value[idx] with
+    case None -> -1
+    case Some { char } ->
+        if char == needle
+        then idx
+        else asciidoc_first_index_of(value, needle, idx + 1)
