@@ -4950,6 +4950,9 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
+                        if (isPipeMapExpression(expression) && resolveSpecializedOptionType(left.type()).isPresent()) {
+                            return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
+                        }
                         var methodCall = resolveMethodInfixCall(
                                 expression.operator().symbol(),
                                 left,
@@ -4969,9 +4972,6 @@ public class CapybaraExpressionCompiler {
                                     .flatMap(right ->
                                             getLinkedInfixExpression(left, expression.operator(), right, expression.position())
                                                     .map(linked -> (CompiledExpression) linked));
-                        }
-                        if (resolveSpecializedOptionType(left.type()).isPresent()) {
-                            return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
                         }
                         return withPosition(
                                 Result.error("`|` operator is not defined for `" + left.type() + "`"),
@@ -5008,6 +5008,14 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE_FLATMAP) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
+                        if (resolveSpecializedOptionType(left.type()).isPresent()) {
+                            return linkBuiltinOptionFlatMapMethodInvoke(new FunctionCall(
+                                    Optional.empty(),
+                                    "flat_map",
+                                    List.of(expression.left(), expression.right()),
+                                    expression.position()
+                            ), scope);
+                        }
                         var methodCall = resolveMethodInfixCall(
                                 expression.operator().symbol(),
                                 left,

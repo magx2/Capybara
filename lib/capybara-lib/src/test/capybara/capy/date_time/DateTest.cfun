@@ -96,8 +96,8 @@ private fun test_month(): List[TestCase] =
     ]
 
 private fun test_leap_year(): List[TestCase] =
-    let leap_year = Date { day: 1, month: JANUARY, year: 2020 } | d => Success { d.leap_year() }
-    let not_leap_year = Date { day: 1, month: JANUARY, year: 2019 } | d => Success { d.leap_year() }
+    let leap_year = Date { day: 1, month: JANUARY, year: 2020 } | d => d.leap_year()
+    let not_leap_year = Date { day: 1, month: JANUARY, year: 2019 } | d => d.leap_year()
     [
         test('1/1/2020 should be a leap year', () => assert_that(leap_year).succeeds(true)),
         test('1/1/2019 should not be a leap year', () => assert_that(not_leap_year).succeeds(false)) ]
@@ -109,7 +109,7 @@ private fun date_test_to_iso_8601(): List[TestCase] =
         (7, JANUARY, 10000, "+10000-01-07"),
     ] | (day, month, year, expected) => test(
         "Date.to_iso_8601() should format {day}/{month}/{year}",
-        () => assert_that(Date { day, month, year } | d => Success { d.to_iso_8601() }).succeeds(expected))).as_list()
+        () => assert_that(Date { day, month, year } | d => d.to_iso_8601()).succeeds(expected))).as_list()
 
 private fun date_test_from_iso_8601_success(): List[TestCase] =
     ([

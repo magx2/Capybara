@@ -12,7 +12,7 @@ fun is_positive(value: int): bool = value > 0
 fun expand_list(value: int): List[int] = [value, value + 1]
 fun expand_set(value: int): Set[int] = {value, value + 10}
 fun expand_seq(value: int): Seq[int] = to_seq([value, value + 1])
-fun nested_success(value: int): Result[Result[String]] = Success { value: Success { value: "v=" + value } }
+fun nested_success(value: int): Result[String] = Success { value: "v=" + value }
 
 fun list_map_named(values: List[int]): Seq[int] = values.map(x => x * 2)
 fun list_map_operator(values: List[int]): Seq[int] = values | x => x * 2
@@ -77,10 +77,10 @@ fun option_reduce_left_named(value: Option[String]): String =
     value.reduce_left("start:", (acc, inner) => acc + inner)
 
 fun result_map_named(value: Result[int]): Result[String] =
-    value.map(x => Success { value: "v=" + x })
+    value.map(x => "v=" + x)
 
 fun result_map_operator(value: Result[int]): Result[String] =
-    value | x => Success { value: "v=" + x }
+    value | x => "v=" + x
 
 fun result_flat_map_named(value: Result[int]): Result[String] =
     value.flat_map(:nested_success)

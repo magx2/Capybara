@@ -4030,11 +4030,9 @@ public final class PythonGenerator implements Generator {
                             self.__capybaraTypes = ['Success', 'Result']
                             self.value = fields.get('value', fields.get('results'))
                             self.results = fields.get('results', self.value)
-                        def map(self, mapper): return invoke(mapper, self.value)
-                        def pipe(self, mapper): return invoke(mapper, self.value)
-                        def flat_map(self, mapper):
-                            mapped = invoke(mapper, self.value)
-                            return mapped.value if is_success_like(mapped) else mapped
+                        def map(self, mapper): return Success({'value': invoke(mapper, self.value)})
+                        def pipe(self, mapper): return self.map(mapper)
+                        def flat_map(self, mapper): return invoke(mapper, self.value)
                         def flatMap(self, mapper): return self.flat_map(mapper)
                         def pipe_star(self, mapper): return self.flat_map(mapper)
                         def pipeStar(self, mapper): return self.flat_map(mapper)

@@ -1,3 +1,17 @@
 union Option[T] = Some[T] | None
 data Some[T] { value: T }
 data None {}
+
+fun Option[T].`|`(map: T => Y): Option[Y] = this.map(map)
+
+fun Option[T].map(map: T => Y): Option[Y] =
+    match this with
+    case None -> None {}
+    case Some s -> Some { map(s.value) }
+
+fun Option[T].`|*`(flatmap: T => Option[Y]): Option[Y] = this.flat_map(flatmap)
+
+fun Option[T].flat_map(flatmap: T => Option[Y]): Option[Y] =
+    match this with
+    case None -> None {}
+    case Some s -> flatmap(s.value)

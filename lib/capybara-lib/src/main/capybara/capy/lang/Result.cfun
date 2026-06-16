@@ -2,31 +2,19 @@ union Result[T] = Success[T] | Error
 data Success[T] { value: T }
 data Error { message: String }
 
-fun Result[T].`|`(map: T => Result[Y]): Result[Y] =
-    match this with
-    case Error e -> e
-    case Success s -> map(s.value)
+fun Result[T].`|`(map: T => Y): Result[Y] = this.map(map)
 
-fun Result[T].map(map: T => Result[Y]): Result[Y] =
+fun Result[T].map(map: T => Y): Result[Y] =
     match this with
     case Error e -> e
-    case Success s -> map(s.value)
+    case Success s -> Success { map(s.value) }
 
-fun Result[T].`|*`(flatmap: T => Result[Result[Y]]): Result[Y] =
-    match this with
-    case Error e -> e
-    case Success s ->
-        match flatmap(s.value) with
-        case Error e -> e
-        case Success { top_result } -> top_result
+fun Result[T].`|*`(flatmap: T => Result[Y]): Result[Y] = this.flat_map(flatmap)
 
-fun Result[T].flat_map(flatmap: T => Result[Result[Y]]): Result[Y] =
+fun Result[T].flat_map(flatmap: T => Result[Y]): Result[Y] =
     match this with
     case Error e -> e
-    case Success s ->
-        match flatmap(s.value) with
-        case Error e -> e
-        case Success { top_result } -> top_result
+    case Success s -> flatmap(s.value)
 
 fun Result[T].or_else(v: T): T =
     match this with

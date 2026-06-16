@@ -1619,9 +1619,44 @@ public final class JavaGenerator implements Generator {
         var methodTypeParameters = method.typeParameters().isEmpty()
                 ? ""
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
+        if (isCapyLangOptionMethod(method)) {
+            return mapCapyLangOptionInterfaceDefaultMethod(method, prefix, methodTypeParameters);
+        }
         return mapJavaDoc(method.comments())
                + prefix + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateMethodBody(method, helperCallOwnerName)
+               + "\n}\n";
+    }
+
+    private boolean isCapyLangOptionMethod(JavaMethod method) {
+        if (!method.sourceName().startsWith(METHOD_DECL_PREFIX + "Option__")) {
+            return false;
+        }
+        return method.parameters().size() == 1
+               && switch (baseMethodName(method.sourceName())) {
+                   case "|", "map", "|*", "flat_map" -> true;
+                   default -> false;
+               };
+    }
+
+    private String mapCapyLangOptionInterfaceDefaultMethod(JavaMethod method, String prefix, String methodTypeParameters) {
+        var mapper = method.parameters().getFirst().generatedName();
+        var body = switch (baseMethodName(method.sourceName())) {
+            case "|", "map" ->
+                    "if (this instanceof capy.lang.Option.Some<?> some) {\n"
+                    + "return java.util.Optional.ofNullable(" + mapper + ".apply((T) some.value()));\n"
+                    + "}\n"
+                    + "return java.util.Optional.empty();";
+            case "|*", "flat_map" ->
+                    "if (this instanceof capy.lang.Option.Some<?> some) {\n"
+                    + "return (java.util.Optional<Y>) " + mapper + ".apply((T) some.value());\n"
+                    + "}\n"
+                    + "return java.util.Optional.empty();";
+            default -> throw new IllegalStateException("Unsupported Option method: " + method.sourceName());
+        };
+        return mapJavaDoc(method.comments())
+               + prefix + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + body
                + "\n}\n";
     }
 
