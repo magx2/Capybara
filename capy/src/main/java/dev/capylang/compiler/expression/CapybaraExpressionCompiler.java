@@ -4950,6 +4950,9 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
+                        if (isPipeMapExpression(expression) && resolveSpecializedOptionType(left.type()).isPresent()) {
+                            return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
+                        }
                         var methodCall = resolveMethodInfixCall(
                                 expression.operator().symbol(),
                                 left,
@@ -4969,9 +4972,6 @@ public class CapybaraExpressionCompiler {
                                     .flatMap(right ->
                                             getLinkedInfixExpression(left, expression.operator(), right, expression.position())
                                                     .map(linked -> (CompiledExpression) linked));
-                        }
-                        if (resolveSpecializedOptionType(left.type()).isPresent()) {
-                            return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
                         }
                         return withPosition(
                                 Result.error("`|` operator is not defined for `" + left.type() + "`"),
@@ -5008,6 +5008,14 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE_FLATMAP) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
+                        if (resolveSpecializedOptionType(left.type()).isPresent()) {
+                            return linkBuiltinOptionFlatMapMethodInvoke(new FunctionCall(
+                                    Optional.empty(),
+                                    "flat_map",
+                                    List.of(expression.left(), expression.right()),
+                                    expression.position()
+                            ), scope);
+                        }
                         var methodCall = resolveMethodInfixCall(
                                 expression.operator().symbol(),
                                 left,
@@ -5655,12 +5663,21 @@ public class CapybaraExpressionCompiler {
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
             if (expression.right() instanceof FunctionReference functionReference) {
                 return resolvePipeFunctionReference(functionReference, elementType)
-                        .map(linked -> (CompiledExpression) new CompiledPipeExpression(
-                                left,
-                                linked.argumentName(),
-                                linked.expression(),
-                                left.type()
-                        ));
+                        .flatMap(linked -> {
+                            var optionType = optionTypeFor(linked.expression().type());
+                            if (optionType == null) {
+                                return withPosition(
+                                        Result.error("Option type is not defined"),
+                                        expression.position()
+                                );
+                            }
+                            return Result.success((CompiledExpression) new CompiledPipeExpression(
+                                    left,
+                                    linked.argumentName(),
+                                    linked.expression(),
+                                    optionType
+                            ));
+                        });
             }
             return withPosition(
                     Result.error("Right side of `|` has to be a lambda expression or function reference"),
@@ -5669,12 +5686,21 @@ public class CapybaraExpressionCompiler {
         }
         return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|")
                 .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
-                .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
-                        left,
-                        lambdaBinding.argumentName(),
-                        mapper,
-                        left.type()
-                )));
+                .flatMap(mapper -> {
+                    var optionType = optionTypeFor(mapper.type());
+                    if (optionType == null) {
+                        return withPosition(
+                                Result.error("Option type is not defined"),
+                                expression.position()
+                        );
+                    }
+                    return Result.success((CompiledExpression) new CompiledPipeExpression(
+                            left,
+                            lambdaBinding.argumentName(),
+                            mapper,
+                            optionType
+                    ));
+                }));
     }
 
     private Result<CompiledExpression> linkCollectionPipeExpression(
