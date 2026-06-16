@@ -3,7 +3,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Ordering import { * }
 from /capy/lang/Result import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/collection/List import { * }
 from /capy/test/CapyTest import { * }
 
@@ -17,6 +17,7 @@ fun tests(): Effect[TestFile] =
         test("should test any and all values", () => list_should_test_any_and_all_values()),
         test("should detect contained values", () => list_should_detect_contained_values()),
         test("should reduce values", () => list_should_reduce_values()),
+        test("should fold values", () => list_should_fold_values()),
         test("should map values", () => list_should_map_values()),
         test("should filter and reject values", () => list_should_filter_and_reject_values()),
         test("should flat map values", () => list_should_flat_map_values()),
@@ -75,6 +76,15 @@ fun list_should_reduce_values(): Assert =
     assert_all([
         assert_that([1, 2, 3] |> 0, (acc, value) => acc + value).is_equal_to(6),
         assert_that(empty.reduce(10, (acc, value) => acc + value)).is_equal_to(10),
+        assert_that([1, 2, 3].reduce("values:", (acc, value) => acc + " " + value)).is_equal_to("values: 1 2 3"),
+        assert_that([",1", ",2"].reduce("", (acc, value) => acc + value)).is_equal_to(",1,2"),
+    ])
+
+fun list_should_fold_values(): Assert =
+    let empty: List[int] = []
+    assert_all([
+        assert_that([1, 2, 3].fold((acc, value) => acc + value)).contains(6),
+        assert_that(empty.fold((acc, value) => acc + value)).is_empty(),
     ])
 
 fun list_should_map_values(): Assert =

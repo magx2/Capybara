@@ -974,7 +974,7 @@ class JavaScriptGeneratorTest {
     void shouldKeepSourceBackedStdlibModulesWhenRuntimeIsOnlyAHelper() {
         var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
                 runtimeModule("Math", "/capy/lang"),
-                runtimeModule("Seq", "/capy/lang")
+                runtimeModule("Seq", "/capy/collection")
         )));
 
         var paths = generated.modules().stream()
@@ -982,7 +982,7 @@ class JavaScriptGeneratorTest {
                 .toList();
 
         assertThat(paths).filteredOn(Path.of("capy", "lang", "Math.js")::equals).hasSize(2);
-        assertThat(paths).filteredOn(Path.of("capy", "lang", "Seq.js")::equals).hasSize(2);
+        assertThat(paths).filteredOn(Path.of("capy", "collection", "Seq.js")::equals).hasSize(2);
     }
 
     private static CompiledProgram compileProgram(String source) {

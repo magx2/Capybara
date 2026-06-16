@@ -944,6 +944,9 @@ public final class JavaScriptGenerator implements Generator {
             if (("reduce".equals(methodName) || "|>".equals(methodName) || "pipe_greater".equals(methodName)) && tailArgs.size() >= 2 && isCollectionType(receiverType)) {
                 return "capy.reduceCollection(" + receiver + ", " + tailArgs.get(0) + ", " + tailArgs.get(1) + ")";
             }
+            if ("fold".equals(methodName) && tailArgs.size() == 1 && receiverType instanceof CollectionLinkedType.CompiledList) {
+                return "capy.foldCollection(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
             if ("sort".equals(methodName) && tailArgs.size() == 1 && receiverType instanceof CollectionLinkedType.CompiledList) {
                 require("capy.collection.List");
                 return moduleVar("capy.collection.List") + ".sort(" + receiver + ", " + tailArgs.getFirst() + ")";
@@ -2862,13 +2865,13 @@ public final class JavaScriptGenerator implements Generator {
                     "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
-            exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
+            exports.put("capy.collection.Seq", Set.of("to_seq", "toSeq"));
             exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
             exports.put("capy.lang.Math", Set.of(
                     "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
                     "RoundMode", "FLOOR", "CEILING", "HALF_UP", "HALF_DOWN", "HALF_EVEN", "round"
             ));
-            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce", "sort"));
+            exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce", "fold", "sort"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
             exports.put("capy.collection.Tuple", Set.of("get"));
@@ -2947,7 +2950,7 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.js"), primitivesRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "String.js"), stringRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "RegexModule.js"), regexRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Seq.js"), seqRuntime()),
+                    new GeneratedModule(Path.of("capy", "collection", "Seq.js"), seqRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "System.js"), systemRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Math.js"), mathRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "List.js"), collectionRuntime()),
@@ -2980,7 +2983,7 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.lang.Primitives",
                     "capy.lang.String",
                     "capy.lang.RegexModule",
-                    "capy.lang.Seq",
+                    "capy.collection.Seq",
                     "capy.lang.System",
                     "capy.lang.Math",
                     "capy.collection.List",
@@ -3224,7 +3227,7 @@ public final class JavaScriptGenerator implements Generator {
             return "'use strict';\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
                    + "const Ordering = require('./Ordering.js');\n"
-                   + "const Seq = require('./Seq.js');\n"
+                   + "const Seq = require('../collection/Seq.js');\n"
                    + "function __constructor__primitive__char(value) {\n"
                    + "    const text = String(value);\n"
                    + "    return text.length === 1 ? new capy.Success({ value: text }) : new capy.Error({ message: 'char must contain exactly one character' });\n"
@@ -3290,6 +3293,7 @@ public final class JavaScriptGenerator implements Generator {
                    + "    flat_map: capy.flatMapCollection,\n"
                    + "    flatMap: capy.flatMapCollection,\n"
                    + "    reduce: capy.reduceCollection,\n"
+                   + "    fold: capy.foldCollection,\n"
                    + "    sort: capy.listSort,\n"
                    + "};\n";
         }
@@ -5945,6 +5949,7 @@ public final class JavaScriptGenerator implements Generator {
                             pipe_minus: { value(predicate) { return filterCollection(this, predicate); } },
                             pipe_star: { value(mapper) { return flatMapCollection(this, mapper); } },
                             reduce: { value(first, second) { return typeof first === 'function' ? nativeArrayReduce.apply(this, arguments) : reduceCollection(this, first, second); } },
+                            fold: { value(reducer) { return foldCollection(this, reducer); } },
                         reduceLeft: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
                         pipe_greater: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
                     };
@@ -6109,6 +6114,7 @@ public final class JavaScriptGenerator implements Generator {
                                 first() { return None; },
                                 firstMatch() { return None; },
                                 flatMap() { return this; },
+                                fold() { return None; },
                                 map() { return this; },
                                 pipe() { return this; },
                                 pipeStar() { return this; },
@@ -6591,6 +6597,18 @@ public final class JavaScriptGenerator implements Generator {
                         return acc;
                     }
 
+                    function foldCollection(value, reducer) {
+                        const values = entries(value);
+                        if (values.length === 0) {
+                            return None;
+                        }
+                        let acc = values[0];
+                        for (let index = 1; index < values.length; index++) {
+                            acc = invoke(reducer, acc, values[index], index);
+                        }
+                        return new Some({ value: acc });
+                    }
+
                     function optionMap(option, mapper) {
                         return isType(option, 'Some') ? mapper(option.value) : None;
                     }
@@ -6938,6 +6956,7 @@ public final class JavaScriptGenerator implements Generator {
                         any,
                         all,
                         reduceCollection,
+                        foldCollection,
                         optionMap,
                         optionFlatMap,
                         optionFilterOut,

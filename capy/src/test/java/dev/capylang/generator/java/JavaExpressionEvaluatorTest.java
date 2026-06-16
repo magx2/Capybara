@@ -642,7 +642,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/List import { * }
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 fun stringify(value: any): Seq[String] =
                     match value with
@@ -951,7 +951,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/List import { * }
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 union Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
@@ -1201,7 +1201,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/List import { * }
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 data Date { day: int }
 
@@ -1492,7 +1492,7 @@ class JavaExpressionEvaluatorTest {
                                 from /capy/collection/List import { * }
                                 from /capy/collection/Set import { * }
                                 from /capy/collection/Dict import { * }
-                                from /capy/lang/Seq import { * }
+                                from /capy/collection/Seq import { * }
 
                                 fun pipe_map(l: List[int]): Seq[int] =
                                     l | x => x * 2
@@ -1505,7 +1505,7 @@ class JavaExpressionEvaluatorTest {
                                 from /capy/collection/List import { * }
                                 from /capy/collection/Set import { * }
                                 from /capy/collection/Dict import { * }
-                                from /capy/lang/Seq import { * }
+                                from /capy/collection/Seq import { * }
 
                                 fun map(l: List[int]) = l | :double
 
@@ -1519,7 +1519,7 @@ class JavaExpressionEvaluatorTest {
                                 from /capy/collection/List import { * }
                                 from /capy/collection/Set import { * }
                                 from /capy/collection/Dict import { * }
-                                from /capy/lang/Seq import { * }
+                                from /capy/collection/Seq import { * }
 
                                 fun pipe_filter_out(l: List[int]): Seq[int] =
                                     l |- x => x > 2
@@ -1544,7 +1544,7 @@ class JavaExpressionEvaluatorTest {
                                 from /capy/collection/List import { * }
                                 from /capy/collection/Set import { * }
                                 from /capy/collection/Dict import { * }
-                                from /capy/lang/Seq import { * }
+                                from /capy/collection/Seq import { * }
 
                                 fun pipe_flat_map(l: List[int]): Seq[int] =
                                     l |* x => [x, x + 1]

@@ -1,18 +1,21 @@
 from /capy/test/Assert import { * }
 from /capy/collection/CollectionTypes import { * }
+from /capy/collection/List import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
-    test_file("/capy/lang/SeqTest", [
+    test_file("/capy/collection/SeqTest", [
         test("should assert finite sequence", () => should_assert_finite_sequence()),
         test("should assert empty sequence", () => should_assert_empty_sequence()),
         test("should take from infinite sequence", () => should_take_from_infinite_sequence()),
         test("should convert sequence to list", () => should_convert_sequence_to_list()),
         test("should drop and until", () => should_drop_and_until()),
         test("should filter and reject values", () => should_filter_and_reject_values()),
+        test("should reduce values", () => should_reduce_values()),
+        test("should fold values", () => should_fold_values()),
         test("should zip two sequences", () => should_zip_two_sequences()),
         test("should generate powers of two", () => should_generate_powers_of_two()),
         test("should return first element", () => should_return_first_element()),
@@ -57,6 +60,27 @@ fun should_filter_and_reject_values(): Assert =
         assert_that(to_seq([1, 2, 3, 4]).reject(x => x % 2 == 0).as_list()).is_equal_to([1, 3]),
     ])
 
+fun should_reduce_values(): Assert =
+    let empty = empty_int_seq()
+    assert_all([
+        assert_that(to_seq([1, 2, 3]).reduce(0, (acc, value) => acc + value)).is_equal_to(6),
+        assert_that(to_seq([1, 2, 3]) |> "values:", (acc, value) => acc + " " + value).is_equal_to("values: 1 2 3"),
+        assert_that(empty.reduce("seed", (acc, value) => acc + value)).is_equal_to("seed"),
+    ])
+
+fun should_fold_values(): Assert =
+    let empty_list: List[int] = []
+    let empty_seq = empty_int_seq()
+    assert_all([
+        assert_that(to_seq([1, 2, 3]).fold((acc, value) => acc + value)).contains(6),
+        assert_that(to_seq([7]).fold((acc, value) => acc + value)).contains(7),
+        assert_that(to_seq(["1", "2", "3"]).fold((acc, value) => acc + ", " + value)).contains("1, 2, 3"),
+        assert_that(to_seq(["1", "2", "3"]).fold((acc, value) => acc + " | " + value)).contains("1 | 2 | 3"),
+        assert_that(to_seq([",1", ",2"]).fold((acc, value) => acc + value)).contains(",1,2"),
+        assert_that(to_seq(empty_list).fold((acc, value) => acc + value)).is_empty(),
+        assert_that(empty_seq.fold((acc, value) => acc + value)).is_empty(),
+    ])
+
 fun should_zip_two_sequences(): Assert =
     let zipped = natural_seq().drop(seq_test_size(1)).zip(ones_seq()).take(seq_test_size(3))
     assert_that(to_seq(zipped)).has_size(3)
@@ -93,3 +117,7 @@ private fun seq_test_size(value: int): size =
     match size { value } with
     case Success { parsed } -> parsed
     case Error -> EMPTY
+
+private fun empty_int_seq(): Seq[int] =
+    let values: List[int] = []
+    to_seq(values)

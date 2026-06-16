@@ -3,7 +3,7 @@ from /capy/lang/Result import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 
 fun match_string(value: any): String =
     match value with

@@ -1,6 +1,6 @@
 from /capy/lang/Math import { floor_mod }
 from /capy/lang/Primitives import { FLOAT_BOUND, DOUBLE_BOUND, FLOAT_BOUND_AS_FLOAT, DOUBLE_BOUND_AS_DOUBLE }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 
 /// Returns a native random seed.
 fun seed(): seed = <native>
