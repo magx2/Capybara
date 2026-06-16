@@ -17,6 +17,7 @@ from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimiti
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/GenericDataType import { GenericDataType }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from Documentation import { Documentation }
 from AsciiDocGenerator import { generate_asciidoc_docs }
@@ -30,7 +31,7 @@ enum DocType {
 }
 
 fun main(args: List[String]): Effect[/capy/lang/Program] =
-    write_docs(from_string("build/capy-docs"), generate_docs(example_program(), ADOC)).map(result =>
+    write_docs(from_string("build/capy-docs"), generate_docs(example_program(), ADOC {})).map(result =>
         match result with
         case Success _ -> /capy/lang/Program.Success {}
         case Error _ -> /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE }
@@ -78,7 +79,10 @@ private fun example_module(): CompiledModule =
     CompiledModule {
         name: "ExampleDocs",
         path: "dev/capylang/example",
-        types: ["Shape", "Circle", "documented_id"],
+        types: {:}
+            + ("Shape", GenericDataType {})
+            + ("Circle", GenericDataType {})
+            + ("documented_id", GenericDataType {}),
         visiblePrimitiveBackedTypes: {:}
             + ("documented_id", CompiledPrimitiveBackedType {
                 name: "documented_id",
