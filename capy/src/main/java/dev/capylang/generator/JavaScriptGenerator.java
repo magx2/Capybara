@@ -5828,9 +5828,9 @@ public final class JavaScriptGenerator implements Generator {
                             });
                             return methodAliasProxy(this);
                         }
-                        map(mapper) { return invoke(mapper, this.value); }
-                        pipe(mapper) { return invoke(mapper, this.value); }
-                        flat_map(mapper) { const mapped = invoke(mapper, this.value); return isSuccessLike(mapped) ? mapped.value : mapped; }
+                        map(mapper) { return new Success({ value: invoke(mapper, this.value) }); }
+                        pipe(mapper) { return this.map(mapper); }
+                        flat_map(mapper) { return invoke(mapper, this.value); }
                         flatMap(mapper) { return this.flat_map(mapper); }
                         pipe_star(mapper) { return this.flat_map(mapper); }
                         orElse() { return this.value; }
@@ -6610,7 +6610,7 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function optionMap(option, mapper) {
-                        return isType(option, 'Some') ? mapper(option.value) : None;
+                        return isType(option, 'Some') ? new Some({ value: mapper(option.value) }) : None;
                     }
 
                     function optionFlatMap(option, mapper) {

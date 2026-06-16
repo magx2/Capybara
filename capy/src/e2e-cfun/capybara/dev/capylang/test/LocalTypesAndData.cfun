@@ -58,7 +58,7 @@ fun local_generic_data_field_access_followed_by_index(buffer: String): String =
     fun parse(value: String): Result[Parse[int]] =
         Success { Parse { buffer: value, value: 1 } }
     ---
-    match (parse(buffer) | parse =>
+    match (parse(buffer) |* parse =>
         match parse.buffer[0] with
         case Some { value } -> Success { value }
         case None -> Error { "" }) with
