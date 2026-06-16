@@ -1,7 +1,7 @@
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from HigherOrderFunctions import { * }
 
 fun tests(): Effect[TestFile] =

@@ -1,7 +1,7 @@
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 
 fun map(l: List[int]) = l | :double
 

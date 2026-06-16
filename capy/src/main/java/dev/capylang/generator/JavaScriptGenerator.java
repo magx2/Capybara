@@ -2865,7 +2865,7 @@ public final class JavaScriptGenerator implements Generator {
                     "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
-            exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
+            exports.put("capy.collection.Seq", Set.of("to_seq", "toSeq"));
             exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
             exports.put("capy.lang.Math", Set.of(
                     "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
@@ -2950,7 +2950,7 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.js"), primitivesRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "String.js"), stringRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "RegexModule.js"), regexRuntime()),
-                    new GeneratedModule(Path.of("capy", "lang", "Seq.js"), seqRuntime()),
+                    new GeneratedModule(Path.of("capy", "collection", "Seq.js"), seqRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "System.js"), systemRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Math.js"), mathRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "List.js"), collectionRuntime()),
@@ -2983,7 +2983,7 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.lang.Primitives",
                     "capy.lang.String",
                     "capy.lang.RegexModule",
-                    "capy.lang.Seq",
+                    "capy.collection.Seq",
                     "capy.lang.System",
                     "capy.lang.Math",
                     "capy.collection.List",
@@ -3227,7 +3227,7 @@ public final class JavaScriptGenerator implements Generator {
             return "'use strict';\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
                    + "const Ordering = require('./Ordering.js');\n"
-                   + "const Seq = require('./Seq.js');\n"
+                   + "const Seq = require('../collection/Seq.js');\n"
                    + "function __constructor__primitive__char(value) {\n"
                    + "    const text = String(value);\n"
                    + "    return text.length === 1 ? new capy.Success({ value: text }) : new capy.Error({ message: 'char must contain exactly one character' });\n"

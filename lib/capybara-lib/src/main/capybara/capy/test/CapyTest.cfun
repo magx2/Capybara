@@ -4,7 +4,7 @@ from /capy/lang/Result import { * }
 from /capy/io/Path import {*}
 from /capy/io/IO import { * }
 from /capy/io/Console import { * }
-from /capy/lang/Seq import {*}
+from /capy/collection/Seq import {*}
 from /capy/lang/String import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }

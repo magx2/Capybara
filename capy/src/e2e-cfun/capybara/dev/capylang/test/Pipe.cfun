@@ -1,4 +1,4 @@
-from /capy/lang/Seq import {*}
+from /capy/collection/Seq import {*}
 from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
 from /capy/collection/List import { * }

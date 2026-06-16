@@ -672,7 +672,7 @@ class PythonGeneratorTest {
     @Test
     void shouldRunSeqNamedMethodsOnPythonListRuntime() throws Exception {
         var program = compileProgram("""
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
                 from /capy/collection/List import { * }
 
                 fun expand(value: int): Seq[int] = to_seq([value, value + 1])
@@ -707,7 +707,7 @@ class PythonGeneratorTest {
         var program = compileProgram("""
                 from /capy/lang/Regex import { * }
                 from /capy/lang/Option import { * }
-                from /capy/lang/Seq import { * }
+                from /capy/collection/Seq import { * }
 
                 fun matches_named(input: String): bool = regex/foo/.matches(input)
                 fun matches_alias(input: String): bool = regex/foo/ ? input

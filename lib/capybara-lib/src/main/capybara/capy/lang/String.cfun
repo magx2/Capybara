@@ -5,7 +5,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
-from /capy/lang/Seq import { * }
+from /capy/collection/Seq import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
 /// Native String type backed by the runtime String implementation.
