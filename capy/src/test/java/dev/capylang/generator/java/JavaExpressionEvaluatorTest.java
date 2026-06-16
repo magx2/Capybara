@@ -1109,6 +1109,25 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldEraseOptionConstructorsInEffectBindContinuationCast() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("EffectOptionConstructor", "/foo/bar", """
+                from /capy/lang/Effect import { * }
+                from /capy/lang/Option import { Some }
+
+                fun effect_some(): Effect[Some[int]] =
+                    let x <- pure(1)
+                    Some { value: x }
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("capy.lang.Effect<java.util.Optional<java.lang.Integer>>");
+        assertThat(generated).doesNotContain("capy.lang.Effect<Some");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldCompileImportedConstructorPatternsNestedInOwnerInterface() {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
                 new RawModule("EitherLike", "/foo/types", """

@@ -2087,7 +2087,14 @@ public class JavaExpressionEvaluator {
                     var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
                             .map(JavaExpressionEvaluator::javaGenericTypeParameterReference)
                             .toList();
+                    if (isOptionSomeTypeName(rawType) || isOptionNoneTypeName(rawType)) {
+                        var optionalElementType = javaArgs.isEmpty() ? "java.lang.Object" : javaArgs.getFirst();
+                        yield "java.util.Optional<" + optionalElementType + ">";
+                    }
                     yield normalizeJavaTypeReference(rawType) + "<" + String.join(", ", javaArgs) + ">";
+                }
+                if (isOptionSomeTypeName(normalized) || isOptionNoneTypeName(normalized)) {
+                    yield "java.util.Optional";
                 }
                 yield normalizeJavaTypeReference(normalized);
             }
