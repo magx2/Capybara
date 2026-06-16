@@ -1,1 +1,2 @@
+/// Compiler diagnostic with message text, source module name, and source position.
 data CompilerError { message: String, moduleName: String, line: int, column: int }

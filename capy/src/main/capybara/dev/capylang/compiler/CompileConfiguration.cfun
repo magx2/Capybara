@@ -2,6 +2,7 @@ from /capy/collection/Set import { Set }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 
+/// CLI-facing compile settings: sources, libraries, output target, output directory, and native providers.
 data CompileConfiguration {
     libraries: Set[CompiledModule],
     native_providers: NativeProviderManifest

@@ -1,3 +1,5 @@
+/// Marker type for values produced by the generator layer.
 data Generated {}
 
+/// Generated source file with its relative output path and emitted code.
 data GeneratedModule { relativePath: String, code: String }
