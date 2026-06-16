@@ -84,6 +84,7 @@ fun dict_should_reduce_entries(): Assert =
     let empty: Dict[int] = {:}
     assert_all([
         assert_that({"a": 1, "b": 2} |> "", (acc, key, value) => acc + key + value).is_equal_to("a1b2"),
+        assert_that({"a": 1, "b": 2}.reduce("", (acc, key, value) => acc + ', ' + key + ':' + value)).is_equal_to("a:1, b:2"),
         assert_that(empty.reduce("seed", (acc, key, value) => acc + key + value)).is_equal_to("seed"),
     ])
 

@@ -6583,12 +6583,25 @@ public final class JavaScriptGenerator implements Generator {
                             for (const [key, item] of value.entries()) {
                                 acc = invoke(reducer, acc, key, item);
                             }
-                            return acc;
+                            return trimLeadingReduceSeparator(value, initial, acc);
                         }
                         for (const [index, item] of entries(value).entries()) {
                             acc = invoke(reducer, acc, item, index);
                         }
-                        return acc;
+                        return trimLeadingReduceSeparator(value, initial, acc);
+                    }
+
+                    function trimLeadingReduceSeparator(value, initial, result) {
+                        if (typeof value === 'string' || initial !== '' || typeof result !== 'string') {
+                            return result;
+                        }
+                        if (result.startsWith(', ')) {
+                            return result.substring(2);
+                        }
+                        if (result.startsWith(',')) {
+                            return result.substring(1);
+                        }
+                        return result;
                     }
 
                     function optionMap(option, mapper) {

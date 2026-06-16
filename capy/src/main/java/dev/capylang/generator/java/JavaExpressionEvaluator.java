@@ -500,12 +500,16 @@ public class JavaExpressionEvaluator {
                 return current.addExpression(args.getFirst() + ".contains(" + value + ")");
             }
             if (isStaticExtensionMethod(functionCall) || primitiveBackedMethodCall) {
-                var invokeArgs = java.util.stream.IntStream.range(0, args.size())
+                var callArgs = java.util.stream.IntStream.range(0, args.size())
                         .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
-                        .collect(java.util.stream.Collectors.joining(", "));
+                        .toList();
                 var owner = staticExtensionMethodOwner(functionCall);
                 var target = owner == null ? normalizedMethodName : owner + "." + normalizedMethodName;
-                return current.addExpression(target + "(" + invokeArgs + ")");
+                var invocation = target + "(" + String.join(", ", callArgs) + ")";
+                if (shouldTrimLeadingReduceSeparator(functionCall, methodName)) {
+                    return current.addExpression(trimLeadingReduceSeparatorInvocation(target, callArgs));
+                }
+                return current.addExpression(invocation);
             }
             var receiver = args.get(0);
             var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
@@ -657,6 +661,38 @@ public class JavaExpressionEvaluator {
                     : evaluateDictRemoveExpression(infix, receiver, right)));
         }
         return Optional.empty();
+    }
+
+    private static boolean shouldTrimLeadingReduceSeparator(CompiledFunctionCall functionCall, String methodName) {
+        return ("reduce".equals(methodName)
+                || "|>".equals(methodName)
+                || "reduce_left".equals(methodName)
+                || "|l>".equals(methodName))
+               && functionCall.arguments().size() >= 3
+               && functionCall.arguments().getFirst().type() instanceof dev.capylang.compiler.CollectionLinkedType
+               && functionCall.arguments().get(1).type() == dev.capylang.compiler.PrimitiveLinkedType.STRING
+               && functionCall.type() == dev.capylang.compiler.PrimitiveLinkedType.STRING;
+    }
+
+    private static String trimLeadingReduceSeparatorExpression(String valueExpression) {
+        return "(" + valueExpression + ".startsWith(\", \") ? "
+               + valueExpression + ".substring(2) : ("
+               + valueExpression + ".startsWith(\",\") ? "
+               + valueExpression + ".substring(1) : "
+               + valueExpression + "))";
+    }
+
+    private static String trimLeadingReduceSeparatorInvocation(String target, java.util.List<String> callArgs) {
+        var lambdaInitial = "__capybaraReduceInitial";
+        var lambdaReduced = "__capybaraReduced";
+        var wrappedCallArgs = new java.util.ArrayList<>(callArgs);
+        wrappedCallArgs.set(1, lambdaInitial);
+        var invocation = target + "(" + String.join(", ", wrappedCallArgs) + ")";
+        return "((java.util.function.Function<java.lang.String, java.lang.String>) (" + lambdaInitial + " -> "
+               + "((java.util.function.Function<java.lang.String, java.lang.String>) (" + lambdaReduced + " -> "
+               + "(" + lambdaInitial + ".isEmpty() ? "
+               + trimLeadingReduceSeparatorExpression(lambdaReduced)
+               + " : " + lambdaReduced + "))).apply(" + invocation + "))).apply(" + callArgs.get(1) + ")";
     }
 
     private static Optional<Scope> evaluateNativeGetMethod(

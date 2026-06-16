@@ -4446,10 +4446,19 @@ public final class PythonGenerator implements Generator {
                         if isinstance(value, CapyDict):
                             for key, item in value.entries():
                                 acc = invoke(reducer, acc, key, item)
-                            return acc
+                            return trim_leading_reduce_separator(value, initial, acc)
                         for index, item in enumerate(entries(value)):
                             acc = invoke(reducer, acc, item, index)
-                        return acc
+                        return trim_leading_reduce_separator(value, initial, acc)
+
+                    def trim_leading_reduce_separator(value, initial, result):
+                        if isinstance(value, str) or initial != '' or not isinstance(result, str):
+                            return result
+                        if result.startswith(', '):
+                            return result[2:]
+                        if result.startswith(','):
+                            return result[1:]
+                        return result
 
                     def option_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_
                     def option_flat_map(option, mapper): return mapper(option.value) if is_type(option, 'Some') else None_
