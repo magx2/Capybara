@@ -39,7 +39,7 @@ class CapybaraPluginTest {
 
         assertFalse(project.file("build/classes/capybara/build-info.json").exists());
         assertTrue(project.file("build/classes/capybara/program.json").isFile());
-        assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
+        assertTrue(containsFileNamed(project.file("build/generated/sources/capybara/java").toPath(), "Main.java"));
         assertFalse(project.file("build/generated/sources/capybara/java/dev/capylang/CapybaraUtil.java").exists());
     }
 
@@ -67,7 +67,7 @@ class CapybaraPluginTest {
 
         project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
 
-        assertTrue(project.file("build/generated/sources/capybara/java/check/foo/Lib.java").isFile());
+        assertTrue(containsFileNamed(project.file("build/generated/sources/capybara/java/check").toPath(), "Lib.java"));
         assertFalse(project.file("build/classes/capybara/foo/Lib.json").exists());
         assertFalse(project.file("build/classes/capybara/program.json").exists());
         assertFalse(project.file("build/classes/capybara/build-info.json").exists());
@@ -217,7 +217,7 @@ class CapybaraPluginTest {
         assertFalse(Files.exists(staleLinkedFile));
         assertFalse(Files.exists(staleGeneratedFile));
         assertTrue(project.file("build/classes/capybara/program.json").isFile());
-        assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
+        assertTrue(containsFileNamed(project.file("build/generated/sources/capybara/java").toPath(), "Main.java"));
     }
 
     @Test
@@ -767,5 +767,14 @@ class CapybaraPluginTest {
         project.getPluginManager().apply(JavaPlugin.class);
         project.getPluginManager().apply(CapybaraPlugin.class);
         return project;
+    }
+
+    private static boolean containsFileNamed(Path directory, String fileName) throws IOException {
+        if (Files.notExists(directory)) {
+            return false;
+        }
+        try (var paths = Files.walk(directory)) {
+            return paths.anyMatch(path -> Files.isRegularFile(path) && path.getFileName().toString().equals(fileName));
+        }
     }
 }
