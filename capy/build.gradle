@@ -437,7 +437,16 @@ def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sy
     group = 'build'
     description = 'Prepares main Capybara compiler sources.'
 
-    from(capybaraMainSourceDir)
+    inputs.property('capybaraProjectVersion', capybaraProjectVersion)
+    from(capybaraMainSourceDir) {
+        exclude 'dev/capylang/cli/Capy.cfun'
+    }
+    from(capybaraMainSourceDir) {
+        include 'dev/capylang/cli/Capy.cfun'
+        filter { String line ->
+            line.replace('const COMPILER_VERSION = "x.y.z"', "const COMPILER_VERSION = \"${capybaraProjectVersion}\"")
+        }
+    }
     from(layout.projectDirectory.dir('src/main/java')) {
         include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
         into 'native/java'

@@ -35,7 +35,7 @@ from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/Generator import { generate }
 
-const COMPILER_VERSION = "0.4.0-SNAPSHOT"
+const COMPILER_VERSION = "x.y.z"
 
 fun main(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
