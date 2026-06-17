@@ -9,6 +9,8 @@ from /capy/lang/String import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 from /capy/meta_prog/Recursive import { Recursive }
 
+private const TYPED_JSON_ENVELOPE_FIELD: String = "$capybaraTypedJson"
+
 union Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: Dict[Json] }
 fun JsonObject.`+`(other: JsonObject): JsonObject = JsonObject { value: this.value + other.value }
@@ -34,6 +36,30 @@ data JsonValueArray { value: JsonArray }
 fun JsonValueArray.get(idx: index): Option[Json] = this.value.get(idx)
 data JsonBool { value: bool }
 data JsonNull {}
+
+union TypedJson = TypedJsonData | TypedJsonObject | TypedJsonArray | TypedJsonValue
+data TypedJsonPackage { name: String, path: String }
+data TypedJsonData { name: String, pkg: TypedJsonPackage, fields: Dict[TypedJson] }
+data TypedJsonObject { value: Dict[TypedJson] }
+data TypedJsonArray { kind: String, value: List[TypedJson] }
+union TypedJsonValue =
+    TypedJsonString
+    | TypedJsonByte
+    | TypedJsonInt
+    | TypedJsonLong
+    | TypedJsonFloat
+    | TypedJsonDouble
+    | TypedJsonBool
+    | TypedJsonNull
+data TypedJsonString { value: String }
+data TypedJsonByte { value: int }
+data TypedJsonInt { value: int }
+data TypedJsonLong { value: long }
+data TypedJsonFloat { value: float }
+data TypedJsonDouble { value: double }
+data TypedJsonBool { value: bool }
+data TypedJsonNull {}
+
 deriver Jsonable {
     fun to_json(): Result[JsonObject] = to_json(receiver)
 }
@@ -129,6 +155,376 @@ fun stringify(json: Json): String =
     case JsonNull -> "null"
 
 fun serialize(obj: JsonObject): String = stringify(obj)
+
+fun to_typed_json(obj: data): Result[TypedJsonData] =
+    match any_to_typed_json(obj) with
+    case Success { typed } -> {
+        match typed with
+        case TypedJsonData typed_data -> Success { typed_data }
+        case _ -> Error { "Expected data value" }
+    }
+    case Error e -> e
+
+fun stringify_typed(json: TypedJson): String = stringify(typed_json_to_json(json))
+
+fun serialize_typed(obj: TypedJsonData): String = stringify_typed(obj)
+
+fun deserialize_typed(json: String): Result[TypedJsonData] =
+    let parsed <- deserialize(json)
+    let typed <- json_to_typed_json(parsed)
+    match typed with
+    case TypedJsonData typed_data -> Success { typed_data }
+    case _ -> Error { "Expected typed JSON data" }
+
+private fun any_to_typed_json(value: any): Result[TypedJson] =
+    match value with
+    case TypedJson typed -> Success { typed }
+    case String s -> Success { TypedJsonString { s } }
+    case int i -> Success { TypedJsonInt { i } }
+    case long l -> Success { TypedJsonLong { l } }
+    case double d -> Success { TypedJsonDouble { d } }
+    case float f -> Success { TypedJsonFloat { f } }
+    case byte b -> Success { TypedJsonByte { b + 0 } }
+    case bool b -> Success { TypedJsonBool { b } }
+    case List l -> {
+        let initial: Result[List[TypedJson]] = Success { [] }
+        let values <- l |> initial, (acc_result, item) => {
+            let acc <- acc_result
+            let encoded <- any_to_typed_json(item)
+            Success { acc + encoded }
+        }
+        TypedJsonArray { kind: "List", value: values }
+    }
+    case Set s -> {
+        let initial: Result[List[TypedJson]] = Success { [] }
+        let values <- s |> initial, (acc_result, item) => {
+            let acc <- acc_result
+            let encoded <- any_to_typed_json(item)
+            Success { acc + encoded }
+        }
+        TypedJsonArray { kind: "Set", value: values }
+    }
+    case Dict d -> {
+        let initial: Result[Dict[TypedJson]] = Success { {:} }
+        let values <- d |> initial, (acc_result, key, item) => {
+            let acc <- acc_result
+            let encoded <- any_to_typed_json(item)
+            Success { acc + { key : encoded } }
+        }
+        TypedJsonObject { value: values }
+    }
+    case Option o -> typed_option_to_json(o)
+    case Result r -> typed_result_to_json(r)
+    case data d -> typed_data_to_json(d)
+    case _ -> Error { "unsupported value" }
+
+private fun typed_option_to_json(option: Option[any]): Result[TypedJsonData] =
+    match option with
+    case Some { value } -> {
+        let encoded <- any_to_typed_json(value)
+        TypedJsonData {
+            name: "Some",
+            pkg: TypedJsonPackage { name: "capy.lang", path: "capy/lang/Option" },
+            fields: { "value": encoded }
+        }
+    }
+    case None -> Success {
+        TypedJsonData {
+            name: "None",
+            pkg: TypedJsonPackage { name: "capy.lang", path: "capy/lang/Option" },
+            fields: {:}
+        }
+    }
+
+private fun typed_result_to_json(result: Result[any]): Result[TypedJsonData] =
+    match result with
+    case Success { value } -> {
+        let encoded <- any_to_typed_json(value)
+        TypedJsonData {
+            name: "Success",
+            pkg: TypedJsonPackage { name: "capy.lang", path: "capy/lang/Result" },
+            fields: { "value": encoded }
+        }
+    }
+    case Error { message } -> Success {
+        TypedJsonData {
+            name: "Error",
+            pkg: TypedJsonPackage { name: "capy.lang", path: "capy/lang/Result" },
+            fields: { "message": TypedJsonString { message } }
+        }
+    }
+
+private fun typed_data_to_json(obj: data): Result[TypedJsonData] =
+    let info = reflection(obj)
+    let initial: Result[Dict[TypedJson]] = Success { {:} }
+    let fields <- info.fields
+        |> initial, (acc_result, field) => {
+            let acc <- acc_result
+            match any_to_typed_json_by_type(field.type.name, field.value) with
+            case Success { encoded } -> Success { acc + { field.name : encoded } }
+            case Error { message } -> Error { "Cannot convert field `" + field.name + "` to typed JSON: " + message }
+        }
+    TypedJsonData {
+        name: info.name,
+        pkg: TypedJsonPackage { name: info.pkg.name, path: info.pkg.path },
+        fields: fields
+    }
+
+private fun typed_json_to_json(json: TypedJson): JsonObject =
+    match json with
+    case TypedJsonData { name, pkg, fields } -> JsonObject {
+        value: {
+            TYPED_JSON_ENVELOPE_FIELD: JsonString { value: "data" },
+            "name": JsonString { value: name },
+            "pkg": typed_package_to_json(pkg),
+            "fields": typed_fields_to_json(fields),
+        }
+    }
+    case TypedJsonObject { value } -> JsonObject {
+        value: {
+            TYPED_JSON_ENVELOPE_FIELD: JsonString { value: "object" },
+            "value": typed_fields_to_json(value),
+        }
+    }
+    case TypedJsonArray { kind, value } -> {
+        let initial: List[Json] = []
+        let encoded: List[Json] = value |> initial, (acc, item) => acc + typed_json_to_json(item)
+        JsonObject {
+            value: {
+                TYPED_JSON_ENVELOPE_FIELD: JsonString { value: "array" },
+                "kind": JsonString { value: kind },
+                "value": JsonArray { value: encoded },
+            }
+        }
+    }
+    case TypedJsonString { value } -> typed_value_to_json("String", JsonString { value })
+    case TypedJsonByte { value } -> typed_value_to_json("byte", JsonNumberLong { value })
+    case TypedJsonInt { value } -> typed_value_to_json("int", JsonNumberLong { value })
+    case TypedJsonLong { value } -> typed_value_to_json("long", JsonNumberLong { value })
+    case TypedJsonFloat { value } -> typed_value_to_json("float", JsonNumberDouble { value })
+    case TypedJsonDouble { value } -> typed_value_to_json("double", JsonNumberDouble { value })
+    case TypedJsonBool { value } -> typed_value_to_json("bool", JsonBool { value })
+    case TypedJsonNull -> JsonObject {
+        value: {
+            TYPED_JSON_ENVELOPE_FIELD: JsonString { value: "value" },
+            "kind": JsonString { value: "null" },
+            "value": JsonNull {},
+        }
+    }
+
+private fun typed_package_to_json(pkg: TypedJsonPackage): JsonObject =
+    JsonObject {
+        value: {
+            "name": JsonString { value: pkg.name },
+            "path": JsonString { value: pkg.path },
+        }
+    }
+
+private fun typed_fields_to_json(fields: Dict[TypedJson]): JsonObject =
+    JsonObject {
+        value: fields | (_, value) => typed_json_to_json(value)
+    }
+
+private fun typed_value_to_json(kind: String, value: Json): JsonObject =
+    JsonObject {
+        value: {
+            TYPED_JSON_ENVELOPE_FIELD: JsonString { value: "value" },
+            "kind": JsonString { value: kind },
+            "value": value,
+        }
+    }
+
+private fun json_to_typed_json(json: Json): Result[TypedJson] =
+    match json with
+    case JsonObject object -> {
+        let marker <- json_string_field(object, TYPED_JSON_ENVELOPE_FIELD)
+        match marker with
+        case "data" -> parse_typed_data(object)
+        case "object" -> parse_typed_object(object)
+        case "array" -> parse_typed_array(object)
+        case "value" -> parse_typed_value(object)
+        case _ -> Error { "Unknown typed JSON marker `" + marker + "`" }
+    }
+    case _ -> Error { "Expected typed JSON envelope object" }
+
+private fun parse_typed_data(object: JsonObject): Result[TypedJsonData] =
+    let name <- json_string_field(object, "name")
+    let pkg_json <- json_field(object, "pkg")
+    let pkg <- parse_typed_package(pkg_json)
+    let fields_json <- json_field(object, "fields")
+    let fields <- parse_typed_fields(fields_json)
+    TypedJsonData { name: name, pkg: pkg, fields: fields }
+
+private fun parse_typed_object(object: JsonObject): Result[TypedJsonObject] =
+    let value_json <- json_field(object, "value")
+    let value <- parse_typed_fields(value_json)
+    TypedJsonObject { value: value }
+
+private fun parse_typed_array(object: JsonObject): Result[TypedJsonArray] =
+    let kind <- json_string_field(object, "kind")
+    let value_json <- json_field(object, "value")
+    match value_json with
+    case JsonArray { value } -> {
+        let initial: Result[List[TypedJson]] = Success { [] }
+        let values <- value |> initial, (acc_result, item) => {
+            let acc <- acc_result
+            let parsed <- json_to_typed_json(item)
+            Success { acc + parsed }
+        }
+        TypedJsonArray { kind: kind, value: values }
+    }
+    case _ -> Error { "Expected typed JSON array value to be a JSON array" }
+
+private fun parse_typed_value(object: JsonObject): Result[TypedJsonValue] =
+    let kind <- json_string_field(object, "kind")
+    let value <- json_field(object, "value")
+    match kind with
+    case "String" -> {
+        let parsed <- json_string_value(value)
+        TypedJsonString { parsed }
+    }
+    case "byte" -> {
+        let parsed <- json_long_value(value)
+        TypedJsonByte { typed_json_long_to_int(parsed) }
+    }
+    case "int" -> {
+        let parsed <- json_long_value(value)
+        TypedJsonInt { typed_json_long_to_int(parsed) }
+    }
+    case "long" -> {
+        let parsed <- json_long_value(value)
+        TypedJsonLong { parsed }
+    }
+    case "float" -> {
+        let parsed <- json_double_value(value)
+        let float_value <- typed_json_double_to_float(parsed)
+        TypedJsonFloat { float_value }
+    }
+    case "double" -> {
+        let parsed <- json_double_value(value)
+        TypedJsonDouble { parsed }
+    }
+    case "bool" -> {
+        let parsed <- json_bool_value(value)
+        TypedJsonBool { parsed }
+    }
+    case "null" -> Success { TypedJsonNull {} }
+    case _ -> Error { "Unknown typed JSON value kind `" + kind + "`" }
+
+private fun parse_typed_package(json: Json): Result[TypedJsonPackage] =
+    match json with
+    case JsonObject object -> {
+        let name <- json_string_field(object, "name")
+        let path <- json_string_field(object, "path")
+        TypedJsonPackage { name: name, path: path }
+    }
+    case _ -> Error { "Expected typed JSON package to be an object" }
+
+private fun parse_typed_fields(json: Json): Result[Dict[TypedJson]] =
+    match json with
+    case JsonObject { value } -> {
+        let initial: Result[Dict[TypedJson]] = Success { {:} }
+        value |> initial, (acc_result, key, item) => {
+            let acc <- acc_result
+            let parsed <- json_to_typed_json(item)
+            Success { acc + { key : parsed } }
+        }
+    }
+    case _ -> Error { "Expected typed JSON fields to be an object" }
+
+private fun json_field(object: JsonObject, name: String): Result[Json] =
+    match object.get(name) with
+    case Some { value } -> Success { value }
+    case None -> Error { "Expected JSON object field `" + name + "`" }
+
+private fun json_string_field(object: JsonObject, name: String): Result[String] =
+    let value <- json_field(object, name)
+    json_string_value(value)
+
+private fun json_string_value(json: Json): Result[String] =
+    match json with
+    case JsonString { value } -> Success { value }
+    case _ -> Error { "Expected JSON string" }
+
+private fun json_long_value(json: Json): Result[long] =
+    match json with
+    case JsonNumberLong { value } -> Success { value }
+    case _ -> Error { "Expected JSON long number" }
+
+private fun json_double_value(json: Json): Result[double] =
+    match json with
+    case JsonNumberDouble { value } -> Success { value }
+    case JsonNumberLong { value } -> Success { value }
+    case _ -> Error { "Expected JSON double number" }
+
+private fun json_bool_value(json: Json): Result[bool] =
+    match json with
+    case JsonBool { value } -> Success { value }
+    case _ -> Error { "Expected JSON bool" }
+
+private fun any_to_typed_json_by_type(type_name: String, value: any): Result[TypedJson] =
+    match type_name with
+    case "byte" -> typed_byte_value(value)
+    case "int" -> typed_int_value(value)
+    case "long" -> typed_long_value(value)
+    case "float" -> typed_float_value(value)
+    case "double" -> typed_double_value(value)
+    case _ -> any_to_typed_json(value)
+
+private fun typed_byte_value(value: any): Result[TypedJsonByte] =
+    match value with
+    case byte b -> Success { TypedJsonByte { b + 0 } }
+    case int i -> Success { TypedJsonByte { i } }
+    case long l -> Success { TypedJsonByte { typed_json_long_to_int(l) } }
+    case _ -> Error { "expected byte value" }
+
+private fun typed_int_value(value: any): Result[TypedJsonInt] =
+    match value with
+    case int i -> Success { TypedJsonInt { i } }
+    case byte b -> Success { TypedJsonInt { b + 0 } }
+    case long l -> Success { TypedJsonInt { typed_json_long_to_int(l) } }
+    case _ -> Error { "expected int value" }
+
+private fun typed_long_value(value: any): Result[TypedJsonLong] =
+    match value with
+    case long l -> Success { TypedJsonLong { l } }
+    case int i -> Success { TypedJsonLong { i } }
+    case byte b -> Success { TypedJsonLong { b + 0L } }
+    case _ -> Error { "expected long value" }
+
+private fun typed_float_value(value: any): Result[TypedJsonFloat] =
+    match value with
+    case float f -> Success { TypedJsonFloat { f } }
+    case double d -> {
+        let f <- typed_json_double_to_float(d)
+        TypedJsonFloat { f }
+    }
+    case int i -> {
+        let f <- typed_json_double_to_float(i)
+        TypedJsonFloat { f }
+    }
+    case long l -> {
+        let f <- typed_json_double_to_float(l)
+        TypedJsonFloat { f }
+    }
+    case byte b -> {
+        let f <- typed_json_double_to_float(b + 0L)
+        TypedJsonFloat { f }
+    }
+    case _ -> Error { "expected float value" }
+
+private fun typed_double_value(value: any): Result[TypedJsonDouble] =
+    match value with
+    case double d -> Success { TypedJsonDouble { d } }
+    case float f -> Success { TypedJsonDouble { f } }
+    case long l -> Success { TypedJsonDouble { l } }
+    case int i -> Success { TypedJsonDouble { i } }
+    case byte b -> Success { TypedJsonDouble { b + 0L } }
+    case _ -> Error { "expected double value" }
+
+private fun typed_json_long_to_int(value: long): int = value.to_int()
+
+private fun typed_json_double_to_float(value: double): Result[float] = ("" + value).to_float()
 
 private fun escape_string(value: String): String =
     fun unicode_control(hex: String): String = '\\' + 'u00' + hex

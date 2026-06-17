@@ -38,6 +38,31 @@ data JsonableNestedSample {
     metadata: Dict[int],
     raw: Json
 } derive Jsonable
+union TypedJsonShapeSample { name: String } =
+    TypedJsonListShape
+    | TypedJsonSetShape
+    | TypedJsonTupleShape
+data TypedJsonListShape {}
+data TypedJsonSetShape {}
+data TypedJsonTupleShape {}
+union TypedJsonReferenceSample { name: String } =
+    TypedJsonVariableReference
+    | TypedJsonFunctionReference
+data TypedJsonVariableReference {}
+data TypedJsonFunctionReference {}
+data TypedJsonNumberSample {
+    int_value: int,
+    long_value: long,
+    float_value: float,
+    double_value: double,
+    byte_value: byte
+}
+data TypedJsonWrapperVariants {
+    present: Option[String],
+    absent: Option[String],
+    success: Result[int],
+    error: Result[int]
+}
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/Json.cfun", [
@@ -70,6 +95,11 @@ fun tests(): Effect[TestFile] =
         test("should deserialize array with objects", () => should_deserialize_array_with_objects()),
         test("should deserialize array with arrays", () => should_deserialize_array_with_arrays()),
         test("should deserialize JSON with whitespaces", () => should_deserialize_json_with_white_spaces()),
+        test("should round-trip typed data constructors with identical shapes", () => should_round_trip_typed_data_constructors_with_identical_shapes()),
+        test("should round-trip typed references with identical name fields", () => should_round_trip_typed_references_with_identical_name_fields()),
+        test("should preserve typed numeric value kinds", () => should_preserve_typed_numeric_value_kinds()),
+        test("should preserve typed option and result constructors", () => should_preserve_typed_option_and_result_constructors()),
+        test("should stringify typed json with reserved envelope", () => should_stringify_typed_json_with_reserved_envelope()),
     ])
 
 fun should_convert_data_with_primitive_fields_to_json_object(): Assert =
@@ -485,3 +515,83 @@ fun should_deserialize_json_with_white_spaces(): Assert =
                 }
             }
         })
+
+fun should_round_trip_typed_data_constructors_with_identical_shapes(): Assert =
+    assert_all([
+        assert_that(round_trip_typed_name(TypedJsonListShape { name: "items" })).succeeds("TypedJsonListShape"),
+        assert_that(round_trip_typed_name(TypedJsonSetShape { name: "items" })).succeeds("TypedJsonSetShape"),
+        assert_that(round_trip_typed_name(TypedJsonTupleShape { name: "items" })).succeeds("TypedJsonTupleShape"),
+    ])
+
+fun should_round_trip_typed_references_with_identical_name_fields(): Assert =
+    assert_all([
+        assert_that(round_trip_typed_name(TypedJsonVariableReference { name: "value" })).succeeds("TypedJsonVariableReference"),
+        assert_that(round_trip_typed_name(TypedJsonFunctionReference { name: "value" })).succeeds("TypedJsonFunctionReference"),
+    ])
+
+fun should_preserve_typed_numeric_value_kinds(): Assert =
+    let sample = TypedJsonNumberSample {
+        int_value: 7,
+        long_value: 9876543210L,
+        float_value: 1.5f,
+        double_value: 2.5,
+        byte_value: 0x0A
+    }
+    assert_all([
+        assert_that(round_trip_typed_field(sample, "int_value")).succeeds(TypedJsonInt { 7 }),
+        assert_that(round_trip_typed_field(sample, "long_value")).succeeds(TypedJsonLong { 9876543210L }),
+        assert_that(round_trip_typed_field(sample, "float_value")).succeeds(TypedJsonFloat { 1.5f }),
+        assert_that(round_trip_typed_field(sample, "double_value")).succeeds(TypedJsonDouble { 2.5 }),
+        assert_that(round_trip_typed_field(sample, "byte_value")).succeeds(TypedJsonByte { 10 }),
+    ])
+
+fun should_preserve_typed_option_and_result_constructors(): Assert =
+    let sample = TypedJsonWrapperVariants {
+        present: Some { value: "available" },
+        absent: None {},
+        success: Success { value: 42 },
+        error: Error { message: "not found" }
+    }
+    assert_all([
+        assert_that(round_trip_typed_field_data_name(sample, "present")).succeeds("Some"),
+        assert_that(round_trip_typed_field_data_name(sample, "absent")).succeeds("None"),
+        assert_that(round_trip_typed_field_data_name(sample, "success")).succeeds("Success"),
+        assert_that(round_trip_typed_field_data_name(sample, "error")).succeeds("Error"),
+    ])
+
+fun should_stringify_typed_json_with_reserved_envelope(): Assert =
+    assert_that(to_typed_json(TypedJsonNumberSample {
+        int_value: 7,
+        long_value: 8L,
+        float_value: 1.5f,
+        double_value: 2.5,
+        byte_value: 0x0A
+    }))
+        .succeeds(typed =>
+            assert_that(serialize_typed(typed))
+                .contains('"$capybaraTypedJson":"data"')
+                .contains('"name":"TypedJsonNumberSample"')
+                .contains('"int_value":{"$capybaraTypedJson":"value"'))
+
+private fun round_trip_typed_data(obj: data): Result[TypedJsonData] =
+    let typed <- to_typed_json(obj)
+    deserialize_typed(serialize_typed(typed))
+
+private fun round_trip_typed_name(obj: data): Result[String] =
+    let typed <- round_trip_typed_data(obj)
+    typed.name
+
+private fun round_trip_typed_field(obj: data, field_name: String): Result[TypedJson] =
+    let typed <- round_trip_typed_data(obj)
+    typed_field(typed, field_name)
+
+private fun round_trip_typed_field_data_name(obj: data, field_name: String): Result[String] =
+    let field <- round_trip_typed_field(obj, field_name)
+    match field with
+    case TypedJsonData typed_data -> Success { typed_data.name }
+    case _ -> Error { "Expected typed data field `" + field_name + "`" }
+
+private fun typed_field(typed: TypedJsonData, field_name: String): Result[TypedJson] =
+    match typed.fields.get(field_name) with
+    case Some { value } -> Success { value }
+    case None -> Error { "Expected typed field `" + field_name + "`" }
