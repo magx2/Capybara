@@ -18,6 +18,11 @@ plugins {
 node {
     version = '22.11.0'
     download = true
+    def nodeGradleWorkRoot = providers.provider { new File(gradle.gradleUserHomeDir, 'capybara-node-gradle') }
+    workDir.set(layout.dir(nodeGradleWorkRoot.map { new File(it, 'node') }))
+    npmWorkDir.set(layout.dir(nodeGradleWorkRoot.map { new File(it, 'npm') }))
+    yarnWorkDir.set(layout.dir(nodeGradleWorkRoot.map { new File(it, 'yarn') }))
+    pnpmWorkDir.set(layout.dir(nodeGradleWorkRoot.map { new File(it, 'pnpm') }))
 }
 
 pythonPlugin {
