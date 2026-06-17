@@ -11,7 +11,6 @@ from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 from /capy/serialization/Json import { * }
-from /dev/capylang/compiler/CapybaraCompiler import { compile }
 from /dev/capylang/compiler/CompileConfiguration import { CompileConfiguration }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
@@ -37,6 +36,9 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/Generator import { generate }
 
 const COMPILER_VERSION = "0.4.0-SNAPSHOT"
+
+fun main(args: List[String]): Effect[/capy/lang/Program] =
+    run(args)
 
 fun run(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
@@ -518,7 +520,7 @@ fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
                             match modules_result with
                             case Error { message } -> runtime_error(message)
                             case Success { raw_modules } ->
-                                compile(
+                                /dev/capylang/compiler/CapybaraCompiler.compile(
                                     raw_modules,
                                     configuration.libraries,
                                     configuration.native_providers,
@@ -551,7 +553,7 @@ private fun compiler_configuration(libs: Option[String], nativeWiring: Option[St
     match read_library_modules(libs) with
     case Error e -> e
     case Success { libraries } ->
-        match read_native_provider_manifest(nativeWiring) with
+        match read_native_provider_manifest_option(nativeWiring) with
         case Error e -> e
         case Success { native_providers } -> Success { CompileConfiguration {
             libraries: libraries,
@@ -566,7 +568,7 @@ private fun read_library_modules(libs: Option[String]): Result[Set[CompiledModul
         then Success { {} }
         else Error { message: "`--libs` is not available until linked program deserialization is translated to CFUN." }
 
-private fun read_native_provider_manifest(nativeWiring: Option[String]): Result[NativeProviderManifest] =
+private fun read_native_provider_manifest_option(nativeWiring: Option[String]): Result[NativeProviderManifest] =
     match nativeWiring with
     case None -> Success { empty_native_provider_manifest() }
     case Some { _ } -> Error { message: "`--native-wiring` is not available until native provider manifest deserialization is translated to CFUN." }
@@ -613,7 +615,7 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
                 }] })
                 case Success { raw_modules } ->
                     read_native_implementation_manifest(inputPath).flat_map(nativeImplementationProviders =>
-                        compile(
+                        /dev/capylang/compiler/CapybaraCompiler.compile(
                             raw_modules,
                             configuration.libraries,
                             configuration.native_providers,

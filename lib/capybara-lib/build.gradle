@@ -1,37 +1,10 @@
 import com.github.gradle.node.task.NodeTask
-import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
-import org.gradle.api.Task
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
-import org.gradle.api.file.ConfigurableFileCollection
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.provider.ListProperty
-import org.gradle.api.provider.Property
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
-import org.gradle.api.tasks.TaskProvider
-import org.gradle.api.tasks.Classpath
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.Internal
-import org.gradle.api.tasks.Optional
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.compile.JavaCompile
-import org.gradle.api.tasks.options.Option
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
-import java.net.URL
-import java.net.URLClassLoader
-import java.nio.file.Path
-import java.nio.file.Files
 import java.nio.file.DirectoryStream
-import java.util.Comparator
-import java.util.TreeSet
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -121,74 +94,45 @@ dependencies {
     testImplementation 'org.assertj:assertj-core:3.27.6'
 }
 
-class CapyRuntimeBridge implements Closeable {
+class CapyCompilerBridge implements Closeable {
     private final URLClassLoader classLoader
-    private final def readLinkedProgramMethod
-    private final def compileMethod
-    private final def compileGenerateMethod
-    private final Class outputTypeClass
+    private final def compileOptionsMethod
+    private final def runCompileMethod
+    private final def compileGenerateOptionsMethod
+    private final def runCompileGenerateMethod
     private def parseArgumentsMethod
     private def runTestsMethod
 
-    CapyRuntimeBridge(Set<File> runtimeClasspathFiles) {
+    CapyCompilerBridge(Set<File> runtimeClasspathFiles) {
         def runtimeUrls = runtimeClasspathFiles.collect { it.toURI().toURL() } as URL[]
         classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
 
-        def capyClass = Class.forName('dev.capylang.CapyRuntime', true, classLoader)
-        readLinkedProgramMethod = capyClass.getMethod('readLinkedProgram', Path, Boolean.TYPE)
-        readLinkedProgramMethod.accessible = true
-        compileMethod = capyClass.getMethod(
-                'compile',
-                Path,
-                Path,
-                TreeSet,
-                Boolean.TYPE,
-                PrintStream,
-                String
-        )
-
-        outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-        compileGenerateMethod = capyClass.getMethod(
-                'compileGenerate',
-                outputTypeClass,
-                Path,
-                Path,
-                Path,
-                Path,
-                Path,
-                TreeSet,
-                Boolean.TYPE,
-                Boolean.TYPE,
+        def capyClass = Class.forName('dev.capylang.cli.Capy', true, classLoader)
+        compileOptionsMethod = generatedMethod(
+                capyClass,
+                'compileOptions',
                 String,
-                PrintStream
+                String,
+                Boolean.TYPE
         )
+        runCompileMethod = generatedMethod(capyClass, 'runCompile', compileOptionsMethod.returnType)
+        compileGenerateOptionsMethod = generatedMethod(
+                capyClass,
+                'compileGenerateOptions',
+                String,
+                String,
+                String,
+                java.util.Optional,
+                java.util.Optional,
+                java.util.Optional,
+                Boolean.TYPE,
+                Boolean.TYPE
+        )
+        runCompileGenerateMethod = generatedMethod(capyClass, 'runCompileGenerate', compileGenerateOptionsMethod.returnType)
     }
 
     TreeSet readLibraryModules(Set<File> libraryDirs) {
-        def modules = new TreeSet(compiledModuleComparator())
-        libraryDirs.each { libraryDir ->
-            Path libraryPath = libraryDir.toPath()
-            if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
-                return
-            }
-            def program = readLinkedProgramMethod.invoke(null, libraryPath, false)
-            modules.addAll(program.modules())
-        }
-        modules
-    }
-
-    private static Comparator compiledModuleComparator() {
-        return { a, b ->
-            def left = compiledModulePath(a)
-            def right = compiledModulePath(b)
-            def compared = left <=> right
-            compared != 0 ? compared : (a.name() <=> b.name())
-        } as Comparator
-    }
-
-    private static String compiledModulePath(def module) {
-        def path = module.path()
-        return path == null || path.isBlank() ? module.name() : "${path}/${module.name()}"
+        new TreeSet()
     }
 
     int compile(
@@ -205,34 +149,34 @@ class CapyRuntimeBridge implements Closeable {
             PrintStream errors
     ) {
         if (generatedOutputPath == null && testInputPath == null && testGeneratedOutputPath == null) {
-            return compileMethod.invoke(
+            if (linkedOutputPath == null) {
+                errors.println('Linked output path is required.')
+                return 1
+            }
+            def options = compileOptionsMethod.invoke(
                     null,
-                    inputPath,
-                    linkedOutputPath,
-                    libraries,
-                    compileTests,
-                    errors,
-                    compilerVersion
-            ) as Integer
+                    inputPath.toString(),
+                    linkedOutputPath.toString(),
+                    compileTests
+            )
+            return runProgram(runCompileMethod.invoke(null, options), errors)
         }
-        def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName }
-        if (outputType == null) {
-            throw new GradleException("Unknown Capybara output type: ${outputTypeName}")
+        if (generatedOutputPath == null) {
+            errors.println('Generated output path is required.')
+            return 1
         }
-        return compileGenerateMethod.invoke(
+        def options = compileGenerateOptionsMethod.invoke(
                 null,
-                outputType,
-                inputPath,
-                generatedOutputPath,
-                linkedOutputPath,
-                testInputPath,
-                testGeneratedOutputPath,
-                libraries,
+                outputTypeArgument(outputTypeName),
+                inputPath.toString(),
+                generatedOutputPath.toString(),
+                optionalPath(linkedOutputPath),
+                optionalPath(testInputPath),
+                optionalPath(testGeneratedOutputPath),
                 compileTests,
-                includeJavaLibResources,
-                compilerVersion,
-                errors
-        ) as Integer
+                includeJavaLibResources
+        )
+        runProgram(runCompileGenerateMethod.invoke(null, options), errors)
     }
 
     int runTests(Path outputPath, String reportType, String logType, List<String> tests, boolean availableTests) {
@@ -275,14 +219,66 @@ class CapyRuntimeBridge implements Closeable {
     void close() {
         classLoader.close()
     }
+
+    private static def generatedMethod(Class<?> type, String name, Class<?>... parameterTypes) {
+        def exact = type.declaredMethods.find { method ->
+            method.name == name && java.util.Arrays.equals(method.parameterTypes, parameterTypes)
+        }
+        def generated = exact ?: type.declaredMethods.find { method ->
+            method.name.startsWith("${name}__") && java.util.Arrays.equals(method.parameterTypes, parameterTypes)
+        }
+        if (generated == null) {
+            throw new GradleException("Unable to find generated Capy method `${name}` on ${type.name}.")
+        }
+        generated.accessible = true
+        generated
+    }
+
+    private static java.util.Optional<String> optionalPath(Path path) {
+        path == null ? java.util.Optional.empty() : java.util.Optional.of(path.toString())
+    }
+
+    private static String outputTypeArgument(String outputTypeName) {
+        switch (outputTypeName.toUpperCase(Locale.ROOT)) {
+            case 'JAVA':
+                return 'java'
+            case 'PYTHON':
+                return 'python'
+            case 'JAVASCRIPT':
+                return 'javascript'
+            default:
+                throw new GradleException("Unknown Capybara output type: ${outputTypeName}")
+        }
+    }
+
+    private static int runProgram(def effect, PrintStream errors) {
+        try {
+            def program = effect.unsafeRun()
+            if (program != null && program.class.simpleName == 'Failed') {
+                return program.class.getMethod('exit_code').invoke(program) as Integer
+            }
+            return 0
+        } catch (RuntimeException exception) {
+            errors.println(rootCauseMessage(exception))
+            return 1
+        }
+    }
+
+    private static String rootCauseMessage(Throwable throwable) {
+        def current = throwable
+        while (current.cause != null) {
+            current = current.cause
+        }
+        current.message ?: current.toString()
+    }
 }
 
-abstract class CapyRuntimeService implements BuildService<BuildServiceParameters.None>, AutoCloseable {
-    private final Map<String, CapyRuntimeBridge> bridges = new ConcurrentHashMap<>()
+abstract class CapyCompilerService implements BuildService<BuildServiceParameters.None>, AutoCloseable {
+    private final Map<String, CapyCompilerBridge> bridges = new ConcurrentHashMap<>()
 
-    CapyRuntimeBridge bridgeFor(Set<File> runtimeClasspathFiles) {
+    CapyCompilerBridge bridgeFor(Set<File> runtimeClasspathFiles) {
         def key = runtimeClasspathFiles.collect { it.absolutePath }.sort().join(File.pathSeparator)
-        bridges.computeIfAbsent(key) { new CapyRuntimeBridge(runtimeClasspathFiles) }
+        bridges.computeIfAbsent(key) { new CapyCompilerBridge(runtimeClasspathFiles) }
     }
 
     @Override
@@ -297,7 +293,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     abstract ConfigurableFileCollection getRuntimeClasspath()
 
     @Internal
-    abstract Property<CapyRuntimeService> getRuntimeService()
+    abstract Property<CapyCompilerService> getCompilerService()
 
     @InputDirectory
     @PathSensitive(PathSensitivity.RELATIVE)
@@ -342,7 +338,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @TaskAction
     void compileCapybara() {
         def errors = new ByteArrayOutputStream()
-        def bridge = runtimeService.get().bridgeFor(runtimeClasspath.files)
+        def bridge = compilerService.get().bridgeFor(runtimeClasspath.files)
         def generatedOutputPath = generatedOutputDir.present ? generatedOutputDir.get().asFile.toPath() : null
         def testInputPath = testInputDir.present ? testInputDir.get().asFile.toPath() : null
         def testGeneratedOutputPath = testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null
@@ -392,7 +388,7 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     abstract ConfigurableFileCollection getRuntimeClasspath()
 
     @Internal
-    abstract Property<CapyRuntimeService> getRuntimeService()
+    abstract Property<CapyCompilerService> getCompilerService()
 
     @OutputDirectory
     abstract DirectoryProperty getOutputDir()
@@ -423,7 +419,7 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     void runCapybaraTests() {
         outputDir.get().asFile.mkdirs()
 
-        def bridge = runtimeService.get().bridgeFor(runtimeClasspath.files)
+        def bridge = compilerService.get().bridgeFor(runtimeClasspath.files)
         def exitCode = bridge.runTests(
                 outputDir.get().asFile.toPath(),
                 reportType.get(),
@@ -437,7 +433,7 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     }
 }
 
-def capyRuntimeService = gradle.sharedServices.registerIfAbsent('capyRuntimeService', CapyRuntimeService) {}
+def capyCompilerService = gradle.sharedServices.registerIfAbsent('capyCompilerService', CapyCompilerService) {}
 def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'FINE'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
@@ -445,13 +441,13 @@ def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
 }
 
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
-    runtimeService.set(capyRuntimeService)
+    compilerService.set(capyCompilerService)
     logLevel.set(capybaraCompileLogLevel)
     outputTypeName.set('JAVA')
 }
 
 tasks.withType(InProcessCapybaraTestTask).configureEach {
-    runtimeService.set(capyRuntimeService)
+    compilerService.set(capyCompilerService)
     logType.set('TC')
     getTests().convention([])
     getPrintAvailableTests().convention(false)
