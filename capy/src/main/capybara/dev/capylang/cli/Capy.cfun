@@ -38,9 +38,6 @@ from /dev/capylang/generator/Generator import { generate }
 const COMPILER_VERSION = "0.4.0-SNAPSHOT"
 
 fun main(args: List[String]): Effect[/capy/lang/Program] =
-    run(args)
-
-fun run(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
     case None -> usage_error("No command passed!")
     case Some { "-h" } | Some { "--help" } -> print_help()
