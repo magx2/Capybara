@@ -107,7 +107,7 @@ fun compile_options(input: String, output: String, compile_tests: bool): Compile
         libs: None {},
         native_wiring: None {},
         compile_tests: compile_tests,
-        log_level: WARN {}
+        log_level: WARN
     }
 
 fun compile_generate_options(
@@ -131,7 +131,7 @@ fun compile_generate_options(
         native_wiring: None {},
         compile_tests: compile_tests,
         include_java_lib_resources: include_java_lib_resources,
-        log_level: WARN {}
+        log_level: WARN
     }
 
 data PackageOptions {
@@ -253,7 +253,7 @@ private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
         input: None {},
         module: None {},
         capy_overrides: [],
-        log_level: INFO {}
+        log_level: INFO
     }) with
     case UsageError e -> e
     case ParsedArgs { options } ->
@@ -401,7 +401,7 @@ private fun empty_named_options(): NamedOptions =
         native_wiring: None {},
         compile_tests: false,
         skip_java_lib: false,
-        log_level: INFO {}
+        log_level: INFO
     }
 
 private fun next_value(args: List[String], idx: int, option: String): CliArgs[String] =
@@ -445,10 +445,10 @@ private fun parse_output_type(value: String): CliArgs[String] =
 
 private fun parse_log_level(value: String): CliArgs[LogLevel] =
     match value with
-    case "DEBUG" | "debug" -> ParsedArgs { DEBUG {} }
-    case "INFO" | "info" -> ParsedArgs { INFO {} }
-    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN {} }
-    case "ERROR" | "error" -> ParsedArgs { ERROR {} }
+    case "DEBUG" | "debug" -> ParsedArgs { DEBUG }
+    case "INFO" | "info" -> ParsedArgs { INFO }
+    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN }
+    case "ERROR" | "error" -> ParsedArgs { ERROR }
     case _ -> UsageError { message: "Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR." }
 
 private fun print_version(): Effect[/capy/lang/Program] =

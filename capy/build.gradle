@@ -24,6 +24,7 @@ buildscript {
 plugins {
     id 'buildlogic.java-application-conventions'
     id 'antlr'
+    id 'idea'
 }
 
 apply plugin: 'dev.capylang'
@@ -408,6 +409,13 @@ def e2eCooGeneratedPythonDir = layout.buildDirectory.dir('generated/sources/capy
 def e2eCooLinkedPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo')
 def e2eCooPythonTestResultsDir = layout.buildDirectory.dir('test-results/e2e-python-coo')
 def e2eCooNativePythonDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
+def intellijE2eTestSourceDirs = files(
+        'src/e2e-cfun',
+        'src/e2e-coo',
+        'src/e2e-coo-java-native',
+        'src/e2e-coo-js-native',
+        'src/e2e-coo-py-native'
+)
 def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
 def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
@@ -440,6 +448,12 @@ sourceSets {
         resources.srcDir file('src/integrationTest/resources')
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
+    }
+}
+
+idea {
+    module {
+        testSources.from(intellijE2eTestSourceDirs)
     }
 }
 
