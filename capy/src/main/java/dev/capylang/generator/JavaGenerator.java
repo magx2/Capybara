@@ -32,6 +32,7 @@ import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateTailRe
 
 public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
+    private static final String CAPY_LANG_STRING_CLASS = "capy.lang.String";
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final Set<String> JAVA_KEYWORDS = Set.of(
@@ -1325,7 +1326,9 @@ public final class JavaGenerator implements Generator {
                         classImports.add(companionImport);
                     }
                 });
-        classImports.forEach(classImport -> code.append("import ").append(classImport).append(";\n"));
+        classImports.stream()
+                .filter(classImport -> !CAPY_LANG_STRING_CLASS.equals(classImport))
+                .forEach(classImport -> code.append("import ").append(classImport).append(";\n"));
         staticImports.stream()
                 .sorted()
                 .filter(staticImport -> !isTypeImport(staticImport))
@@ -1915,7 +1918,7 @@ public final class JavaGenerator implements Generator {
         var failedType = programType + ".Failed";
         return capybaraMainMethod
                + "\n"
-               + "public static final void main(String... args) {\n"
+               + "public static final void main(java.lang.String... args) {\n"
                + "var __capybaraArgsList = java.util.List.of(args);\n"
                + programType + " __capybaraProgram = " + mapMethodName(method.name()) + "(__capybaraArgsList).unsafeRun();\n"
                + "if (__capybaraProgram instanceof " + failedType + " __capybaraFailed) {\n"
