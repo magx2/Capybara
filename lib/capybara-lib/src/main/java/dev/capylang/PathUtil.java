@@ -48,20 +48,14 @@ public final class PathUtil {
     }
 
     public static Object fromString(String pathString) {
-        var root = pathString.startsWith("/")
-                ? root("ABSOLUTE")
-                : pathString.startsWith("~") ? root("HOME") : root("RELATIVE");
-        var value = pathString.startsWith("/")
-                ? pathString.substring(1)
-                : pathString.startsWith("~/") ? pathString.substring(2)
-                : pathString.startsWith("~") ? pathString.substring(1)
-                : pathString;
-        return Map.of(
-                "__type", "Path",
-                "root", root,
-                "prefix", Optional.empty(),
-                "segments", normalizeSegments(root, splitSegments(value))
-        );
+        if (pathString.startsWith("~")) {
+            var homePath = Paths.get(System.getProperty("user.home")).normalize();
+            var value = pathString.startsWith("~/") || pathString.startsWith("~\\")
+                    ? pathString.substring(2)
+                    : pathString.substring(1);
+            return fromJavaPath(value.isEmpty() ? homePath : homePath.resolve(value));
+        }
+        return fromJavaPath(Paths.get(pathString));
     }
 
     private static Object root(String name) {
