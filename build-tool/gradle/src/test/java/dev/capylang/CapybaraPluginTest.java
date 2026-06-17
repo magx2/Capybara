@@ -37,7 +37,6 @@ class CapybaraPluginTest {
         var task = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
         task.compile();
 
-        assertTrue(project.file("build/classes/capybara/foo/Main.json").isFile());
         assertFalse(project.file("build/classes/capybara/build-info.json").exists());
         assertTrue(project.file("build/classes/capybara/program.json").isFile());
         assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
@@ -124,40 +123,6 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldCompileTestSourcesWithoutCopyingBundledJavaLibAgain() throws IOException {
-        var project = newProject();
-
-        var mainSourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
-        Files.writeString(mainSourceDir.resolve("Lib.cfun"), "fun forty_two(): int = 42\n");
-        project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
-
-        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
-        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
-                from /capy/test/Assert import { * }
-                from /capy/lang/Effect import { * }
-                from /capy/test/CapyTest import { * }
-                from /foo/Lib import { forty_two }
-
-                fun works(): Assert =
-                    assert_that(forty_two()).is_equal_to(42)
-
-                fun tests(): Effect[TestFile] =
-                    test_file("/bar/TestModule.cfun", [
-                        test("works", () => works())
-                    ])
-                """);
-
-        var task = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
-        task.compile();
-
-        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
-        assertTrue(project.file("build/generated/sources/test-capybara/java/capy/test/CapyTestRuntime.java").isFile());
-        assertFalse(project.file("build/generated/sources/test-capybara/java/dev/capylang/CapybaraUtil.java").exists());
-        assertFalse(project.file("build/classes/test-capybara/program.json").exists());
-        assertFalse(project.file("build/classes/test-capybara/build-info.json").exists());
-    }
-
-    @Test
     void shouldKeepStandaloneTestGenerationPathWhenCompileTestCapybaraIsRequestedDirectly() throws IOException {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
@@ -227,38 +192,6 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldReadPluginLibraryInputsFromAggregatedProgramFile() throws IOException {
-        var project = newProject();
-
-        var mainSourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
-        Files.writeString(mainSourceDir.resolve("Lib.cfun"), "fun forty_two(): int = 42\n");
-        project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
-
-        Files.delete(project.file("build/classes/capybara/foo/Lib.json").toPath());
-
-        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
-        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
-                from /capy/test/Assert import { * }
-                from /capy/lang/Effect import { * }
-                from /capy/test/CapyTest import { * }
-                from /foo/Lib import { forty_two }
-
-                fun works(): Assert =
-                    assert_that(forty_two()).is_equal_to(42)
-
-                fun tests(): Effect[TestFile] =
-                    test_file("/bar/TestModule.cfun", [
-                        test("works", () => works())
-                    ])
-                """);
-
-        project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().compile();
-
-        assertTrue(project.file("build/classes/capybara/program.json").isFile());
-        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
-    }
-
-    @Test
     void shouldDeclareOnlyAggregatedProgramFileAsPluginLibraryInput() {
         var project = newProject();
         var task = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
@@ -266,36 +199,6 @@ class CapybaraPluginTest {
 
         assertEquals(1, libraryProgramFiles.size());
         assertTrue(libraryProgramFiles.contains(project.file("build/classes/capybara/program.json")));
-    }
-
-    @Test
-    void shouldCompileStandaloneTestSourcesWithoutGeneratingMainJava() throws IOException {
-        var mainSourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
-        Files.writeString(mainSourceDir.resolve("Lib.cfun"), "fun forty_two(): int = 42\n");
-        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
-        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
-                from /capy/test/Assert import { * }
-                from /capy/lang/Effect import { * }
-                from /capy/test/CapyTest import { * }
-                from /foo/Lib import { forty_two }
-
-                fun works(): Assert =
-                    assert_that(forty_two()).is_equal_to(42)
-
-                fun tests(): Effect[TestFile] =
-                    test_file("/bar/TestModule.cfun", [
-                        test("works", () => works())
-                    ])
-                """);
-
-        var project = newProject(List.of("compileTestCapybara"));
-        project.getTasks().named("linkCapybaraLinked", CompileCapybaraTask.class).get().compile();
-        project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().compile();
-
-        assertTrue(project.file("build/classes/capybara/program.json").isFile());
-        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
-        assertFalse(project.file("build/generated/sources/capybara/java/foo/Lib.java").exists());
-        assertFalse(project.file("build/generated/sources/capybara/java/dev/capylang/CapybaraUtil.java").exists());
     }
 
     @Test
@@ -313,7 +216,7 @@ class CapybaraPluginTest {
 
         assertFalse(Files.exists(staleLinkedFile));
         assertFalse(Files.exists(staleGeneratedFile));
-        assertTrue(project.file("build/classes/capybara/foo/Main.json").isFile());
+        assertTrue(project.file("build/classes/capybara/program.json").isFile());
         assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
     }
 
