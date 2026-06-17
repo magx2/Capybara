@@ -1,9 +1,4 @@
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.Comparator
 import javax.inject.Inject
-import org.gradle.process.ExecOperations
-import org.gradle.api.tasks.Optional
 
 buildscript {
     repositories {
@@ -76,53 +71,32 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
         URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
         try {
-            def capyClass = Class.forName('dev.capylang.CapyRuntime', true, classLoader)
-            def readLinkedProgram = capyClass.getMethod('readLinkedProgram', Path, Boolean.TYPE)
-            readLinkedProgram.accessible = true
-            def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-            def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName.getOrElse('JAVA') }
-            if (outputType == null) {
-                throw new GradleException("Unknown Capybara output type: ${outputTypeName.getOrElse('JAVA')}")
-            }
-            def compileGenerate = capyClass.getMethod(
-                    'compileGenerate',
-                    outputTypeClass,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    TreeSet,
-                    Boolean.TYPE,
-                    Boolean.TYPE,
+            def capyClass = Class.forName('dev.capylang.cli.Capy', true, classLoader)
+            def compileGenerateOptions = generatedMethod(
+                    capyClass,
+                    'compileGenerateOptions',
                     String,
-                    PrintStream
+                    String,
+                    String,
+                    java.util.Optional,
+                    java.util.Optional,
+                    java.util.Optional,
+                    Boolean.TYPE,
+                    Boolean.TYPE
             )
-
-            def libraries = new TreeSet(compiledModuleComparator())
-            additionalInputDirs.files.each { libraryDir ->
-                Path libraryPath = libraryDir.toPath()
-                if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
-                    return
-                }
-                def program = readLinkedProgram.invoke(null, libraryPath, false)
-                libraries.addAll(program.modules())
-            }
-
-            def exitCode = compileGenerate.invoke(
+            def runCompileGenerate = generatedMethod(capyClass, 'runCompileGenerate', compileGenerateOptions.returnType)
+            def options = compileGenerateOptions.invoke(
                     null,
-                    outputType,
-                    inputDir.get().asFile.toPath(),
-                    generatedOutputDir.get().asFile.toPath(),
-                    linkedOutputDir.get().asFile.toPath(),
-                    null,
-                    null,
-                    libraries,
+                    outputTypeArgument(outputTypeName.getOrElse('JAVA')),
+                    inputDir.get().asFile.toString(),
+                    generatedOutputDir.get().asFile.toString(),
+                    java.util.Optional.of(linkedOutputDir.get().asFile.toString()),
+                    java.util.Optional.empty(),
+                    java.util.Optional.empty(),
                     true,
-                    false,
-                    compilerVersion.get(),
-                    new PrintStream(errors)
-            ) as Integer
+                    false
+            )
+            def exitCode = runProgram(runCompileGenerate.invoke(null, options), new PrintStream(errors))
             if (exitCode != 0) {
                 def message = errors.toString().trim()
                 throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
@@ -132,18 +106,52 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         }
     }
 
-    private static Comparator compiledModuleComparator() {
-        return { a, b ->
-            def left = compiledModulePath(a)
-            def right = compiledModulePath(b)
-            def compared = left <=> right
-            compared != 0 ? compared : (a.name() <=> b.name())
-        } as Comparator
+    private static def generatedMethod(Class<?> type, String name, Class<?>... parameterTypes) {
+        def exact = type.declaredMethods.find { method ->
+            method.name == name && java.util.Arrays.equals(method.parameterTypes, parameterTypes)
+        }
+        def generated = exact ?: type.declaredMethods.find { method ->
+            method.name.startsWith("${name}__") && java.util.Arrays.equals(method.parameterTypes, parameterTypes)
+        }
+        if (generated == null) {
+            throw new GradleException("Unable to find generated Capy method `${name}` on ${type.name}.")
+        }
+        generated.accessible = true
+        generated
     }
 
-    private static String compiledModulePath(def module) {
-        def path = module.path()
-        return path == null || path.isBlank() ? module.name() : "${path}/${module.name()}"
+    private static String outputTypeArgument(String outputTypeName) {
+        switch (outputTypeName.toUpperCase(Locale.ROOT)) {
+            case 'JAVA':
+                return 'java'
+            case 'PYTHON':
+                return 'python'
+            case 'JAVASCRIPT':
+                return 'javascript'
+            default:
+                throw new GradleException("Unknown Capybara output type: ${outputTypeName}")
+        }
+    }
+
+    private static int runProgram(def effect, PrintStream errors) {
+        try {
+            def program = effect.unsafeRun()
+            if (program != null && program.class.simpleName == 'Failed') {
+                return program.class.getMethod('exit_code').invoke(program) as Integer
+            }
+            return 0
+        } catch (RuntimeException exception) {
+            errors.println(rootCauseMessage(exception))
+            return 1
+        }
+    }
+
+    private static String rootCauseMessage(Throwable throwable) {
+        def current = throwable
+        while (current.cause != null) {
+            current = current.cause
+        }
+        current.message ?: current.toString()
     }
 }
 
@@ -350,15 +358,12 @@ def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory
 def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
 def capyResourcesDir = layout.buildDirectory.dir('resources/main')
 def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
-def capybaraWrapperLinkedDir = layout.projectDirectory.dir('src/main/capybara-linked')
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
-def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources/capybara/main-without-wrapper')
-def capybaraWrapperSourceDir = layout.buildDirectory.dir('generated/sources/capybara/wrapper-source')
-def capybaraWrapperGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara-wrapper/java')
-def capybaraWrapperLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara-wrapper/linked')
+def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources/capybara/main')
 def capybaraMainLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
-def capybaraMainNativePythonSourceDir = layout.projectDirectory.dir('src/main/capybara/native/py')
-def capybaraMainNativeJavaScriptSourceDir = layout.projectDirectory.dir('src/main/capybara/native/js')
+def capybaraMainNativeSourceDir = layout.projectDirectory.dir('src/main/native')
+def capybaraMainNativePythonSourceDir = capybaraMainNativeSourceDir.dir('py')
+def capybaraMainNativeJavaScriptSourceDir = capybaraMainNativeSourceDir.dir('js')
 def capybaraGeneratedCompilerPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/compiler')
 def capybaraLinkedCompilerPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/compiler')
 def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript/compiler')
@@ -409,8 +414,8 @@ sourceSets {
     main {
         java {
             exclude 'e2e-*/**'
-            srcDir capybaraWrapperGeneratedJavaDir
         }
+        resources.srcDir capybaraMainNativeSourceDir
     }
     integrationTest {
         java.srcDir file('src/integrationTest/java')
@@ -422,26 +427,14 @@ sourceSets {
 
 def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sync) {
     group = 'build'
-    description = 'Prepares main Capybara compiler sources without the JVM wrapper module.'
+    description = 'Prepares main Capybara compiler sources.'
 
-    from(capybaraMainSourceDir) {
-        exclude 'dev/capylang/Capy.cfun'
-    }
+    from(capybaraMainSourceDir)
     from(layout.projectDirectory.dir('src/main/java')) {
         include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
         into 'native/java'
     }
     into capybaraPreparedMainSourceDir
-}
-
-def prepareCapybaraWrapperSources = tasks.register('prepareCapybaraWrapperSources', Sync) {
-    group = 'build'
-    description = 'Prepares the JVM Capybara wrapper source for isolated generation.'
-
-    from(capybaraMainSourceDir) {
-        include 'dev/capylang/Capy.cfun'
-    }
-    into capybaraWrapperSourceDir
 }
 
 tasks.named('compileCapybara') {
@@ -455,29 +448,6 @@ tasks.named('linkCapybaraLinked') {
     dependsOn prepareMainCapybaraSources
     inputDir.set(capybaraPreparedMainSourceDir)
     outputDir.set(capybaraMainLinkedOutputDir)
-}
-
-tasks.register('compileCapybaraWrapper', dev.capylang.CompileCapybaraTask) {
-    group = 'build'
-    description = 'Generates the public JVM Capybara wrapper from CFUN.'
-
-    dependsOn prepareCapybaraWrapperSources
-
-    inputDir.set(capybaraWrapperSourceDir)
-    libraryProgramFiles.from(capybaraWrapperLinkedDir)
-    outputDir.set(capybaraWrapperLinkedOutputDir)
-    writeLinkedOutput.set(false)
-    generatedOutputDir.set(capybaraWrapperGeneratedJavaDir)
-    compilerVersion.set(capybaraProjectVersion)
-    compileTests.set(false)
-    includeJavaLibResources.set(false)
-    compileTestSourcesWithMainCompilation.set(false)
-    includeJavaLibResourcesInTestOutput.set(false)
-    logLevel.set('WARNING')
-}
-
-tasks.named('compileJava') {
-    dependsOn tasks.named('compileCapybaraWrapper')
 }
 
 configurations {
@@ -763,7 +733,7 @@ processResources {
 }
 
 application {
-    mainClass = 'dev.capylang.Capy'
+    mainClass = 'dev.capylang.cli.Capy'
 }
 
 def integrationTests = tasks.register('integrationTest', Test) {

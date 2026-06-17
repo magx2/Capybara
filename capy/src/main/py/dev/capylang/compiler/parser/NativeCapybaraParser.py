@@ -1,15 +1,12 @@
 import os
 import re
-
-from antlr4 import CommonTokenStream, InputStream, Token
-from antlr4.error.ErrorListener import ErrorListener
-
-from dev.capylang.capybara import NativeImplementation
 from FunctionalLexer import FunctionalLexer
 from FunctionalParser import FunctionalParser
 from ObjectOrientedLexer import ObjectOrientedLexer
 from ObjectOrientedParser import ObjectOrientedParser
-
+from antlr4 import CommonTokenStream, InputStream, Token
+from antlr4.error.ErrorListener import ErrorListener
+from dev.capylang.capybara import NativeImplementation
 
 MODULE_NAME_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][a-zA-Z0-9_]*(?:/[A-Za-z_][a-zA-Z0-9_]*)+"
 FROM_IMPORT_PATTERN = re.compile(
