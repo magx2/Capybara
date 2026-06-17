@@ -361,9 +361,8 @@ def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.di
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources/capybara/main')
 def capybaraMainLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
-def capybaraMainNativeSourceDir = layout.projectDirectory.dir('src/main/native')
-def capybaraMainNativePythonSourceDir = capybaraMainNativeSourceDir.dir('py')
-def capybaraMainNativeJavaScriptSourceDir = capybaraMainNativeSourceDir.dir('js')
+def capybaraMainPythonSourceDir = layout.projectDirectory.dir('src/main/py')
+def capybaraMainJavaScriptSourceDir = layout.projectDirectory.dir('src/main/js')
 def capybaraGeneratedCompilerPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/compiler')
 def capybaraLinkedCompilerPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/compiler')
 def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript/compiler')
@@ -409,13 +408,22 @@ def capyRuntimeClasspath = files(
         capyResourcesDir,
         capyRuntimeDependencies
 )
+def capybaraMainJavaScriptSources = objects.sourceDirectorySet('js', 'main JavaScript sources')
+capybaraMainJavaScriptSources.srcDir(capybaraMainJavaScriptSourceDir)
+capybaraMainJavaScriptSources.include('**/*.js')
+def capybaraMainPythonSources = objects.sourceDirectorySet('py', 'main Python sources')
+capybaraMainPythonSources.srcDir(capybaraMainPythonSourceDir)
+capybaraMainPythonSources.include('**/*.py')
 
 sourceSets {
     main {
         java {
             exclude 'e2e-*/**'
         }
-        resources.srcDir capybaraMainNativeSourceDir
+        extensions.add('js', capybaraMainJavaScriptSources)
+        extensions.add('py', capybaraMainPythonSources)
+        allSource.source(capybaraMainJavaScriptSources)
+        allSource.source(capybaraMainPythonSources)
     }
     integrationTest {
         java.srcDir file('src/integrationTest/java')
@@ -844,7 +852,7 @@ def prepareJavaScriptCompilerRuntime = tasks.register('prepareJavaScriptCompiler
     from(capybaraGeneratedCompilerJavaScriptDir) {
         exclude 'dev/capylang/compiler/parser/CapybaraParserProvider.js'
     }
-    from(capybaraMainNativeJavaScriptSourceDir) {
+    from(capybaraMainJavaScriptSourceDir) {
         include 'dev/**'
     }
     into capybaraRuntimeCompilerJavaScriptDir
@@ -863,8 +871,8 @@ tasks.register('pythonNativeParserSmoke', Exec) {
     inputs.dir(capybaraGeneratedCompilerPythonDir)
             .withPropertyName('generatedPythonCompiler')
             .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(capybaraMainNativePythonSourceDir)
-            .withPropertyName('mainNativePythonSources')
+    inputs.dir(capybaraMainPythonSourceDir)
+            .withPropertyName('mainPythonSources')
             .withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.dir(pythonAntlrGeneratedDir)
             .withPropertyName('pythonAntlrGeneratedSources')
@@ -879,7 +887,7 @@ tasks.register('pythonNativeParserSmoke', Exec) {
         outputDir.mkdirs()
         def pythonPathEntries = [
                 capybaraGeneratedCompilerPythonDir.get().asFile.absolutePath,
-                capybaraMainNativePythonSourceDir.asFile.absolutePath,
+                capybaraMainPythonSourceDir.asFile.absolutePath,
                 pythonAntlrGeneratedDir.get().asFile.absolutePath,
                 pythonAntlrRuntimeDir.get().asFile.absolutePath
         ]
