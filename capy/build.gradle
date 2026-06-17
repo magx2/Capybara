@@ -353,6 +353,7 @@ dependencies {
 }
 
 def capybaraProjectVersion = project.version.toString()
+def capybaraTaskGroup = 'capybara'
 def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
 def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
@@ -433,8 +434,12 @@ sourceSets {
     }
 }
 
+tasks.withType(org.gradle.api.plugins.antlr.AntlrTask).configureEach {
+    group = capybaraTaskGroup
+}
+
 def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sync) {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Prepares main Capybara compiler sources.'
 
     inputs.property('capybaraProjectVersion', capybaraProjectVersion)
@@ -455,6 +460,7 @@ def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sy
 }
 
 tasks.named('compileCapybara') {
+    group = capybaraTaskGroup
     dependsOn prepareMainCapybaraSources
     inputDir.set(capybaraPreparedMainSourceDir)
     writeLinkedOutput.set(false)
@@ -462,9 +468,21 @@ tasks.named('compileCapybara') {
 }
 
 tasks.named('linkCapybaraLinked') {
+    group = capybaraTaskGroup
     dependsOn prepareMainCapybaraSources
     inputDir.set(capybaraPreparedMainSourceDir)
     outputDir.set(capybaraMainLinkedOutputDir)
+}
+
+[
+        'compileTestCapybara',
+        'generateCapybaraJava',
+        'generateTestCapybaraJava',
+        'testCapybara'
+].each { taskName ->
+    tasks.named(taskName) {
+        group = capybaraTaskGroup
+    }
 }
 
 configurations {
@@ -484,7 +502,7 @@ def systemPythonExecutable = {
 }
 
 tasks.register('preparePythonAntlrGrammars') {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Prepares Python-target ANTLR grammar overlays.'
 
     inputs.file(functionalGrammarFile)
@@ -541,7 +559,7 @@ def emit(self):
 }
 
 tasks.register('generatePythonAntlr', JavaExec) {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Generates Python ANTLR parser sources.'
     dependsOn tasks.named('preparePythonAntlrGrammars')
 
@@ -563,7 +581,7 @@ tasks.register('generatePythonAntlr', JavaExec) {
 }
 
 tasks.register('prepareJavaScriptAntlrGrammars') {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Prepares JavaScript-target ANTLR grammar overlays.'
 
     inputs.file(functionalGrammarFile)
@@ -620,7 +638,7 @@ this.emit = function() {
 }
 
 tasks.register('generateJavaScriptAntlrEsm', JavaExec) {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Generates JavaScript ANTLR parser sources in ANTLR ESM format.'
     dependsOn tasks.named('prepareJavaScriptAntlrGrammars')
 
@@ -642,7 +660,7 @@ tasks.register('generateJavaScriptAntlrEsm', JavaExec) {
 }
 
 tasks.register('generateJavaScriptAntlr') {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Converts ANTLR JavaScript parser sources to CommonJS for the Capybara JavaScript backend.'
     dependsOn tasks.named('generateJavaScriptAntlrEsm')
 
@@ -677,7 +695,7 @@ tasks.register('generateJavaScriptAntlr') {
 }
 
 tasks.register('installPythonAntlrRuntime', Exec) {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Installs the Python ANTLR runtime matching the ANTLR tool version.'
 
     inputs.property('antlrVersion', antlrToolVersion)
@@ -723,7 +741,7 @@ with zipfile.ZipFile(io.BytesIO(wheel)) as archive:
 }
 
 tasks.register('installJavaScriptAntlrRuntime', Exec) {
-    group = 'build'
+    group = capybaraTaskGroup
     description = 'Installs the JavaScript ANTLR runtime matching the ANTLR tool version.'
 
     inputs.property('antlrVersion', antlrToolVersion)
@@ -755,7 +773,7 @@ application {
 
 def integrationTests = tasks.register('integrationTest', Test) {
     description = 'Runs compiler integration tests.'
-    group = 'verification'
+    group = capybaraTaskGroup
     testClassesDirs = sourceSets.integrationTest.output.classesDirs
     classpath = sourceSets.integrationTest.runtimeClasspath
     shouldRunAfter test
@@ -764,12 +782,12 @@ def integrationTests = tasks.register('integrationTest', Test) {
 
 def e2eJavaScriptTests = tasks.register('e2e-javascript') {
     description = 'Runs Capybara e2e tests on JavaScript.'
-    group = 'verification'
+    group = capybaraTaskGroup
 }
 
 def e2ePythonTests = tasks.register('e2e-python') {
     description = 'Runs Capybara e2e tests on Python.'
-    group = 'verification'
+    group = capybaraTaskGroup
 }
 
 check {
@@ -778,7 +796,7 @@ check {
 
 def registerCapybaraE2eGenerationTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir ->
     tasks.register(taskName, InProcessCapybaraCompileTask) {
-        group = 'build'
+        group = capybaraTaskGroup
         description = taskDescription
         dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
         dependsOn ':capy:classes'
@@ -804,7 +822,7 @@ def generateE2eJavaScriptCfun = registerCapybaraE2eGenerationTask(
 
 def e2eJavaScriptCfunTests = tasks.register('e2e-javascript-cfun', CapybaraJavaScriptTestTask) {
     description = 'Runs functional Capybara e2e tests on JavaScript.'
-    group = 'verification'
+    group = capybaraTaskGroup
     dependsOn generateE2eJavaScriptCfun
 
     runnerFile.set(capybaraJavaScriptTestRunner)
@@ -855,7 +873,7 @@ generateJavaScriptCompiler.configure {
 
 def prepareJavaScriptCompilerRuntime = tasks.register('prepareJavaScriptCompilerRuntime', Sync) {
     description = 'Prepares generated JavaScript compiler output with JavaScript native provider shims.'
-    group = 'build'
+    group = capybaraTaskGroup
     dependsOn generateJavaScriptCompiler
 
     from(capybaraGeneratedCompilerJavaScriptDir) {
@@ -869,7 +887,7 @@ def prepareJavaScriptCompilerRuntime = tasks.register('prepareJavaScriptCompiler
 
 tasks.register('pythonNativeParserSmoke', Exec) {
     description = 'Runs the generated Python compiler parser through the Python native parser implementation.'
-    group = 'verification'
+    group = capybaraTaskGroup
     dependsOn generatePythonCompiler
     dependsOn tasks.named('generatePythonAntlr')
     dependsOn tasks.named('installPythonAntlrRuntime')
@@ -912,7 +930,7 @@ tasks.register('pythonNativeParserSmoke', Exec) {
 
 tasks.register('javascriptNativeParserSmoke', Exec) {
     description = 'Runs the generated JavaScript compiler parser through the JavaScript native parser implementation.'
-    group = 'verification'
+    group = capybaraTaskGroup
     dependsOn prepareJavaScriptCompilerRuntime
     dependsOn tasks.named('generateJavaScriptAntlr')
     dependsOn tasks.named('installJavaScriptAntlrRuntime')
@@ -951,7 +969,7 @@ tasks.register('javascriptNativeParserSmoke', Exec) {
 
 def e2ePythonCfunTests = tasks.register('e2e-python-cfun', CapybaraPythonTestTask) {
     description = 'Runs functional Capybara e2e tests on Python.'
-    group = 'verification'
+    group = capybaraTaskGroup
     dependsOn generateE2ePythonCfun
 
     runnerFile.set(capybaraPythonTestRunner)
@@ -976,7 +994,7 @@ def generateE2eJavaScriptCoo = registerCapybaraE2eGenerationTask(
 
 def e2eJavaScriptCooTests = tasks.register('e2e-javascript-coo', CapybaraJavaScriptTestTask) {
     description = 'Runs object-oriented Capybara e2e tests on JavaScript.'
-    group = 'verification'
+    group = capybaraTaskGroup
     dependsOn generateE2eJavaScriptCoo
 
     runnerFile.set(capybaraJavaScriptTestRunner)
@@ -1001,7 +1019,7 @@ def generateE2ePythonCoo = registerCapybaraE2eGenerationTask(
 
 def e2ePythonCooTests = tasks.register('e2e-python-coo', CapybaraPythonTestTask) {
     description = 'Runs object-oriented Capybara e2e tests on Python.'
-    group = 'verification'
+    group = capybaraTaskGroup
     dependsOn generateE2ePythonCoo
 
     runnerFile.set(capybaraPythonTestRunner)
