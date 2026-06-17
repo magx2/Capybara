@@ -553,6 +553,29 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldNotImportCapyLangStringAsClassWhenStringModuleIsImported() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                new RawModule("String", "/capy/lang", """
+                        data String { <native> }
+                        fun String.trim(): String = <native>
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/lang/String import { * }
+
+                        fun normalized(value: String): String = value.trim()
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated)
+                .contains("import static capy.lang.String.*;")
+                .doesNotContain("import capy.lang.String;")
+                .contains("public static java.lang.String normalized(java.lang.String value)");
+    }
+
+    @Test
     void shouldStillRequireBracesForSingleValues() {
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 data Done {}
@@ -1104,7 +1127,11 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("capy.lang.Effect<capy.lang.Program>");
+        assertThat(generated)
+                .contains("capy.lang.Effect<capy.lang.Program>")
+                .contains("public static capy.lang.Effect<capy.lang.Program> main(java.util.List<java.lang.String> args)")
+                .contains("public static final void main(java.lang.String... args)")
+                .doesNotContain("public static final void main(String... args)");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
