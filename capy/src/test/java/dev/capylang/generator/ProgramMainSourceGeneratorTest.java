@@ -22,7 +22,7 @@ class ProgramMainSourceGeneratorTest {
         assertThat(main)
                 .contains("public static capy.lang.Effect<Program> main(java.util.List<java.lang.String> args)")
                 .containsSubsequence(
-                        "public static final void main(String... args)",
+                        "public static final void main(java.lang.String... args)",
                         "var __capybaraArgsList = java.util.List.of(args);",
                         "Program __capybaraProgram = main(__capybaraArgsList).unsafeRun();",
                         "if (__capybaraProgram instanceof Program.Failed __capybaraFailed)",
@@ -35,7 +35,7 @@ class ProgramMainSourceGeneratorTest {
         var directProgramMain = generatedCode(generated, Path.of("foo", "SecondaryMain.java"));
         assertThat(directProgramMain)
                 .contains("public static capy.lang.Program main(java.util.List<java.lang.String> args)")
-                .doesNotContain("public static final void main(String... args)")
+                .doesNotContain("public static final void main(java.lang.String... args)")
                 .doesNotContain("unsafeRun()")
                 .doesNotContain("System.exit(");
     }
