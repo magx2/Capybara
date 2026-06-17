@@ -37,11 +37,28 @@ fun JsonValueArray.get(idx: index): Option[Json] = this.value.get(idx)
 data JsonBool { value: bool }
 data JsonNull {}
 
+/// Typed JSON representation that preserves Capy metadata.
+///
+/// Unlike plain `Json`, this representation is opt-in and records data
+/// constructor names, package metadata, collection kind, and primitive numeric
+/// kind. Use it when structurally identical union variants must remain
+/// distinguishable after serialization.
 union TypedJson = TypedJsonData | TypedJsonObject | TypedJsonArray | TypedJsonValue
+/// Package metadata for a typed Capy data constructor.
 data TypedJsonPackage { name: String, path: String }
+/// Typed Capy data value with constructor name, package metadata, and typed fields.
 data TypedJsonData { name: String, pkg: TypedJsonPackage, fields: Dict[TypedJson] }
+/// Typed object node used for dictionary-like values.
 data TypedJsonObject { value: Dict[TypedJson] }
+/// Typed array node used for collection values.
+///
+/// The `kind` field records the source collection family, such as `List` or
+/// `Set`, because both are represented as JSON arrays.
 data TypedJsonArray { kind: String, value: List[TypedJson] }
+/// Typed primitive value.
+///
+/// Numeric variants are separate so `int`, `long`, `float`, `double`, and
+/// `byte` values can be distinguished after a typed JSON round trip.
 union TypedJsonValue =
     TypedJsonString
     | TypedJsonByte
@@ -51,13 +68,24 @@ union TypedJsonValue =
     | TypedJsonDouble
     | TypedJsonBool
     | TypedJsonNull
+/// Typed string value.
 data TypedJsonString { value: String }
+/// Typed byte value.
+///
+/// The byte payload is stored as `int` while the `TypedJsonByte` constructor
+/// preserves the original numeric kind.
 data TypedJsonByte { value: int }
+/// Typed int value.
 data TypedJsonInt { value: int }
+/// Typed long value.
 data TypedJsonLong { value: long }
+/// Typed float value.
 data TypedJsonFloat { value: float }
+/// Typed double value.
 data TypedJsonDouble { value: double }
+/// Typed bool value.
 data TypedJsonBool { value: bool }
+/// Typed null value.
 data TypedJsonNull {}
 
 deriver Jsonable {
@@ -156,6 +184,12 @@ fun stringify(json: Json): String =
 
 fun serialize(obj: JsonObject): String = stringify(obj)
 
+/// Converts a Capy data value into typed JSON metadata.
+///
+/// The result keeps the concrete constructor name from reflection, package
+/// metadata, and typed field values. `Option` and `Result` fields keep their
+/// concrete variants (`Some`, `None`, `Success`, `Error`) instead of collapsing
+/// to their plain JSON payload representation.
 fun to_typed_json(obj: data): Result[TypedJsonData] =
     match any_to_typed_json(obj) with
     case Success { typed } -> {
@@ -165,10 +199,19 @@ fun to_typed_json(obj: data): Result[TypedJsonData] =
     }
     case Error e -> e
 
+/// Converts typed JSON to a JSON string using the reserved typed envelope.
+///
+/// The envelope field is `$capybaraTypedJson`, which separates typed data,
+/// object, array, and primitive value nodes from ordinary user JSON objects.
 fun stringify_typed(json: TypedJson): String = stringify(typed_json_to_json(json))
 
+/// Serializes a typed data value to a JSON string.
 fun serialize_typed(obj: TypedJsonData): String = stringify_typed(obj)
 
+/// Parses a JSON string produced by `serialize_typed` into typed JSON metadata.
+///
+/// This does not reconstruct the original runtime Capy data value. It returns a
+/// typed AST that callers can inspect without Java reflection.
 fun deserialize_typed(json: String): Result[TypedJsonData] =
     let parsed <- deserialize(json)
     let typed <- json_to_typed_json(parsed)
