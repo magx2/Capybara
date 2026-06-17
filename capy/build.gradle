@@ -477,6 +477,7 @@ def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sy
     }
     from(layout.projectDirectory.dir('src/main/java')) {
         include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
+        include 'dev/capylang/compiler/NativeLinkedProgramReader.java'
         into 'native/java'
     }
     from(capybaraMainPythonSourceDir) {

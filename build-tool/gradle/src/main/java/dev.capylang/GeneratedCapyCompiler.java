@@ -101,7 +101,7 @@ final class GeneratedCapyCompiler {
 
     private static Capy.LogLevel logLevel(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
-            case "DEBUG" -> Capy.LogLevel.DEBUG;
+            case "DEBUG", "FINE" -> Capy.LogLevel.DEBUG;
             case "INFO" -> Capy.LogLevel.INFO;
             case "WARN", "WARNING" -> Capy.LogLevel.WARN;
             case "ERROR" -> Capy.LogLevel.ERROR;

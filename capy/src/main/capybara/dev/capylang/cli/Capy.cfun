@@ -24,6 +24,7 @@ from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimiti
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/LinkedProgramReaderProvider import { linked_program_reader }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
@@ -501,70 +502,74 @@ private fun capy_override_field(arg: String): String =
     copy_suffix(arg, 7, "")
 
 fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
-    match compile_configuration(options) with
-    case Error { message } -> runtime_error(message)
-    case Success { configuration } ->
-        let input_path = from_string(options.input)
-        let output_path = from_string(options.output)
-        validate_input_directory(input_path, options.input).flat_map(input_result =>
-            match input_result with
-            case Error { message } -> runtime_error(message)
-            case Success _ ->
-                validate_output_directory(output_path, options.output).flat_map(output_result =>
-                    match output_result with
-                    case Error { message } -> runtime_error(message)
-                    case Success _ ->
-                        read_source_modules(input_path, options.input).flat_map(modules_result =>
-                            match modules_result with
-                            case Error { message } -> runtime_error(message)
-                            case Success { raw_modules } ->
-                                /dev/capylang/compiler/CapybaraCompiler.compile(
-                                    raw_modules,
-                                    configuration.libraries,
-                                    configuration.native_providers,
-                                    empty_native_provider_manifest()
-                                ).flat_map(compilation =>
-                                    match compilation with
-                                    case Left { program } ->
-                                        write_compilation_output(output_path, program).flat_map(write_result =>
-                                            match write_result with
-                                            case Error { message } -> runtime_error(message)
-                                            case Success _ -> pure(/capy/lang/Program.Success {})
-                                        )
-                                    case Right { errors } ->
-                                        print_compiler_errors(errors)
-                                            .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                                )
-                        )
-                )
-        )
+    compile_configuration(options).flat_map(configuration_result =>
+        match configuration_result with
+        case Error { message } -> runtime_error(message)
+        case Success { configuration } ->
+            let input_path = from_string(options.input)
+            let output_path = from_string(options.output)
+            validate_input_directory(input_path, options.input).flat_map(input_result =>
+                match input_result with
+                case Error { message } -> runtime_error(message)
+                case Success _ ->
+                    validate_output_directory(output_path, options.output).flat_map(output_result =>
+                        match output_result with
+                        case Error { message } -> runtime_error(message)
+                        case Success _ ->
+                            read_source_modules(input_path, options.input).flat_map(modules_result =>
+                                match modules_result with
+                                case Error { message } -> runtime_error(message)
+                                case Success { raw_modules } ->
+                                    /dev/capylang/compiler/CapybaraCompiler.compile(
+                                        raw_modules,
+                                        configuration.libraries,
+                                        configuration.native_providers,
+                                        empty_native_provider_manifest()
+                                    ).flat_map(compilation =>
+                                        match compilation with
+                                        case Left { program } ->
+                                            write_compilation_output(output_path, program).flat_map(write_result =>
+                                                match write_result with
+                                                case Error { message } -> runtime_error(message)
+                                                case Success _ -> pure(/capy/lang/Program.Success {})
+                                            )
+                                        case Right { errors } ->
+                                            print_compiler_errors(errors)
+                                                .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                                    )
+                            )
+                    )
+            )
+    )
 
-private fun compile_configuration(options: CompileOptions): Result[CompileConfiguration] =
+private fun compile_configuration(options: CompileOptions): Effect[Result[CompileConfiguration]] =
     if options.compile_tests
-    then Error { message: "`compile --compile-tests` is not available until test augmentation is translated to CFUN." }
+    then pure(Error { message: "`compile --compile-tests` is not available until test augmentation is translated to CFUN." })
     else compiler_configuration(options.libs, options.native_wiring)
 
-private fun compile_generate_configuration(options: CompileGenerateOptions): Result[CompileConfiguration] =
+private fun compile_generate_configuration(options: CompileGenerateOptions): Effect[Result[CompileConfiguration]] =
     compiler_configuration(options.libs, options.native_wiring)
 
-private fun compiler_configuration(libs: Option[String], nativeWiring: Option[String]): Result[CompileConfiguration] =
-    match read_library_modules(libs) with
-    case Error e -> e
-    case Success { libraries } ->
-        match read_native_provider_manifest_option(nativeWiring) with
+private fun compiler_configuration(libs: Option[String], nativeWiring: Option[String]): Effect[Result[CompileConfiguration]] =
+    read_library_modules(libs).map(libraries_result =>
+        match libraries_result with
         case Error e -> e
-        case Success { native_providers } -> Success { CompileConfiguration {
-            libraries: libraries,
-            native_providers: native_providers
-        }}
+        case Success { libraries } ->
+            match read_native_provider_manifest_option(nativeWiring) with
+            case Error e -> e
+            case Success { native_providers } -> Success { CompileConfiguration {
+                libraries: libraries,
+                native_providers: native_providers
+            }}
+    )
 
-private fun read_library_modules(libs: Option[String]): Result[Set[CompiledModule]] =
+private fun read_library_modules(libs: Option[String]): Effect[Result[Set[CompiledModule]]] =
     match libs with
-    case None -> Success { {} }
+    case None -> pure(Success { {} })
     case Some { value } ->
         if value.trim().is_empty()
-        then Success { {} }
-        else Error { message: "`--libs` is not available until linked program deserialization is translated to CFUN." }
+        then pure(Success { {} })
+        else linked_program_reader().flat_map(reader => reader.read_libraries(value).map(libraries => Success { libraries }))
 
 private fun read_native_provider_manifest_option(nativeWiring: Option[String]): Result[NativeProviderManifest] =
     match nativeWiring with
@@ -1461,12 +1466,7 @@ fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
     )
 
 private fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
-    let programFile = inputDir / "program.json"
-    read_text(programFile).map(readResult =>
-        match readResult with
-        case Error { message } -> Error { message: "Unable to read linked program `" + cli_path_to_string(programFile) + "`: " + message }
-        case Success _ -> Error { message: "`capy generate` uses the Java facade for linked program deserialization." }
-    )
+    linked_program_reader().flat_map(reader => reader.read_program(cli_path_to_string(inputDir), true).map(program => Success { program }))
 
 private fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
     write_generated_modules(outputDir, program.modules)
@@ -1668,43 +1668,45 @@ private fun write_package_archive(outputFile: Path, archive: PackageArchive): Ef
     )
 
 fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
-    match compile_generate_configuration(options) with
-    case Error { message } -> runtime_error(message)
-    case Success { configuration } ->
-        let inputPath = from_string(options.input)
-        let outputPath = from_string(options.output)
-        validate_output_directory(outputPath, options.output).flat_map(outputResult =>
-            match outputResult with
-            case Error { message } -> runtime_error(message)
-            case Success _ ->
-                compile_source_directory(inputPath, options.input, configuration).flat_map(compilation =>
-                    match compilation with
-                    case Right { errors } ->
-                        print_compiler_errors(errors)
-                            .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                    case Left { program } ->
-                        write_compile_generate_linked_output(options.linked_output, program).flat_map(linkedResult =>
-                            match linkedResult with
-                            case Error { message } -> runtime_error(message)
-                            case Success _ ->
-                                compile_generate_tests(options, configuration, program).flat_map(testResult =>
-                                    match testResult with
-                                    case Error { message } -> runtime_error(message)
-                                    case Success { testProgram } ->
-                                        write_generated_program(outputPath, generate(program, options.output_type)).flat_map(writeResult =>
-                                            match writeResult with
-                                            case Error { message } -> runtime_error(message)
-                                            case Success _ ->
-                                                write_compile_generate_test_output(options, testProgram).flat_map(testWriteResult =>
-                                                    match testWriteResult with
-                                                    case Error { message } -> runtime_error(message)
-                                                    case Success _ -> pure(/capy/lang/Program.Success {})
-                                                )
-                                        )
-                                )
-                        )
-                )
-        )
+    compile_generate_configuration(options).flat_map(configuration_result =>
+        match configuration_result with
+        case Error { message } -> runtime_error(message)
+        case Success { configuration } ->
+            let inputPath = from_string(options.input)
+            let outputPath = from_string(options.output)
+            validate_output_directory(outputPath, options.output).flat_map(outputResult =>
+                match outputResult with
+                case Error { message } -> runtime_error(message)
+                case Success _ ->
+                    compile_source_directory(inputPath, options.input, configuration).flat_map(compilation =>
+                        match compilation with
+                        case Right { errors } ->
+                            print_compiler_errors(errors)
+                                .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                        case Left { program } ->
+                            write_compile_generate_linked_output(options.linked_output, program).flat_map(linkedResult =>
+                                match linkedResult with
+                                case Error { message } -> runtime_error(message)
+                                case Success _ ->
+                                    compile_generate_tests(options, configuration, program).flat_map(testResult =>
+                                        match testResult with
+                                        case Error { message } -> runtime_error(message)
+                                        case Success { testProgram } ->
+                                            write_generated_program(outputPath, generate(program, options.output_type)).flat_map(writeResult =>
+                                                match writeResult with
+                                                case Error { message } -> runtime_error(message)
+                                                case Success _ ->
+                                                    write_compile_generate_test_output(options, testProgram).flat_map(testWriteResult =>
+                                                        match testWriteResult with
+                                                        case Error { message } -> runtime_error(message)
+                                                        case Success _ -> pure(/capy/lang/Program.Success {})
+                                                    )
+                                            )
+                                    )
+                            )
+                    )
+            )
+    )
 
 fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
     let moduleFile = from_string(options.module)

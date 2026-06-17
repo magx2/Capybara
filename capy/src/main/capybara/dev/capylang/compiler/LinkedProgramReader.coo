@@ -1,0 +1,4 @@
+interface LinkedProgramReader {
+    def read_program(inputDir: String, requireModules: bool): CompiledProgram
+    def read_libraries(libs: String): Set[CompiledModule]
+}
