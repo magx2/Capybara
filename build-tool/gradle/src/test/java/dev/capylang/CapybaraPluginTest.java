@@ -147,8 +147,13 @@ class CapybaraPluginTest {
         assertTrue(linkCapybaraLinked.getOutputDir().isPresent());
         assertFalse(linkCapybaraLinked.getGeneratedOutputDir().isPresent());
         assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
-        assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
-        assertTrue(compileTestCapybaraDependencies.contains(linkCapybaraLinked));
+        assertEquals(project.file("src/main/capybara"), compileTestCapybara.getInputDir().get().getAsFile());
+        assertEquals(project.file("build/generated/sources/test-capybara/main-java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
+        assertEquals(project.file("src/test/capybara"), compileTestCapybara.getTestInputDir().get().getAsFile());
+        assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedTestOutputDir().get().getAsFile());
+        assertTrue(compileTestCapybara.getCompileTestSourcesWithMainCompilation().get());
+        assertTrue(compileTestCapybara.getLibraryProgramFiles().isEmpty());
+        assertFalse(compileTestCapybaraDependencies.contains(linkCapybaraLinked));
         assertFalse(compileTestCapybaraDependencies.contains(project.getTasks().named("compileCapybara").get()));
     }
 
@@ -177,8 +182,13 @@ class CapybaraPluginTest {
         assertTrue(linkCapybaraLinked.getOutputDir().isPresent());
         assertFalse(linkCapybaraLinked.getGeneratedOutputDir().isPresent());
         assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
-        assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
-        assertTrue(compileTestCapybaraDependencies.contains(linkCapybaraLinked));
+        assertEquals(project.file("src/main/capybara"), compileTestCapybara.getInputDir().get().getAsFile());
+        assertEquals(project.file("build/generated/sources/test-capybara/main-java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
+        assertEquals(project.file("src/test/capybara"), compileTestCapybara.getTestInputDir().get().getAsFile());
+        assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedTestOutputDir().get().getAsFile());
+        assertTrue(compileTestCapybara.getCompileTestSourcesWithMainCompilation().get());
+        assertTrue(compileTestCapybara.getLibraryProgramFiles().isEmpty());
+        assertFalse(compileTestCapybaraDependencies.contains(linkCapybaraLinked));
         assertFalse(compileTestCapybaraDependencies.contains(project.getTasks().named("compileCapybara").get()));
     }
 
@@ -192,13 +202,12 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldDeclareOnlyAggregatedProgramFileAsPluginLibraryInput() {
+    void shouldNotDeclareLinkedProgramJsonAsPluginLibraryInput() {
         var project = newProject();
         var task = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
         var libraryProgramFiles = task.getLibraryProgramFiles().getFiles();
 
-        assertEquals(1, libraryProgramFiles.size());
-        assertTrue(libraryProgramFiles.contains(project.file("build/classes/capybara/program.json")));
+        assertTrue(libraryProgramFiles.isEmpty());
     }
 
     @Test

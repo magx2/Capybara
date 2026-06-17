@@ -49,15 +49,20 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     abstract DirectoryProperty getInputDir()
 
-    @InputFiles
+    @Optional
+    @InputDirectory
     @PathSensitive(PathSensitivity.RELATIVE)
-    abstract ConfigurableFileCollection getAdditionalInputDirs()
+    abstract DirectoryProperty getTestInputDir()
 
     @OutputDirectory
     abstract DirectoryProperty getLinkedOutputDir()
 
     @OutputDirectory
     abstract DirectoryProperty getGeneratedOutputDir()
+
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getGeneratedTestOutputDir()
 
     @Input
     abstract Property<String> getCompilerVersion()
@@ -91,8 +96,12 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                     inputDir.get().asFile.toString(),
                     generatedOutputDir.get().asFile.toString(),
                     java.util.Optional.of(linkedOutputDir.get().asFile.toString()),
-                    java.util.Optional.empty(),
-                    java.util.Optional.empty(),
+                    testInputDir.isPresent()
+                            ? java.util.Optional.of(testInputDir.get().asFile.toString())
+                            : java.util.Optional.empty(),
+                    generatedTestOutputDir.isPresent()
+                            ? java.util.Optional.of(generatedTestOutputDir.get().asFile.toString())
+                            : java.util.Optional.empty(),
                     true,
                     false
             )
@@ -358,7 +367,7 @@ def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
 def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
 def capyResourcesDir = layout.buildDirectory.dir('resources/main')
-def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
+def capybaraLibSourceDir = project(':lib:capybara-lib').layout.projectDirectory.dir('src/main/capybara')
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources/capybara/main')
 def capybaraMainLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
@@ -455,6 +464,10 @@ def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sy
     from(layout.projectDirectory.dir('src/main/java')) {
         include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
         into 'native/java'
+    }
+    from(capybaraMainPythonSourceDir) {
+        include 'dev/capylang/compiler/parser/NativeCapybaraParser.py'
+        into 'native/py'
     }
     into capybaraPreparedMainSourceDir
 }
@@ -794,16 +807,20 @@ check {
     dependsOn integrationTests
 }
 
-def registerCapybaraE2eGenerationTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir ->
+def registerCapybaraE2eGenerationTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir, boolean compileAgainstCapybaraLibSources = false ->
     tasks.register(taskName, InProcessCapybaraCompileTask) {
         group = capybaraTaskGroup
         description = taskDescription
-        dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
         dependsOn ':capy:classes'
 
         runtimeClasspath.from(capyRuntimeClasspath)
-        getInputDir().set(capybaraInputDir)
-        additionalInputDirs.from(capybaraLibLinkedDir)
+        if (compileAgainstCapybaraLibSources) {
+            getInputDir().set(capybaraLibSourceDir)
+            getTestInputDir().set(capybaraInputDir)
+            getGeneratedTestOutputDir().set(capybaraGeneratedOutputDir)
+        } else {
+            getInputDir().set(capybaraInputDir)
+        }
         getLinkedOutputDir().set(capybaraLinkedOutputDir)
         getGeneratedOutputDir().set(capybaraGeneratedOutputDir)
         compilerVersion.set(project.version.toString())
@@ -817,7 +834,8 @@ def generateE2eJavaScriptCfun = registerCapybaraE2eGenerationTask(
         'JAVASCRIPT',
         e2eCfunCapybaraSourceDir,
         e2eCfunLinkedJavaScriptOutputDir,
-        e2eCfunGeneratedJavaScriptDir
+        e2eCfunGeneratedJavaScriptDir,
+        true
 )
 
 def e2eJavaScriptCfunTests = tasks.register('e2e-javascript-cfun', CapybaraJavaScriptTestTask) {
@@ -842,7 +860,8 @@ def generateE2ePythonCfun = registerCapybaraE2eGenerationTask(
         'PYTHON',
         e2eCfunCapybaraSourceDir,
         e2eCfunLinkedPythonOutputDir,
-        e2eCfunGeneratedPythonDir
+        e2eCfunGeneratedPythonDir,
+        true
 )
 
 def generatePythonCompiler = registerCapybaraE2eGenerationTask(
@@ -989,7 +1008,8 @@ def generateE2eJavaScriptCoo = registerCapybaraE2eGenerationTask(
         'JAVASCRIPT',
         e2eCooCapybaraSourceDir,
         e2eCooLinkedJavaScriptOutputDir,
-        e2eCooGeneratedJavaScriptDir
+        e2eCooGeneratedJavaScriptDir,
+        true
 )
 
 def e2eJavaScriptCooTests = tasks.register('e2e-javascript-coo', CapybaraJavaScriptTestTask) {
@@ -1014,7 +1034,8 @@ def generateE2ePythonCoo = registerCapybaraE2eGenerationTask(
         'PYTHON',
         e2eCooCapybaraSourceDir,
         e2eCooLinkedPythonOutputDir,
-        e2eCooGeneratedPythonDir
+        e2eCooGeneratedPythonDir,
+        true
 )
 
 def e2ePythonCooTests = tasks.register('e2e-python-coo', CapybaraPythonTestTask) {
