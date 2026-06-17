@@ -1,7 +1,8 @@
 import os
+import importlib
 from pathlib import Path
 
-from dev.capylang.compiler.parser.CapybaraParserProvider import parser
+parser_provider = importlib.import_module("dev.capylang.compiler.parser.CapybaraParserProvider")
 
 
 def source_kind(name):
@@ -23,8 +24,23 @@ def assert_equal(actual, expected, label):
         raise AssertionError(f"{label}: expected {expected!r}, got {actual!r}")
 
 
+def generated_parser():
+    parser = getattr(parser_provider, "parser", None)
+    if parser is not None:
+        return parser
+
+    parser_functions = [
+        getattr(parser_provider, name)
+        for name in dir(parser_provider)
+        if name.startswith("parser__") and callable(getattr(parser_provider, name))
+    ]
+    if len(parser_functions) != 1:
+        raise AssertionError(f"expected one generated parser function, got {len(parser_functions)}")
+    return parser_functions[0]
+
+
 def main():
-    parser_impl = parser().unsafe_run()
+    parser_impl = generated_parser()().unsafe_run()
 
     parsed = parser_impl.parse(
         [
