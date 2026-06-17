@@ -2,9 +2,11 @@ import com.github.gradle.node.task.NodeTask
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
 
+import java.io.UncheckedIOException
 import java.nio.file.DirectoryStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Comparator
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -160,8 +162,8 @@ class CapyCompilerBridge implements Closeable {
             }
             def options = compileOptionsMethod.invoke(
                     null,
-                    inputPath.toString(),
-                    linkedOutputPath.toString(),
+                    pathArgument(inputPath),
+                    pathArgument(linkedOutputPath),
                     compileTests
             )
             return runProgram(runCompileMethod.invoke(null, options), errors)
@@ -173,8 +175,8 @@ class CapyCompilerBridge implements Closeable {
         def options = compileGenerateOptionsMethod.invoke(
                 null,
                 outputTypeArgument(outputTypeName),
-                inputPath.toString(),
-                generatedOutputPath.toString(),
+                pathArgument(inputPath),
+                pathArgument(generatedOutputPath),
                 optionalPath(linkedOutputPath),
                 optionalPath(testInputPath),
                 optionalPath(testGeneratedOutputPath),
@@ -240,7 +242,11 @@ class CapyCompilerBridge implements Closeable {
     }
 
     private static java.util.Optional<String> optionalPath(Path path) {
-        path == null ? java.util.Optional.empty() : java.util.Optional.of(path.toString())
+        path == null ? java.util.Optional.empty() : java.util.Optional.of(pathArgument(path))
+    }
+
+    private static String pathArgument(Path path) {
+        path.toAbsolutePath().normalize().toString()
     }
 
     private static String outputTypeArgument(String outputTypeName) {
@@ -282,8 +288,28 @@ abstract class CapyCompilerService implements BuildService<BuildServiceParameter
     private final Map<String, CapyCompilerBridge> bridges = new ConcurrentHashMap<>()
 
     CapyCompilerBridge bridgeFor(Set<File> runtimeClasspathFiles) {
-        def key = runtimeClasspathFiles.collect { it.absolutePath }.sort().join(File.pathSeparator)
+        def key = runtimeClasspathFiles.collect { runtimeClasspathFingerprint(it) }.sort().join(File.pathSeparator)
         bridges.computeIfAbsent(key) { new CapyCompilerBridge(runtimeClasspathFiles) }
+    }
+
+    static String runtimeClasspathFingerprint(File file) {
+        if (!file.exists()) {
+            return "${file.absolutePath}:missing"
+        }
+        if (file.isFile()) {
+            return "${file.absolutePath}:file:${file.lastModified()}:${file.length()}"
+        }
+
+        def root = file.toPath()
+        def entries = []
+        try (def paths = Files.walk(root)) {
+            paths.filter { path -> Files.isRegularFile(path) }
+                    .forEach { path ->
+                        def relativePath = root.relativize(path).toString().replace(File.separatorChar, '/' as char)
+                        entries.add("${relativePath}:${Files.getLastModifiedTime(path).toMillis()}:${Files.size(path)}")
+                    }
+        }
+        "${file.absolutePath}:dir:${entries.sort().join('|')}"
     }
 
     @Override
@@ -347,6 +373,11 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         def generatedOutputPath = generatedOutputDir.present ? generatedOutputDir.get().asFile.toPath() : null
         def testInputPath = testInputDir.present ? testInputDir.get().asFile.toPath() : null
         def testGeneratedOutputPath = testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null
+        [linkedOutputDir, generatedOutputDir, testGeneratedOutputDir].each { outputDir ->
+            if (outputDir.present) {
+                clearDirectory(outputDir.get().asFile.toPath())
+            }
+        }
         def libraryInputDirs = libraryProgramFiles.files.collect { it.parentFile }.findAll { it != null } as Set<File>
         def libraries = bridge.readLibraryModules(libraryInputDirs)
 
@@ -370,6 +401,28 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
             def message = errors.toString().trim()
             throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
         }
+    }
+
+    static void clearDirectory(Path directory) {
+        if (Files.notExists(directory)) {
+            Files.createDirectories(directory)
+            return
+        }
+
+        try (def paths = Files.walk(directory)) {
+            paths.sorted(Comparator.reverseOrder())
+                    .filter { path -> !path.equals(directory) }
+                    .forEach { path ->
+                        try {
+                            Files.deleteIfExists(path)
+                        } catch (IOException exception) {
+                            throw new UncheckedIOException(exception)
+                        }
+                    }
+        } catch (UncheckedIOException exception) {
+            throw exception.cause
+        }
+        Files.createDirectories(directory)
     }
 
     private static int withJulLogLevel(Level configuredLevel, Closure<Integer> action) {
