@@ -18,6 +18,7 @@ import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledTupleType;
 import dev.capylang.compiler.CompiledType;
+import dev.capylang.compiler.CompiledTypeSignature;
 import dev.capylang.compiler.GenericDataType;
 import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.NativeProviderCatalog;
@@ -2729,7 +2730,7 @@ public final class PythonGenerator implements Generator {
             if (functionNameOverrides.containsKey(key)) {
                 return functionNameOverrides.get(key);
             }
-            var parameterSignature = parameterTypes.stream().map(String::valueOf).collect(joining(","));
+            var parameterSignature = CompiledTypeSignature.parameterSignature(parameterTypes);
             if (simple.contains("__local_const_")) {
                 return pyIdentifier(simple);
             }
@@ -5538,7 +5539,7 @@ public final class PythonGenerator implements Generator {
     }
 
     private static String signatureKey(String name, List<CompiledType> parameterTypes) {
-        return name + "|" + parameterTypes.stream().map(String::valueOf).collect(joining(","));
+        return CompiledTypeSignature.signatureKey(name, parameterTypes);
     }
 
     private static String baseMethodName(String name) {
@@ -5567,10 +5568,7 @@ public final class PythonGenerator implements Generator {
     }
 
     private static String overloadTypeName(CompiledType type) {
-        if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
-            return primitiveBackedType.name();
-        }
-        return String.valueOf(type);
+        return CompiledTypeSignature.typeKey(type);
     }
 
     private static String methodVariantSuffix(String rawBaseName) {

@@ -1736,8 +1736,10 @@ public class CapybaraCompiler {
     private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
         var byKey = new LinkedHashMap<String, CompiledFunction>();
         for (var function : linkedFunctions) {
-            var parameters = function.parameters().stream().map(parameter -> String.valueOf(parameter.type())).toList();
-            byKey.put(function.name() + "#" + parameters, function);
+            var parameterTypes = function.parameters().stream()
+                    .map(CompiledFunctionParameter::type)
+                    .toList();
+            byKey.put(CompiledTypeSignature.signatureKey(function.name(), parameterTypes), function);
         }
         return unmodifiableSortedSet(new TreeSet<>(byKey.values()));
     }
@@ -1924,8 +1926,7 @@ public class CapybaraCompiler {
     }
 
     private String signatureKey(CapybaraExpressionCompiler.FunctionSignature signature) {
-        var parameters = signature.parameterTypes().stream().map(String::valueOf).toList();
-        return signature.name() + "#" + parameters;
+        return CompiledTypeSignature.signatureKey(signature.name(), signature.parameterTypes());
     }
 
     private List<Function> findFunctions(Set<Definition> definitions) {
