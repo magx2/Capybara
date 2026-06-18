@@ -112,13 +112,10 @@ fun should_change_ascii_case(): Assert =
     assert_all([
         assert_that("Capy BARA 123!?".to_upper_case()).is_equal_to("CAPY BARA 123!?"),
         assert_that("Capy BARA 123!?".to_lower_case()).is_equal_to("capy bara 123!?"),
-        assert_that("ABC".tol_lower_case()).is_equal_to("abc"),
         assert_that(char { "a" }).succeeds(value =>
             assert_that(value.to_upper_case().to_string()).is_equal_to("A")),
         assert_that(char { "Z" }).succeeds(value =>
             assert_that(value.to_lower_case().to_string()).is_equal_to("z")),
-        assert_that(char { "B" }).succeeds(value =>
-            assert_that(value.tol_lower_case().to_string()).is_equal_to("b")),
         assert_that(char { "!" }).succeeds(value =>
             assert_that(value.to_upper_case().to_string()).is_equal_to("!")),
     ])

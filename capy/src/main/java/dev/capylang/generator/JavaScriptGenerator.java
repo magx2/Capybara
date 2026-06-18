@@ -880,8 +880,7 @@ public final class JavaScriptGenerator implements Generator {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".to_upper_case(" + receiver + ")";
             }
-            if (("to_lower_case".equals(methodName) || "toLowerCase".equals(methodName)
-                 || "tol_lower_case".equals(methodName) || "tolLowerCase".equals(methodName))
+            if (("to_lower_case".equals(methodName) || "toLowerCase".equals(methodName))
                 && isStringLike(receiverType)
                 && tailArgs.isEmpty()) {
                 require("capy.lang.String");
@@ -2912,12 +2911,11 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.String", Set.of(
                     "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim", "compare",
                     "chars", "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
-                    "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase", "tol_lower_case", "tolLowerCase",
+                    "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase",
                     "is_blank", "isBlank", "trim_start", "trimStart", "trim_end", "trimEnd",
                     "repeat", "index_of", "indexOf", "last_index_of", "lastIndexOf",
                     "toUpperCase__name_to_upper_case__char",
                     "toLowerCase__name_to_lower_case__char",
-                    "tolLowerCase__name_tol_lower_case__char",
                     "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
@@ -3366,8 +3364,6 @@ public final class JavaScriptGenerator implements Generator {
                    + "    toUpperCase,\n"
                    + "    to_lower_case: toLowerCase,\n"
                    + "    toLowerCase,\n"
-                   + "    tol_lower_case: toLowerCase,\n"
-                   + "    tolLowerCase: toLowerCase,\n"
                    + "    compare,\n"
                    + "    chars,\n"
                    + "    __constructor__primitive__char,\n"
@@ -3380,7 +3376,6 @@ public final class JavaScriptGenerator implements Generator {
                    + "    toString__name_to_string__char: toStringChar,\n"
                    + "    toUpperCase__name_to_upper_case__char: toUpperCase,\n"
                    + "    toLowerCase__name_to_lower_case__char: toLowerCase,\n"
-                   + "    tolLowerCase__name_tol_lower_case__char: toLowerCase,\n"
                    + "    op3d_op3d__op_op3d_op3d__char__char: equalsChar,\n"
                    + "    compare__name_compare__char__char: compare,\n"
                    + "    __capybaraPrimitiveTypes,\n"
