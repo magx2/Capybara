@@ -587,7 +587,7 @@ public class JavaAstBuilder {
     }
 
     private static String signatureKey(String name, List<CompiledType> parameterTypes) {
-        return name + "|" + parameterTypes.stream().map(type -> String.valueOf(type)).collect(joining(","));
+        return CompiledTypeSignature.signatureKey(name, parameterTypes);
     }
 
     private String normalizeJavaMethodIdentifier(String rawName) {

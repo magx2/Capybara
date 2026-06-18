@@ -16,6 +16,7 @@ fun tests(): Effect[TestFile] =
         test("should get substrings by range", () => should_get_substrings_by_range()),
         test("should concatenate values", () => should_concatenate_values()),
         test("should compare strings and chars", () => should_compare_strings_and_chars()),
+        test("should change ASCII case", () => should_change_ascii_case()),
         test("should test any and all characters", () => should_test_any_and_all_characters()),
         test("should test any and all characters with index", () => should_test_any_and_all_characters_with_index()),
         test("should detect contained substrings", () => should_detect_contained_substrings()),
@@ -25,6 +26,10 @@ fun tests(): Effect[TestFile] =
         test("should flat map characters", () => should_flat_map_characters()),
         test("should detect prefixes and suffixes", () => should_detect_prefixes_and_suffixes()),
         test("should trim whitespace", () => should_trim_whitespace()),
+        test("should detect blank strings", () => should_detect_blank_strings()),
+        test("should trim one side", () => should_trim_one_side()),
+        test("should repeat strings", () => should_repeat_strings()),
+        test("should find substring indexes", () => should_find_substring_indexes()),
         test("should replace all occurrences", () => should_replace_all_occurrences()),
     ])
 
@@ -103,6 +108,18 @@ fun should_compare_strings_and_chars(): Assert =
                 assert_that(left.compare(right)).is_equal_to(GREATER))),
     ])
 
+fun should_change_ascii_case(): Assert =
+    assert_all([
+        assert_that("Capy BARA 123!?".to_upper_case()).is_equal_to("CAPY BARA 123!?"),
+        assert_that("Capy BARA 123!?".to_lower_case()).is_equal_to("capy bara 123!?"),
+        assert_that(char { "a" }).succeeds(value =>
+            assert_that(value.to_upper_case().to_string()).is_equal_to("A")),
+        assert_that(char { "Z" }).succeeds(value =>
+            assert_that(value.to_lower_case().to_string()).is_equal_to("z")),
+        assert_that(char { "!" }).succeeds(value =>
+            assert_that(value.to_upper_case().to_string()).is_equal_to("!")),
+    ])
+
 fun should_test_any_and_all_characters(): Assert =
     assert_all([
         assert_that("capybara".any(ch => ch == "y")).is_equal_to(true),
@@ -166,6 +183,43 @@ fun should_trim_whitespace(): Assert =
         assert_that((" " + '\t' + "capybara" + '\n' + " ").trim()).is_equal_to("capybara"),
         assert_that("     ".trim()).is_equal_to(""),
         assert_that("capy".trim()).is_equal_to("capy"),
+    ])
+
+fun should_detect_blank_strings(): Assert =
+    assert_all([
+        assert_that("".is_blank()).is_equal_to(true),
+        assert_that((" " + '\t' + '\n').is_blank()).is_equal_to(true),
+        assert_that(" capy ".is_blank()).is_equal_to(false),
+    ])
+
+fun should_trim_one_side(): Assert =
+    assert_all([
+        assert_that((" " + '\t' + "capy" + '\n').trim_start()).is_equal_to("capy" + '\n'),
+        assert_that((" " + '\t' + "capy" + '\n').trim_end()).is_equal_to(" " + '\t' + "capy"),
+        assert_that("capy".trim_start()).is_equal_to("capy"),
+        assert_that("capy".trim_end()).is_equal_to("capy"),
+    ])
+
+fun should_repeat_strings(): Assert =
+    assert_all([
+        assert_that("ha".repeat(3)).is_equal_to("hahaha"),
+        assert_that("ha".repeat(1)).is_equal_to("ha"),
+        assert_that("ha".repeat(0)).is_equal_to(""),
+        assert_that("ha".repeat(-2)).is_equal_to(""),
+        assert_that("".repeat(4)).is_equal_to(""),
+    ])
+
+fun should_find_substring_indexes(): Assert =
+    assert_all([
+        assert_that("banana".index_of("na")).contains(string_test_index(2)),
+        assert_that("banana".last_index_of("na")).contains(string_test_index(4)),
+        assert_that("banana".index_of("ba")).contains(FIRST_ELEMENT),
+        assert_that("banana".index_of("")).contains(FIRST_ELEMENT),
+        assert_that("banana".last_index_of("")).contains(string_test_index(6)),
+        assert_that("banana".index_of("zz")).is_empty(),
+        assert_that("banana".last_index_of("zz")).is_empty(),
+        assert_that("ba".index_of("banana")).is_empty(),
+        assert_that("ba".last_index_of("banana")).is_empty(),
     ])
 
 fun should_replace_all_occurrences(): Assert =
