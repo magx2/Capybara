@@ -154,6 +154,28 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     @Test
+    void shouldDispatchStringBackedPrimitiveMethodsBeforeStandardStringShortcutsInJavaScriptAndPython() {
+        var program = compileProgram(List.of(new RawModule("Tokens", "/foo", """
+                type token -> String
+
+                fun token.to_upper_case(): token = token { "token:" + this.value }
+                fun uppercase_token(value: token): token = value.to_upper_case()
+                """)));
+
+        var js = generatedCode(new JavaScriptGenerator(), program, Path.of("foo", "Tokens.js"));
+        var python = generatedCode(new PythonGenerator(), program, Path.of("foo", "Tokens.py"));
+
+        assertThat(js)
+                .contains("function toUpperCase__name_to_upper_case__token(this_)")
+                .contains("return toUpperCase__name_to_upper_case__token(value);")
+                .doesNotContain("__module_capy_lang_String.to_upper_case(value)");
+        assertThat(python)
+                .contains("def toUpperCase__name_to_upper_case__token(this_):")
+                .contains("return toUpperCase__name_to_upper_case__token(value)")
+                .doesNotContain("capy_module_capy_lang_String.to_upper_case(value)");
+    }
+
+    @Test
     void shouldNotShadowPythonRuntimeWithPrimitiveBackedConstructorAliases() {
         var program = compileProgram(List.of(new RawModule("Numbers", "/foo", """
                 from /capy/lang/Result import { * }
