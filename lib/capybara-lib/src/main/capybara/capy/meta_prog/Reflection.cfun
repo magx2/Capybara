@@ -1,10 +1,16 @@
+/// Reflection type metadata for either functional or object-oriented symbols.
+///
+/// `name` is the declaration name and `pkg` describes the package where that
+/// declaration was defined.
 union AnyInfo { name: String, pkg: PackageInfo } = CFunInfo | CooInfo
+/// Functional Capybara type metadata.
 union CFunInfo = DataInfo
     | ListInfo
     | SetInfo
     | DictInfo
     | TupleInfo
     | FunctionTypeInfo
+/// Object-oriented Capybara type metadata.
 union CooInfo =
     InterfaceInfo
     | ObjectInfo
@@ -12,8 +18,10 @@ union CooInfo =
     | MethodInfo
 
 // COMMON
+/// Package metadata for reflected declarations.
 data PackageInfo { name: String, path: String }
 
+/// Annotation argument value captured by reflection.
 union AnnotationValue =
     AnnotationString
     | AnnotationInt
@@ -24,17 +32,27 @@ union AnnotationValue =
     | AnnotationTypeName
     | AnnotationNothing
 
+/// Reflected string annotation argument.
 data AnnotationString { value: String }
+/// Reflected int annotation argument.
 data AnnotationInt { value: int }
+/// Reflected long annotation argument.
 data AnnotationLong { value: long }
+/// Reflected double annotation argument.
 data AnnotationDouble { value: double }
+/// Reflected float annotation argument.
 data AnnotationFloat { value: float }
+/// Reflected bool annotation argument.
 data AnnotationBool { value: bool }
+/// Reflected type-name annotation argument.
 data AnnotationTypeName { value: String }
+/// Reflected annotation argument without a value.
 data AnnotationNothing {}
 
+/// Named annotation argument.
 data AnnotationArgumentInfo { name: String, value: AnnotationValue }
 
+/// Reflected annotation with package metadata and argument values.
 data AnnotationInfo {
     name: String,
     pkg: PackageInfo,
@@ -42,25 +60,49 @@ data AnnotationInfo {
 }
 
 // CFUN
+/// Function type metadata.
 data FunctionTypeInfo { params: List[AnyInfo], return_type: AnyInfo }
 
+/// Data declaration metadata without runtime field values.
 data DataInfo { name: String, pkg: PackageInfo, annotations: List[AnnotationInfo] }
 
+/// Field declaration metadata.
 data FieldInfo { name: String, type: AnyInfo, annotations: List[AnnotationInfo] }
+/// Field metadata plus the runtime value stored in a reflected data instance.
 data FieldValueInfo { name: String, type: AnyInfo, value: any, annotations: List[AnnotationInfo] }
+/// Runtime data value metadata, including constructor name and field values.
 data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo], annotations: List[AnnotationInfo] }
 
 // CFUN > COLLECTIONS
+/// List type metadata.
 data ListInfo { element_type: AnyInfo }
+/// Set type metadata.
 data SetInfo { element_type: AnyInfo }
+/// Dict type metadata.
 data DictInfo { value_type: AnyInfo }
+/// Tuple type metadata.
 data TupleInfo { elements: List[AnyInfo] }
 
 // COO
+/// Interface metadata.
 data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+/// Object metadata.
 data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+/// Trait metadata.
 data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo], annotations: List[AnnotationInfo] }
+/// Method metadata.
 data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo, annotations: List[AnnotationInfo] }
 
 /// Returns reflection metadata and field values for a concrete data value.
+///
+/// Example:
+/// ```cfun
+/// data User { name: String, age: int }
+///
+/// let info = reflection(User { name: "Ada", age: 36 })
+/// info.fields | field => field.name
+/// ```
+/// `info.name` is `User`, and the reflected fields expose both metadata and
+/// runtime values. This is useful for generic serializers, diagnostics, and
+/// documentation tools.
 fun reflection(obj: data): DataValueInfo = <native>

@@ -6,14 +6,36 @@ from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
+/// Kind of root used by a `Path`.
+///
+/// `RELATIVE` paths are resolved from the current working directory,
+/// `ABSOLUTE` paths start at `/`, and `HOME` paths start at `~`.
 enum PathRoot { RELATIVE, ABSOLUTE, HOME }
 
+/// Portable path value split into a root and path segments.
+///
+/// Build paths with `from_string` or the `/` operator instead of manually
+/// constructing segments.
+///
+/// Example:
+/// ```cfun
+/// let path = from_string("~/projects") / "capybara" / "README.md"
+/// path.is_absolute()
+/// ```
+/// The root remains `HOME`, and each joined segment is normalized separately.
 data Path {
     root: PathRoot,
     prefix: Option[String],
     segments: List[String]
 }
 
+/// Parses a string path and normalizes empty, `.`, and `..` segments.
+///
+/// Example:
+/// ```cfun
+/// from_string("/var/log/../tmp/app.log")
+/// ```
+/// Produces an absolute path with segments `["var", "tmp", "app.log"]`.
 fun from_string(path_string: String): Path =
     @Recursive
     fun segments(value: String, current: String, acc: List[String]): List[String] =
@@ -51,6 +73,13 @@ fun from_string(path_string: String): Path =
         segments: segments(value, "", [])
     }.normalize()
 
+/// Returns a new path with `segment` appended.
+///
+/// Example:
+/// ```cfun
+/// from_string("reports") / "junit" / "TEST-main.xml"
+/// ```
+/// The original path is unchanged.
 fun Path.`/`(segment: String) =
     Path {
         root: this.root,
@@ -58,6 +87,10 @@ fun Path.`/`(segment: String) =
         segments: this.segments + segment
     }
 
+/// Returns a new path with `other` path segments appended.
+///
+/// The root of `this` is preserved, so use this to join a base directory with a
+/// relative child path.
 fun Path.`/`(other: Path) =
     Path {
         root: this.root,
@@ -65,6 +98,10 @@ fun Path.`/`(other: Path) =
         segments: this.segments + other.segments
     }
 
+/// Returns the final segment name, or the root name for root paths.
+///
+/// Examples: `from_string("/tmp/app.log").name()` returns `app.log`,
+/// while `from_string("/").name()` returns `/`.
 fun Path.name(): String =
     match this.prefix with
     case Some { v } -> v
@@ -74,6 +111,13 @@ fun Path.name(): String =
         case ABSOLUTE -> '/'
         case HOME -> '~'
 
+/// Returns the parent path, or `None` when this path has no parent segment.
+///
+/// Example:
+/// ```cfun
+/// from_string("docs/api/json.md").parent()
+/// ```
+/// Returns `Some` containing `docs/api`.
 fun Path.parent(): Option[Path] =
     if this.segments.is_empty() then None {}
     else Some {
@@ -84,13 +128,25 @@ fun Path.parent(): Option[Path] =
         }
     }
 
+/// Returns true for absolute and home-rooted paths.
 fun Path.is_absolute(): bool =
     match this.root with
     case RELATIVE -> false
     case _ -> true
 
+/// Returns true when the path has a root but no child segments.
 fun Path.is_root(): bool = this.segments.size() == EMPTY
 
+/// Returns a path with redundant segments removed.
+///
+/// Relative leading `..` segments are preserved; absolute and home paths do not
+/// move above their root.
+///
+/// Example:
+/// ```cfun
+/// from_string("src/./main/../test").normalize()
+/// ```
+/// Produces the relative path `src/test`.
 fun Path.normalize(): Path =
     @Recursive
     fun normalize_path(root: PathRoot, segments: List[String], acc: List[String]): List[String] =
