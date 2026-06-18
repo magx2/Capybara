@@ -98,6 +98,7 @@ fun tests(): Effect[TestFile] =
         test("should round-trip typed data constructors with identical shapes", () => should_round_trip_typed_data_constructors_with_identical_shapes()),
         test("should round-trip typed references with identical name fields", () => should_round_trip_typed_references_with_identical_name_fields()),
         test("should preserve typed numeric value kinds", () => should_preserve_typed_numeric_value_kinds()),
+        test("should reject typed int and byte values outside int range", () => should_reject_typed_int_and_byte_values_outside_int_range()),
         test("should preserve typed option and result constructors", () => should_preserve_typed_option_and_result_constructors()),
         test("should stringify typed json with reserved envelope", () => should_stringify_typed_json_with_reserved_envelope()),
     ])
@@ -543,6 +544,14 @@ fun should_preserve_typed_numeric_value_kinds(): Assert =
         assert_that(round_trip_typed_field(sample, "float_value")).succeeds(TypedJsonFloat { 1.5f }),
         assert_that(round_trip_typed_field(sample, "double_value")).succeeds(TypedJsonDouble { 2.5 }),
         assert_that(round_trip_typed_field(sample, "byte_value")).succeeds(TypedJsonByte { 10 }),
+    ])
+
+fun should_reject_typed_int_and_byte_values_outside_int_range(): Assert =
+    assert_all([
+        assert_that(deserialize_typed('{"$capybaraTypedJson":"data","name":"TypedJsonNumberSample","pkg":{"name":"capy.serialization","path":"capy/serialization/JsonTest"},"fields":{"int_value":{"$capybaraTypedJson":"value","kind":"int","value":2147483648}}}'))
+            .fails("long value `2147483648` is greater than max int value"),
+        assert_that(deserialize_typed('{"$capybaraTypedJson":"data","name":"TypedJsonNumberSample","pkg":{"name":"capy.serialization","path":"capy/serialization/JsonTest"},"fields":{"byte_value":{"$capybaraTypedJson":"value","kind":"byte","value":-2147483649}}}'))
+            .fails("long value `-2147483649` is smaller than min int value"),
     ])
 
 fun should_preserve_typed_option_and_result_constructors(): Assert =

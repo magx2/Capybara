@@ -4,6 +4,7 @@ from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Primitives import { safe_long_to_int }
 from /capy/collection/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
@@ -428,11 +429,13 @@ private fun parse_typed_value(object: JsonObject): Result[TypedJsonValue] =
     }
     case "byte" -> {
         let parsed <- json_long_value(value)
-        TypedJsonByte { typed_json_long_to_int(parsed) }
+        let int_value <- typed_json_long_to_int(parsed)
+        TypedJsonByte { int_value }
     }
     case "int" -> {
         let parsed <- json_long_value(value)
-        TypedJsonInt { typed_json_long_to_int(parsed) }
+        let int_value <- typed_json_long_to_int(parsed)
+        TypedJsonInt { int_value }
     }
     case "long" -> {
         let parsed <- json_long_value(value)
@@ -518,14 +521,20 @@ private fun typed_byte_value(value: any): Result[TypedJsonByte] =
     match value with
     case byte b -> Success { TypedJsonByte { b + 0 } }
     case int i -> Success { TypedJsonByte { i } }
-    case long l -> Success { TypedJsonByte { typed_json_long_to_int(l) } }
+    case long l -> {
+        let int_value <- typed_json_long_to_int(l)
+        TypedJsonByte { int_value }
+    }
     case _ -> Error { "expected byte value" }
 
 private fun typed_int_value(value: any): Result[TypedJsonInt] =
     match value with
     case int i -> Success { TypedJsonInt { i } }
     case byte b -> Success { TypedJsonInt { b + 0 } }
-    case long l -> Success { TypedJsonInt { typed_json_long_to_int(l) } }
+    case long l -> {
+        let int_value <- typed_json_long_to_int(l)
+        TypedJsonInt { int_value }
+    }
     case _ -> Error { "expected int value" }
 
 private fun typed_long_value(value: any): Result[TypedJsonLong] =
@@ -565,7 +574,7 @@ private fun typed_double_value(value: any): Result[TypedJsonDouble] =
     case byte b -> Success { TypedJsonDouble { b + 0L } }
     case _ -> Error { "expected double value" }
 
-private fun typed_json_long_to_int(value: long): int = value.to_int()
+private fun typed_json_long_to_int(value: long): Result[int] = safe_long_to_int(value)
 
 private fun typed_json_double_to_float(value: double): Result[float] = ("" + value).to_float()
 
