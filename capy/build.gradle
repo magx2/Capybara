@@ -340,6 +340,15 @@ dependencies {
     testImplementation 'org.assertj:assertj-core:3.27.6'
 }
 
+configurations {
+    capyRuntimeDependenciesElements {
+        canBeConsumed = true
+        canBeResolved = false
+        visible = false
+        extendsFrom configurations.runtimeClasspath
+    }
+}
+
 def capybaraVersion = project.version.toString()
 def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
