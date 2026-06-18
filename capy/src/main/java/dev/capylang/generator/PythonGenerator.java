@@ -865,6 +865,19 @@ public final class PythonGenerator implements Generator {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".compare(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
+            if (("to_upper_case".equals(methodName) || "toUpperCase".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".to_upper_case(" + receiver + ")";
+            }
+            if (("to_lower_case".equals(methodName) || "toLowerCase".equals(methodName)
+                 || "tol_lower_case".equals(methodName) || "tolLowerCase".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".to_lower_case(" + receiver + ")";
+            }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
@@ -2767,6 +2780,10 @@ public final class PythonGenerator implements Generator {
                     "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim", "compare",
                     "__constructor__primitive__char", "capy__constructorPrimitiveChar",
                     "chars", "char_at", "charAt", "get_char", "getChar",
+                    "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase", "tol_lower_case", "tolLowerCase",
+                    "toUpperCase__name_to_upper_case__char",
+                    "toLowerCase__name_to_lower_case__char",
+                    "tolLowerCase__name_tol_lower_case__char",
                     "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
@@ -3082,6 +3099,16 @@ public final class PythonGenerator implements Generator {
                     starts_with = lambda value, part: str(value).startswith(part)
                     end_with = lambda value, part: str(value).endswith(part)
                     trim = lambda value: str(value).strip()
+                    LOWER_CASE_ASCII_LETTERS = "abcdefghijklmnopqrstuvwxyz"
+                    UPPER_CASE_ASCII_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    def _convert_ascii_case(value, source, target):
+                        return ''.join(target[source.index(char)] if char in source else char for char in str(value))
+                    to_upper_case = lambda value: _convert_ascii_case(value, LOWER_CASE_ASCII_LETTERS, UPPER_CASE_ASCII_LETTERS)
+                    toUpperCase = to_upper_case
+                    to_lower_case = lambda value: _convert_ascii_case(value, UPPER_CASE_ASCII_LETTERS, LOWER_CASE_ASCII_LETTERS)
+                    toLowerCase = to_lower_case
+                    tol_lower_case = to_lower_case
+                    tolLowerCase = to_lower_case
                     def compare(left, right):
                         left_text = str(left)
                         right_text = str(right)
@@ -3104,6 +3131,9 @@ public final class PythonGenerator implements Generator {
                     toString__name_to_string__char = lambda value: str(value)
                     op3d_op3d__op_op3d_op3d__char__char = lambda left, right: str(left) == str(right)
                     compare__name_compare__char__char = compare
+                    toUpperCase__name_to_upper_case__char = to_upper_case
+                    toLowerCase__name_to_lower_case__char = to_lower_case
+                    tolLowerCase__name_tol_lower_case__char = to_lower_case
                     __capybaraPrimitiveTypes = {'char': {"cfunType": '/capy/lang/String.char', "backingType": 'String'}}
                     """;
         }

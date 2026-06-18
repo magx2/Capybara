@@ -16,6 +16,7 @@ fun tests(): Effect[TestFile] =
         test("should get substrings by range", () => should_get_substrings_by_range()),
         test("should concatenate values", () => should_concatenate_values()),
         test("should compare strings and chars", () => should_compare_strings_and_chars()),
+        test("should change ASCII case", () => should_change_ascii_case()),
         test("should test any and all characters", () => should_test_any_and_all_characters()),
         test("should test any and all characters with index", () => should_test_any_and_all_characters_with_index()),
         test("should detect contained substrings", () => should_detect_contained_substrings()),
@@ -101,6 +102,21 @@ fun should_compare_strings_and_chars(): Assert =
         assert_that(char { "b" }).succeeds(left =>
             assert_that(char { "a" }).succeeds(right =>
                 assert_that(left.compare(right)).is_equal_to(GREATER))),
+    ])
+
+fun should_change_ascii_case(): Assert =
+    assert_all([
+        assert_that("Capy BARA 123!?".to_upper_case()).is_equal_to("CAPY BARA 123!?"),
+        assert_that("Capy BARA 123!?".to_lower_case()).is_equal_to("capy bara 123!?"),
+        assert_that("ABC".tol_lower_case()).is_equal_to("abc"),
+        assert_that(char { "a" }).succeeds(value =>
+            assert_that(value.to_upper_case().to_string()).is_equal_to("A")),
+        assert_that(char { "Z" }).succeeds(value =>
+            assert_that(value.to_lower_case().to_string()).is_equal_to("z")),
+        assert_that(char { "B" }).succeeds(value =>
+            assert_that(value.tol_lower_case().to_string()).is_equal_to("b")),
+        assert_that(char { "!" }).succeeds(value =>
+            assert_that(value.to_upper_case().to_string()).is_equal_to("!")),
     ])
 
 fun should_test_any_and_all_characters(): Assert =
