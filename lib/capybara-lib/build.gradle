@@ -491,7 +491,9 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     }
 }
 
-def capyCompilerService = gradle.sharedServices.registerIfAbsent('capyCompilerService', CapyCompilerService) {}
+def capyCompilerService = gradle.sharedServices.registerIfAbsent('capyCompilerService', CapyCompilerService) {
+    maxParallelUsages.set(1)
+}
 def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'FINE'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
@@ -499,12 +501,14 @@ def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
 }
 
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
+    usesService(capyCompilerService)
     compilerService.set(capyCompilerService)
     logLevel.set(capybaraCompileLogLevel)
     outputTypeName.set('JAVA')
 }
 
 tasks.withType(InProcessCapybaraTestTask).configureEach {
+    usesService(capyCompilerService)
     compilerService.set(capyCompilerService)
     logType.set('TC')
     getTests().convention([])

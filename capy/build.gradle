@@ -1,4 +1,6 @@
 import javax.inject.Inject
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
 
 buildscript {
     repositories {
@@ -351,6 +353,16 @@ abstract class CapybaraPythonTestTask extends DefaultTask {
         }
         return 'python3'
     }
+}
+
+abstract class CapybaraCompileTaskService implements BuildService<BuildServiceParameters.None> {}
+
+def capybaraCompileTaskService = gradle.sharedServices.registerIfAbsent('capybaraCompileTaskService', CapybaraCompileTaskService) {
+    maxParallelUsages.set(1)
+}
+
+tasks.withType(InProcessCapybaraCompileTask).configureEach {
+    usesService(capybaraCompileTaskService)
 }
 
 dependencies {
