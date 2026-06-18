@@ -7,6 +7,8 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
@@ -292,6 +294,16 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
             classLoader.close()
         }
     }
+}
+
+abstract class CapyInProcessTaskService implements BuildService<BuildServiceParameters.None> {}
+
+def capyInProcessTaskService = gradle.sharedServices.registerIfAbsent('capyInProcessTaskService', CapyInProcessTaskService) {
+    maxParallelUsages.set(1)
+}
+
+tasks.withType(InProcessCapybaraCompileTask).configureEach {
+    usesService(capyInProcessTaskService)
 }
 
 abstract class CapybaraNodeTestTask extends NodeTask {
