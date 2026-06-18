@@ -3706,7 +3706,8 @@ public final class PythonGenerator implements Generator {
                         if (
                             name.startswith('testFileStringCompiledlistElementtype')
                             and (
-                                'CompileddatatypeNameTestcase' in name
+                                name.endswith('Testcase')
+                                or 'CompileddatatypeNameTestcase' in name
                                 or 'CompileddataparenttypeNameEffect' in name
                             )
                         ):

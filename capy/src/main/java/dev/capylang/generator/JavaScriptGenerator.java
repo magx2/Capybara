@@ -5531,7 +5531,8 @@ public final class JavaScriptGenerator implements Generator {
                             if (typeof property === 'string'
                                 && (property.startsWith('testFile__string__compiledlist_elementtype_')
                                     || property.startsWith('test_file__string__compiledlist_elementtype_'))
-                                && (property.includes('compileddatatype_name_testcase')
+                                && (property.endsWith('_testcase')
+                                    || property.includes('compileddatatype_name_testcase')
                                     || property.includes('compileddataparenttype_name_effect'))) {
                                 return testFile;
                             }
