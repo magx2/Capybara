@@ -875,6 +875,18 @@ public final class JavaScriptGenerator implements Generator {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".compare(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
+            if (("to_upper_case".equals(methodName) || "toUpperCase".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".to_upper_case(" + receiver + ")";
+            }
+            if (("to_lower_case".equals(methodName) || "toLowerCase".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".to_lower_case(" + receiver + ")";
+            }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
@@ -884,6 +896,44 @@ public final class JavaScriptGenerator implements Generator {
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
                 return "String(" + receiver + ").endsWith(" + tailArgs.getFirst() + ")";
+            }
+            if ("trim".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim(" + receiver + ")";
+            }
+            if (("is_blank".equals(methodName) || "isBlank".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".is_blank(" + receiver + ")";
+            }
+            if (("trim_start".equals(methodName) || "trimStart".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim_start(" + receiver + ")";
+            }
+            if (("trim_end".equals(methodName) || "trimEnd".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim_end(" + receiver + ")";
+            }
+            if ("repeat".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".repeat(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
+            if (("index_of".equals(methodName) || "indexOf".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
+            if (("last_index_of".equals(methodName) || "lastIndexOf".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".last_index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if ("size".equals(methodName) && isCollectionType(receiverType)) {
                 if (receiverType instanceof CollectionLinkedType.CompiledDict
@@ -2862,6 +2912,11 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.String", Set.of(
                     "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim", "compare",
                     "chars", "__constructor__primitive__char", "char_at", "charAt", "get_char", "getChar",
+                    "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase",
+                    "is_blank", "isBlank", "trim_start", "trimStart", "trim_end", "trimEnd",
+                    "repeat", "index_of", "indexOf", "last_index_of", "lastIndexOf",
+                    "toUpperCase__name_to_upper_case__char",
+                    "toLowerCase__name_to_lower_case__char",
                     "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
@@ -3244,6 +3299,44 @@ public final class JavaScriptGenerator implements Generator {
                    + "    const next = idx => idx >= text.length ? Seq.End : new Seq.Cons({ value: text.charAt(idx), rest: () => next(idx + 1) });\n"
                    + "    return next(0);\n"
                    + "};\n"
+                   + "const LOWER_CASE_ASCII_LETTERS = 'abcdefghijklmnopqrstuvwxyz';\n"
+                   + "const UPPER_CASE_ASCII_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';\n"
+                   + "const TRIM_WHITESPACE = new Set([' ', '\\t', '\\n', '\\r', '\\f']);\n"
+                   + "function trimStartValue(value) {\n"
+                   + "    const text = String(value);\n"
+                   + "    let idx = 0;\n"
+                   + "    while (idx < text.length && TRIM_WHITESPACE.has(text.charAt(idx))) {\n"
+                   + "        idx += 1;\n"
+                   + "    }\n"
+                   + "    return text.slice(idx);\n"
+                   + "}\n"
+                   + "function trimEndValue(value) {\n"
+                   + "    const text = String(value);\n"
+                   + "    let idx = text.length;\n"
+                   + "    while (idx > 0 && TRIM_WHITESPACE.has(text.charAt(idx - 1))) {\n"
+                   + "        idx -= 1;\n"
+                   + "    }\n"
+                   + "    return text.slice(0, idx);\n"
+                   + "}\n"
+                   + "const trimValue = value => trimEndValue(trimStartValue(value));\n"
+                   + "const isBlank = value => trimValue(value).length === 0;\n"
+                   + "const repeat = (value, times) => times <= 0 ? '' : String(value).repeat(times);\n"
+                   + "function indexOf(value, part) {\n"
+                   + "    const idx = String(value).indexOf(String(part));\n"
+                   + "    return idx < 0 ? capy.None : new capy.Some({ value: idx });\n"
+                   + "}\n"
+                   + "function lastIndexOf(value, part) {\n"
+                   + "    const idx = String(value).lastIndexOf(String(part));\n"
+                   + "    return idx < 0 ? capy.None : new capy.Some({ value: idx });\n"
+                   + "}\n"
+                   + "function convertAsciiCase(value, source, target) {\n"
+                   + "    return Array.from(String(value), char => {\n"
+                   + "        const index = source.indexOf(char);\n"
+                   + "        return index >= 0 ? target.charAt(index) : char;\n"
+                   + "    }).join('');\n"
+                   + "}\n"
+                   + "const toUpperCase = value => convertAsciiCase(value, LOWER_CASE_ASCII_LETTERS, UPPER_CASE_ASCII_LETTERS);\n"
+                   + "const toLowerCase = value => convertAsciiCase(value, UPPER_CASE_ASCII_LETTERS, LOWER_CASE_ASCII_LETTERS);\n"
                    + "const toStringChar = value => String(value);\n"
                    + "const equalsChar = (left, right) => String(left) === String(right);\n"
                    + "const __capybaraPrimitiveTypes = Object.freeze({ char: Object.freeze({ cfunType: '/capy/lang/String.char', backingType: 'String' }) });\n"
@@ -3256,7 +3349,22 @@ public final class JavaScriptGenerator implements Generator {
                    + "    contains: (value, part) => String(value).includes(part),\n"
                    + "    starts_with: (value, part) => String(value).startsWith(part),\n"
                    + "    end_with: (value, part) => String(value).endsWith(part),\n"
-                   + "    trim: value => String(value).trim(),\n"
+                   + "    trim: trimValue,\n"
+                   + "    is_blank: isBlank,\n"
+                   + "    isBlank,\n"
+                   + "    trim_start: trimStartValue,\n"
+                   + "    trimStart: trimStartValue,\n"
+                   + "    trim_end: trimEndValue,\n"
+                   + "    trimEnd: trimEndValue,\n"
+                   + "    repeat,\n"
+                   + "    index_of: indexOf,\n"
+                   + "    indexOf,\n"
+                   + "    last_index_of: lastIndexOf,\n"
+                   + "    lastIndexOf,\n"
+                   + "    to_upper_case: toUpperCase,\n"
+                   + "    toUpperCase,\n"
+                   + "    to_lower_case: toLowerCase,\n"
+                   + "    toLowerCase,\n"
                    + "    compare,\n"
                    + "    chars,\n"
                    + "    __constructor__primitive__char,\n"
@@ -3267,6 +3375,8 @@ public final class JavaScriptGenerator implements Generator {
                    + "    to_string: toStringChar,\n"
                    + "    toString: toStringChar,\n"
                    + "    toString__name_to_string__char: toStringChar,\n"
+                   + "    toUpperCase__name_to_upper_case__char: toUpperCase,\n"
+                   + "    toLowerCase__name_to_lower_case__char: toLowerCase,\n"
                    + "    op3d_op3d__op_op3d_op3d__char__char: equalsChar,\n"
                    + "    compare__name_compare__char__char: compare,\n"
                    + "    __capybaraPrimitiveTypes,\n"

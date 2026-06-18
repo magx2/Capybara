@@ -865,6 +865,18 @@ public final class PythonGenerator implements Generator {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".compare(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
+            if (("to_upper_case".equals(methodName) || "toUpperCase".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".to_upper_case(" + receiver + ")";
+            }
+            if (("to_lower_case".equals(methodName) || "toLowerCase".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".to_lower_case(" + receiver + ")";
+            }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
@@ -876,7 +888,42 @@ public final class PythonGenerator implements Generator {
                 return "str(" + receiver + ").endswith(" + tailArgs.getFirst() + ")";
             }
             if ("trim".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.isEmpty()) {
-                return "str(" + receiver + ").strip()";
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim(" + receiver + ")";
+            }
+            if (("is_blank".equals(methodName) || "isBlank".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".is_blank(" + receiver + ")";
+            }
+            if (("trim_start".equals(methodName) || "trimStart".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim_start(" + receiver + ")";
+            }
+            if (("trim_end".equals(methodName) || "trimEnd".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim_end(" + receiver + ")";
+            }
+            if ("repeat".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".repeat(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
+            if (("index_of".equals(methodName) || "indexOf".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
+            if (("last_index_of".equals(methodName) || "lastIndexOf".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".last_index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if ("size".equals(methodName) && isCollectionType(receiverType)) {
                 return "capy.size(" + receiver + ")";
@@ -2767,6 +2814,11 @@ public final class PythonGenerator implements Generator {
                     "size", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim", "compare",
                     "__constructor__primitive__char", "capy__constructorPrimitiveChar",
                     "chars", "char_at", "charAt", "get_char", "getChar",
+                    "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase",
+                    "is_blank", "isBlank", "trim_start", "trimStart", "trim_end", "trimEnd",
+                    "repeat", "index_of", "indexOf", "last_index_of", "lastIndexOf",
+                    "toUpperCase__name_to_upper_case__char",
+                    "toLowerCase__name_to_lower_case__char",
                     "to_string", "toString", "toString__name_to_string__char",
                     "op3d_op3d__op_op3d_op3d__char__char", "compare__name_compare__char__char", "__capybaraPrimitiveTypes"
             ));
@@ -3081,7 +3133,41 @@ public final class PythonGenerator implements Generator {
                     contains = lambda value, part: part in str(value)
                     starts_with = lambda value, part: str(value).startswith(part)
                     end_with = lambda value, part: str(value).endswith(part)
-                    trim = lambda value: str(value).strip()
+                    TRIM_WHITESPACE = " \\t\\n\\r\\f"
+                    def trim_start(value):
+                        text = str(value)
+                        idx = 0
+                        while idx < len(text) and text[idx] in TRIM_WHITESPACE:
+                            idx += 1
+                        return text[idx:]
+                    trimStart = trim_start
+                    def trim_end(value):
+                        text = str(value)
+                        idx = len(text)
+                        while idx > 0 and text[idx - 1] in TRIM_WHITESPACE:
+                            idx -= 1
+                        return text[:idx]
+                    trimEnd = trim_end
+                    trim = lambda value: trim_end(trim_start(value))
+                    is_blank = lambda value: len(trim(value)) == 0
+                    isBlank = is_blank
+                    repeat = lambda value, times: str(value) * max(0, times)
+                    def index_of(value, part):
+                        idx = str(value).find(str(part))
+                        return capy.None_ if idx < 0 else capy.Some({'value': idx})
+                    indexOf = index_of
+                    def last_index_of(value, part):
+                        idx = str(value).rfind(str(part))
+                        return capy.None_ if idx < 0 else capy.Some({'value': idx})
+                    lastIndexOf = last_index_of
+                    LOWER_CASE_ASCII_LETTERS = "abcdefghijklmnopqrstuvwxyz"
+                    UPPER_CASE_ASCII_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    def _convert_ascii_case(value, source, target):
+                        return ''.join(target[source.index(char)] if char in source else char for char in str(value))
+                    to_upper_case = lambda value: _convert_ascii_case(value, LOWER_CASE_ASCII_LETTERS, UPPER_CASE_ASCII_LETTERS)
+                    toUpperCase = to_upper_case
+                    to_lower_case = lambda value: _convert_ascii_case(value, UPPER_CASE_ASCII_LETTERS, LOWER_CASE_ASCII_LETTERS)
+                    toLowerCase = to_lower_case
                     def compare(left, right):
                         left_text = str(left)
                         right_text = str(right)
@@ -3104,6 +3190,8 @@ public final class PythonGenerator implements Generator {
                     toString__name_to_string__char = lambda value: str(value)
                     op3d_op3d__op_op3d_op3d__char__char = lambda left, right: str(left) == str(right)
                     compare__name_compare__char__char = compare
+                    toUpperCase__name_to_upper_case__char = to_upper_case
+                    toLowerCase__name_to_lower_case__char = to_lower_case
                     __capybaraPrimitiveTypes = {'char': {"cfunType": '/capy/lang/String.char', "backingType": 'String'}}
                     """;
         }
