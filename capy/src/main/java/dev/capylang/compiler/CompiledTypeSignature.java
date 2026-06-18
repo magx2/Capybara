@@ -39,7 +39,7 @@ public final class CompiledTypeSignature {
             case CompiledGenericTypeParameter genericTypeParameter -> genericTypeParameter.name();
             case CompiledDataType dataType -> namedTypeKey(dataType.name(), dataType.typeParameters());
             case CompiledDataParentType parentType -> namedTypeKey(parentType.name(), parentType.typeParameters());
-            case CompiledObjectType objectType -> objectType.name();
+            case CompiledObjectType objectType -> objectType.name() + "[backendClassName=" + objectType.backendClassName() + "]";
             case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
         };
     }

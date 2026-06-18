@@ -30,4 +30,14 @@ class CompiledTypeSignatureTest {
         assertThat(CompiledTypeSignature.typeKey(new CompiledList(PrimitiveLinkedType.INT)))
                 .isNotEqualTo(CompiledTypeSignature.typeKey(new CompiledList(PrimitiveLinkedType.LONG)));
     }
+
+    @Test
+    void shouldIncludeObjectBackendIdentity() {
+        var left = new CompiledObjectType("User", "pkg.a.Model.User", List.of(), null);
+        var right = new CompiledObjectType("User", "pkg.b.Model.User", List.of(), null);
+
+        assertThat(CompiledTypeSignature.typeKey(left))
+                .isEqualTo("User[backendClassName=pkg.a.Model.User]")
+                .isNotEqualTo(CompiledTypeSignature.typeKey(right));
+    }
 }
