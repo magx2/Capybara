@@ -1,0 +1,8 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/ObjectOrientedClass import { ObjectOrientedClass }
+from /dev/capylang/compiler/parser/ObjectOrientedInterface import { ObjectOrientedInterface }
+
+data ObjectOriented {
+    interfaces: List[ObjectOrientedInterface],
+    classes: List[ObjectOrientedClass]
+}

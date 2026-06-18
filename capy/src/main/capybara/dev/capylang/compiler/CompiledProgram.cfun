@@ -1,0 +1,24 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
+
+data CompiledProgram {
+    modules: List[CompiledModule],
+    objectOrientedModules: List[CompiledObjectOrientedUnit],
+    nativeProviders: NativeProviderManifest,
+    nativeProviderCatalog: NativeProviderCatalog,
+}
+
+fun empty_native_provider_manifest(): NativeProviderManifest =
+    NativeProviderManifest { providers: [] }
+
+fun empty_native_provider_catalog(): NativeProviderCatalog =
+    NativeProviderCatalog {
+        declarations: [],
+        bindings: []
+    }

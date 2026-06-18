@@ -5,6 +5,7 @@ from /capy/lang/Option import { * }
 from /capy/collection/List import { * }
 from /capy/meta_prog/Reflection import { * }
 from AnnotationReflectionDefinitions import { * }
+import /dev/capylang/test/support/QualifiedAnnotationDefinitions
 
 @ImportedAnnotationMarker
 @ImportedDataLabel(label: "definition-defaults")
@@ -17,6 +18,11 @@ data DefinitionsDefaultCustomer {
 
 @ImportedDataLabel(label: "definition-custom", order: 7, active: false)
 data DefinitionsCustomCustomer {
+    id: String
+}
+
+@QualifiedAnnotationDefinitions.SupportDataLabel(label: "definition-qualified", order: 11)
+data DefinitionsQualifiedCustomer {
     id: String
 }
 
@@ -33,6 +39,7 @@ fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/AnnotationReflectionDefinitions.cfun", [
         test("reflects imported data annotation defaults", () => reflects_imported_data_annotation_defaults()),
         test("reflects imported data annotation arguments", () => reflects_imported_data_annotation_arguments()),
+        test("reflects qualified imported data annotation", () => reflects_qualified_imported_data_annotation()),
         test("reflects imported field annotations", () => reflects_imported_field_annotations()),
         test("uses imported function and method annotations", () => uses_imported_function_and_method_annotations()),
     ])
@@ -62,6 +69,18 @@ fun reflects_imported_data_annotation_arguments(): Assert =
         assert_that(ard_annotation_string(data_label, "label")).is_equal_to("definition-custom"),
         assert_that(ard_annotation_int(data_label, "order")).is_equal_to(7),
         assert_that(ard_annotation_bool(data_label, "active")).is_false(),
+    ])
+
+fun reflects_qualified_imported_data_annotation(): Assert =
+    let info = reflection(DefinitionsQualifiedCustomer { id: "C-5" })
+    let data_label = info.annotations[0]
+    assert_all([
+        assert_that(info.name).is_equal_to("DefinitionsQualifiedCustomer"),
+        assert_that(ard_annotation_names(info.annotations)).is_equal_to(["SupportDataLabel"]),
+        assert_that(ard_annotation_pkg_name(data_label)).is_equal_to("QualifiedAnnotationDefinitions"),
+        assert_that(ard_annotation_string(data_label, "label")).is_equal_to("definition-qualified"),
+        assert_that(ard_annotation_int(data_label, "order")).is_equal_to(11),
+        assert_that(ard_annotation_bool(data_label, "active")).is_true(),
     ])
 
 fun reflects_imported_field_annotations(): Assert =

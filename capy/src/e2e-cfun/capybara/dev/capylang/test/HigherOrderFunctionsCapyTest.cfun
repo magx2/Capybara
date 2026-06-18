@@ -13,6 +13,7 @@ fun tests(): Effect[TestFile] =
         test("run_lambda2 invokes a function reference", () => run_lambda2_invokes_a_function_reference()),
         test("invoke_hof_unused ignores its lambda argument", () => invoke_hof_unused_ignores_its_lambda_argument()),
         test("run_lambda_unused_middle ignores unused middle arguments", () => run_lambda_unused_middle_ignores_unused_middle_arguments()),
+        test("run_lambda_unused_pair gives ignored arguments unique backend names", () => run_lambda_unused_pair_gives_ignored_arguments_unique_backend_names()),
         test("run_lambda_no_args invokes a no-arg lambda", () => run_lambda_no_args_invokes_a_no_arg_lambda()),
     ])
 
@@ -42,6 +43,10 @@ private fun invoke_hof_unused_ignores_its_lambda_argument(): Assert =
 private fun run_lambda_unused_middle_ignores_unused_middle_arguments(): Assert =
     let value: int = run_lambda_unused_middle()
     assert_that(value).is_equal_to(12)
+
+private fun run_lambda_unused_pair_gives_ignored_arguments_unique_backend_names(): Assert =
+    let value: int = run_lambda_unused_pair()
+    assert_that(value).is_equal_to(15)
 
 private fun run_lambda_no_args_invokes_a_no_arg_lambda(): Assert =
     let value: String = run_lambda_no_args()

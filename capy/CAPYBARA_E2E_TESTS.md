@@ -1,6 +1,6 @@
 # Capybara E2E Test Conventions
 
-Use Capybara test companions for migrated e2e behavior so the same assertions run on Java, JavaScript, and Python generated backends.
+Use Capybara test companions for migrated e2e behavior so the same assertions run on Java and Python generated backends.
 
 ## Functional Tests
 

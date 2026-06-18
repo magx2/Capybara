@@ -1,7 +1,0 @@
-package dev.capylang.compiler.parser;
-
-import java.util.Optional;
-
-public sealed interface Expression permits BooleanValue, ByteValue, ConstructorData, DoubleValue, FieldAccess, FloatValue, FunctionCall, FunctionInvoke, FunctionReference, IfExpression, IndexExpression, InfixExpression, IntValue, LambdaExpression, LetExpression, LongValue, MatchExpression, NewData, NewDictExpression, NewListExpression, NewSetExpression, NothingValue, PlaceholderExpression, ReduceExpression, SliceExpression, StringValue, TupleExpression, UnwrapExpression, Value, WithExpression {
-    Optional<SourcePosition> position();
-}

@@ -1,0 +1,1 @@
+data CompiledSourceLocation { line: int, column: int }
