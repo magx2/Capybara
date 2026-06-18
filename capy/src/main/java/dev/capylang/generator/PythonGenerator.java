@@ -887,8 +887,43 @@ public final class PythonGenerator implements Generator {
                 && tailArgs.size() == 1) {
                 return "str(" + receiver + ").endswith(" + tailArgs.getFirst() + ")";
             }
-            if ("trim".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.isEmpty()) {
-                return "str(" + receiver + ").strip()";
+            if ("trim".equals(methodName) && isStringLike(receiverType) && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim(" + receiver + ")";
+            }
+            if (("is_blank".equals(methodName) || "isBlank".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".is_blank(" + receiver + ")";
+            }
+            if (("trim_start".equals(methodName) || "trimStart".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim_start(" + receiver + ")";
+            }
+            if (("trim_end".equals(methodName) || "trimEnd".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".trim_end(" + receiver + ")";
+            }
+            if ("repeat".equals(methodName) && isStringLike(receiverType) && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".repeat(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
+            if (("index_of".equals(methodName) || "indexOf".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
+            if (("last_index_of".equals(methodName) || "lastIndexOf".equals(methodName))
+                && isStringLike(receiverType)
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".last_index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if ("size".equals(methodName) && isCollectionType(receiverType)) {
                 return "capy.size(" + receiver + ")";
@@ -2780,6 +2815,8 @@ public final class PythonGenerator implements Generator {
                     "__constructor__primitive__char", "capy__constructorPrimitiveChar",
                     "chars", "char_at", "charAt", "get_char", "getChar",
                     "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase", "tol_lower_case", "tolLowerCase",
+                    "is_blank", "isBlank", "trim_start", "trimStart", "trim_end", "trimEnd",
+                    "repeat", "index_of", "indexOf", "last_index_of", "lastIndexOf",
                     "toUpperCase__name_to_upper_case__char",
                     "toLowerCase__name_to_lower_case__char",
                     "tolLowerCase__name_tol_lower_case__char",
@@ -3097,7 +3134,33 @@ public final class PythonGenerator implements Generator {
                     contains = lambda value, part: part in str(value)
                     starts_with = lambda value, part: str(value).startswith(part)
                     end_with = lambda value, part: str(value).endswith(part)
-                    trim = lambda value: str(value).strip()
+                    TRIM_WHITESPACE = " \\t\\n\\r\\f"
+                    def trim_start(value):
+                        text = str(value)
+                        idx = 0
+                        while idx < len(text) and text[idx] in TRIM_WHITESPACE:
+                            idx += 1
+                        return text[idx:]
+                    trimStart = trim_start
+                    def trim_end(value):
+                        text = str(value)
+                        idx = len(text)
+                        while idx > 0 and text[idx - 1] in TRIM_WHITESPACE:
+                            idx -= 1
+                        return text[:idx]
+                    trimEnd = trim_end
+                    trim = lambda value: trim_end(trim_start(value))
+                    is_blank = lambda value: len(trim(value)) == 0
+                    isBlank = is_blank
+                    repeat = lambda value, times: str(value) * max(0, times)
+                    def index_of(value, part):
+                        idx = str(value).find(str(part))
+                        return capy.None_ if idx < 0 else capy.Some({'value': idx})
+                    indexOf = index_of
+                    def last_index_of(value, part):
+                        idx = str(value).rfind(str(part))
+                        return capy.None_ if idx < 0 else capy.Some({'value': idx})
+                    lastIndexOf = last_index_of
                     LOWER_CASE_ASCII_LETTERS = "abcdefghijklmnopqrstuvwxyz"
                     UPPER_CASE_ASCII_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                     def _convert_ascii_case(value, source, target):
