@@ -3645,6 +3645,7 @@ public final class JavaScriptGenerator implements Generator {
             return """
                     'use strict';
                     const capy = require('../../dev/capylang/capybara.js');
+                    const io = () => require('./IO.js');
 
                     const PathRoot = (() => {
                         const values = [
@@ -3742,6 +3743,75 @@ public final class JavaScriptGenerator implements Generator {
                         }
                         capybaraDataValueInfo() {
                             return capy.dataValueInfo(this, 'Path', 'capy.io', 'capy/io/Path', [], []);
+                        }
+                        appendBytes(bytes) {
+                            return io().appendBytes(this, bytes);
+                        }
+                        appendLines(lines) {
+                            return io().appendLines(this, lines);
+                        }
+                        appendText(text) {
+                            return io().appendText(this, text);
+                        }
+                        copy(target) {
+                            return io().copy(this, target);
+                        }
+                        copyReplace(target) {
+                            return io().copyReplace(this, target);
+                        }
+                        createDirectories() {
+                            return io().createDirectories(this);
+                        }
+                        createDirectory() {
+                            return io().createDirectory(this);
+                        }
+                        createFile() {
+                            return io().createFile(this);
+                        }
+                        delete() {
+                            return io().delete_(this);
+                        }
+                        delete_() {
+                            return this.delete();
+                        }
+                        exists() {
+                            return io().exists(this);
+                        }
+                        isDirectory() {
+                            return io().isDirectory(this);
+                        }
+                        isFile() {
+                            return io().isFile(this);
+                        }
+                        listEntries() {
+                            return io().listEntries(this);
+                        }
+                        move(target) {
+                            return io().move(this, target);
+                        }
+                        moveReplace(target) {
+                            return io().moveReplace(this, target);
+                        }
+                        readBytes() {
+                            return io().readBytes(this);
+                        }
+                        readLines() {
+                            return io().readLines(this);
+                        }
+                        readText() {
+                            return io().readText(this);
+                        }
+                        size() {
+                            return io().size(this);
+                        }
+                        writeBytes(bytes) {
+                            return io().writeBytes(this, bytes);
+                        }
+                        writeLines(lines) {
+                            return io().writeLines(this, lines);
+                        }
+                        writeText(text) {
+                            return io().writeText(this, text);
                         }
                     }
 
