@@ -3925,7 +3925,7 @@ public class CapybaraExpressionCompiler {
 
     private String overloadedJavaFunctionName(FunctionSignature signature) {
         return signature.name() + "__" + signature.parameterTypes().stream()
-                .map(type -> sanitizeOverloadSuffix(String.valueOf(type)))
+                .map(type -> sanitizeOverloadSuffix(CompiledTypeSignature.typeKey(type)))
                 .collect(java.util.stream.Collectors.joining("__"));
     }
 
