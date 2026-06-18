@@ -2,7 +2,6 @@ import com.github.gradle.node.task.NodeTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Task
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
@@ -113,7 +112,15 @@ tasks.named('envSetup') {
     mustRunAfter(capyPythonSetupTasks)
 }
 
+configurations {
+    capyRuntimeDependencies {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
 dependencies {
+    capyRuntimeDependencies project(path: ':capy', configuration: 'capyRuntimeDependenciesElements')
     testImplementation 'org.assertj:assertj-core:3.27.6'
 }
 
@@ -419,7 +426,9 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     }
 }
 
-def capyRuntimeService = gradle.sharedServices.registerIfAbsent('capyRuntimeService', CapyRuntimeService) {}
+def capyRuntimeService = gradle.sharedServices.registerIfAbsent('capyRuntimeService', CapyRuntimeService) {
+    maxParallelUsages.set(1)
+}
 def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'FINE'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
@@ -427,12 +436,14 @@ def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
 }
 
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
+    usesService(capyRuntimeService)
     runtimeService.set(capyRuntimeService)
     logLevel.set(capybaraCompileLogLevel)
     outputTypeName.set('JAVA')
 }
 
 tasks.withType(InProcessCapybaraTestTask).configureEach {
+    usesService(capyRuntimeService)
     runtimeService.set(capyRuntimeService)
     logType.set('TC')
     getTests().convention([])
@@ -440,12 +451,9 @@ tasks.withType(InProcessCapybaraTestTask).configureEach {
 }
 
 def capyProject = project(':capy')
-def capyRuntimeDependencies = capyProject.configurations.runtimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
-}.files
 def capyRuntimeClasspath = files(
         capyProject.sourceSets.main.output.classesDirs,
-        capyRuntimeDependencies
+        configurations.capyRuntimeDependencies
 )
 
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
