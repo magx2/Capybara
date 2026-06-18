@@ -12,8 +12,23 @@ from /capy/date_time/DateTime import { * }
 from /capy/date_time/Duration import { * }
 from /capy/date_time/Interval import { * }
 
+/// Result of one assertion check.
 data Assertion { result: bool, message: String, type: String }
 
+/// Chainable assertion value produced by `assert_that`.
+///
+/// Assertions are lazy: each assertion stores suppliers that the test runner
+/// evaluates later. Chain methods to describe all expectations for one value,
+/// and use `assert_all` to combine expectations for several values.
+///
+/// Example:
+/// ```cfun
+/// assert_all([
+///     assert_that("capybara").starts_with("capy").contains("bara"),
+///     assert_that([1, 2, 3]).has_size(3).contains(2),
+///     assert_that(Success { value: 42 }).succeeds(42)
+/// ])
+/// ```
 union Assert { assertions: List[() => Assertion] } =
     TechnicalAssert
     | StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
@@ -21,8 +36,10 @@ union Assert { assertions: List[() => Assertion] } =
     | DateAssert | TimeAssert | DateTimeAssert | DurationAssert | IntervalAssert
     | ListAssert | SetAssert | DictAssert | SeqAssert
 
+/// Returns true when at least one assertion in the chain fails.
 fun Assert.failed(): bool = (this.assertions | supplier => supplier().result).any(r => !r)
 
+/// Returns true when every assertion in the chain succeeds.
 fun Assert.succeeded(): bool = !this.failed()
 
 private data TechnicalAssert { assertions: List[() => Assertion] }
@@ -45,11 +62,23 @@ data SetAssert[T] { value: Set[T] }
 data DictAssert[T] { value: Dict[T] }
 data SeqAssert[T] { value: Seq[T] }
 
+/// Combines several assertion chains into one `Assert`.
+///
+/// Use this when a test case needs to verify multiple independent values.
+///
+/// Example:
+/// ```cfun
+/// test("profile is valid", () => assert_all([
+///     assert_that(profile.name).is_equal_to("Ada"),
+///     assert_that(profile.age).is_between(1, 150)
+/// ]))
+/// ```
 fun assert_all(asserts: List[Assert]): Assert =
     let initial: List[() => Assertion] = []
     let assertions: List[() => Assertion] = asserts |> initial, (acc, assert) => acc + assert.assertions
     TechnicalAssert { assertions: assertions }
 
+/// Adds a string equality assertion to the chain.
 fun StringAssert.is_equal_to(other: String): StringAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -61,6 +90,7 @@ fun StringAssert.is_equal_to(other: String): StringAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the string starts with `other`.
 fun StringAssert.starts_with(other: String): StringAssert =
     let assertion = Assertion {
        result: this.value.starts_with(other),
@@ -83,6 +113,7 @@ fun StringAssert.does_not_start_with(other: String): StringAssert =
        assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the string contains `other`.
 fun StringAssert.contains(other: String): StringAssert =
     let assertion = Assertion {
        result: this.value ? other,
@@ -94,6 +125,7 @@ fun StringAssert.contains(other: String): StringAssert =
        assertions: this.assertions + () => assertion
     }
 
+/// Adds an int equality assertion to the chain.
 fun IntAssert.is_equal_to(other: int): IntAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -139,6 +171,7 @@ fun IntAssert.is_less_or_equals_than(other: int): IntAssert =
 
 fun IntAssert.is_zero(): IntAssert = this.is_equal_to(0)
 fun IntAssert.is_one(): IntAssert = this.is_equal_to(1)
+/// Adds assertions that the int is between `start` and `end`, inclusive.
 fun IntAssert.is_between(start: int, end: int): IntAssert =
     this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
@@ -332,6 +365,7 @@ fun BoolAssert.is_equal_to(other: bool): BoolAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the bool is true.
 fun BoolAssert.is_true(): BoolAssert =
     let assertion = Assertion {
         result: this.value,
@@ -343,6 +377,7 @@ fun BoolAssert.is_true(): BoolAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the bool is false.
 fun BoolAssert.is_false(): BoolAssert =
     let assertion = Assertion {
         result: !this.value,
@@ -387,6 +422,7 @@ fun OptionAssert[T].is_equal_to(other: /capy/lang/Option[T]): OptionAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the option is `Some` with `other`.
 fun OptionAssert[T].contains(other: T): OptionAssert[T] =
     let assertion = Assertion {
         result: match this.value with
@@ -400,6 +436,7 @@ fun OptionAssert[T].contains(other: T): OptionAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the option is `None`.
 fun OptionAssert[T].is_empty(): OptionAssert[T] =
     let assertion = Assertion {
         result: match this.value with
@@ -424,6 +461,7 @@ fun ResultAssert[T].is_equal_to(other: /capy/lang/Result[T]): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the result is `Success`.
 fun ResultAssert[T].succeeds(): ResultAssert[T] =
     let assertion = Assertion {
         result:
@@ -438,6 +476,9 @@ fun ResultAssert[T].succeeds(): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the result is `Success` containing `other`.
+///
+/// Example: `assert_that("42".to_int()).succeeds(42)`.
 fun ResultAssert[T].succeeds(other: T): ResultAssert[T] =
     let assertion = Assertion {
         result:
@@ -452,6 +493,15 @@ fun ResultAssert[T].succeeds(other: T): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the result is `Success`, then runs nested assertions
+/// against the success value.
+///
+/// Example:
+/// ```cfun
+/// assert_that(load_user()).succeeds(user =>
+///     assert_that(user.name).is_equal_to("Ada")
+/// )
+/// ```
 fun ResultAssert[T].succeeds(assert: T => Assert): ResultAssert[T] =
     let assertions: List[() => Assertion] =
         match this.value with
@@ -468,6 +518,7 @@ fun ResultAssert[T].succeeds(assert: T => Assert): ResultAssert[T] =
         assertions: this.assertions + assertions
     }
 
+/// Adds an assertion that the result is `Error`.
 fun ResultAssert[T].fails(): ResultAssert[T] =
     let assertion = Assertion {
         result: {
@@ -483,6 +534,7 @@ fun ResultAssert[T].fails(): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the result is `Error` with the expected message.
 fun ResultAssert[T].fails(message: String): ResultAssert[T] =
     let assertion = Assertion {
         result: {
@@ -889,6 +941,7 @@ fun ListAssert[T].is_equal_to(other: List[T]): ListAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the list size equals `other`.
 fun ListAssert[T].has_size(other: int): ListAssert[T] =
     let assertion = Assertion {
         result: this.value.size() == other,
@@ -911,6 +964,7 @@ fun ListAssert[T].is_empty(): ListAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the list contains `other`.
 fun ListAssert[T].contains(other: T): ListAssert[T] =
     let assertion = Assertion {
         result: this.value.any(v => v == other),
@@ -1021,6 +1075,7 @@ fun DictAssert[T].is_empty(): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the dict contains `other` as a key.
 fun DictAssert[T].contains_key(other: String): DictAssert[T] =
     let assertion = Assertion {
         result: this.value.any((k, v) => k == other),
@@ -1109,22 +1164,41 @@ fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Starts a string assertion chain.
+///
+/// Example:
+/// ```cfun
+/// assert_that("capybara").starts_with("capy").contains("bara")
+/// ```
 fun assert_that(value: String) = StringAssert { value: value, assertions: [] }
 fun assert_that(value: size) = IntAssert { value: value.value, assertions: [] }
+/// Starts an int assertion chain.
 fun assert_that(value: int) = IntAssert { value: value, assertions: [] }
 fun assert_that(value: long) = LongAssert { value: value, assertions: [] }
 fun assert_that(value: double) = DoubleAssert { value: value, assertions: [] }
 fun assert_that(value: float) = FloatAssert { value: value, assertions: [] }
+/// Starts a bool assertion chain.
 fun assert_that(value: bool) = BoolAssert { value: value, assertions: [] }
 fun assert_that(value: Date) = DateAssert { value: value, assertions: [] }
 fun assert_that(value: Time) = TimeAssert { value: value, assertions: [] }
 fun assert_that(value: DateTime) = DateTimeAssert { value: value, assertions: [] }
 fun assert_that(value: Duration) = DurationAssert { value: value, assertions: [] }
 fun assert_that(value: Interval) = IntervalAssert { value: value, assertions: [] }
+/// Starts a list assertion chain.
 fun assert_that(value: List[T]): ListAssert[T] = ListAssert { value: value, assertions: [] }
 fun assert_that(value: Set[T]): SetAssert[T] = SetAssert { value: value, assertions: [] }
 fun assert_that(value: Dict[T]): DictAssert[T] = DictAssert { value: value, assertions: [] }
 fun assert_that(value: Seq[T]): SeqAssert[T] = SeqAssert { value: value, assertions: [] }
+/// Starts an option assertion chain.
 fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] }
+/// Starts a result assertion chain.
+///
+/// Example:
+/// ```cfun
+/// assert_that(parse_user(raw)).succeeds(user =>
+///     assert_that(user.name).is_equal_to("Ada")
+/// )
+/// ```
 fun assert_that(value: Result[T]) = ResultAssert { value: value, assertions: [] }
+/// Starts a data assertion chain using data equality or containment checks.
 fun assert_that(value: data) = DataAssert { value: value, assertions: [] }

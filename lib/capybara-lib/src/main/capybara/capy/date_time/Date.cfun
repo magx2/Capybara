@@ -51,6 +51,13 @@ private const MONTH_TO_DAY_BIAS: int = 2
 ///
 /// The constructor validates the provided values and returns an error for
 /// impossible dates.
+///
+/// Example:
+/// ```cfun
+/// Date { day: 29, month: FEBRUARY, year: 2024 }
+/// Date { day: 29, month: FEBRUARY, year: 2025 }
+/// ```
+/// The leap-year date succeeds; the invalid 2025 date returns `Error`.
 data Date {
     day: int,
     month: month,
@@ -81,6 +88,8 @@ fun Date.last_day_of_month(): Date =
         else Date! { day: 30, month: this.month, year: this.year }
 
 /// Converts this date to days since Unix epoch (`1970-01-01`).
+///
+/// Example: `UNIX_DATE.to_days_since_unix_epoch()` returns `0`.
 fun Date.to_days_since_unix_epoch(): int =
     let month_value = this.month.value
     let y = if month_value <= 2 then this.year - 1 else this.year
@@ -92,6 +101,8 @@ fun Date.to_days_since_unix_epoch(): int =
     era * DAYS_PER_400_YEARS + doe - UNIX_EPOCH_CIVIL_OFFSET_DAYS
 
 /// Converts days since Unix epoch (`1970-01-01`) to `Date`.
+///
+/// Example: `from_days_since_unix_epoch(1)` returns `1970-01-02`.
 fun from_days_since_unix_epoch(days_since_epoch: int): Date =
     let z: int = days_since_epoch + UNIX_EPOCH_CIVIL_OFFSET_DAYS
     let era: int = floor_div(z, DAYS_PER_400_YEARS)
@@ -106,9 +117,17 @@ fun from_days_since_unix_epoch(days_since_epoch: int): Date =
     Date! { day, month: month! { month_value }, year }
 
 /// Adds days to this date.
+///
+/// Example: `UNIX_DATE.add_days(31)` returns `1970-02-01`.
 fun Date.add_days(days: int): Date = from_days_since_unix_epoch(this.to_days_since_unix_epoch() + days)
 
 /// Adds years and months to this date, clamping the day to target month length.
+///
+/// Example:
+/// ```cfun
+/// Date! { day: 31, month: JANUARY, year: 2024 }.add_years_months(0, 1)
+/// ```
+/// Returns `2024-02-29`, because February 2024 has no day 31.
 fun Date.add_years_months(years: int, months: int): Date =
     fun floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
     fun days_in_month(year: int, value: month): int =
@@ -129,6 +148,9 @@ fun Date.add_years_months(years: int, months: int): Date =
     }
 
 /// Formats this date as an ISO 8601 calendar date.
+///
+/// Example: `Date! { day: 5, month: JUNE, year: 2026 }.to_iso_8601()`
+/// returns `2026-06-05`.
 fun Date.to_iso_8601(): String =
     @Recursive
     fun pad_left(value: String, size: int): String =
@@ -149,6 +171,13 @@ fun Date.to_iso_8601(): String =
     + pad_left("" + this.day, 2)
 
 /// Parses an ISO 8601 calendar date in basic or extended complete form.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("2026-06-05")
+/// from_iso_8601("20260605")
+/// ```
+/// Both forms return the same `Date`.
 fun from_iso_8601(iso: String): Result[Date] =
     data Parse[T] { buffer: String, value: T }
     fun invalid(message: String): String = "Invalid ISO 8601 date format: " + message

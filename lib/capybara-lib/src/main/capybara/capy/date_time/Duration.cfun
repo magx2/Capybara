@@ -19,6 +19,12 @@ from /capy/meta_prog/Recursive import { Recursive }
 /// `Duration` is a sum type:
 /// - `DateDuration` for year/month/day/time durations
 /// - `WeekDuration` for ISO week-only durations like `P2W`
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("P3Y6M4DT12H30M5S")
+/// ```
+/// Returns a `DateDuration` with date and time components populated.
 union Duration = DateDuration | WeekDuration
 
 /// Duration expressed with calendar and clock components.
@@ -95,6 +101,15 @@ fun Duration.to_iso_8601(): String =
 /// - only integer values are supported
 ///
 /// Returns `Error` with a readable message when the input is invalid.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("PT90S")
+/// from_iso_8601("P2W")
+/// from_iso_8601("P0003-06-04T12:30:05")
+/// ```
+/// These return a 90-second date duration, a two-week duration, and a combined
+/// extended duration respectively.
 fun from_iso_8601(iso: String): Result[Duration] =
     data Parse[T] { buffer: String, value: T }
     data Parts {
@@ -389,6 +404,10 @@ fun from_iso_8601(iso: String): Result[Duration] =
 
 
 /// Returns this duration with all components negated.
+/// Returns the same duration with every component sign inverted.
+///
+/// Example: `DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }.negate()`
+/// returns a negative one-day duration.
 fun Duration.negate(): Duration =
     match this with
     case WeekDuration { weeks } -> WeekDuration { weeks: 0 - weeks }
