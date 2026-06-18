@@ -1,0 +1,157 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/System import { current_millis, nano_time }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/io/Path.cfun", [
+        path_methods_read_write_append_text_lines_and_bytes().map(assertion => test("path methods read write and append text lines and bytes", () => assertion)),
+        path_methods_create_list_and_delete_files_and_directories().map(assertion => test("path methods create list and delete files and directories", () => assertion)),
+        path_methods_copy_move_and_replace_files().map(assertion => test("path methods copy move and replace files", () => assertion)),
+        path_methods_forward_io_failures().map(assertion => test("path methods forward IO failures", () => assertion)),
+    ])
+
+fun path_methods_read_write_append_text_lines_and_bytes(): Effect[Assert] =
+    let base <- unique_base_path("read-write")
+    let base_path = from_string(base)
+    let text_file = from_string(base + "/text.txt")
+    let lines_file = from_string(base + "/lines.txt")
+    let bytes_file = from_string(base + "/bytes.bin")
+    let created <- base_path.create_directories()
+    let text_written <- text_file.write_text("hello")
+    let text_appended <- text_file.append_text(" world")
+    let text_read <- text_file.read_text()
+    let lines_written <- lines_file.write_lines(["alpha"])
+    let lines_appended <- lines_file.append_lines(["beta"])
+    let lines_read <- lines_file.read_lines()
+    let bytes_written <- bytes_file.write_bytes([0x41, 0x42])
+    let bytes_appended <- bytes_file.append_bytes([0x43])
+    let bytes_read <- bytes_file.read_bytes()
+    let bytes_size <- bytes_file.size()
+    let bytes_exists <- bytes_file.exists()
+    let bytes_is_file <- bytes_file.is_file()
+    let bytes_is_directory <- bytes_file.is_directory()
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_that(text_written).succeeds("hello"),
+        assert_that(text_appended).succeeds(" world"),
+        assert_that(text_read).succeeds("hello world"),
+        assert_that(lines_written).succeeds(["alpha"]),
+        assert_that(lines_appended).succeeds(["beta"]),
+        assert_that(lines_read).succeeds(["alpha", "beta"]),
+        assert_that(bytes_written).succeeds([0x41, 0x42]),
+        assert_that(bytes_appended).succeeds([0x43]),
+        assert_that(bytes_read).succeeds([0x41, 0x42, 0x43]),
+        assert_that(bytes_size).succeeds(byte_size => assert_that(byte_size.value).is_equal_to(3L)),
+        assert_that(bytes_exists).is_true(),
+        assert_that(bytes_is_file).is_true(),
+        assert_that(bytes_is_directory).is_false(),
+    ])
+
+fun path_methods_create_list_and_delete_files_and_directories(): Effect[Assert] =
+    let base <- unique_base_path("directories")
+    let base_path = from_string(base)
+    let single_dir = from_string(base + "/single")
+    let dir = from_string(base + "/nested/dir")
+    let child = from_string(base + "/nested/dir/child.txt")
+    let delete_target = from_string(base + "/delete-me.txt")
+    let base_created <- base_path.create_directories()
+    let single_created <- single_dir.create_directory()
+    let single_is_directory <- single_dir.is_directory()
+    let dir_created <- dir.create_directories()
+    let dir_is_directory <- dir.is_directory()
+    let child_written <- child.write_text("x")
+    let entries: Result[List[Path]] <- dir.list_entries()
+    let delete_target_created <- delete_target.create_file()
+    let delete_target_is_file <- delete_target.is_file()
+    let deleted <- delete_target.delete()
+    let delete_target_exists <- delete_target.exists()
+    assert_all([
+        assert_that(base_created).succeeds(),
+        assert_that(single_created).succeeds(),
+        assert_that(single_is_directory).is_true(),
+        assert_that(dir_created).succeeds(),
+        assert_that(dir_is_directory).is_true(),
+        assert_that(child_written).succeeds("x"),
+        assert_successful_path_list_has_size(entries, 1),
+        assert_that(delete_target_created).succeeds(),
+        assert_that(delete_target_is_file).is_true(),
+        assert_that(deleted).succeeds(true),
+        assert_that(delete_target_exists).is_false(),
+    ])
+
+fun path_methods_copy_move_and_replace_files(): Effect[Assert] =
+    let base <- unique_base_path("copy-move")
+    let base_path = from_string(base)
+    let source = from_string(base + "/source.txt")
+    let copied = from_string(base + "/copied.txt")
+    let moved = from_string(base + "/moved.txt")
+    let replace_source = from_string(base + "/replace-source.txt")
+    let replace_copied = from_string(base + "/replace-copied.txt")
+    let replace_moved = from_string(base + "/replace-moved.txt")
+    let created <- base_path.create_directories()
+    let source_written <- source.write_text("payload")
+    let copied_result <- source.copy(copied)
+    let copied_text <- copied.read_text()
+    let moved_result <- copied.move(moved)
+    let copied_exists <- copied.exists()
+    let moved_text <- moved.read_text()
+    let replace_source_written <- replace_source.write_text("new")
+    let replace_copied_written <- replace_copied.write_text("old")
+    let copied_replaced <- replace_source.copy_replace(replace_copied)
+    let copied_replaced_text <- replace_copied.read_text()
+    let replace_moved_written <- replace_moved.write_text("old")
+    let moved_replaced <- replace_copied.move_replace(replace_moved)
+    let replace_copied_exists <- replace_copied.exists()
+    let moved_replaced_text <- replace_moved.read_text()
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_that(source_written).succeeds("payload"),
+        assert_that(copied_result).succeeds(),
+        assert_that(copied_text).succeeds("payload"),
+        assert_that(moved_result).succeeds(),
+        assert_that(copied_exists).is_false(),
+        assert_that(moved_text).succeeds("payload"),
+        assert_that(replace_source_written).succeeds("new"),
+        assert_that(replace_copied_written).succeeds("old"),
+        assert_that(copied_replaced).succeeds(),
+        assert_that(copied_replaced_text).succeeds("new"),
+        assert_that(replace_moved_written).succeeds("old"),
+        assert_that(moved_replaced).succeeds(),
+        assert_that(replace_copied_exists).is_false(),
+        assert_that(moved_replaced_text).succeeds("new"),
+    ])
+
+fun path_methods_forward_io_failures(): Effect[Assert] =
+    let base <- unique_base_path("errors")
+    let base_path = from_string(base)
+    let missing = from_string(base + "/missing.txt")
+    let created <- base_path.create_directories()
+    let read_missing <- missing.read_text()
+    let size_missing <- missing.size()
+    let copy_missing <- missing.copy(from_string(base + "/copied.txt"))
+    let missing_exists <- missing.exists()
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_failed_message_contains(read_missing, "read_text failed"),
+        assert_failed_message_contains(size_missing, "size failed"),
+        assert_failed_message_contains(copy_missing, "copy failed"),
+        assert_that(missing_exists).is_false(),
+    ])
+
+private fun unique_base_path(name: String): Effect[String] =
+    let millis <- current_millis()
+    let nanos <- nano_time()
+    "/tmp/capybara-path-test/" + name + "-" + millis + "-" + nanos
+
+private fun assert_failed_message_contains(result: Result[T], expected: String): Assert =
+    match result with
+    case Error e -> assert_that(e.message).contains(expected)
+    case Success _ -> assert_that(false).is_true()
+
+private fun assert_successful_path_list_has_size(result: Result[List[Path]], expected: int): Assert =
+    match result with
+    case Error _ -> assert_that(false).is_true()
+    case Success { paths } -> assert_that(paths).has_size(expected)
