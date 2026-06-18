@@ -866,13 +866,13 @@ public final class PythonGenerator implements Generator {
                 return moduleVar("capy.lang.String") + ".compare(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (("to_upper_case".equals(methodName) || "toUpperCase".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.isEmpty()) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".to_upper_case(" + receiver + ")";
             }
             if (("to_lower_case".equals(methodName) || "toLowerCase".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.isEmpty()) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".to_lower_case(" + receiver + ")";
@@ -887,40 +887,40 @@ public final class PythonGenerator implements Generator {
                 && tailArgs.size() == 1) {
                 return "str(" + receiver + ").endswith(" + tailArgs.getFirst() + ")";
             }
-            if ("trim".equals(methodName) && isStringLike(receiverType) && tailArgs.isEmpty()) {
+            if ("trim".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.isEmpty()) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".trim(" + receiver + ")";
             }
             if (("is_blank".equals(methodName) || "isBlank".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.isEmpty()) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".is_blank(" + receiver + ")";
             }
             if (("trim_start".equals(methodName) || "trimStart".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.isEmpty()) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".trim_start(" + receiver + ")";
             }
             if (("trim_end".equals(methodName) || "trimEnd".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.isEmpty()) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".trim_end(" + receiver + ")";
             }
-            if ("repeat".equals(methodName) && isStringLike(receiverType) && tailArgs.size() == 1) {
+            if ("repeat".equals(methodName) && receiverType == PrimitiveLinkedType.STRING && tailArgs.size() == 1) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".repeat(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (("index_of".equals(methodName) || "indexOf".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
             if (("last_index_of".equals(methodName) || "lastIndexOf".equals(methodName))
-                && isStringLike(receiverType)
+                && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
                 require("capy.lang.String");
                 return moduleVar("capy.lang.String") + ".last_index_of(" + receiver + ", " + tailArgs.getFirst() + ")";
