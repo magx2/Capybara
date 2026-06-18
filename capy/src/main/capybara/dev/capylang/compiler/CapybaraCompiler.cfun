@@ -22,6 +22,8 @@ from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimiti
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/CapybaraValidator import { CapybaraValidator }
+from /dev/capylang/compiler/CapybaraValidatorProvider import { validator }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
@@ -43,8 +45,10 @@ from /dev/capylang/compiler/parser/ObjectOrientedInitBlock import { ObjectOrient
 from /dev/capylang/compiler/parser/ObjectOrientedInterface import { ObjectOrientedInterface }
 from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
 from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
+from /dev/capylang/compiler/parser/CapybaraParser import { CapybaraParser }
 from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }
+from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
@@ -62,23 +66,80 @@ fun compile(
         moduleName: "",
         line: 0,
         column: 0
-    }] })
+        }] })
     else
         let capybara_parser <- parser()
-        capybara_parser.parse(rawModules).map(program => compiled_program(program, libraries, nativeProviders, nativeImplementationProviders))
+        let capybara_validator <- validator()
+        capybara_parser.parse(rawModules).flat_map(program =>
+            validate_program(capybara_validator, rawModules, libraries, nativeProviders).map(errors =>
+                compiled_program(program, libraries, nativeProviders, nativeImplementationProviders, errors)
+            )
+        )
 
 private fun compiled_program(
     program: /dev/capylang/compiler/parser/ParsedProgram,
     libraries: Set[CompiledModule],
     nativeProviders: NativeProviderManifest,
-    nativeImplementationProviders: NativeProviderManifest
+    nativeImplementationProviders: NativeProviderManifest,
+    errors: List[CompilerError]
 ): Either[CompiledProgram, List[CompilerError]] =
-    Left { CompiledProgram {
-        modules: compile_modules(program.modules, program.modules, libraries.to_list()),
+    let libraryModules = libraries.to_list()
+    if !errors.is_empty()
+    then Right { errors }
+    else Left { CompiledProgram {
+        modules: compile_modules(program.modules, program.modules, libraryModules),
         objectOrientedModules: compile_object_oriented_modules(program.modules, program.modules),
         nativeProviders: nativeProviders,
         nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
     }}
+
+private fun validate_program(
+    capybaraValidator: CapybaraValidator,
+    rawModules: List[RawModule],
+    libraries: Set[CompiledModule],
+    nativeProviders: NativeProviderManifest
+): Effect[List[CompilerError]] =
+    let libraryModules = validation_library_modules(libraries.to_list())
+    capybaraValidator.validate(
+        raw_module_names(rawModules),
+        raw_module_paths(rawModules),
+        raw_module_inputs(rawModules),
+        raw_module_source_kinds(rawModules),
+        libraryModules,
+        nativeProviders
+    )
+
+private fun raw_module_names(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [module.name] + raw_module_names(modules[1:])
+
+private fun raw_module_paths(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [module.path] + raw_module_paths(modules[1:])
+
+private fun raw_module_inputs(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [module.input] + raw_module_inputs(modules[1:])
+
+private fun raw_module_source_kinds(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [raw_module_source_kind(module.sourceKind)] + raw_module_source_kinds(modules[1:])
+
+private fun raw_module_source_kind(sourceKind: SourceKind): String =
+    match sourceKind with
+    case FUNCTIONAL -> "FUNCTIONAL"
+    case OBJECT_ORIENTED -> "OBJECT_ORIENTED"
+
+private fun validation_library_modules(libraries: List[CompiledModule]): List[String] =
+    match libraries[0] with
+    case None -> []
+    case Some { library } ->
+        [compiled_module_path(library), library.name, compiled_module_class_name(library)]
+            + validation_library_modules(libraries[1:])
 
 private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraries: List[CompiledModule]): List[CompiledModule] =
     match modules[0] with
@@ -965,22 +1026,35 @@ private fun compile_native_provider_declarations_in_module(definitions: List[Def
     case Some { definition } ->
         match definition with
         case FunctionDefinition { function } ->
-            if native_provider_function(function)
+            if native_provider_function(function, module)
             then [compile_native_provider_declaration(function, module, allModules)] + compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
             else compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
         case _ -> compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
 
-private fun native_provider_function(function: FunctionDeclaration): bool =
-    native_provider_annotations(function.annotations)
+private fun native_provider_function(function: FunctionDeclaration, module: ParsedModule): bool =
+    native_provider_annotations(function.annotations, module)
 
-private fun native_provider_annotations(annotations: List[FunctionAnnotationApplication]): bool =
+private fun native_provider_annotations(annotations: List[FunctionAnnotationApplication], module: ParsedModule): bool =
     match annotations[0] with
     case None -> false
     case Some { annotation } ->
-        native_provider_annotation_name(annotation.name) | native_provider_annotations(annotations[1:])
+        native_provider_annotation_name(annotation.name, module) | native_provider_annotations(annotations[1:], module)
 
-private fun native_provider_annotation_name(name: String): bool =
-    compiler_unqualified_type_name(name) == "NativeProvider"
+private fun native_provider_annotation_name(name: String, module: ParsedModule): bool =
+    compiler_unqualified_type_name(name) == "NativeProvider" & standard_native_provider_imported(module)
+
+private fun standard_native_provider_imported(module: ParsedModule): bool =
+    module_imports_name(module.imports, "/capy/meta_prog/NativeProvider", "NativeProvider")
+        | module_imports_name(module.imports, "capy/meta_prog/NativeProvider", "NativeProvider")
+        | module_imports_name(module.imports, "NativeProvider", "NativeProvider")
+
+private fun module_imports_name(imports: List[ImportDeclaration], modulePath: String, name: String): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if normalize_import_module_path(declaration.modulePath) == normalize_import_module_path(modulePath)
+        then declaration.wildcard | declaration.importedNames.contains(name)
+        else module_imports_name(imports[1:], modulePath, name)
 
 private fun compile_native_provider_declaration(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledNativeProviderDeclaration =
     let returnType = compile_type_in_module(function.returnType, module, allModules)
@@ -991,7 +1065,7 @@ private fun compile_native_provider_declaration(function: FunctionDeclaration, m
         sourceModuleName: module.name,
         targetTypeName: targetType.name,
         interfaceId: native_provider_interface_id(targetType),
-        qualifier: native_provider_qualifier(function.annotations),
+        qualifier: native_provider_qualifier(function.annotations, module),
         sourceFile: native_provider_source_file(module)
     }
 
@@ -1007,13 +1081,13 @@ private fun native_provider_interface_id(type: CompiledTypeReference): String =
     then type.name["__capy_oo|".size().value, type.name.size().value]
     else type.name
 
-private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplication]): String =
+private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplication], module: ParsedModule): String =
     match annotations[0] with
     case None -> ""
     case Some { annotation } ->
-        if native_provider_annotation_name(annotation.name)
+        if native_provider_annotation_name(annotation.name, module)
         then native_provider_qualifier_argument(annotation.arguments)
-        else native_provider_qualifier(annotations[1:])
+        else native_provider_qualifier(annotations[1:], module)
 
 private fun native_provider_qualifier_argument(arguments: List[FunctionAnnotationArgument]): String =
     match arguments[0] with
@@ -1408,7 +1482,7 @@ private fun compiler_tuple_type(arguments: List[TypeReference]): TypeReference =
     TypeReference { name: "Tuple", arguments: arguments }
 
 private fun placeholder_source(source: String): bool =
-    source == "???" | source == "_"
+    source == "_"
 
 private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
     match imports[0] with

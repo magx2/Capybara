@@ -2,7 +2,7 @@ from /capy/collection/List import { * }
 from /capy/collection/Dict import { * }
 from /capy/collection/Set import { * }
 from /capy/io/Console import { println, println_error }
-from /capy/io/IO import { create_directories, exists, is_directory, is_file, list_entries, read_text, write_text }
+from /capy/io/IO import { create_directories, delete, exists, is_directory, is_file, list_entries, read_text, write_text }
 from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { * }
@@ -551,24 +551,24 @@ fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
     )
 
 private fun compile_configuration(options: CompileOptions): Effect[Result[CompileConfiguration]] =
-    if options.compile_tests
-    then pure(Error { message: "`compile --compile-tests` is not available until test augmentation is translated to CFUN." })
-    else compiler_configuration(options.libs, options.native_wiring)
+    compiler_configuration(options.libs, options.native_wiring)
 
 private fun compile_generate_configuration(options: CompileGenerateOptions): Effect[Result[CompileConfiguration]] =
     compiler_configuration(options.libs, options.native_wiring)
 
 private fun compiler_configuration(libs: Option[String], nativeWiring: Option[String]): Effect[Result[CompileConfiguration]] =
-    read_library_modules(libs).map(libraries_result =>
+    read_library_modules(libs).flat_map(libraries_result =>
         match libraries_result with
-        case Error e -> e
+        case Error e -> pure(e)
         case Success { libraries } ->
-            match read_native_provider_manifest_option(nativeWiring) with
-            case Error e -> e
-            case Success { native_providers } -> Success { CompileConfiguration {
-                libraries: libraries,
-                native_providers: native_providers
-            }}
+            read_native_provider_manifest_option(nativeWiring).map(native_result =>
+                match native_result with
+                case Error e -> e
+                case Success { native_providers } -> Success { CompileConfiguration {
+                    libraries: libraries,
+                    native_providers: native_providers
+                }}
+            )
     )
 
 private fun read_library_modules(libs: Option[String]): Effect[Result[Set[CompiledModule]]] =
@@ -579,10 +579,114 @@ private fun read_library_modules(libs: Option[String]): Effect[Result[Set[Compil
         then pure(Success { {} })
         else read_linked_libraries(value)
 
-private fun read_native_provider_manifest_option(nativeWiring: Option[String]): Result[NativeProviderManifest] =
+private fun read_native_provider_manifest_option(nativeWiring: Option[String]): Effect[Result[NativeProviderManifest]] =
     match nativeWiring with
-    case None -> Success { empty_native_provider_manifest() }
-    case Some { _ } -> Error { message: "`--native-wiring` is not available until native provider manifest deserialization is translated to CFUN." }
+    case None -> pure(Success { empty_native_provider_manifest() })
+    case Some { rawPath } ->
+        let manifestPath = from_string(rawPath)
+        validate_module_file(manifestPath, rawPath).flat_map(fileResult =>
+            match fileResult with
+            case Error { message } -> pure(Error { message: "Native wiring manifest is not a file: " + rawPath + ": " + message })
+            case Success _ ->
+                read_text(manifestPath).map(readResult =>
+                    match readResult with
+                    case Error { message } -> Error { message: "Unable to read native wiring manifest `" + rawPath + "`: " + message }
+                    case Success { source } -> parse_native_provider_manifest(rawPath, source)
+                )
+        )
+
+private fun parse_native_provider_manifest(rawPath: String, source: String): Result[NativeProviderManifest] =
+    match deserialize(source) with
+    case Error { message } -> Error { message: "Unable to parse native wiring manifest `" + rawPath + "`: " + message }
+    case Success { value } ->
+        match value.get("providers") with
+        case None -> Success { empty_native_provider_manifest() }
+        case Some { providersJson } ->
+            match native_provider_bindings_from_json(providersJson) with
+            case Error e -> e
+            case Success { providers } -> Success { NativeProviderManifest { providers } }
+
+private fun native_provider_bindings_from_json(json: Json): Result[List[NativeProviderBinding]] =
+    match json with
+    case JsonArray { value } -> native_provider_bindings_from_json_values(value)
+    case JsonValueArray { value } -> native_provider_bindings_from_json(value)
+    case _ -> Error { message: "Native wiring field `providers` must be an array." }
+
+private fun native_provider_bindings_from_json_values(values: List[Json]): Result[List[NativeProviderBinding]] =
+    match values[0] with
+    case None -> Success { [] }
+    case Some { value } ->
+        let binding <- native_provider_binding_from_json(value)
+        let rest <- native_provider_bindings_from_json_values(values[1:])
+        [binding] + rest
+
+private fun native_provider_binding_from_json(json: Json): Result[NativeProviderBinding] =
+    let object <- json_object(json, "Native provider binding")
+    let interfaceId <- json_required_string(object, "interfaceId")
+    let qualifier <- json_optional_string(object, "qualifier", "")
+    let javaBinding <- json_optional_backend_binding(object, "javaBinding")
+    let javascriptBinding <- json_optional_backend_binding(object, "javascriptBinding")
+    let pythonBinding <- json_optional_backend_binding(object, "pythonBinding")
+    NativeProviderBinding {
+        interfaceId: interfaceId,
+        qualifier: qualifier,
+        javaBinding: javaBinding,
+        javascriptBinding: javascriptBinding,
+        pythonBinding: pythonBinding
+    }
+
+private fun json_optional_backend_binding(object: JsonObject, field: String): Result[Option[NativeProviderBackendBinding]] =
+    match object.get(field) with
+    case None -> Success { None {} }
+    case Some { value } ->
+        match value with
+        case JsonNull -> Success { None {} }
+        case _ ->
+            let backendObject <- json_object(value, "Native provider backend binding `" + field + "`")
+            let className <- json_optional_string_option(backendObject, "className")
+            let moduleName <- json_optional_string_option(backendObject, "moduleName")
+            let exportName <- json_optional_string_option(backendObject, "exportName")
+            let factory <- json_optional_string_option(backendObject, "factory")
+            Some { NativeProviderBackendBinding {
+                className: className,
+                moduleName: moduleName,
+                exportName: exportName,
+                factory: factory
+            }}
+
+private fun json_object(json: Json, description: String): Result[JsonObject] =
+    match json with
+    case JsonObject object -> Success { object }
+    case JsonValueObject { value } -> Success { value }
+    case _ -> Error { message: description + " must be a JSON object." }
+
+private fun json_required_string(object: JsonObject, field: String): Result[String] =
+    match object.get(field) with
+    case None -> Error { message: "Missing native wiring field `" + field + "`." }
+    case Some { value } -> json_string(value, "Native wiring field `" + field + "`")
+
+private fun json_optional_string(object: JsonObject, field: String, defaultValue: String): Result[String] =
+    match object.get(field) with
+    case None -> Success { defaultValue }
+    case Some { value } ->
+        match value with
+        case JsonNull -> Success { defaultValue }
+        case _ -> json_string(value, "Native wiring field `" + field + "`")
+
+private fun json_optional_string_option(object: JsonObject, field: String): Result[Option[String]] =
+    match object.get(field) with
+    case None -> Success { None {} }
+    case Some { value } ->
+        match value with
+        case JsonNull -> Success { None {} }
+        case _ ->
+            let text <- json_string(value, "Native wiring field `" + field + "`")
+            Some { text }
+
+private fun json_string(json: Json, description: String): Result[String] =
+    match json with
+    case JsonString { value } -> Success { value }
+    case _ -> Error { message: description + " must be a string." }
 
 private fun validate_input_directory(path: Path, raw_path: String): Effect[Result[Path]] =
     exists(path).flat_map(present =>
@@ -1198,6 +1302,27 @@ private fun write_compile_generate_test_output(options: CompileGenerateOptions, 
         match options.test_output with
         case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
         case Some { rawTestOutput } -> write_generated_program(from_string(rawTestOutput), generate(program, options.output_type))
+
+private fun write_compile_generate_outputs(options: CompileGenerateOptions, mainProgram: CompiledProgram, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
+    match testProgram with
+    case Some { test } -> {
+        match options.test_output with
+        case Some { rawTestOutput } when rawTestOutput == options.output ->
+            write_generated_program(
+                from_string(options.output),
+                merge_generated_programs(generate(mainProgram, options.output_type), generate(test, options.output_type))
+            )
+        case _ ->
+            write_generated_program(from_string(options.output), generate(mainProgram, options.output_type)).flat_map(writeResult =>
+                match writeResult with
+                case Error e -> pure(e)
+                case Success _ -> write_compile_generate_test_output(options, testProgram)
+            )
+    }
+    case None -> write_generated_program(from_string(options.output), generate(mainProgram, options.output_type))
+
+private fun merge_generated_programs(first: GeneratedProgram, second: GeneratedProgram): GeneratedProgram =
+    GeneratedProgram { modules: first.modules + second.modules }
 
 private fun merge_libraries(libraries: Set[CompiledModule], program: CompiledProgram): Set[CompiledModule] =
     add_modules_to_libraries(libraries, program.modules)
@@ -2478,7 +2603,48 @@ private fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]]
     read_linked_program(inputDir, true)
 
 private fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
-    write_generated_modules(outputDir, program.modules)
+    clear_generated_output_directory(outputDir).flat_map(clearResult =>
+        match clearResult with
+        case Error e -> pure(e)
+        case Success _ -> write_generated_modules(outputDir, program.modules)
+    )
+
+private fun clear_generated_output_directory(outputDir: Path): Effect[Result[String]] =
+    list_entries(outputDir).flat_map(entriesResult =>
+        match entriesResult with
+        case Error e -> pure(e)
+        case Success { entries } -> delete_entries(entries)
+    )
+
+private fun delete_entries(entries: List[Path]): Effect[Result[String]] =
+    match entries[0] with
+    case None -> pure(Success { "generated output pruned" })
+    case Some { entry } ->
+        delete_entry(entry).flat_map(deleteResult =>
+            match deleteResult with
+            case Error e -> pure(e)
+            case Success _ -> delete_entries(entries[1:])
+        )
+
+private fun delete_entry(path: Path): Effect[Result[String]] =
+    is_directory(path).flat_map(directory =>
+        if directory
+        then clear_generated_output_directory(path).flat_map(clearResult =>
+            match clearResult with
+            case Error e -> pure(e)
+            case Success _ ->
+                delete(path).map(deleteResult =>
+                    match deleteResult with
+                    case Error e -> e
+                    case Success _ -> Success { "deleted" }
+                )
+        )
+        else delete(path).map(deleteResult =>
+            match deleteResult with
+            case Error e -> e
+            case Success _ -> Success { "deleted" }
+        )
+    )
 
 private fun write_generated_modules(outputDir: Path, modules: List[GeneratedModule]): Effect[Result[String]] =
     match modules[0] with
@@ -2701,15 +2867,10 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
                                         match testResult with
                                         case Error { message } -> runtime_error(message)
                                         case Success { testProgram } ->
-                                            write_generated_program(outputPath, generate(program, options.output_type)).flat_map(writeResult =>
+                                            write_compile_generate_outputs(options, program, testProgram).flat_map(writeResult =>
                                                 match writeResult with
                                                 case Error { message } -> runtime_error(message)
-                                                case Success _ ->
-                                                    write_compile_generate_test_output(options, testProgram).flat_map(testWriteResult =>
-                                                        match testWriteResult with
-                                                        case Error { message } -> runtime_error(message)
-                                                        case Success _ -> pure(/capy/lang/Program.Success {})
-                                                    )
+                                                case Success _ -> pure(/capy/lang/Program.Success {})
                                             )
                                     )
                             )

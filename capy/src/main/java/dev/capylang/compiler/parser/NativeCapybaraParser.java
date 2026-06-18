@@ -1,6 +1,10 @@
 package dev.capylang.compiler.parser;
 
 import dev.capylang.NativeImplementation;
+import dev.capylang.compiler.CapybaraValidator;
+import dev.capylang.compiler.CompilerError;
+import dev.capylang.compiler.NativeCompilerValidator;
+import dev.capylang.compiler.NativeProviderManifest;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -19,7 +23,9 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 @NativeImplementation
-public final class NativeCapybaraParser implements CapybaraParser {
+public final class NativeCapybaraParser implements CapybaraParser, CapybaraValidator {
+    private final NativeCompilerValidator validator = new NativeCompilerValidator();
+
     private static final String MODULE_NAME_PATTERN =
             "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][a-zA-Z0-9_]*(?:/[A-Za-z_][a-zA-Z0-9_]*)+";
     private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
@@ -38,6 +44,43 @@ public final class NativeCapybaraParser implements CapybaraParser {
             parsedModules.add(parseModule(module));
         }
         return new ParsedProgram(List.copyOf(parsedModules));
+    }
+
+    @Override
+    public List<CompilerError> validate(
+            List<String> moduleNames,
+            List<String> modulePaths,
+            List<String> moduleInputs,
+            List<String> moduleSourceKinds,
+            List<String> libraryModules,
+            NativeProviderManifest nativeProviders
+    ) {
+        var modules = rawModules(moduleNames, modulePaths, moduleInputs, moduleSourceKinds);
+        return validator.validate(parse(modules).modules(), libraryModules, nativeProviders);
+    }
+
+    private static List<RawModule> rawModules(
+            List<String> moduleNames,
+            List<String> modulePaths,
+            List<String> moduleInputs,
+            List<String> moduleSourceKinds
+    ) {
+        if (moduleNames.size() != modulePaths.size()
+                || moduleNames.size() != moduleInputs.size()
+                || moduleNames.size() != moduleSourceKinds.size()) {
+            throw new IllegalArgumentException("Raw module metadata lists must have the same length.");
+        }
+
+        var modules = new ArrayList<RawModule>();
+        for (var idx = 0; idx < moduleNames.size(); idx++) {
+            modules.add(new RawModule(
+                    moduleNames.get(idx),
+                    modulePaths.get(idx),
+                    moduleInputs.get(idx),
+                    SourceKind.valueOf(moduleSourceKinds.get(idx))
+            ));
+        }
+        return List.copyOf(modules);
     }
 
     private ParsedModule parseModule(RawModule module) {
@@ -322,10 +365,8 @@ public final class NativeCapybaraParser implements CapybaraParser {
             dev.capylang.parser.antlr.ObjectOrientedParser.TraitDeclarationContext ctx
     ) {
         var methods = new ArrayList<ObjectOrientedMethod>();
-        for (var member : ctx.typeBody().memberDeclaration()) {
-            if (member.methodDeclaration() != null) {
-                methods.add(objectOrientedMethod(member.methodDeclaration()));
-            }
+        for (var member : ctx.traitBody().traitMemberDeclaration()) {
+            methods.add(objectOrientedMethod(member.methodDeclaration()));
         }
         return new ObjectOrientedInterface(
                 ctx.TYPE().getText(),

@@ -247,7 +247,7 @@ tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
 
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
-placeholder: UNDERSCORE | NOTHING_LITERAL;
+placeholder: UNDERSCORE;
 functionCall: NAME '(' argumentList? ')'
             | 'derive' '(' argumentList? ')'
             | 'deriver' '(' argumentList? ')'

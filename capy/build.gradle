@@ -15,7 +15,7 @@ buildscript {
         }
     }
     dependencies {
-        classpath files('bootstrap-patches/capy-0.3.1-signature/capy-0.3.1-signature-patch.jar')
+        classpath files('../bootstrap-patches/capy-0.3.1-signature/capy-0.3.1-signature-patch.jar')
         classpath "dev.capylang:gradle:${capybaraVersion}@jar"
         classpath "dev.capylang:capy:${capybaraVersion}@jar"
     }
@@ -477,6 +477,7 @@ def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sy
     }
     from(layout.projectDirectory.dir('src/main/java')) {
         include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
+        include 'dev/capylang/compiler/NativeCompilerValidator.java'
         into 'native/java'
     }
     from(capybaraMainPythonSourceDir) {
