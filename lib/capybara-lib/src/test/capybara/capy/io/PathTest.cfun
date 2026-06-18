@@ -1,7 +1,9 @@
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
+from /capy/collection/List import { * }
 from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/System import { current_millis, nano_time }
 
@@ -14,12 +16,11 @@ fun tests(): Effect[TestFile] =
     ])
 
 fun path_methods_read_write_append_text_lines_and_bytes(): Effect[Assert] =
-    let base <- unique_base_path("read-write")
-    let base_path = from_string(base)
-    let text_file = from_string(base + "/text.txt")
-    let lines_file = from_string(base + "/lines.txt")
-    let bytes_file = from_string(base + "/bytes.bin")
-    let created <- base_path.create_directories()
+    let base <- unique_temp_path("read-write")
+    let text_file = resolve(base, ["text.txt"])
+    let lines_file = resolve(base, ["lines.txt"])
+    let bytes_file = resolve(base, ["bytes.bin"])
+    let created <- base.create_directories()
     let text_written <- text_file.write_text("hello")
     let text_appended <- text_file.append_text(" world")
     let text_read <- text_file.read_text()
@@ -51,13 +52,12 @@ fun path_methods_read_write_append_text_lines_and_bytes(): Effect[Assert] =
     ])
 
 fun path_methods_create_list_and_delete_files_and_directories(): Effect[Assert] =
-    let base <- unique_base_path("directories")
-    let base_path = from_string(base)
-    let single_dir = from_string(base + "/single")
-    let dir = from_string(base + "/nested/dir")
-    let child = from_string(base + "/nested/dir/child.txt")
-    let delete_target = from_string(base + "/delete-me.txt")
-    let base_created <- base_path.create_directories()
+    let base <- unique_temp_path("directories")
+    let single_dir = resolve(base, ["single"])
+    let dir = resolve(base, ["nested", "dir"])
+    let child = resolve(dir, ["child.txt"])
+    let delete_target = resolve(base, ["delete-me.txt"])
+    let base_created <- base.create_directories()
     let single_created <- single_dir.create_directory()
     let single_is_directory <- single_dir.is_directory()
     let dir_created <- dir.create_directories()
@@ -83,15 +83,14 @@ fun path_methods_create_list_and_delete_files_and_directories(): Effect[Assert] 
     ])
 
 fun path_methods_copy_move_and_replace_files(): Effect[Assert] =
-    let base <- unique_base_path("copy-move")
-    let base_path = from_string(base)
-    let source = from_string(base + "/source.txt")
-    let copied = from_string(base + "/copied.txt")
-    let moved = from_string(base + "/moved.txt")
-    let replace_source = from_string(base + "/replace-source.txt")
-    let replace_copied = from_string(base + "/replace-copied.txt")
-    let replace_moved = from_string(base + "/replace-moved.txt")
-    let created <- base_path.create_directories()
+    let base <- unique_temp_path("copy-move")
+    let source = resolve(base, ["source.txt"])
+    let copied = resolve(base, ["copied.txt"])
+    let moved = resolve(base, ["moved.txt"])
+    let replace_source = resolve(base, ["replace-source.txt"])
+    let replace_copied = resolve(base, ["replace-copied.txt"])
+    let replace_moved = resolve(base, ["replace-moved.txt"])
+    let created <- base.create_directories()
     let source_written <- source.write_text("payload")
     let copied_result <- source.copy(copied)
     let copied_text <- copied.read_text()
@@ -125,13 +124,12 @@ fun path_methods_copy_move_and_replace_files(): Effect[Assert] =
     ])
 
 fun path_methods_forward_io_failures(): Effect[Assert] =
-    let base <- unique_base_path("errors")
-    let base_path = from_string(base)
-    let missing = from_string(base + "/missing.txt")
-    let created <- base_path.create_directories()
+    let base <- unique_temp_path("errors")
+    let missing = resolve(base, ["missing.txt"])
+    let created <- base.create_directories()
     let read_missing <- missing.read_text()
     let size_missing <- missing.size()
-    let copy_missing <- missing.copy(from_string(base + "/copied.txt"))
+    let copy_missing <- missing.copy(resolve(base, ["copied.txt"]))
     let missing_exists <- missing.exists()
     assert_all([
         assert_that(created).succeeds(),
@@ -141,10 +139,21 @@ fun path_methods_forward_io_failures(): Effect[Assert] =
         assert_that(missing_exists).is_false(),
     ])
 
-private fun unique_base_path(name: String): Effect[String] =
+private fun unique_temp_path(name: String): Effect[Path] =
     let millis <- current_millis()
     let nanos <- nano_time()
-    "/tmp/capybara-path-test/" + name + "-" + millis + "-" + nanos
+    Path {
+        root: PathRoot.TEMP,
+        prefix: None {},
+        segments: ["capybara-path-test", name + "-" + millis + "-" + nanos]
+    }
+
+private fun resolve(path: Path, segments: List[String]): Path =
+    Path {
+        root: path.root,
+        prefix: path.prefix,
+        segments: path.segments + segments
+    }
 
 private fun assert_failed_message_contains(result: Result[T], expected: String): Assert =
     match result with

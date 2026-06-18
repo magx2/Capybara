@@ -11,7 +11,7 @@ from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
-enum PathRoot { RELATIVE, ABSOLUTE, HOME }
+enum PathRoot { RELATIVE, ABSOLUTE, HOME, TEMP }
 
 data Path {
     root: PathRoot,
@@ -78,6 +78,7 @@ fun Path.name(): String =
         case RELATIVE -> '.'
         case ABSOLUTE -> '/'
         case HOME -> '~'
+        case TEMP -> 'tmp'
 
 fun Path.parent(): Option[Path] =
     if this.segments.is_empty() then None {}

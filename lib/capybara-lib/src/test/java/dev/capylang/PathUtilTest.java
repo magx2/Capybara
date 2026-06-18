@@ -38,6 +38,19 @@ class PathUtilTest {
     }
 
     @Test
+    void shouldRoundTripTempPathWithoutNativeRootPrefix() {
+        var tempPath = Paths.get(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
+        var javaPath = tempPath.resolve("capybara-pathutil-test").resolve("nested").normalize();
+
+        var capyPath = PathUtil.fromJavaPath(javaPath);
+
+        assertEquals(PathRoot.TEMP, capyPath.root());
+        assertEquals(Optional.empty(), capyPath.prefix());
+        assertEquals(List.of("capybara-pathutil-test", "nested"), capyPath.segments());
+        assertEquals(javaPath, PathUtil.toJavaPath(capyPath));
+    }
+
+    @Test
     void shouldRoundTripRelativePathWithoutNativeRootPrefix() {
         var javaPath = Paths.get("reports", "TEST-capy.lang.MathTest.xml").normalize();
 

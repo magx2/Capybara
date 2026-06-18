@@ -20,6 +20,7 @@ public final class PathUtil {
                     ? Paths.get((String) path.prefix().orElseThrow())
                     : Paths.get(java.nio.file.Path.of("/").toString());
             case HOME -> Paths.get(System.getProperty("user.home"));
+            case TEMP -> tempPath();
             case RELATIVE -> Paths.get("");
         };
         return appendSegments(javaRoot, segments).normalize();
@@ -28,17 +29,26 @@ public final class PathUtil {
     public static Path fromJavaPath(java.nio.file.Path path) {
         var normalizedPath = path.normalize();
         var homePath = Paths.get(System.getProperty("user.home")).normalize();
+        var tempPath = tempPath();
         var nativeRoot = normalizedPath.getRoot();
-        var root = normalizedPath.startsWith(homePath)
+        var root = normalizedPath.startsWith(tempPath)
+                ? PathRoot.TEMP
+                : normalizedPath.startsWith(homePath)
                 ? PathRoot.HOME
                 : normalizedPath.isAbsolute() ? PathRoot.ABSOLUTE : PathRoot.RELATIVE;
         var prefix = root == PathRoot.ABSOLUTE && nativeRoot != null
                 ? Optional.of(nativeRoot.toString())
                 : Optional.<String>empty();
-        var segments = normalizedPath.startsWith(homePath)
+        var segments = normalizedPath.startsWith(tempPath)
+                ? segments(tempPath.relativize(normalizedPath))
+                : normalizedPath.startsWith(homePath)
                 ? segments(homePath.relativize(normalizedPath))
                 : segments(normalizedPath);
         return new Path(root, prefix, segments);
+    }
+
+    private static java.nio.file.Path tempPath() {
+        return Paths.get(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
     }
 
     private static java.nio.file.Path appendSegments(java.nio.file.Path root, List<String> segments) {

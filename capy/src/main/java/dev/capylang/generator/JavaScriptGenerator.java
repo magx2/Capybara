@@ -2933,7 +2933,7 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.collection.Tuple", Set.of("get"));
             exports.put("capy.io.Console", Set.of("print", "println", "print_error", "printError", "println_error", "printlnError", "read_line", "readLine"));
             exports.put("capy.io.Stdout", Set.of("print", "println"));
-            exports.put("capy.io.PathModule", Set.of("Path", "PathRoot", "RELATIVE", "ABSOLUTE", "HOME", "from_string", "fromString"));
+            exports.put("capy.io.PathModule", Set.of("Path", "PathRoot", "RELATIVE", "ABSOLUTE", "HOME", "TEMP", "from_string", "fromString"));
             exports.put("capy.io.IO", Set.of("read_text", "readText", "read_lines", "readLines", "read_bytes", "readBytes",
                     "write_text", "writeText", "write_lines", "writeLines", "write_bytes", "writeBytes",
                     "append_text", "appendText", "append_lines", "appendLines", "append_bytes", "appendBytes",
@@ -3644,6 +3644,8 @@ public final class JavaScriptGenerator implements Generator {
         private static String pathRuntime() {
             return """
                     'use strict';
+                    const os = require('node:os');
+                    const pathModule = require('node:path');
                     const capy = require('../../dev/capylang/capybara.js');
                     const io = () => require('./IO.js');
 
@@ -3652,11 +3654,13 @@ public final class JavaScriptGenerator implements Generator {
                             capy.enumValue('RELATIVE', 'PathRoot', ['PathRoot'], 0, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
                             capy.enumValue('ABSOLUTE', 'PathRoot', ['PathRoot'], 1, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
                             capy.enumValue('HOME', 'PathRoot', ['PathRoot'], 2, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
+                            capy.enumValue('TEMP', 'PathRoot', ['PathRoot'], 3, [], 'capy.io', 'capy/io/Path', { fields: [], annotations: [] }),
                         ];
                         return Object.freeze({
                             RELATIVE: values[0],
                             ABSOLUTE: values[1],
                             HOME: values[2],
+                            TEMP: values[3],
                             values,
                             valuesSet: () => capy.set(values),
                             parse: value => capy.parseEnum(value, values, 'PathRoot'),
@@ -3665,6 +3669,7 @@ public final class JavaScriptGenerator implements Generator {
                     const RELATIVE = PathRoot.RELATIVE;
                     const ABSOLUTE = PathRoot.ABSOLUTE;
                     const HOME = PathRoot.HOME;
+                    const TEMP = PathRoot.TEMP;
 
                     class Path {
                         constructor(fields = {}) {
@@ -3726,6 +3731,9 @@ public final class JavaScriptGenerator implements Generator {
                             if (capy.isType(this.root, 'HOME')) {
                                 return '~';
                             }
+                            if (capy.isType(this.root, 'TEMP')) {
+                                return 'tmp';
+                            }
                             return '.';
                         }
                         toString() {
@@ -3735,6 +3743,9 @@ public final class JavaScriptGenerator implements Generator {
                             }
                             if (capy.isType(this.root, 'HOME')) {
                                 return body.length === 0 ? '~' : '~/' + body;
+                            }
+                            if (capy.isType(this.root, 'TEMP')) {
+                                return this.segments.length === 0 ? os.tmpdir() : pathModule.join(os.tmpdir(), ...this.segments);
                             }
                             return body.length === 0 ? '.' : body;
                         }
@@ -3829,6 +3840,7 @@ public final class JavaScriptGenerator implements Generator {
                         RELATIVE,
                         ABSOLUTE,
                         HOME,
+                        TEMP,
                         fromString,
                         from_string: fromString,
                     };
