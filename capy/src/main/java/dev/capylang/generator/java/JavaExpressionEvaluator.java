@@ -88,7 +88,7 @@ public class JavaExpressionEvaluator {
                 "is_empty", "plus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*",
                 "starts_with", "end_with", "trim", "compare", "chars", "char_at", "charAt", "get_char", "getChar",
-                "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase", "tol_lower_case", "tolLowerCase",
+                "to_upper_case", "toUpperCase", "to_lower_case", "toLowerCase",
                 "is_blank", "isBlank", "trim_start", "trimStart", "trim_end", "trimEnd",
                 "repeat", "index_of", "indexOf", "last_index_of", "lastIndexOf"
         );

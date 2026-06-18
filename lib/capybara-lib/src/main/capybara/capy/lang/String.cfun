@@ -41,9 +41,6 @@ fun String.to_upper_case(): String = string_convert_ascii_case(this, LOWER_CASE_
 /// Characters outside `A` through `Z` are unchanged.
 fun String.to_lower_case(): String = string_convert_ascii_case(this, UPPER_CASE_ASCII_LETTERS, LOWER_CASE_ASCII_LETTERS)
 
-/// Compatibility alias for `to_lower_case`.
-fun String.tol_lower_case(): String = this.to_lower_case()
-
 /// Returns this char converted to uppercase when it is an ASCII lowercase letter.
 ///
 /// Characters outside `a` through `z` are unchanged.
@@ -53,9 +50,6 @@ fun char.to_upper_case(): char = char! { this.value.to_upper_case() }
 ///
 /// Characters outside `A` through `Z` are unchanged.
 fun char.to_lower_case(): char = char! { this.value.to_lower_case() }
-
-/// Compatibility alias for `to_lower_case`.
-fun char.tol_lower_case(): char = this.to_lower_case()
 
 private fun string_convert_ascii_case(value: String, from: String, to: String): String =
     @Recursive
