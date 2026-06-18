@@ -1,4 +1,9 @@
+import /capy/io/IO
+
+from /capy/io/ByteSize import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Option import {*}
+from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
@@ -116,3 +121,69 @@ fun Path.normalize(): Path =
         prefix: this.prefix,
         segments: normalize_path(this.root, this.segments, [])
     }
+
+/// Reads the entire file at this path as UTF-8 text.
+fun Path.read_text(): Effect[Result[String]] = IO.read_text(this)
+
+/// Reads all lines from the file at this path as UTF-8 text.
+fun Path.read_lines(): Effect[Result[List[String]]] = IO.read_lines(this)
+
+/// Reads the entire file at this path as bytes.
+fun Path.read_bytes(): Effect[Result[List[byte]]] = IO.read_bytes(this)
+
+/// Writes UTF-8 text to this path, replacing existing content, and returns the consumed text.
+fun Path.write_text(text: String): Effect[Result[String]] = IO.write_text(this, text)
+
+/// Writes UTF-8 lines to this path, replacing existing content, and returns the consumed lines.
+fun Path.write_lines(lines: List[String]): Effect[Result[List[String]]] = IO.write_lines(this, lines)
+
+/// Writes bytes to this path, replacing existing content, and returns the consumed bytes.
+fun Path.write_bytes(bytes: List[byte]): Effect[Result[List[byte]]] = IO.write_bytes(this, bytes)
+
+/// Appends UTF-8 text to this path, creating the file when needed, and returns the consumed text.
+fun Path.append_text(text: String): Effect[Result[String]] = IO.append_text(this, text)
+
+/// Appends UTF-8 lines to this path, creating the file when needed, and returns the consumed lines.
+fun Path.append_lines(lines: List[String]): Effect[Result[List[String]]] = IO.append_lines(this, lines)
+
+/// Appends bytes to this path, creating the file when needed, and returns the consumed bytes.
+fun Path.append_bytes(bytes: List[byte]): Effect[Result[List[byte]]] = IO.append_bytes(this, bytes)
+
+/// Returns true when this path exists.
+fun Path.exists(): Effect[bool] = IO.exists(this)
+
+/// Returns true when this path exists and is a regular file.
+fun Path.is_file(): Effect[bool] = IO.is_file(this)
+
+/// Returns true when this path exists and is a directory.
+fun Path.is_directory(): Effect[bool] = IO.is_directory(this)
+
+/// Returns the size of this file in bytes.
+fun Path.size(): Effect[Result[byte_count]] = IO.size(this)
+
+/// Creates a new empty file at this path and returns the created path.
+fun Path.create_file(): Effect[Result[Path]] = IO.create_file(this)
+
+/// Creates a single directory at this path and returns the created path.
+fun Path.create_directory(): Effect[Result[Path]] = IO.create_directory(this)
+
+/// Creates a directory and any missing parent directories at this path, returning the created path.
+fun Path.create_directories(): Effect[Result[Path]] = IO.create_directories(this)
+
+/// Lists direct child entries of this directory.
+fun Path.list_entries(): Effect[Result[List[Path]]] = IO.list_entries(this)
+
+/// Deletes the file or empty directory at this path and returns true when something was deleted.
+fun Path.delete(): Effect[Result[bool]] = IO.delete(this)
+
+/// Copies this file to the target path. Fails if the target already exists.
+fun Path.copy(target: Path): Effect[Result[Path]] = IO.copy(this, target)
+
+/// Copies this file to the target path, replacing an existing target.
+fun Path.copy_replace(target: Path): Effect[Result[Path]] = IO.copy_replace(this, target)
+
+/// Moves this file or directory to the target path. Fails if the target already exists.
+fun Path.move(target: Path): Effect[Result[Path]] = IO.move(this, target)
+
+/// Moves this file or directory to the target path, replacing an existing target.
+fun Path.move_replace(target: Path): Effect[Result[Path]] = IO.move_replace(this, target)
