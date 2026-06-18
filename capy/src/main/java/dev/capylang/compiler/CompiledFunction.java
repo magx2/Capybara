@@ -73,7 +73,8 @@ public record CompiledFunction(String name,
                     var leftParameter = left.get(i);
                     var rightParameter = right.get(i);
 
-                    var typeCompare = leftParameter.type().toString().compareTo(rightParameter.type().toString());
+                    var typeCompare = CompiledTypeSignature.typeKey(leftParameter.type())
+                            .compareTo(CompiledTypeSignature.typeKey(rightParameter.type()));
                     if (typeCompare != 0) {
                         return typeCompare;
                     }

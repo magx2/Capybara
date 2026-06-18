@@ -7,6 +7,7 @@ import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledObjectKind;
 import dev.capylang.compiler.CompiledObjectType;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.CompiledTypeSignature;
 import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.CompiledFunctionCall;
@@ -895,7 +896,7 @@ public final class JavaGenerator implements Generator {
     }
 
     private static String signatureKey(String name, java.util.List<dev.capylang.compiler.CompiledType> parameterTypes) {
-        return name + "|" + parameterTypes.stream().map(type -> String.valueOf(type)).collect(joining(","));
+        return CompiledTypeSignature.signatureKey(name, parameterTypes);
     }
 
     private static String baseMethodName(String name) {
@@ -1089,10 +1090,7 @@ public final class JavaGenerator implements Generator {
     }
 
     private static String overloadTypeName(dev.capylang.compiler.CompiledType type) {
-        if (type instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType) {
-            return primitiveBackedType.name();
-        }
-        return String.valueOf(type);
+        return CompiledTypeSignature.typeKey(type);
     }
 
     private <T> T time(java.util.function.LongConsumer recorder, Supplier<T> action) {

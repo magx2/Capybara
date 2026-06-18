@@ -2,6 +2,7 @@ package dev.capylang.generator.java;
 
 import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
+import dev.capylang.compiler.CompiledTypeSignature;
 import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
@@ -3878,9 +3879,7 @@ public class JavaExpressionEvaluator {
         if (standardMethodName.isPresent()) {
             return standardMethodName.orElseThrow();
         }
-        var parameterSignature = parameterTypes.stream()
-                .map(type -> String.valueOf(type))
-                .collect(java.util.stream.Collectors.joining(","));
+        var parameterSignature = CompiledTypeSignature.parameterSignature(parameterTypes);
         var overrideBySimpleName = findOverrideBySimpleName(functionCall.name(), parameterSignature);
         if (overrideBySimpleName.isPresent()) {
             return overrideBySimpleName.get();
@@ -3976,10 +3975,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String overloadTypeName(dev.capylang.compiler.CompiledType type) {
-        if (type instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType) {
-            return primitiveBackedType.name();
-        }
-        return String.valueOf(type);
+        return CompiledTypeSignature.typeKey(type);
     }
 
     private static String methodVariantSuffix(String rawBaseName) {
@@ -4076,7 +4072,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String signatureKey(String name, java.util.List<dev.capylang.compiler.CompiledType> parameterTypes) {
-        return name + "|" + parameterTypes.stream().map(type -> String.valueOf(type)).collect(java.util.stream.Collectors.joining(","));
+        return CompiledTypeSignature.signatureKey(name, parameterTypes);
     }
 
     private static String normalizeJavaQualifier(String qualifier) {
