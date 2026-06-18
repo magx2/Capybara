@@ -24,6 +24,7 @@ from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativ
 from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
 from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
 from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
@@ -1998,6 +1999,7 @@ private fun linked_decode_primitive_backed_type(node: any): Result[CompiledPrimi
     let checked <- linked_expect_data(node, "CompiledPrimitiveBackedType")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let backingTypeData <- linked_data_field(node, "backingType")
     let backingType <- linked_decode_type_reference(backingTypeData)
     let locationData <- linked_data_field(node, "location")
@@ -2005,6 +2007,7 @@ private fun linked_decode_primitive_backed_type(node: any): Result[CompiledPrimi
     CompiledPrimitiveBackedType {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         backingType: backingType,
         location: location
     }
@@ -2016,6 +2019,7 @@ private fun linked_decode_function(node: any): Result[CompiledFunction] =
     let checked <- linked_expect_data(node, "CompiledFunction")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
     let returnTypeData <- linked_data_field(node, "returnType")
     let returnType <- linked_decode_type_reference(returnTypeData)
@@ -2026,6 +2030,7 @@ private fun linked_decode_function(node: any): Result[CompiledFunction] =
     CompiledFunction {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         parameters: parameters,
         returnType: returnType,
         body: body,
@@ -2076,12 +2081,14 @@ private fun linked_decode_deriver(node: any): Result[CompiledDeriverDeclaration]
     let checked <- linked_expect_data(node, "CompiledDeriverDeclaration")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let methods <- linked_list_field(node, "methods", value => linked_decode_function_value(value))
     let locationData <- linked_data_field(node, "location")
     let location <- linked_decode_source_location(locationData)
     CompiledDeriverDeclaration {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         methods: methods,
         location: location
     }
@@ -2093,6 +2100,7 @@ private fun linked_decode_annotation(node: any): Result[CompiledAnnotationDeclar
     let checked <- linked_expect_data(node, "CompiledAnnotationDeclaration")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let repeatable <- linked_bool_field(node, "repeatable")
     let targets <- linked_list_field(node, "targets", value => linked_string_value(value))
     let fields <- linked_list_field(node, "fields", value => linked_string_value(value))
@@ -2101,6 +2109,7 @@ private fun linked_decode_annotation(node: any): Result[CompiledAnnotationDeclar
     CompiledAnnotationDeclaration {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         repeatable: repeatable,
         targets: targets,
         fields: fields,
@@ -2479,6 +2488,7 @@ private fun linked_decode_object_oriented_interface(node: any): Result[CompiledO
     let checked <- linked_expect_data(node, "CompiledObjectOrientedInterface")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let kind <- linked_string_field(node, "kind")
     let parents <- linked_list_field(node, "parents", value => linked_decode_type_reference_value(value))
     let methods <- linked_list_field(node, "methods", value => linked_decode_object_oriented_method_value(value))
@@ -2486,6 +2496,7 @@ private fun linked_decode_object_oriented_interface(node: any): Result[CompiledO
     CompiledObjectOrientedInterface {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         kind: kind,
         parents: parents,
         methods: methods,
@@ -2499,16 +2510,18 @@ private fun linked_decode_object_oriented_class(node: any): Result[CompiledObjec
     let checked <- linked_expect_data(node, "CompiledObjectOrientedClass")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let open <- linked_bool_field(node, "open")
     let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
     let parents <- linked_list_field(node, "parents", value => linked_decode_type_reference_value(value))
     let fields <- linked_list_field(node, "fields", value => linked_decode_object_oriented_field_value(value))
-    let initBlocks <- linked_list_field(node, "initBlocks", value => linked_decode_expression_value(value))
+    let initBlocks <- linked_list_field(node, "initBlocks", value => linked_decode_object_oriented_init_block_value(value))
     let methods <- linked_list_field(node, "methods", value => linked_decode_object_oriented_method_value(value))
     let location <- linked_decode_source_location_field(node)
     CompiledObjectOrientedClass {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         open: open,
         parameters: parameters,
         parents: parents,
@@ -2525,6 +2538,7 @@ private fun linked_decode_object_oriented_field(node: any): Result[CompiledObjec
     let checked <- linked_expect_data(node, "CompiledObjectOrientedField")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let typeReferenceData <- linked_data_field(node, "typeReference")
     let typeReference <- linked_decode_type_reference(typeReferenceData)
     let value <- linked_decode_expression_field(node, "value")
@@ -2533,9 +2547,24 @@ private fun linked_decode_object_oriented_field(node: any): Result[CompiledObjec
     CompiledObjectOrientedField {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         typeReference: typeReference,
         value: value,
         hasValue: hasValue,
+        location: location
+    }
+
+private fun linked_decode_object_oriented_init_block_value(value: any): Result[CompiledObjectOrientedInitBlock] =
+    linked_decode_data_value(value, "CompiledObjectOrientedInitBlock", node => linked_decode_object_oriented_init_block(node))
+
+private fun linked_decode_object_oriented_init_block(node: any): Result[CompiledObjectOrientedInitBlock] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedInitBlock")
+    let body <- linked_decode_expression_field(node, "body")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let location <- linked_decode_source_location_field(node)
+    CompiledObjectOrientedInitBlock {
+        body: body,
+        documentation: documentation,
         location: location
     }
 
@@ -2546,6 +2575,7 @@ private fun linked_decode_object_oriented_method(node: any): Result[CompiledObje
     let checked <- linked_expect_data(node, "CompiledObjectOrientedMethod")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
     let returnTypeData <- linked_data_field(node, "returnType")
     let returnType <- linked_decode_type_reference(returnTypeData)
@@ -2554,6 +2584,7 @@ private fun linked_decode_object_oriented_method(node: any): Result[CompiledObje
     CompiledObjectOrientedMethod {
         name: name,
         visibility: visibility,
+        documentation: documentation,
         parameters: parameters,
         returnType: returnType,
         body: body,

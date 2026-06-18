@@ -444,7 +444,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 visibility,
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
                 ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
-                unsupported(ctx),
+                new Expression.StringLiteral("", "\"\"", location(ctx)),
                 docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
                 location(ctx)

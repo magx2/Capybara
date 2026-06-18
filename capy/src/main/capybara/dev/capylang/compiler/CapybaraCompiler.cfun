@@ -381,7 +381,7 @@ private fun compile_object_interface(interface: ObjectOrientedInterface, module:
         documentation: interface.documentation,
         kind: interface.kind,
         parents: compile_types_in_module(interface.parents, module, allModules),
-        methods: compile_object_methods(interface.name, interface.methods, module, allModules),
+        methods: compile_object_interface_methods(interface.name, interface.kind, interface.methods, module, allModules),
         location: compile_location(interface.location)
     }
 
@@ -453,6 +453,24 @@ private fun compile_object_method(className: String, method: ObjectOrientedMetho
         location: compile_location(method.location)
     }
 
+/// Converts parsed object interface methods into compiled metadata.
+private fun compile_object_interface_methods(interfaceName: String, interfaceKind: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedMethod] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_object_interface_method(interfaceName, interfaceKind, method, module, allModules)] + compile_object_interface_methods(interfaceName, interfaceKind, methods[1:], module, allModules)
+
+/// Converts a parsed object interface method into compiled metadata.
+private fun compile_object_interface_method(interfaceName: String, interfaceKind: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedMethod =
+    CompiledObjectOrientedMethod {
+        name: method.name,
+        visibility: method.visibility,
+        documentation: method.documentation,
+        parameters: compile_parameters_in_module(method.parameters, module, allModules),
+        returnType: compile_type_in_module(method.returnType, module, allModules),
+        body: compile_object_interface_method_body(interfaceKind, method, interfaceName, module, allModules),
+        location: compile_location(method.location)
+    }
+
 /// Converts parsed object interface functions into compiled metadata.
 private fun compile_object_interface_functions(interfaces: List[ObjectOrientedInterface], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match interfaces[0] with
@@ -462,7 +480,7 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
             + [compile_object_interface_kind_schema_function(interface)]
             + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0, interface.location)
             + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(interface.name), interface.annotations, 0)
-            + compile_object_interface_method_functions(interface.name, interface.methods, module, allModules)
+            + compile_object_interface_method_functions(interface.name, interface.kind, interface.methods, module, allModules)
             + compile_object_interface_functions(interfaces[1:], module, allModules)
 
 /// Converts a parsed object interface schema function into compiled metadata.
@@ -495,25 +513,35 @@ private fun compile_object_parent_schema_functions(prefix: String, ownerName: St
             + compile_object_parent_schema_functions(prefix, ownerName, parents[1:], module, allModules, idx + 1, location)
 
 /// Converts parsed object interface method functions into compiled metadata.
-private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+private fun compile_object_interface_method_functions(interfaceName: String, interfaceKind: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match methods[0] with
     case None -> []
     case Some { method } ->
-        [compile_object_interface_method_function(interfaceName, method, module, allModules)]
+        [compile_object_interface_method_function(interfaceName, interfaceKind, method, module, allModules)]
             + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(interfaceName, method.name), method.annotations, 0)
-            + compile_object_interface_method_functions(interfaceName, methods[1:], module, allModules)
+            + compile_object_interface_method_functions(interfaceName, interfaceKind, methods[1:], module, allModules)
 
 /// Converts a parsed object interface method function into compiled metadata.
-private fun compile_object_interface_method_function(interfaceName: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+private fun compile_object_interface_method_function(interfaceName: String, interfaceKind: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: object_interface_method_schema_key(interfaceName, method.name),
         visibility: "oo_interface_method:" + method.visibility,
         documentation: method.documentation,
         parameters: compile_parameters_in_module(method.parameters, module, allModules),
         returnType: compile_type_in_module(method.returnType, module, allModules),
-        body: compile_expression_in_function(method.body, interfaceName + "." + method.name),
+        body: compile_object_interface_method_body(interfaceKind, method, interfaceName, module, allModules),
         location: compile_location(method.location)
     }
+
+/// Converts parsed object interface method body metadata into compiled metadata.
+private fun compile_object_interface_method_body(interfaceKind: String, method: ObjectOrientedMethod, interfaceName: String, module: ParsedModule, allModules: List[ParsedModule]): CompiledExpression =
+    if interfaceKind == "interface"
+    then CompiledStringLiteral {
+        value: "",
+        source: "\"\"",
+        location: compile_location(method.location)
+    }
+    else compile_expression_in_function(method.body, interfaceName + "." + method.name)
 
 /// Converts parsed object class functions into compiled metadata.
 private fun compile_object_class_functions(classes: List[ObjectOrientedClass], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
