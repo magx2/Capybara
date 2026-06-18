@@ -447,6 +447,30 @@ class ObjectOrientedCompilerTest {
     }
 
     @Test
+    void shouldAllowOverloadsForObjectTypesWithSameNameFromDifferentModules() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule("Model", "/pkg/a", """
+                        class User {
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                new RawModule("Model", "/pkg/b", """
+                        class User {
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                new RawModule("Use", "/pkg/app", """
+                        fun describe(user: /pkg/a/Model.User): int = 1
+                        fun describe(user: /pkg/b/Model.User): int = 2
+                        """)
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+        assertThat(program.modules().first().functions())
+                .filteredOn(function -> function.name().equals("describe"))
+                .hasSize(2);
+    }
+
+    @Test
     void shouldLinkImportedObjectOrientedMethodsFromFunctionalCode() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 effectModule(),

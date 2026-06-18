@@ -3,10 +3,12 @@ package dev.capylang.compiler;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class RecursionCompilerTest {
     @Test
@@ -104,8 +106,39 @@ class RecursionCompilerTest {
                 });
     }
 
+    @Test
+    void shouldCompileRecursiveDataSignaturesWithoutWalkingFields() {
+        var program = assertTimeoutPreemptively(
+                Duration.ofSeconds(10),
+                () -> compileProgram(recursiveSignatureSource())
+        );
+
+        assertThat(program.modules().first().functions())
+                .extracting(CompiledFunction::name)
+                .contains("wrap_tree", "wrap_trees", "describe");
+    }
+
     private static CompiledProgram compileProgram(String source) {
         return compileProgram(List.of(new RawModule("Recursion", "/foo/bar", source)));
+    }
+
+    private static String recursiveSignatureSource() {
+        return """
+                from /capy/collection/List import { * }
+
+                union Tree = Leaf | Branch
+                data Leaf { value: int }
+                data Branch { children: List[Tree] }
+
+                union Result[T] = Success[T] | Error
+                data Success[T] { value: T }
+                data Error { message: String }
+
+                fun wrap_tree(tree: Tree): Result[Tree] = Success { value: tree }
+                fun wrap_trees(trees: List[Tree]): Result[List[Tree]] = Success { value: trees }
+                fun describe(result: Result[Tree]): int = 1
+                fun describe(result: Result[List[Tree]]): int = 2
+                """;
     }
 
     private static RawModule recursiveAnnotationModule() {

@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -38,6 +39,7 @@ import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 import static dev.capylang.compiler.CompiledExpressionPrinter.printExpression;
 import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class JavaExpressionEvaluatorTest {
     private static final Object STANDARD_LIBRARY_LOCK = new Object();
@@ -109,6 +111,25 @@ class JavaExpressionEvaluatorTest {
                 """);
     }
 
+    private static String recursiveSignatureSource() {
+        return """
+                from /capy/collection/List import { * }
+
+                union Tree = Leaf | Branch
+                data Leaf { value: int }
+                data Branch { children: List[Tree] }
+
+                union Result[T] = Success[T] | Error
+                data Success[T] { value: T }
+                data Error { message: String }
+
+                fun wrap_tree(tree: Tree): Result[Tree] = Success { value: tree }
+                fun wrap_trees(trees: List[Tree]): Result[List[Tree]] = Success { value: trees }
+                fun describe(result: Result[Tree]): int = 1
+                fun describe(result: Result[List[Tree]]): int = 2
+                """;
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> modules) {
         var programResult = CapybaraCompiler.INSTANCE.compile(modules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Error<CompiledProgram> er) {
@@ -155,6 +176,23 @@ class JavaExpressionEvaluatorTest {
                 "CompiledList[elementType=INT]");
 
         assertThat(resolved).contains("choose_target");
+    }
+
+    @Test
+    void shouldGenerateRecursiveSignatureOverloadNamesWithoutWalkingFields() {
+        var generated = assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            var program = compileProgram("RecursiveSignature", "/foo/bar", recursiveSignatureSource());
+            return new JavaGenerator().generate(program).modules().stream()
+                    .filter(module -> module.relativePath().equals(Path.of("foo", "bar", "RecursiveSignature.java")))
+                    .map(dev.capylang.generator.GeneratedModule::code)
+                    .findFirst()
+                    .orElseThrow();
+        });
+
+        assertThat(generated)
+                .contains("describe__result_tree")
+                .contains("describe__result_list_tree")
+                .doesNotContainPattern("describe__[A-Za-z0-9_]*children");
     }
 
     @Test
