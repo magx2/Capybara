@@ -1,0 +1,11 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+data ImportDeclaration {
+    modulePath: String,
+    importedNames: List[String],
+    excludedNames: List[String],
+    wildcard: bool,
+    qualified: bool,
+    location: SourceLocation
+}

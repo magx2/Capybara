@@ -3,12 +3,14 @@ package dev.capylang.compiler;
 import org.junit.jupiter.api.Test;
 import dev.capylang.generator.GeneratedModule;
 import dev.capylang.generator.JavaGenerator;
+import dev.capylang.generator.JavaScriptGenerator;
 import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.compiler.parser.SourceKind;
+import capy.lang.Either;
 
-import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -20,22 +22,22 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 data Message { value: String }
                 fun make_message(value: String): Message = Message { value: value }
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new TreeSet<>()).modules();
+        var libraries = new LinkedHashSet<>(compileProgram(List.of(rawModule("Library", "/foo/lib", librarySource)), new LinkedHashSet<>()).modules());
 
         var consumerSource = """
                 from Library import { * }
                 fun consume(value: String): String = make_message(value).value
                 """;
-        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries));
+        var generated = JavaGenerator.javaGenerator(compileProgram(List.of(rawModule("Consumer", "/foo/app", consumerSource)), libraries));
 
         assertThat(generated.modules()).hasSize(1);
         var module = generated.modules().getFirst();
-        assertThat(module.relativePath()).isEqualTo(Path.of("foo", "app", "Consumer.java"));
+        assertThat(module.relativePath()).isEqualTo("foo/app/Consumer.java");
         assertThat(module.code()).contains("import static foo.lib.Library.*;");
-        assertThat(module.code()).contains("makeMessage(value)");
+        assertThat(module.code()).contains("make_message__2_0(value)");
         assertThat(generated.modules())
                 .extracting(GeneratedModule::relativePath)
-                .doesNotContain(Path.of("foo", "lib", "Library.java"));
+                .doesNotContain("foo/lib/Library.java");
     }
 
     @Test
@@ -67,12 +69,12 @@ class CapybaraCompilerLibrariesIntegrationTest {
                     if index == 0 then /capy/lang/Option.Some { value: this.group_value } else /capy/lang/Option.None {}
                 fun Match.groups(): List[/capy/lang/Option[String]] = [/capy/lang/Option.Some { value: this.group_value }]
                 """;
-        var libraries = compileProgram(List.of(
+        var libraries = new LinkedHashSet<>(compileProgram(List.of(
                 optionModule(),
                 stringModule(),
                 collectionsModule(),
-                new RawModule("Regex", "/capy/lang", regexLibrarySource)
-        ), new TreeSet<>()).modules();
+                rawModule("Regex", "/capy/lang", regexLibrarySource)
+        ), new LinkedHashSet<>()).modules());
 
         var consumerSource = """
                 from /capy/lang/Regex import { * }
@@ -92,29 +94,88 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 fun split_like(input: String): List[String] = regex/,/ /> input
                 fun first_group(input: String): String =
                     match regex/\\\\d+/.find(input).group(0) with
-                    case Some { group } -> group
+                    case Some { value } -> value
                     case None -> ""
                 fun groups_count(input: String): int = regex/\\\\d+/.find(input).groups().size()
                 """;
-        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
+        var generated = JavaGenerator.javaGenerator(compileProgram(List.of(rawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
 
         assertThat(generated.modules()).hasSize(1);
         var module = generated.modules().getFirst();
-        assertThat(module.relativePath()).isEqualTo(Path.of("foo", "app", "RegexConsumer.java"));
-        assertThat(module.code()).contains("fromLiteral(\"\\\\d+\", \"\")");
-        assertThat(module.code()).contains("fromLiteral(\",\", \"\")");
+        assertThat(module.relativePath()).isEqualTo("foo/app/RegexConsumer.java");
+        assertThat(module.code()).contains("__capy_regex_matches(__capy_data(");
+        assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \"\\\\d+\")");
+        assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \",\")");
     }
 
-    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
-        var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
-        if (result instanceof Result.Error<CompiledProgram> error) {
-            fail(error.errors().toString());
+    @Test
+    void shouldNotGatherJavaScriptTestsWhenSliceEndIsUnsupported() {
+        var source = """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /capy/lang/Effect import { * }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/foo/app/SliceEndPlaceholder.cfun", [
+                        test("unsupported slice end stays ungathered", () => assert_that(slice_with_placeholder("capy")).is_equal_to("c")),
+                    ])
+
+                private fun slice_with_placeholder(value: String): String =
+                    value[0, ???]
+                """;
+        var generated = JavaScriptGenerator.javaScriptGenerator(compileProgram(List.of(rawModule("SliceEndPlaceholder", "/foo/app", source)), new LinkedHashSet<>()));
+
+        assertThat(generated.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains("foo/app/SliceEndPlaceholder.js", "capy/test/CapyTestRuntime.js");
+        var runtime = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.js"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(runtime.code()).doesNotContain("SliceEndPlaceholder");
+    }
+
+    @Test
+    void shouldGenerateJavaScriptQualifiedImportCalls() {
+        var moduleA = """
+                fun foo(x: int): int = x + 1
+                """;
+        var moduleB = """
+                fun foo(x: int): int = x - 1
+                """;
+        var consumerSource = """
+                import /foo/app/A
+
+                fun alias_call(x: int): int = A.foo(x)
+                fun absolute_call(x: int): int = /foo/app/B.foo(x)
+                """;
+        var generated = JavaScriptGenerator.javaScriptGenerator(compileProgram(List.of(
+                rawModule("A", "/foo/app", moduleA),
+                rawModule("B", "/foo/app", moduleB),
+                rawModule("Consumer", "/foo/app", consumerSource)
+        ), new LinkedHashSet<>()));
+
+        var consumer = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("foo/app/Consumer.js"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumer.code()).contains("const __capy_import_foo_app_A = require(");
+        assertThat(consumer.code()).contains("__capy_import_foo_app_A[");
+        assertThat(consumer.code()).contains("require(\"../../foo/app/B\")[");
+        assertThat(consumer.code()).doesNotContain("__capy_import_foo_app_B");
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> rawModules, Set<CompiledModule> libraries) {
+        var result = CapybaraCompiler.compile(rawModules, libraries, emptyNativeProviders(), emptyNativeProviders()).unsafeRun();
+        if (result instanceof Either.Right<?, ?> error) {
+            fail(error.value().toString());
         }
-        return ((Result.Success<CompiledProgram>) result).value();
+        return (CompiledProgram) ((Either.Left<?, ?>) result).value();
     }
 
     private static RawModule optionModule() {
-        return new RawModule("Option", "/capy/lang", """
+        return rawModule("Option", "/capy/lang", """
                 union Option[T] = Some[T] | None
                 data Some[T] { value: T }
                 data None {}
@@ -122,7 +183,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     private static RawModule stringModule() {
-        return new RawModule("String", "/capy/lang", """
+        return rawModule("String", "/capy/lang", """
                 data String { <native> }
                 fun String.`?`(part: String): bool = <native>
                 fun String.replace(old: String, new: String): String = <native>
@@ -130,10 +191,18 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     private static RawModule collectionsModule() {
-        return new RawModule("List", "/capy/collection", """
+        return rawModule("List", "/capy/collection", """
                 data List[T] { <native> }
                 fun List[T].`|`(map: T => Y): List[Y] = <native>
                 fun List[T].size(): int = <native>
                 """);
+    }
+
+    private static RawModule rawModule(String name, String path, String input) {
+        return new RawModule(name, path, input, SourceKind.FUNCTIONAL);
+    }
+
+    private static NativeProviderManifest emptyNativeProviders() {
+        return new NativeProviderManifest(List.of());
     }
 }

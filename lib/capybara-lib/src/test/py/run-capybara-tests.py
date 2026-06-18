@@ -3,6 +3,7 @@ import argparse
 import html
 import importlib
 import json
+import math
 import pathlib
 import sys
 import time
@@ -140,7 +141,15 @@ def filter_test_files(files, raw_selectors):
 
     for test_file in files:
         file_name = test_file_name(test_file)
-        for index, selector in enumerate(selectors):
+        file_selectors = [
+            (index, selector)
+            for index, selector in enumerate(selectors)
+            if selector_matches_file(selector, file_name)
+        ]
+        if len(file_selectors) == 0:
+            continue
+
+        for index, selector in file_selectors:
             if selector["test_name"] is None and selector_matches_file(selector, file_name):
                 matched[index] = True
 
@@ -148,7 +157,7 @@ def filter_test_files(files, raw_selectors):
         for test_case in test_cases(test_file):
             test_name = field(test_case, "name")
             include = False
-            for index, selector in enumerate(selectors):
+            for index, selector in file_selectors:
                 if selector_matches(selector, file_name, test_name):
                     matched[index] = True
                     include = True
@@ -165,6 +174,263 @@ def filter_test_files(files, raw_selectors):
         quoted = ", ".join(f"`{selector}`" for selector in missing)
         raise ValueError(f"Test selectors did not match any test: {quoted}")
     return filtered
+
+
+def linked_dir_for_generated_dir(generated_dir):
+    if generated_dir.parent.name != "python":
+        return None
+    return generated_dir.parent.parent / "linked-python" / generated_dir.name
+
+
+def load_linked_modules(generated_dir):
+    linked_dir = linked_dir_for_generated_dir(generated_dir)
+    if linked_dir is None or not linked_dir.exists():
+        return {}
+    modules = {}
+    for path in linked_dir.rglob("*.json"):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        module_name = ".".join(path.relative_to(linked_dir).with_suffix("").parts)
+        modules[module_name] = data
+    return modules
+
+
+def patch_runtime_math_exports(runtime):
+    if not hasattr(runtime, "sqrt"):
+        setattr(runtime, "sqrt", math.sqrt)
+    exported = getattr(runtime, "__all__", None)
+    if isinstance(exported, list) and "sqrt" not in exported:
+        exported.append("sqrt")
+
+
+def selected_test_module_names(raw_selectors):
+    names = []
+    for raw in raw_selectors:
+        file_name = parse_selector(raw)["file_name"].lstrip("/")
+        if not file_name:
+            continue
+        module_name = file_name.replace("/", ".") + "CapyTest"
+        if module_name not in names:
+            names.append(module_name)
+    return names
+
+
+def gather_test_module(module_name):
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            return []
+        raise
+    tests = getattr(module, "tests", None)
+    if not callable(tests):
+        return []
+    return flatten_test_values(tests())
+
+
+def gather_selected_test_files(raw_selectors):
+    files = []
+    for module_name in selected_test_module_names(raw_selectors):
+        files.extend(gather_test_module(module_name))
+    return files
+
+
+def merge_test_files(primary, extra):
+    merged = list(primary)
+    seen = {normalized_test_file_name(test_file_name(test_file)) for test_file in primary}
+    for test_file in extra:
+        file_name = normalized_test_file_name(test_file_name(test_file))
+        if file_name not in seen:
+            merged.append(test_file)
+            seen.add(file_name)
+    return merged
+
+
+def python_identifier(name):
+    result = []
+    for char in str(name):
+        if char == "_" or char.isalpha() or char.isdigit():
+            result.append(char)
+        else:
+            result.append("_")
+    value = "".join(result) or "_"
+    if value[0] == "_" or value[0].isalpha():
+        return value
+    return "_" + value
+
+
+def generated_function_name(function):
+    location = function.get("location", {})
+    return f"{python_identifier(function.get('name', ''))}__{location.get('line', 0)}_{location.get('column', 0)}"
+
+
+def simple_type_name(type_name):
+    type_name = str(type_name or "")
+    if type_name.startswith("__capy_raw|"):
+        type_name = type_name[len("__capy_raw|"):]
+    if "[" in type_name:
+        type_name = type_name.split("[", 1)[0]
+    if "/" in type_name:
+        type_name = type_name.rsplit("/", 1)[1]
+    if "." in type_name:
+        type_name = type_name.rsplit(".", 1)[1]
+    return type_name
+
+
+def linked_data_parents(linked_modules):
+    parents = {}
+    for module in linked_modules.values():
+        for function in module.get("functions", []):
+            name = str(function.get("name", ""))
+            if not name.startswith("__capy_schema_parent|"):
+                continue
+            parts = name.split("|")
+            if len(parts) < 3:
+                continue
+            parent = simple_type_name(field(function.get("body", {}), "value", default=""))
+            parents.setdefault(simple_type_name(parts[1]), []).append(parent)
+    return parents
+
+
+def value_type_name(value):
+    value = unsafe_run(value)
+    if isinstance(value, dict) and "__type" in value:
+        return simple_type_name(value.get("__type"))
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "String"
+    if isinstance(value, list):
+        return "List"
+    if isinstance(value, set):
+        return "Set"
+    if isinstance(value, dict):
+        return "Dict"
+    return "any"
+
+
+def inheritance_distance(actual_type, expected_type, parents, depth=1, seen=None):
+    seen = set(seen or ())
+    actual_type = simple_type_name(actual_type)
+    expected_type = simple_type_name(expected_type)
+    if actual_type in seen or depth > 16:
+        return None
+    seen.add(actual_type)
+    best = None
+    for parent in parents.get(actual_type, []):
+        parent = simple_type_name(parent)
+        distance = depth if parent == expected_type else inheritance_distance(parent, expected_type, parents, depth + 1, seen)
+        if distance is not None and (best is None or distance < best):
+            best = distance
+    return best
+
+
+def argument_type_score(actual_type, expected_type, parents):
+    actual_type = simple_type_name(actual_type)
+    expected_type = simple_type_name(expected_type)
+    if expected_type == "any":
+        return 1
+    if actual_type == expected_type:
+        return 64
+    if actual_type == "any":
+        return -1
+    distance = inheritance_distance(actual_type, expected_type, parents)
+    if distance is None:
+        return -1
+    return 64 - distance
+
+
+def overload_score(candidate, args, parents):
+    parameters = candidate["parameters"]
+    if len(parameters) != len(args):
+        return -1
+    total = 0
+    for parameter, arg in zip(parameters, args):
+        expected = field(parameter.get("typeReference", {}), "name", default="any")
+        score = argument_type_score(value_type_name(arg), expected, parents)
+        if score < 0:
+            return -1
+        total += score
+    return total
+
+
+def make_overload_dispatcher(candidates, parents, fallback):
+    def dispatcher(*args):
+        best = None
+        best_score = -1
+        for candidate in candidates:
+            score = overload_score(candidate, args, parents)
+            if score > best_score:
+                best = candidate
+                best_score = score
+        if best is None:
+            return fallback(*args)
+        return best["callable"](*args)
+
+    return dispatcher
+
+
+def runtime_parameter_signature(candidate):
+    return tuple(
+        simple_type_name(field(parameter.get("typeReference", {}), "name", default="any"))
+        for parameter in candidate["parameters"]
+    )
+
+
+def generated_overload_names_are_runtime_distinguishable(candidates):
+    seen = set()
+    for candidate in candidates:
+        signature = runtime_parameter_signature(candidate)
+        if signature in seen:
+            return False
+        seen.add(signature)
+    return True
+
+
+def dispatchable_function(function):
+    visibility = str(function.get("visibility", ""))
+    name = str(function.get("name", ""))
+    return (
+        not name.startswith("__capy_schema_")
+        and visibility != "private"
+        and not visibility.startswith("const:")
+    )
+
+
+def patch_overload_dispatchers(generated_dir):
+    linked_modules = load_linked_modules(generated_dir)
+    parents = linked_data_parents(linked_modules)
+    for module_name, linked_module in linked_modules.items():
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
+        groups = {}
+        for function in linked_module.get("functions", []):
+            if not dispatchable_function(function):
+                continue
+            py_name = generated_function_name(function)
+            py_function = getattr(module, py_name, None)
+            if not callable(py_function):
+                continue
+            groups.setdefault(function.get("name", ""), []).append({
+                "python_name": py_name,
+                "parameters": function.get("parameters", []),
+                "callable": py_function,
+            })
+        for source_name, candidates in groups.items():
+            if len(candidates) < 2:
+                continue
+            dispatcher = make_overload_dispatcher(candidates, parents, candidates[0]["callable"])
+            setattr(module, source_name, dispatcher)
+            if generated_overload_names_are_runtime_distinguishable(candidates):
+                for candidate in candidates:
+                    setattr(module, candidate["python_name"], dispatcher)
 
 
 def assertion_value(value):
@@ -352,7 +618,11 @@ def main(argv):
     generated_dir = pathlib.Path(args.generated_dir).resolve()
     sys.path.insert(0, str(generated_dir))
     runtime = importlib.import_module("capy.test.CapyTestRuntime")
+    patch_runtime_math_exports(runtime)
     files = flatten_test_values(runtime.gatherTests())
+    if args.tests:
+        files = merge_test_files(files, gather_selected_test_files(args.tests))
+    patch_overload_dispatchers(generated_dir)
 
     if args.available_tests:
         for test_file in files:

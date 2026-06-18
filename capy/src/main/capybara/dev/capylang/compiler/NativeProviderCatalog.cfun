@@ -1,0 +1,8 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+
+data NativeProviderCatalog {
+    declarations: List[CompiledNativeProviderDeclaration],
+    bindings: List[CompiledNativeProviderBinding]
+}

@@ -1,0 +1,16 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
+from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+data ObjectOrientedInterface {
+    name: String,
+    visibility: String,
+    kind: String,
+    parents: List[TypeReference],
+    methods: List[ObjectOrientedMethod],
+    documentation: List[String],
+    annotations: List[FunctionAnnotationApplication],
+    location: SourceLocation
+}

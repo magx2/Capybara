@@ -12,7 +12,7 @@ definition:
     | interfaceDeclaration;
 
 classDeclaration: docComment* annotationBlock* classModifier* 'class' TYPE constructorParameters? inheritanceClause? typeBody;
-traitDeclaration: docComment* annotationBlock* 'trait' TYPE inheritanceClause? typeBody;
+traitDeclaration: docComment* annotationBlock* 'trait' TYPE inheritanceClause? traitBody;
 interfaceDeclaration: docComment* annotationBlock* 'interface' TYPE inheritanceClause? interfaceBody;
 
 classModifier
@@ -22,10 +22,12 @@ classModifier
 
 inheritanceClause: ':' qualifiedType (',' qualifiedType)*;
 typeBody: '{' memberDeclaration* '}';
+traitBody: '{' traitMemberDeclaration* '}';
 interfaceBody: '{' interfaceMemberDeclaration* '}';
 memberDeclaration: fieldDeclaration
                  | methodDeclaration
                  | initBlock;
+traitMemberDeclaration: methodDeclaration;
 interfaceMemberDeclaration: interfaceMethodDeclaration;
 fieldDeclaration: docComment* annotationBlock* visibility? 'field' identifier ':' type ('=' expression)?;
 methodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType methodBody?;

@@ -27,6 +27,8 @@ fun find_all_alias_count(input: String): int =
 
 fun replace_named(input: String): String = regex/1/.replace("#")(input)
 fun replace_alias(input: String): String = (regex/1/ ~> "#")(input)
+fun replace_named_literal_dollar(input: String): String = regex/1/.replace("$&")(input)
+fun replace_alias_literal_dollar(input: String): String = (regex/1/ ~> "$&")(input)
 
 fun split_named(input: String): List[String] = regex/,/.split(input)
 fun split_alias(input: String): List[String] = regex/,/ /> input

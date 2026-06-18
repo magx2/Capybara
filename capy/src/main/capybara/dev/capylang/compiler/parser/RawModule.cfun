@@ -1,0 +1,5 @@
+from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
+
+data Raw {}
+
+data RawModule { name: String, path: String, input: String, sourceKind: SourceKind }

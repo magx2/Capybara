@@ -18,13 +18,30 @@ from /capy/lang/TimeUnit import { * }
 from /capy/serialization/Json import { JsonString, stringify }
 from /capy/meta_prog/Recursive import { Recursive }
 
+/// Test suite source file with test cases and a run timestamp.
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
+/// Single test case and its executable assertion supplier.
 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Assert }
+/// Test execution result.
 union TestResult = Passed | Failed
+/// Successful test execution.
 data Passed {}
+/// Failed test execution with assertion message and assertion type.
 data Failed { message: String, type: String }
+/// Test runner logging mode.
 enum LogType { NONE, LOG, TEAM_CITY }
 
+/// Builds a test file from already constructed test cases.
+///
+/// Example:
+/// ```cfun
+/// test_file("/capy/lang/StringTest.cfun", [
+///     test("starts_with", () =>
+///         assert_that("capybara").starts_with("capy")
+///     )
+/// ])
+/// ```
+/// The timestamp is captured from `now()` when the effect runs.
 fun test_file(file_name: String, test_cases: List[TestCase]): Effect[TestFile] =
     let current <- now()
     TestFile {
@@ -33,6 +50,10 @@ fun test_file(file_name: String, test_cases: List[TestCase]): Effect[TestFile] =
         timestamp_millis: current.timestamp() * 1000L
     }
 
+/// Builds a test file from effectful test cases.
+///
+/// Use this overload when test cases need setup effects before they can be
+/// added to the suite.
 fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
     let unwrapped_test_cases <- unwrap_test_cases(test_cases)
@@ -50,6 +71,10 @@ private fun unwrap_test_cases(test_cases: List[Effect[TestCase]]): Effect[List[T
         let unwrapped_test_cases <- unwrap_test_cases(test_cases[1:])
         [test_case] + unwrapped_test_cases
 
+/// Creates a test case from a name and lazy assertion supplier.
+///
+/// The supplier is evaluated by the runner, so expensive or failing assertions
+/// should stay inside the lambda.
 fun test(name: String, assert_supplier: () => Assert): TestCase =
     TestCase {
         name: name,
@@ -115,14 +140,18 @@ private fun execute(assertions: List[() => Assertion]): TestResult =
     }
     case None -> Passed {}
 
+/// Returns true when this executed test case passed.
 fun TestCase.succeeded(): bool = !this.failed()
 
+/// Returns true when this executed test case failed.
 fun TestCase.failed(): bool =
     match this.result with
     case Passed -> false
     case Failed -> true
 
+/// Report format emitted by the test runner.
 enum ReportType { JUNIT, CTRF, JEST }
+/// Generated test report value.
 union Report = JUnitReport | CtrfReport | JestReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
@@ -161,21 +190,63 @@ fun JUnitFailure.`+`(other_message: String): JUnitFailure =
         call_stack: this.call_stack
     }
 
+/// CTRF JSON report payload.
 data CtrfReport { report: String }
+/// Jest JSON report payload.
 data JestReport { report: String }
 
+/// One generated test report output.
 data TestOutput { path: Path, content: String, failed: bool }
+/// Result of writing a test run to disk.
 data TestRun { outputs: List[TestOutput], written_files: List[Path], failure_summary: String, failed: bool }
 
+/// Generates report outputs in memory from already executed test files.
+///
+/// This overload does not evaluate test bodies or call `execute_test_files`.
+/// Freshly built `test(...)` values keep their initial result state, so use the
+/// overload with `output_dir` when the test assertions should run as part of
+/// report generation.
+///
+/// Example:
+/// ```cfun
+/// let reported_case = TestCase {
+///     name: "starts_with",
+///     result: Passed {},
+///     assertions_count: 1,
+///     execution_time: 0.001,
+///     assert_supplier: () => assert_that(true).is_true()
+/// }
+/// let reported_suite = TestFile {
+///     file_name: "/capy/lang/StringTest.cfun",
+///     test_cases: [reported_case],
+///     timestamp_millis: 0L
+/// }
+/// let outputs = run_tests(JUNIT, [reported_suite])
+/// ```
+/// Use the overload with `output_dir` to write report files.
 fun run_tests(rtype: ReportType, test_files: List[TestFile]): List[TestOutput] =
     match rtype with
     case JUNIT -> junit_run_tests(test_files)
     case CTRF -> ctrf_run_tests(test_files)
     case JEST -> jest_run_tests(test_files)
 
+/// Runs test files, writes reports under `output_dir`, and returns the written
+/// output summary.
 fun run_tests(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     run_tests(rtype, output_dir, NONE, test_files)
 
+/// Runs test files with the requested report type and logging mode.
+///
+/// Example:
+/// ```cfun
+/// let suite <- test_file("/capy/lang/StringTest.cfun", [
+///     test("starts_with", () =>
+///         assert_that("capybara").starts_with("capy")
+///     )
+/// ])
+/// run_tests(JUNIT, from_string("build/test-results"), LOG, [suite])
+/// ```
+/// `TEAM_CITY` emits service messages while tests execute.
 fun run_tests(rtype: ReportType, output_dir: Path, log_type: LogType, test_files: List[TestFile]): Effect[Result[TestRun]] =
     execute_test_files(log_type, test_files).flat_map(executed_test_files =>
         write_test_run(rtype, output_dir, executed_test_files)
@@ -201,9 +272,11 @@ private fun write_test_run(rtype: ReportType, output_dir: Path, executed_test_fi
             )
     )
 
+/// Runs tests, writes reports, and prints a failure summary.
 fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     run_tests_and_print_summary(rtype, output_dir, NONE, test_files)
 
+/// Runs tests with logging, writes reports, and prints a failure summary.
 fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, log_type: LogType, test_files: List[TestFile]): Effect[Result[TestRun]] =
     run_tests(rtype, output_dir, log_type, test_files).flat_map(run_result =>
         match run_result with
@@ -213,6 +286,8 @@ fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, log_type: L
     )
 
 /// Writes every test output under the given output directory and returns normalized relative paths.
+///
+/// Existing files that already have the same content are left untouched.
 fun write_test_outputs(output_dir: Path, test_outputs: List[TestOutput]): Effect[Result[List[Path]]] =
     match test_outputs[0] with
     case None -> pure(Success { [] })
@@ -340,8 +415,9 @@ fun test_log_lines(test_files: List[TestFile]): List[String] =
 private fun test_log_lines_file(test_file: TestFile): List[String] =
     let suite_name = test_suite_name(test_file.file_name)
     let initial: List[String] = []
+    let case_lines = test_file.test_cases |> initial, (acc, test_case) => acc + test_log_lines_case(test_case)
     ["Test suite started: {suite_name}"]
-        + (test_file.test_cases |> initial, (acc, test_case) => acc + test_log_lines_case(test_case))
+        + case_lines
         + ["Test suite finished: {suite_name}"]
 
 private fun test_log_lines_case(test_case: TestCase): List[String] =
@@ -363,8 +439,9 @@ fun team_city_messages(test_files: List[TestFile]): List[String] =
 private fun team_city_messages_file(test_file: TestFile): List[String] =
     let suite_name = team_city_escape(test_suite_name(test_file.file_name))
     let initial: List[String] = []
+    let case_messages = test_file.test_cases |> initial, (acc, test_case) => acc + team_city_messages_case(test_case)
     ["##teamcity[testSuiteStarted name='{suite_name}']"]
-        + (test_file.test_cases |> initial, (acc, test_case) => acc + team_city_messages_case(test_case))
+        + case_messages
         + ["##teamcity[testSuiteFinished name='{suite_name}']"]
 
 private fun team_city_messages_case(test_case: TestCase): List[String] =
@@ -582,8 +659,9 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
     let suite_name = junit_escape_xml_attribute(test_file.file_name)
     let time = test_file.test_cases |> 0.0, (acc, tc) => acc + tc.execution_time
     let timestamp = test_file_timestamp(test_file)
+    let test_cases_content = test_file.test_cases |> '', (acc, tc) => acc + junit_run_test_case(test_file.file_name, tc)
     let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{timestamp}\">"
-    + (test_file.test_cases |> '', (acc, tc) => acc + junit_run_test_case(test_file.file_name, tc))
+    + test_cases_content
     + '</testsuite>'
     TestOutput {
         path: from_string(JUNIT_PREFIX + test_file.file_name[1, test_file.file_name.size()].replace('/', '.') + '.xml'),
@@ -706,7 +784,10 @@ private fun ctrf_start_millis(test_files: List[TestFile]): long =
 
 private fun ctrf_total_duration_millis(test_files: List[TestFile]): long =
     test_files |> 0L, (acc, test_file) =>
-        acc + (test_file.test_cases |> 0L, (test_acc, test_case) => test_acc + ctrf_duration_millis(test_case))
+        acc + ctrf_test_file_duration_millis(test_file)
+
+private fun ctrf_test_file_duration_millis(test_file: TestFile): long =
+    test_file.test_cases |> 0L, (test_acc, test_case) => test_acc + ctrf_duration_millis(test_case)
 
 private fun ctrf_duration_millis(test_case: TestCase): long =
     second { round(test_case.execution_time, HALF_EVEN) }.to_milli_seconds().value
@@ -716,11 +797,17 @@ private fun ctrf_tests_count(test_files: List[TestFile]): int =
 
 private fun ctrf_passed_count(test_files: List[TestFile]): int =
     test_files |> 0, (acc, test_file) =>
-        acc + (test_file.test_cases |> 0, (test_acc, test_case) => if test_case.succeeded() then test_acc + 1 else test_acc)
+        acc + ctrf_test_file_passed_count(test_file)
+
+private fun ctrf_test_file_passed_count(test_file: TestFile): int =
+    test_file.test_cases |> 0, (test_acc, test_case) => if test_case.succeeded() then test_acc + 1 else test_acc
 
 private fun ctrf_failed_count(test_files: List[TestFile]): int =
     test_files |> 0, (acc, test_file) =>
-        acc + (test_file.test_cases |> 0, (test_acc, test_case) => if test_case.failed() then test_acc + 1 else test_acc)
+        acc + ctrf_test_file_failed_count(test_file)
+
+private fun ctrf_test_file_failed_count(test_file: TestFile): int =
+    test_file.test_cases |> 0, (test_acc, test_case) => if test_case.failed() then test_acc + 1 else test_acc
 
 private fun ctrf_comma(value: String): String = if value.is_empty() then '' else ','
 

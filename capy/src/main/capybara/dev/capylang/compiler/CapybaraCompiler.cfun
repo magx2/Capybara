@@ -1,0 +1,2025 @@
+from /capy/collection/Dict import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Either import { Either, Left, Right }
+from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
+from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
+from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from /dev/capylang/compiler/CapybaraValidator import { CapybaraValidator }
+from /dev/capylang/compiler/CapybaraValidatorProvider import { validator }
+from /dev/capylang/compiler/CompilerError import { CompilerError }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/StaticImport import { StaticImport }
+from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
+from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, DeriveApplication, DeriverDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition, PrimitiveBackedTypeDeclaration, TypeDeclaration }
+from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
+from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
+from /dev/capylang/compiler/parser/FunctionAnnotationArgument import { FunctionAnnotationArgument }
+from /dev/capylang/compiler/parser/FunctionAnnotationValue import { FunctionAnnotationBoolValue, FunctionAnnotationDoubleValue, FunctionAnnotationFloatValue, FunctionAnnotationIntValue, FunctionAnnotationLongValue, FunctionAnnotationNothingValue, FunctionAnnotationStringValue, FunctionAnnotationTypeNameValue, FunctionAnnotationValue }
+from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
+from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
+from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
+from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
+from /dev/capylang/compiler/parser/ObjectOrientedClass import { ObjectOrientedClass }
+from /dev/capylang/compiler/parser/ObjectOrientedField import { ObjectOrientedField }
+from /dev/capylang/compiler/parser/ObjectOrientedInitBlock import { ObjectOrientedInitBlock }
+from /dev/capylang/compiler/parser/ObjectOrientedInterface import { ObjectOrientedInterface }
+from /dev/capylang/compiler/parser/ObjectOrientedMethod import { ObjectOrientedMethod }
+from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
+from /dev/capylang/compiler/parser/CapybaraParser import { CapybaraParser }
+from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
+from /dev/capylang/compiler/parser/RawModule import { RawModule }
+from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
+
+fun compile(
+    rawModules: List[RawModule],
+    libraries: Set[CompiledModule],
+    nativeProviders: NativeProviderManifest,
+    nativeImplementationProviders: NativeProviderManifest
+): Effect[Either[CompiledProgram, List[CompilerError]]] =
+    if rawModules.is_empty()
+    then pure(Right { [CompilerError {
+        message: "No Capybara source modules found.",
+        moduleName: "",
+        line: 0,
+        column: 0
+        }] })
+    else
+        let capybara_parser <- parser()
+        let capybara_validator <- validator()
+        capybara_parser.parse(rawModules).flat_map(program =>
+            validate_program(capybara_validator, rawModules, libraries, nativeProviders).map(errors =>
+                compiled_program(program, libraries, nativeProviders, nativeImplementationProviders, errors)
+            )
+        )
+
+private fun compiled_program(
+    program: /dev/capylang/compiler/parser/ParsedProgram,
+    libraries: Set[CompiledModule],
+    nativeProviders: NativeProviderManifest,
+    nativeImplementationProviders: NativeProviderManifest,
+    errors: List[CompilerError]
+): Either[CompiledProgram, List[CompilerError]] =
+    let libraryModules = libraries.to_list()
+    if !errors.is_empty()
+    then Right { errors }
+    else Left { CompiledProgram {
+        modules: compile_modules(program.modules, program.modules, libraryModules),
+        objectOrientedModules: compile_object_oriented_modules(program.modules, program.modules),
+        nativeProviders: nativeProviders,
+        nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
+    }}
+
+private fun validate_program(
+    capybaraValidator: CapybaraValidator,
+    rawModules: List[RawModule],
+    libraries: Set[CompiledModule],
+    nativeProviders: NativeProviderManifest
+): Effect[List[CompilerError]] =
+    let libraryModules = validation_library_modules(libraries.to_list())
+    capybaraValidator.validate(
+        raw_module_names(rawModules),
+        raw_module_paths(rawModules),
+        raw_module_inputs(rawModules),
+        raw_module_source_kinds(rawModules),
+        libraryModules,
+        nativeProviders
+    )
+
+private fun raw_module_names(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [module.name] + raw_module_names(modules[1:])
+
+private fun raw_module_paths(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [module.path] + raw_module_paths(modules[1:])
+
+private fun raw_module_inputs(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [module.input] + raw_module_inputs(modules[1:])
+
+private fun raw_module_source_kinds(modules: List[RawModule]): List[String] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> [raw_module_source_kind(module.sourceKind)] + raw_module_source_kinds(modules[1:])
+
+private fun raw_module_source_kind(sourceKind: SourceKind): String =
+    match sourceKind with
+    case FUNCTIONAL -> "FUNCTIONAL"
+    case OBJECT_ORIENTED -> "OBJECT_ORIENTED"
+
+private fun validation_library_modules(libraries: List[CompiledModule]): List[String] =
+    match libraries[0] with
+    case None -> []
+    case Some { library } ->
+        [compiled_module_path(library), library.name, compiled_module_class_name(library)]
+            + validation_library_modules(libraries[1:])
+
+private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraries: List[CompiledModule]): List[CompiledModule] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> merge_compiled_module(compile_module_with_libraries(module, allModules, libraries), compile_modules(modules[1:], allModules, libraries))
+
+private fun merge_compiled_module(module: CompiledModule, modules: List[CompiledModule]): List[CompiledModule] =
+    match modules[0] with
+    case None -> [module]
+    case Some { existing } ->
+        if same_compiled_module(module, existing)
+        then [merge_compiled_modules(module, existing)] + modules[1:]
+        else [existing] + merge_compiled_module(module, modules[1:])
+
+private fun same_compiled_module(first: CompiledModule, second: CompiledModule): bool =
+    first.name == second.name & first.path == second.path
+
+private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule): CompiledModule =
+    CompiledModule {
+        name: first.name,
+        path: first.path,
+        types: first.types + second.types,
+        visiblePrimitiveBackedTypes: first.visiblePrimitiveBackedTypes + second.visiblePrimitiveBackedTypes,
+        functions: first.functions + second.functions,
+        imports: first.imports + second.imports,
+        derivers: first.derivers + second.derivers,
+        annotations: first.annotations + second.annotations,
+        staticImports: first.staticImports + second.staticImports
+    }
+
+private fun compile_module(module: ParsedModule, allModules: List[ParsedModule]): CompiledModule =
+    let derivers = compile_derivers(module.definitions)
+    CompiledModule {
+        name: module.name,
+        path: normalize_module_path(module.path),
+        types: {:},
+        visiblePrimitiveBackedTypes: compile_primitive_backed_types(module.definitions, module, allModules),
+        functions: compile_functions(module.definitions, module.definitions, module, allModules)
+            + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
+            + compile_object_class_functions(module.objectOriented.classes, module, allModules),
+        imports: compile_imports(module.imports),
+        derivers: derivers,
+        annotations: compile_annotations(module.definitions),
+        staticImports: []
+    }
+
+private fun compile_primitive_backed_types(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): Dict[CompiledPrimitiveBackedType] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        match definition with
+        case PrimitiveBackedTypeDeclaration declaration ->
+            compile_primitive_backed_types(definitions[1:], module, allModules) + (declaration.name, compile_primitive_backed_type(declaration, module, allModules))
+        case _ -> compile_primitive_backed_types(definitions[1:], module, allModules)
+
+private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledPrimitiveBackedType =
+    CompiledPrimitiveBackedType {
+        name: declaration.name,
+        visibility: declaration.visibility,
+        backingType: compile_type_in_module(declaration.backingType, module, allModules),
+        location: compile_location(declaration.location)
+    }
+
+private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraries: List[CompiledModule]): CompiledModule =
+    let compiled = compile_module(module, allModules)
+    compiled.with(
+        functions: compiled.functions + imported_library_functions(compiled.imports, libraries),
+        staticImports: library_static_imports(compiled.imports, libraries)
+    )
+
+private fun imported_library_functions(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[CompiledFunction] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } ->
+        if declaration.qualified
+        then imported_library_functions(imports[1:], libraries)
+        else imported_library_functions_for_import(declaration, libraries) + imported_library_functions(imports[1:], libraries)
+
+private fun imported_library_functions_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[CompiledFunction] =
+    match find_imported_library(declaration, libraries) with
+    case Some { library } -> imported_library_functions_from_module(declaration, library.functions)
+    case None -> []
+
+private fun imported_library_functions_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction]): List[CompiledFunction] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if imported_library_function(declaration, function)
+        then [function.with(visibility: "imported")] + imported_library_functions_from_module(declaration, functions[1:])
+        else imported_library_functions_from_module(declaration, functions[1:])
+
+private fun imported_library_function(declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
+    compiled_import_includes_name(function.name, declaration)
+        & function.visibility != "private"
+        & function.visibility != "const:private"
+        & !compiler_string_has_prefix(function.visibility, "const:schema")
+
+private fun library_static_imports(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[StaticImport] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } ->
+        if declaration.qualified | compiler_stdlib_import(declaration.modulePath)
+        then library_static_imports(imports[1:], libraries)
+        else library_static_imports_for_import(declaration, libraries) + library_static_imports(imports[1:], libraries)
+
+private fun library_static_imports_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[StaticImport] =
+    match find_imported_library(declaration, libraries) with
+    case Some { library } ->
+        if declaration.wildcard & declaration.excludedNames.is_empty()
+        then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
+        else explicit_library_static_imports(declaration, library, library.functions)
+    case None -> []
+
+private fun explicit_library_static_imports(declaration: CompiledImportDeclaration, library: CompiledModule, functions: List[CompiledFunction]): List[StaticImport] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if imported_library_function(declaration, function)
+        then [StaticImport { className: compiled_module_class_name(library), memberName: compiler_java_function_name(function), enumValue: false }]
+            + explicit_library_static_imports(declaration, library, functions[1:])
+        else explicit_library_static_imports(declaration, library, functions[1:])
+
+private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match libraries[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { library } ->
+        if imported_library_matches(declaration.modulePath, library)
+        then /capy/lang/Option.Some { library }
+        else find_imported_library(declaration, libraries[1:])
+
+private fun imported_library_matches(modulePath: String, library: CompiledModule): bool =
+    let className = compiled_module_class_name(library)
+    modulePath == library.name
+        | normalize_module_path(modulePath) == compiled_module_path(library)
+        | normalize_import_module_path(modulePath) == compiled_module_path(library)
+        | modulePath == className
+
+private fun compiled_module_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else module.path + "/" + module.name
+
+private fun compiled_module_class_name(module: CompiledModule): String =
+    compiled_module_path(module).replace("/", ".")
+
+private fun compiler_stdlib_import(modulePath: String): bool =
+    compiler_string_has_prefix(modulePath, "/capy/") | compiler_string_has_prefix(modulePath, "capy/")
+
+private fun compiled_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
+    if declaration.wildcard
+    then !compiler_string_list_contains(declaration.excludedNames, name)
+    else compiler_string_list_contains(declaration.importedNames, name)
+
+private fun compiler_java_function_name(function: CompiledFunction): String =
+    if function.name == "tests"
+    then "tests"
+    else if function.name == "main"
+    then "main"
+    else compiler_java_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
+
+private fun compiler_java_identifier(name: String): String =
+    let sanitized = compiler_java_identifier_chars(name, 0, "")
+    let nonEmpty = if sanitized.is_empty() then "_" else sanitized
+    match nonEmpty[0] with
+    case None -> "_"
+    case Some { char } -> if compiler_java_identifier_start_char(char) then nonEmpty else "_" + nonEmpty
+
+private fun compiler_java_identifier_chars(name: String, idx: int, acc: String): String =
+    if idx >= name.size().value
+    then acc
+    else match name[idx] with
+        case None -> acc
+        case Some { char } ->
+            let next = if compiler_java_identifier_part_char(char) then char else "_"
+            compiler_java_identifier_chars(name, idx + 1, acc + next)
+
+private fun compiler_java_identifier_start_char(char: String): bool =
+    ("ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char) | ("abcdefghijklmnopqrstuvwxyz" ? char) | char == "_" | char == "$"
+
+private fun compiler_java_identifier_part_char(char: String): bool =
+    compiler_java_identifier_start_char(char) | ("0123456789" ? char)
+
+private fun compile_object_oriented_modules(modules: List[ParsedModule], allModules: List[ParsedModule]): List[CompiledObjectOrientedUnit] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        if module.objectOriented.interfaces.is_empty() & module.objectOriented.classes.is_empty()
+        then compile_object_oriented_modules(modules[1:], allModules)
+        else [CompiledObjectOrientedUnit {
+            name: module.name,
+            path: normalize_module_path(module.path),
+            interfaces: compile_object_interfaces(module.objectOriented.interfaces, module, allModules),
+            classes: compile_object_classes(module.objectOriented.classes, module, allModules)
+        }] + compile_object_oriented_modules(modules[1:], allModules)
+
+private fun compile_object_interfaces(interfaces: List[ObjectOrientedInterface], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedInterface] =
+    match interfaces[0] with
+    case None -> []
+    case Some { interface } -> [compile_object_interface(interface, module, allModules)] + compile_object_interfaces(interfaces[1:], module, allModules)
+
+private fun compile_object_interface(interface: ObjectOrientedInterface, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedInterface =
+    CompiledObjectOrientedInterface {
+        name: interface.name,
+        visibility: interface.visibility,
+        kind: interface.kind,
+        parents: compile_types_in_module(interface.parents, module, allModules),
+        methods: compile_object_methods(interface.name, interface.methods, module, allModules),
+        location: compile_location(interface.location)
+    }
+
+private fun compile_object_classes(classes: List[ObjectOrientedClass], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedClass] =
+    match classes[0] with
+    case None -> []
+    case Some { class } -> [compile_object_class(class, module, allModules)] + compile_object_classes(classes[1:], module, allModules)
+
+private fun compile_object_class(class: ObjectOrientedClass, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedClass =
+    CompiledObjectOrientedClass {
+        name: class.name,
+        visibility: class.visibility,
+        open: class.open,
+        parameters: compile_parameters_in_module(class.parameters, module, allModules),
+        parents: compile_types_in_module(class.parents, module, allModules),
+        fields: compile_object_fields(class.name, class.fields, module, allModules),
+        initBlocks: compile_object_init_blocks(class.name, class.initBlocks),
+        methods: compile_object_methods(class.name, class.methods, module, allModules),
+        location: compile_location(class.location)
+    }
+
+private fun compile_object_fields(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedField] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> [compile_object_field(className, field, module, allModules)] + compile_object_fields(className, fields[1:], module, allModules)
+
+private fun compile_object_field(className: String, field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedField =
+    CompiledObjectOrientedField {
+        name: field.name,
+        visibility: field.visibility,
+        typeReference: compile_type_in_module(field.typeReference, module, allModules),
+        value: compile_expression_in_function(field.value, className + "." + field.name),
+        hasValue: field.hasValue,
+        location: compile_location(field.location)
+    }
+
+private fun compile_object_init_blocks(className: String, initBlocks: List[ObjectOrientedInitBlock]): List[CompiledExpression] =
+    match initBlocks[0] with
+    case None -> []
+    case Some { initBlock } -> [compile_expression_in_function(initBlock.body, className + ".init")] + compile_object_init_blocks(className, initBlocks[1:])
+
+private fun compile_object_methods(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledObjectOrientedMethod] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_object_method(className, method, module, allModules)] + compile_object_methods(className, methods[1:], module, allModules)
+
+private fun compile_object_method(className: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledObjectOrientedMethod =
+    let functionName = className + "." + method.name
+    CompiledObjectOrientedMethod {
+        name: method.name,
+        visibility: method.visibility,
+        parameters: compile_parameters_in_module(method.parameters, module, allModules),
+        returnType: compile_type_in_module(method.returnType, module, allModules),
+        body: compile_expression_in_function(method.body, functionName),
+        location: compile_location(method.location)
+    }
+
+private fun compile_object_interface_functions(interfaces: List[ObjectOrientedInterface], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+    match interfaces[0] with
+    case None -> []
+    case Some { interface } ->
+        [compile_object_interface_schema_function(interface)]
+            + [compile_object_interface_kind_schema_function(interface)]
+            + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0, interface.location)
+            + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(interface.name), interface.annotations, 0)
+            + compile_object_interface_method_functions(interface.name, interface.methods, module, allModules)
+            + compile_object_interface_functions(interfaces[1:], module, allModules)
+
+private fun compile_object_interface_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
+    compile_schema_constant(
+        object_interface_schema_key(interface.name),
+        interface.visibility,
+        interface.location
+    )
+
+private fun compile_object_interface_kind_schema_function(interface: ObjectOrientedInterface): CompiledFunction =
+    compile_schema_constant(
+        object_interface_kind_schema_key(interface.name),
+        interface.kind,
+        interface.location
+    )
+
+private fun compile_object_interface_parent_schema_functions(interfaceName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
+    compile_object_parent_schema_functions(object_interface_parent_schema_prefix(), interfaceName, parents, module, allModules, idx, location)
+
+private fun compile_object_parent_schema_functions(prefix: String, ownerName: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [compile_schema_constant(object_indexed_schema_key(prefix, ownerName, idx), compiled_type_reference_schema(compile_type_in_module(parent, module, allModules)), location)]
+            + compile_object_parent_schema_functions(prefix, ownerName, parents[1:], module, allModules, idx + 1, location)
+
+private fun compile_object_interface_method_functions(interfaceName: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } ->
+        [compile_object_interface_method_function(interfaceName, method, module, allModules)]
+            + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(interfaceName, method.name), method.annotations, 0)
+            + compile_object_interface_method_functions(interfaceName, methods[1:], module, allModules)
+
+private fun compile_object_interface_method_function(interfaceName: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+    CompiledFunction {
+        name: object_interface_method_schema_key(interfaceName, method.name),
+        visibility: "oo_interface_method:" + method.visibility,
+        parameters: compile_parameters_in_module(method.parameters, module, allModules),
+        returnType: compile_type_in_module(method.returnType, module, allModules),
+        body: compile_expression_in_function(method.body, interfaceName + "." + method.name),
+        location: compile_location(method.location)
+    }
+
+private fun compile_object_class_functions(classes: List[ObjectOrientedClass], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+    match classes[0] with
+    case None -> []
+    case Some { class } ->
+        [compile_object_class_schema_function(class)]
+            + [compile_object_class_open_schema_function(class)]
+            + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
+            + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0, class.location)
+            + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(class.name), class.annotations, 0)
+            + compile_object_field_schema_functions(class.name, class.fields, module, allModules, 0)
+            + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
+            + compile_object_field_init_functions(class.name, class.parameters, class.fields, module, allModules)
+            + compile_object_init_functions(class.name, class.parameters, class.initBlocks, module, allModules, 0)
+            + compile_object_method_functions(class.name, class.methods, module, allModules)
+            + compile_object_class_functions(classes[1:], module, allModules)
+
+private fun compile_object_class_schema_function(class: ObjectOrientedClass): CompiledFunction =
+    compile_schema_constant(
+        object_class_schema_key(class.name),
+        class.visibility,
+        class.location
+    )
+
+private fun compile_object_class_open_schema_function(class: ObjectOrientedClass): CompiledFunction =
+    compile_schema_constant(
+        object_class_open_schema_key(class.name),
+        if class.open then "true" else "false",
+        class.location
+    )
+
+private fun compile_object_class_parameter_schema_functions(className: String, parameters: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [compile_schema_constant(object_indexed_schema_key(object_class_parameter_schema_prefix(), className, idx), parameter.name + "|" + compiled_type_reference_schema(compile_type_in_module(parameter.typeReference, module, allModules)), parameter.location)]
+            + compile_object_class_parameter_schema_functions(className, parameters[1:], module, allModules, idx + 1)
+
+private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
+    compile_object_parent_schema_functions(object_class_parent_schema_prefix(), className, parents, module, allModules, idx, location)
+
+private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [compile_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, module, allModules), field.location)]
+            + compile_object_field_schema_functions(className, fields[1:], module, allModules, idx + 1)
+
+private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        compile_function_annotation_application_schema(object_field_annotation_schema_prefix(className, idx), field.annotations, 0)
+            + compile_object_field_annotation_schema_functions(className, fields[1:], idx + 1)
+
+private fun object_field_schema(field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): String =
+    field.name + "|" + field.visibility + "|" + compiled_type_reference_schema(compile_type_in_module(field.typeReference, module, allModules)) + "|" + object_field_has_value_schema(field)
+
+private fun object_field_has_value_schema(field: ObjectOrientedField): String =
+    if field.hasValue then "true" else "false"
+
+private fun compile_object_field_init_functions(className: String, parameters: List[FunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        if field.hasValue
+        then [compile_object_field_init_function(className, parameters, field, module, allModules)] + compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
+        else compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
+
+private fun compile_object_field_init_function(className: String, parameters: List[FunctionParameter], field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+    CompiledFunction {
+        name: object_field_init_schema_key(className, field.name),
+        visibility: "oo_field_init",
+        parameters: compile_parameters_in_module(parameters, module, allModules),
+        returnType: compile_type_in_module(field.typeReference, module, allModules),
+        body: compile_expression_in_function(field.value, className + "." + field.name),
+        location: compile_location(field.location)
+    }
+
+private fun compile_object_init_functions(className: String, parameters: List[FunctionParameter], initBlocks: List[ObjectOrientedInitBlock], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+    match initBlocks[0] with
+    case None -> []
+    case Some { initBlock } ->
+        [compile_object_init_function(className, parameters, initBlock, module, allModules, idx)]
+            + compile_object_init_functions(className, parameters, initBlocks[1:], module, allModules, idx + 1)
+
+private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: ObjectOrientedInitBlock, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
+    CompiledFunction {
+        name: object_indexed_schema_key(object_init_schema_prefix(), className, idx),
+        visibility: "oo_init",
+        parameters: compile_parameters_in_module(parameters, module, allModules),
+        returnType: compile_type(compiler_any_type()),
+        body: compile_expression_in_function(initBlock.body, className + ".init"),
+        location: compile_location(initBlock.location)
+    }
+
+private fun compile_object_method_functions(className: String, methods: List[ObjectOrientedMethod], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } ->
+        [compile_object_method_function(className, method, module, allModules)]
+            + compile_function_annotation_application_schema(object_method_annotation_schema_prefix(className, method.name), method.annotations, 0)
+            + compile_object_method_functions(className, methods[1:], module, allModules)
+
+private fun compile_object_method_function(className: String, method: ObjectOrientedMethod, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+    let functionName = className + "." + method.name
+    CompiledFunction {
+        name: object_method_schema_key(className, method.name),
+        visibility: "oo:" + method.visibility,
+        parameters: compile_parameters_in_module(method.parameters, module, allModules),
+        returnType: compile_type_in_module(method.returnType, module, allModules),
+        body: compile_expression_in_function(method.body, functionName),
+        location: compile_location(method.location)
+    }
+
+private fun object_class_schema_key(className: String): String =
+    object_schema_key(object_class_schema_prefix(), className)
+
+private fun object_interface_schema_key(interfaceName: String): String =
+    object_schema_key(object_interface_schema_prefix(), interfaceName)
+
+private fun object_class_open_schema_key(className: String): String =
+    object_schema_key(object_class_open_schema_prefix(), className)
+
+private fun object_interface_kind_schema_key(interfaceName: String): String =
+    object_schema_key(object_interface_kind_schema_prefix(), interfaceName)
+
+private fun object_method_schema_key(ownerName: String, methodName: String): String =
+    object_member_schema_key(object_method_schema_prefix(), ownerName, methodName)
+
+private fun object_interface_method_schema_key(ownerName: String, methodName: String): String =
+    object_member_schema_key(object_interface_method_schema_prefix(), ownerName, methodName)
+
+private fun object_field_init_schema_key(className: String, fieldName: String): String =
+    object_member_schema_key(object_field_init_schema_prefix(), className, fieldName)
+
+private fun object_type_annotation_schema_prefix(ownerName: String): String =
+    object_annotation_schema_prefix("type", ownerName, "")
+
+private fun object_method_annotation_schema_prefix(ownerName: String, methodName: String): String =
+    object_annotation_schema_prefix("method", ownerName, methodName)
+
+private fun object_field_annotation_schema_prefix(ownerName: String, idx: int): String =
+    object_annotation_schema_prefix("field", ownerName, "" + idx)
+
+private fun object_schema_key(prefix: String, ownerName: String): String =
+    prefix + ownerName
+
+private fun object_indexed_schema_key(prefix: String, ownerName: String, idx: int): String =
+    object_schema_key(prefix, ownerName) + "|" + idx
+
+private fun object_member_schema_key(prefix: String, ownerName: String, memberName: String): String =
+    object_schema_key(prefix, ownerName) + "|" + memberName
+
+private fun object_annotation_schema_prefix(target: String, ownerName: String, memberName: String): String =
+    if memberName.is_empty()
+    then "__capy_oo_annotation|" + target + "|" + ownerName + "|"
+    else "__capy_oo_annotation|" + target + "|" + ownerName + "|" + memberName + "|"
+
+private fun object_class_schema_prefix(): String =
+    "__capy_oo_class|"
+
+private fun object_interface_schema_prefix(): String =
+    "__capy_oo_interface|"
+
+private fun object_class_open_schema_prefix(): String =
+    "__capy_oo_class_open|"
+
+private fun object_interface_kind_schema_prefix(): String =
+    "__capy_oo_interface_kind|"
+
+private fun object_class_parameter_schema_prefix(): String =
+    "__capy_oo_param|"
+
+private fun object_class_parent_schema_prefix(): String =
+    "__capy_oo_parent|"
+
+private fun object_interface_parent_schema_prefix(): String =
+    "__capy_oo_interface_parent|"
+
+private fun object_field_schema_prefix(): String =
+    "__capy_oo_field|"
+
+private fun object_method_schema_prefix(): String =
+    "__capy_oo_method|"
+
+private fun object_interface_method_schema_prefix(): String =
+    "__capy_oo_interface_method|"
+
+private fun object_field_init_schema_prefix(): String =
+    "__capy_oo_field_init|"
+
+private fun object_init_schema_prefix(): String =
+    "__capy_oo_init|"
+
+private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDeriverDeclaration] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        match definition with
+        case DeriverDeclaration declaration ->
+            compile_derivers(definitions[1:]) + (declaration.name, compile_deriver_declaration(declaration))
+        case _ -> compile_derivers(definitions[1:])
+
+private fun compile_deriver_declaration(declaration: DeriverDeclaration): CompiledDeriverDeclaration =
+    CompiledDeriverDeclaration {
+        name: declaration.name,
+        visibility: declaration.visibility,
+        methods: compile_deriver_methods(declaration.methods),
+        location: compile_location(declaration.location)
+    }
+
+private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_function(method)] + compile_deriver_methods(methods[1:])
+
+private fun compile_derived_functions_for_type(typeName: String, derives: List[DeriveApplication], definitions: List[Definition]): List[CompiledFunction] =
+    match derives[0] with
+    case None -> []
+    case Some { derive } ->
+        match find_deriver(derive.name, definitions) with
+        case Some { deriver } ->
+            compile_derived_methods(typeName, deriver.methods)
+                + compile_derived_functions_for_type(typeName, derives[1:], definitions)
+        case None -> compile_derived_functions_for_type(typeName, derives[1:], definitions)
+
+private fun find_deriver(name: String, definitions: List[Definition]): /capy/lang/Option[DeriverDeclaration] =
+    match definitions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { definition } ->
+        match definition with
+        case DeriverDeclaration declaration ->
+            if declaration.name == name
+            then /capy/lang/Option.Some { declaration }
+            else find_deriver(name, definitions[1:])
+        case _ -> find_deriver(name, definitions[1:])
+
+private fun compile_derived_methods(typeName: String, methods: List[FunctionDeclaration]): List[CompiledFunction] =
+    match methods[0] with
+    case None -> []
+    case Some { method } -> [compile_derived_method(typeName, method)] + compile_derived_methods(typeName, methods[1:])
+
+private fun compile_derived_method(typeName: String, method: FunctionDeclaration): CompiledFunction =
+    let functionName = typeName + "." + method.name
+    CompiledFunction {
+        name: functionName,
+        visibility: method.visibility,
+        parameters: compile_parameters(method.parameters),
+        returnType: compile_type(method.returnType),
+        body: compile_expression_in_function(method.body, functionName),
+        location: compile_location(method.location)
+    }
+
+private fun compile_annotations(definitions: List[Definition]): Dict[CompiledAnnotationDeclaration] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        match definition with
+        case AnnotationDeclaration declaration ->
+            compile_annotations(definitions[1:]) + (declaration.name, compile_annotation_declaration(declaration))
+        case _ -> compile_annotations(definitions[1:])
+
+private fun compile_annotation_declaration(declaration: AnnotationDeclaration): CompiledAnnotationDeclaration =
+    CompiledAnnotationDeclaration {
+        name: declaration.name,
+        visibility: declaration.visibility,
+        repeatable: declaration.repeatable,
+        targets: declaration.targets,
+        fields: compile_annotation_fields(declaration.fields),
+        location: compile_location(declaration.location)
+    }
+
+private fun compile_annotation_fields(fields: List[AnnotationFieldDeclaration]): List[String] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> [compile_annotation_field(field)] + compile_annotation_fields(fields[1:])
+
+private fun compile_annotation_field(field: AnnotationFieldDeclaration): String =
+    field.name
+        + "|" + type_reference_schema(field.typeReference)
+        + "|" + annotation_default_present_schema(field.hasDefault)
+        + "|" + annotation_value_schema(field.defaultValue)
+
+private fun annotation_default_present_schema(hasDefault: bool): String =
+    if hasDefault then "true" else "false"
+
+private fun normalize_module_path(path: String): String =
+    if compiler_string_has_prefix(path, "/")
+    then normalize_module_path(path[1, path.size()])
+    else path
+
+private fun normalize_import_module_path(path: String): String =
+    let normalized = normalize_module_path(path)
+    if compiler_string_has_prefix(normalized, "dev/capylang/capybara/")
+    then normalize_capybara_import_suffix(normalized["dev/capylang/capybara/".size(), normalized.size()], "dev/capylang/")
+    else if compiler_string_has_prefix(normalized, "capybara/")
+    then normalize_capybara_import_suffix(normalized["capybara/".size(), normalized.size()], "")
+    else normalized
+
+private fun normalize_capybara_import_suffix(suffix: String, prefix: String): String =
+    if compiler_string_has_prefix(suffix, "test/")
+    then prefix + suffix
+    else prefix + "test/" + suffix
+
+private fun compiler_string_has_prefix(value: String, prefix: String): bool =
+    compiler_string_has_prefix_at(value, prefix, 0)
+
+private fun compiler_string_has_prefix_at(value: String, prefix: String, idx: int): bool =
+    match prefix[idx] with
+    case None -> true
+    case Some { expected } ->
+        match value[idx] with
+        case None -> false
+        case Some { actual } ->
+            if actual == expected
+            then compiler_string_has_prefix_at(value, prefix, idx + 1)
+            else false
+
+private fun compile_constant(constant: ConstantDeclaration): CompiledFunction =
+    CompiledFunction {
+        name: constant.name,
+        visibility: "const:" + constant.visibility,
+        parameters: [],
+        returnType: compile_type(constant.typeReference),
+        body: compile_expression_in_function(constant.expression, constant.name),
+        location: compile_location(constant.location)
+    }
+
+private fun compile_constant_in_module(constant: ConstantDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+    CompiledFunction {
+        name: constant.name,
+        visibility: "const:" + constant.visibility,
+        parameters: [],
+        returnType: compile_type_in_module(constant.typeReference, module, allModules),
+        body: compile_expression_in_function(constant.expression, constant.name),
+        location: compile_location(constant.location)
+    }
+
+private fun compile_functions(definitions: List[Definition], allDefinitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+    match definitions[0] with
+    case None -> []
+    case Some { definition } ->
+        match definition with
+        case ConstantDefinition { constant } -> [compile_constant_in_module(constant, module, allModules)] + compile_functions(definitions[1:], allDefinitions, module, allModules)
+        case DataDeclaration declaration ->
+            compile_data_declaration(declaration)
+                + compile_derived_functions_for_type(declaration.name, declaration.derives, allDefinitions)
+                + compile_functions(definitions[1:], allDefinitions, module, allModules)
+        case TypeDeclaration declaration ->
+            compile_derived_functions_for_type(declaration.name, declaration.derives, allDefinitions)
+                + compile_functions(definitions[1:], allDefinitions, module, allModules)
+        case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:], allDefinitions, module, allModules)
+        case FunctionDefinition { function } -> [compile_function_in_module(function, module, allModules)] + compile_functions(definitions[1:], allDefinitions, module, allModules)
+        case _ -> compile_functions(definitions[1:], allDefinitions, module, allModules)
+
+private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
+    [compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location)]
+        + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
+        + compile_data_schema_fields(declaration.name, declaration.fields, 0)
+        + compile_data_schema_parents(declaration.name, declaration.parents, 0)
+        + compile_annotation_application_schema("__capy_schema_annotation|data|" + declaration.name + "|", declaration.annotations, 0)
+        + compile_data_field_annotation_schema(declaration.name, declaration.fields, 0)
+
+private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
+    [
+        compile_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.location),
+        compile_schema_constant("__capy_schema_field|" + declaration.name + "|0", "name|String", declaration.location),
+        compile_schema_constant("__capy_schema_field|" + declaration.name + "|1", "order|int", declaration.location),
+    ] + compile_annotation_application_schema("__capy_schema_annotation|enum|" + declaration.name + "|", declaration.annotations, 0)
+        + compile_enum_values(declaration.name, declaration.values, 0)
+
+private fun compile_enum_values(enumName: String, values: List[EnumValueDeclaration], idx: int): List[CompiledFunction] =
+    match values[0] with
+    case None -> []
+    case Some { value } ->
+        [compile_schema_constant("__capy_schema_enum|" + enumName + "|" + idx, value.name, value.location),
+            compile_enum_value_constant(enumName, value, idx)]
+            + compile_enum_values(enumName, values[1:], idx + 1)
+
+private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclaration, idx: int): CompiledFunction =
+    CompiledFunction {
+        name: value.name,
+        visibility: "const:public",
+        parameters: [],
+        returnType: CompiledTypeReference { name: enumName, arguments: [] },
+        body: CompiledDataLiteral {
+            typeName: "__capy_raw|" + value.name,
+            fields: [
+                CompiledDataField {
+                    name: "name",
+                    value: CompiledStringLiteral {
+                        value: value.name,
+                        source: "\"" + value.name + "\"",
+                        location: compile_location(value.location)
+                    },
+                    spread: false,
+                    location: compile_location(value.location)
+                },
+                CompiledDataField {
+                    name: "order",
+                    value: CompiledIntLiteral {
+                        value: idx,
+                        source: "" + idx,
+                        location: compile_location(value.location)
+                    },
+                    spread: false,
+                    location: compile_location(value.location)
+                },
+            ],
+            location: compile_location(value.location)
+        },
+        location: compile_location(value.location)
+    }
+
+private fun compile_data_schema_parameters(dataName: String, parameters: List[String], idx: int, location: SourceLocation): List[CompiledFunction] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        [compile_schema_constant("__capy_schema_param|" + dataName + "|" + idx, parameter, location)]
+            + compile_data_schema_parameters(dataName, parameters[1:], idx + 1, location)
+
+private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        [compile_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.location)]
+            + compile_data_schema_fields(dataName, fields[1:], idx + 1)
+
+private fun compile_data_field_annotation_schema(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        compile_annotation_application_schema(
+            "__capy_schema_annotation|field|" + dataName + "|" + idx + "|",
+            field.annotations,
+            0
+        ) + compile_data_field_annotation_schema(dataName, fields[1:], idx + 1)
+
+private fun compile_annotation_application_schema(prefix: String, annotations: List[AnnotationApplication], idx: int): List[CompiledFunction] =
+    match annotations[0] with
+    case None -> []
+    case Some { annotation } ->
+        [compile_schema_constant(prefix + idx, annotation_application_schema(annotation), annotation.location)]
+            + compile_annotation_application_schema(prefix, annotations[1:], idx + 1)
+
+private fun annotation_application_schema(annotation: AnnotationApplication): String =
+    annotation.name + "|" + annotation_arguments_schema(annotation.arguments)
+
+private fun annotation_arguments_schema(arguments: List[AnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> annotation_argument_schema(argument) + annotation_argument_schema_tail(arguments[1:])
+
+private fun annotation_argument_schema_tail(arguments: List[AnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ";" + annotation_arguments_schema(arguments)
+
+private fun annotation_argument_schema(argument: AnnotationArgument): String =
+    argument.name + "=" + annotation_value_schema(argument.value)
+
+private fun annotation_value_schema(value: AnnotationValue): String =
+    match value with
+    case AnnotationStringValue literal -> "string:" + literal.value
+    case AnnotationIntValue literal -> "int:" + literal.source
+    case AnnotationLongValue literal -> "long:" + literal.source
+    case AnnotationDoubleValue literal -> "double:" + literal.source
+    case AnnotationFloatValue literal -> "float:" + literal.source
+    case AnnotationBoolValue literal -> if literal.value then "bool:true" else "bool:false"
+    case AnnotationTypeNameValue literal -> "type:" + literal.value
+    case AnnotationNothingValue _ -> "nothing:"
+
+private fun compile_function_annotation_application_schema(prefix: String, annotations: List[FunctionAnnotationApplication], idx: int): List[CompiledFunction] =
+    match annotations[0] with
+    case None -> []
+    case Some { annotation } ->
+        [compile_schema_constant(prefix + idx, function_annotation_application_schema(annotation), annotation.location)]
+            + compile_function_annotation_application_schema(prefix, annotations[1:], idx + 1)
+
+private fun function_annotation_application_schema(annotation: FunctionAnnotationApplication): String =
+    annotation.name + "|" + function_annotation_arguments_schema(annotation.arguments)
+
+private fun function_annotation_arguments_schema(arguments: List[FunctionAnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> function_annotation_argument_schema(argument) + function_annotation_argument_schema_tail(arguments[1:])
+
+private fun function_annotation_argument_schema_tail(arguments: List[FunctionAnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ";" + function_annotation_arguments_schema(arguments)
+
+private fun function_annotation_argument_schema(argument: FunctionAnnotationArgument): String =
+    argument.name + "=" + function_annotation_value_schema(argument.value)
+
+private fun function_annotation_value_schema(value: FunctionAnnotationValue): String =
+    match value with
+    case FunctionAnnotationStringValue literal -> "string:" + literal.value
+    case FunctionAnnotationIntValue literal -> "int:" + literal.source
+    case FunctionAnnotationLongValue literal -> "long:" + literal.source
+    case FunctionAnnotationDoubleValue literal -> "double:" + literal.source
+    case FunctionAnnotationFloatValue literal -> "float:" + literal.source
+    case FunctionAnnotationBoolValue literal -> if literal.value then "bool:true" else "bool:false"
+    case FunctionAnnotationTypeNameValue literal -> "type:" + literal.value
+    case FunctionAnnotationNothingValue _ -> "nothing:"
+
+private fun compile_data_schema_parents(dataName: String, parents: List[DataParentDeclaration], idx: int): List[CompiledFunction] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        [compile_schema_constant("__capy_schema_parent|" + dataName + "|" + idx, type_reference_schema(parent.typeReference), parent.location)]
+            + compile_data_schema_parents(dataName, parents[1:], idx + 1)
+
+private fun data_declaration_field_schema(field: DataFieldDeclaration): String =
+    field.name + "|" + type_reference_schema(field.typeReference)
+
+private fun type_reference_schema(type: TypeReference): String =
+    type.name + type_reference_arguments_schema(type.arguments)
+
+private fun type_reference_arguments_schema(arguments: List[TypeReference]): String =
+    if arguments.is_empty()
+    then ""
+    else "[" + type_reference_list_schema(arguments) + "]"
+
+private fun type_reference_list_schema(arguments: List[TypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> type_reference_schema(argument) + type_reference_list_tail_schema(arguments[1:])
+
+private fun type_reference_list_tail_schema(arguments: List[TypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> ", " + type_reference_schema(argument) + type_reference_list_tail_schema(arguments[1:])
+
+private fun compiled_type_reference_schema(type: CompiledTypeReference): String =
+    type.name + compiled_type_reference_arguments_schema(type.arguments)
+
+private fun compiled_type_reference_arguments_schema(arguments: List[CompiledTypeReference]): String =
+    if arguments.is_empty()
+    then ""
+    else "[" + compiled_type_reference_list_schema(arguments) + "]"
+
+private fun compiled_type_reference_list_schema(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> compiled_type_reference_schema(argument) + compiled_type_reference_list_tail_schema(arguments[1:])
+
+private fun compiled_type_reference_list_tail_schema(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> ", " + compiled_type_reference_schema(argument) + compiled_type_reference_list_tail_schema(arguments[1:])
+
+private fun compile_native_provider_catalog(modules: List[ParsedModule], nativeImplementationProviders: NativeProviderManifest): NativeProviderCatalog =
+    NativeProviderCatalog {
+        declarations: compile_native_provider_declarations(modules, modules),
+        bindings: compile_native_provider_bindings(nativeImplementationProviders.providers)
+    }
+
+private fun compile_native_provider_declarations(modules: List[ParsedModule], allModules: List[ParsedModule]): List[CompiledNativeProviderDeclaration] =
+    match modules[0] with
+    case None -> []
+    case Some { module } -> compile_native_provider_declarations_in_module(module.definitions, module, allModules) + compile_native_provider_declarations(modules[1:], allModules)
+
+private fun compile_native_provider_declarations_in_module(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledNativeProviderDeclaration] =
+    match definitions[0] with
+    case None -> []
+    case Some { definition } ->
+        match definition with
+        case FunctionDefinition { function } ->
+            if native_provider_function(function, module)
+            then [compile_native_provider_declaration(function, module, allModules)] + compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
+            else compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
+        case _ -> compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
+
+private fun native_provider_function(function: FunctionDeclaration, module: ParsedModule): bool =
+    native_provider_annotations(function.annotations, module)
+
+private fun native_provider_annotations(annotations: List[FunctionAnnotationApplication], module: ParsedModule): bool =
+    match annotations[0] with
+    case None -> false
+    case Some { annotation } ->
+        native_provider_annotation_name(annotation.name, module) | native_provider_annotations(annotations[1:], module)
+
+private fun native_provider_annotation_name(name: String, module: ParsedModule): bool =
+    compiler_unqualified_type_name(name) == "NativeProvider" & standard_native_provider_imported(module)
+
+private fun standard_native_provider_imported(module: ParsedModule): bool =
+    module_imports_name(module.imports, "/capy/meta_prog/NativeProvider", "NativeProvider")
+        | module_imports_name(module.imports, "capy/meta_prog/NativeProvider", "NativeProvider")
+        | module_imports_name(module.imports, "NativeProvider", "NativeProvider")
+
+private fun module_imports_name(imports: List[ImportDeclaration], modulePath: String, name: String): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if normalize_import_module_path(declaration.modulePath) == normalize_import_module_path(modulePath)
+        then declaration.wildcard | declaration.importedNames.contains(name)
+        else module_imports_name(imports[1:], modulePath, name)
+
+private fun compile_native_provider_declaration(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledNativeProviderDeclaration =
+    let returnType = compile_type_in_module(function.returnType, module, allModules)
+    let targetType = native_provider_target_type(returnType)
+    CompiledNativeProviderDeclaration {
+        providerName: function.name,
+        sourceModulePath: normalize_module_path(module.path),
+        sourceModuleName: module.name,
+        targetTypeName: targetType.name,
+        interfaceId: native_provider_interface_id(targetType),
+        qualifier: native_provider_qualifier(function.annotations, module),
+        sourceFile: native_provider_source_file(module)
+    }
+
+private fun native_provider_target_type(returnType: CompiledTypeReference): CompiledTypeReference =
+    if returnType.name == "Effect"
+    then match returnType.arguments[0] with
+        case Some { argument } -> argument
+        case None -> CompiledTypeReference { name: "", arguments: [] }
+    else returnType
+
+private fun native_provider_interface_id(type: CompiledTypeReference): String =
+    if compiler_string_has_prefix(type.name, "__capy_oo|")
+    then type.name["__capy_oo|".size().value, type.name.size().value]
+    else type.name
+
+private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplication], module: ParsedModule): String =
+    match annotations[0] with
+    case None -> ""
+    case Some { annotation } ->
+        if native_provider_annotation_name(annotation.name, module)
+        then native_provider_qualifier_argument(annotation.arguments)
+        else native_provider_qualifier(annotations[1:], module)
+
+private fun native_provider_qualifier_argument(arguments: List[FunctionAnnotationArgument]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } ->
+        if argument.name == "qualifier"
+        then function_annotation_string_value(argument.value)
+        else native_provider_qualifier_argument(arguments[1:])
+
+private fun function_annotation_string_value(value: FunctionAnnotationValue): String =
+    match value with
+    case FunctionAnnotationStringValue literal -> literal.value
+    case _ -> ""
+
+private fun native_provider_source_file(module: ParsedModule): String =
+    let path = normalize_module_path(module.path)
+    if path.is_empty()
+    then module.name + ".cfun"
+    else path + "/" + module.name + ".cfun"
+
+private fun compile_native_provider_bindings(providers: List[NativeProviderBinding]): List[CompiledNativeProviderBinding] =
+    match providers[0] with
+    case None -> []
+    case Some { provider } -> [CompiledNativeProviderBinding {
+        interfaceId: provider.interfaceId,
+        qualifier: provider.qualifier,
+        javaBinding: provider.javaBinding,
+        javascriptBinding: provider.javascriptBinding,
+        pythonBinding: provider.pythonBinding
+    }] + compile_native_provider_bindings(providers[1:])
+
+private fun compile_schema_constant(name: String, value: String, location: SourceLocation): CompiledFunction =
+    CompiledFunction {
+        name: name,
+        visibility: "const:schema",
+        parameters: [],
+        returnType: compile_type(compiler_string_type()),
+        body: CompiledStringLiteral {
+            value: value,
+            source: "\"" + value + "\"",
+            location: compile_location(location)
+        },
+        location: compile_location(location)
+    }
+
+private fun compile_function(function: FunctionDeclaration): CompiledFunction =
+    CompiledFunction {
+        name: function.name,
+        visibility: function.visibility,
+        parameters: compile_parameters(function.parameters),
+        returnType: compile_return_type(function.returnType, function.parameters, function.body),
+        body: compile_expression_in_function(function.body, function.name),
+        location: compile_location(function.location)
+    }
+
+private fun compile_function_in_module(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+    CompiledFunction {
+        name: function.name,
+        visibility: function.visibility,
+        parameters: compile_parameters_in_module(function.parameters, module, allModules),
+        returnType: compile_return_type_in_module(function.returnType, function.parameters, function.body, module, allModules),
+        body: compile_expression_in_function(function.body, function.name),
+        location: compile_location(function.location)
+    }
+
+private fun compile_return_type(type: TypeReference, parameters: List[FunctionParameter], body: Expression): CompiledTypeReference =
+    if type.name.is_empty()
+    then compile_type(infer_return_type(body, parameters, 0))
+    else compile_type(type)
+
+private fun compile_return_type_in_module(type: TypeReference, parameters: List[FunctionParameter], body: Expression, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
+    if type.name.is_empty()
+    then compile_type_in_module(infer_return_type_in_module(body, parameters, module, allModules, 0), module, allModules)
+    else compile_type_in_module(type, module, allModules)
+
+private fun infer_return_type_in_module(expression: Expression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    if depth > 16
+    then missing_type()
+    else match expression with
+    case FunctionCallExpression call -> infer_function_call_type(call, module, allModules, depth + 1)
+    case IfExpression ifExpression -> infer_if_type_in_module(ifExpression, env, module, allModules, depth + 1)
+    case BlockExpression block -> infer_return_type_in_module(block.result, block_type_env_in_module(block.bindings, env, module, allModules, depth + 1), module, allModules, depth + 1)
+    case _ -> infer_return_type(expression, env, depth + 1)
+
+private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    let thenType = infer_return_type_in_module(ifExpression.thenBranch, env, module, allModules, depth + 1)
+    let elseType = infer_return_type_in_module(ifExpression.elseBranch, env, module, allModules, depth + 1)
+    if thenType.name.is_empty()
+    then elseType
+    else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
+    then thenType
+    else if compiler_data_object_type(thenType) & compiler_data_object_type(elseType)
+    then compiler_preferred_data_object_type(thenType, elseType)
+    else missing_type()
+
+private fun block_type_env_in_module(bindings: List[LetBinding], env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): List[FunctionParameter] =
+    match bindings[0] with
+    case None -> env
+    case Some { binding } ->
+        let bindingType = if binding.typeReference.name.is_empty() then infer_return_type_in_module(binding.value, env, module, allModules, depth + 1) else binding.typeReference
+        block_type_env_in_module(bindings[1:], [FunctionParameter {
+            name: binding.name,
+            typeReference: bindingType,
+            location: binding.location
+        }] + env, module, allModules, depth + 1)
+
+private fun infer_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    if compiler_qualified_name(call.name)
+    then infer_qualified_function_call_type(call, module, allModules, depth + 1)
+    else infer_function_call_type_in_module(compiler_qualified_member_name("." + call.name), module, allModules, depth + 1)
+
+private fun infer_qualified_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    match find_parsed_module_by_class(compiler_qualified_class_name(call.name, module), allModules) with
+    case Some { targetModule } -> infer_function_call_type_in_module(compiler_qualified_member_name(call.name), targetModule, allModules, depth + 1)
+    case None -> missing_type()
+
+private fun infer_function_call_type_in_module(name: String, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    match find_function_declaration(name, module.definitions) with
+    case Some { function } ->
+        if function.returnType.name.is_empty()
+        then infer_return_type_in_module(function.body, function.parameters, module, allModules, depth + 1)
+        else function.returnType
+    case None -> missing_type()
+
+private fun find_function_declaration(name: String, definitions: List[Definition]): /capy/lang/Option[FunctionDeclaration] =
+    match definitions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { definition } ->
+        match definition with
+        case FunctionDefinition { function } ->
+            if function.name == name
+            then /capy/lang/Option.Some { function }
+            else find_function_declaration(name, definitions[1:])
+        case _ -> find_function_declaration(name, definitions[1:])
+
+private fun infer_return_type(expression: Expression, env: List[FunctionParameter], depth: int): TypeReference =
+    if depth > 16
+    then missing_type()
+    else match expression with
+    case UnsupportedExpression unsupported -> if placeholder_source(unsupported.source) then nothing_type() else missing_type()
+    case IntLiteral _ -> compiler_int_type()
+    case LongLiteral _ -> compiler_long_type()
+    case FloatLiteral _ -> compiler_float_type()
+    case DoubleLiteral _ -> compiler_double_type()
+    case BoolLiteral _ -> compiler_bool_type()
+    case StringLiteral _ -> compiler_string_type()
+    case VariableExpression variable -> lookup_inferred_type(variable.name, env)
+    case IfExpression ifExpression -> infer_if_type(ifExpression, env, depth + 1)
+    case BinaryExpression binary -> infer_binary_type(binary, env, depth + 1)
+    case UnaryExpression unary -> infer_unary_type(unary, env, depth + 1)
+    case FunctionCallExpression _ -> missing_type()
+    case FunctionReferenceExpression _ -> missing_type()
+    case MethodCallExpression call -> infer_method_call_type(call, env, depth + 1)
+    case WithExpression withExpression -> infer_return_type(withExpression.receiver, env, depth + 1)
+    case LambdaExpression _ -> missing_type()
+    case ListLiteral literal -> compiler_list_type(compiler_first_expression_type(literal.values, env, depth + 1))
+    case SetLiteral literal -> compiler_set_type(compiler_first_expression_type(literal.values, env, depth + 1))
+    case DictLiteral literal -> compiler_dict_type(compiler_first_dict_value_type(literal.entries, env, depth + 1))
+    case TupleLiteral literal -> compiler_tuple_type(compiler_expression_types(literal.values, env, depth + 1))
+    case IndexExpression _ -> missing_type()
+    case DataLiteral literal -> TypeReference { name: literal.typeName, arguments: [] }
+    case FieldAccessExpression _ -> missing_type()
+    case ReduceExpression reduce -> infer_return_type(reduce.initial, env, depth + 1)
+    case MatchExpression matchExpression -> compiler_match_expression_type(matchExpression.cases, env, depth + 1)
+    case BlockExpression block -> infer_return_type(block.result, block_type_env(block.bindings, env, depth + 1), depth + 1)
+
+private fun block_type_env(bindings: List[LetBinding], env: List[FunctionParameter], depth: int): List[FunctionParameter] =
+    match bindings[0] with
+    case None -> env
+    case Some { binding } ->
+        let bindingType = if binding.typeReference.name.is_empty() then infer_return_type(binding.value, env, depth + 1) else binding.typeReference
+        block_type_env(bindings[1:], [FunctionParameter {
+            name: binding.name,
+            typeReference: bindingType,
+            location: binding.location
+        }] + env, depth + 1)
+
+private fun lookup_inferred_type(name: String, env: List[FunctionParameter]): TypeReference =
+    match env[0] with
+    case None -> missing_type()
+    case Some { binding } ->
+        if binding.name == name
+        then binding.typeReference
+        else lookup_inferred_type(name, env[1:])
+
+private fun infer_if_type(ifExpression: IfExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    let thenType = infer_return_type(ifExpression.thenBranch, env, depth + 1)
+    let elseType = infer_return_type(ifExpression.elseBranch, env, depth + 1)
+    if thenType.name.is_empty()
+    then elseType
+    else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
+    then thenType
+    else if compiler_data_object_type(thenType) & compiler_data_object_type(elseType)
+    then compiler_preferred_data_object_type(thenType, elseType)
+    else missing_type()
+
+private fun compiler_data_object_type(type: TypeReference): bool =
+    !type.name.is_empty()
+        & !compiler_numeric_type(type)
+        & type.name != "bool"
+        & type.name != "String"
+        & type.name != "List"
+        & type.name != "Set"
+        & type.name != "Dict"
+        & type.name != "Tuple"
+        & type.name != "Effect"
+        & type.name != "Assert"
+        & compiler_uppercase_type_name(type.name)
+
+private fun compiler_uppercase_type_name(name: String): bool =
+    let member = compiler_unqualified_type_name(name)
+    match member[0] with
+    case None -> false
+    case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
+
+private fun compiler_unqualified_type_name(name: String): String =
+    let dot = compiler_last_index_of(name, ".", 0, -1)
+    let slash = compiler_last_index_of(name, "/", 0, -1)
+    let idx = if dot > slash then dot else slash
+    if idx < 0 then name else name[idx + 1, name.size().value]
+
+private fun compiler_last_index_of(value: String, needle: String, idx: int, found: int): int =
+    if idx >= value.size().value
+    then found
+    else match value[idx] with
+        case None -> found
+        case Some { char } ->
+            compiler_last_index_of(value, needle, idx + 1, if char == needle then idx else found)
+
+private fun compiler_preferred_data_object_type(first: TypeReference, second: TypeReference): TypeReference =
+    if first.arguments.is_empty() & !second.arguments.is_empty()
+    then second
+    else first
+
+private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    let leftType = infer_return_type(binary.left, env, depth + 1)
+    if compiler_collection_pipe_expression(binary, leftType)
+    then missing_type()
+    else compiler_binary_result_type(
+        binary.operator,
+        leftType,
+        infer_return_type(binary.right, env, depth + 1)
+    )
+
+private fun compiler_collection_pipe_expression(binary: BinaryExpression, leftType: TypeReference): bool =
+    compiler_collection_pipe_operator(binary.operator) & compiler_collection_receiver_type(leftType) & compiler_lambda_expression(binary.right)
+
+private fun compiler_collection_pipe_operator(operator: String): bool =
+    operator == "|" | operator == "|-" | operator == "|*"
+
+private fun compiler_collection_receiver_type(type: TypeReference): bool =
+    type.name == "List" | type.name == "Set" | type.name == "Dict" | type.name == "Seq" | type.name == "String"
+
+private fun compiler_lambda_expression(expression: Expression): bool =
+    match expression with
+    case LambdaExpression _ -> true
+    case FunctionReferenceExpression _ -> true
+    case _ -> false
+
+private fun infer_unary_type(unary: UnaryExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    if unary.operator == "!"
+    then compiler_bool_type()
+    else if unary.operator == ".not."
+    then
+        let type = infer_return_type(unary.expression, env, depth + 1)
+        if compiler_integer_type(type) then type else missing_type()
+    else infer_return_type(unary.expression, env, depth + 1)
+
+private fun infer_method_call_type(call: MethodCallExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    if call.name == "size"
+    then compiler_int_type()
+    else missing_type()
+
+private fun compiler_first_expression_type(expressions: List[Expression], env: List[FunctionParameter], depth: int): TypeReference =
+    match expressions[0] with
+    case None -> compiler_any_type()
+    case Some { expression } -> infer_return_type(expression, env, depth + 1)
+
+private fun compiler_first_dict_value_type(entries: List[DictEntry], env: List[FunctionParameter], depth: int): TypeReference =
+    match entries[0] with
+    case None -> compiler_any_type()
+    case Some { entry } -> infer_return_type(entry.value, env, depth + 1)
+
+private fun compiler_expression_types(expressions: List[Expression], env: List[FunctionParameter], depth: int): List[TypeReference] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } -> [infer_return_type(expression, env, depth + 1)] + compiler_expression_types(expressions[1:], env, depth + 1)
+
+private fun compiler_match_expression_type(cases: List[MatchCase], env: List[FunctionParameter], depth: int): TypeReference =
+    match cases[0] with
+    case None -> missing_type()
+    case Some { matchCase } -> infer_return_type(matchCase.body, env, depth + 1)
+
+private fun compiler_binary_result_type(operator: String, leftType: TypeReference, rightType: TypeReference): TypeReference =
+    if compiler_boolean_binary_operator(operator)
+    then compiler_bool_type()
+    else if compiler_comparison_operator(operator)
+    then compiler_bool_type()
+    else if operator == "+" & (leftType.name == "String" | rightType.name == "String")
+    then compiler_string_type()
+    else if compiler_string_left_numeric_operator(operator, leftType, rightType)
+    then compiler_string_type()
+    else if compiler_bitwise_binary_operator(operator) & compiler_integer_type(leftType) & compiler_integer_type(rightType)
+    then compiler_promoted_numeric_type(leftType, rightType)
+    else if compiler_numeric_binary_operator(operator) & compiler_numeric_type(leftType) & compiler_numeric_type(rightType)
+    then compiler_promoted_numeric_type(leftType, rightType)
+    else missing_type()
+
+private fun compiler_boolean_binary_operator(operator: String): bool =
+    operator == "&" | operator == "|"
+
+private fun compiler_comparison_operator(operator: String): bool =
+    operator == ">" | operator == "<" | operator == ">=" | operator == "<=" | operator == "==" | operator == "!=" | operator == "?"
+
+private fun compiler_numeric_binary_operator(operator: String): bool =
+    operator == "+" | operator == "-" | operator == "*" | operator == "/" | operator == "%" | operator == "^"
+
+private fun compiler_bitwise_binary_operator(operator: String): bool =
+    operator == ".and." | operator == ".nand." | operator == ".or." | operator == ".xor."
+
+private fun compiler_string_left_numeric_operator(operator: String, leftType: TypeReference, rightType: TypeReference): bool =
+    (operator == "-" | operator == "*" | operator == "/" | operator == "^") & leftType.name == "String" & compiler_numeric_type(rightType)
+
+private fun compiler_promoted_numeric_type(leftType: TypeReference, rightType: TypeReference): TypeReference =
+    if leftType.name == "double" | rightType.name == "double"
+    then compiler_double_type()
+    else if leftType.name == "float" | rightType.name == "float"
+    then compiler_float_type()
+    else if leftType.name == "long" | rightType.name == "long"
+    then compiler_long_type()
+    else if leftType.name == "int" | rightType.name == "int"
+    then compiler_int_type()
+    else compiler_byte_type()
+
+private fun compiler_numeric_type(type: TypeReference): bool =
+    type.name == "byte" | type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
+
+private fun compiler_integer_type(type: TypeReference): bool =
+    type.name == "byte" | type.name == "int" | type.name == "long"
+
+private fun compiler_same_type(first: TypeReference, second: TypeReference): bool =
+    first.name == second.name & compiler_same_type_arguments(first.arguments, second.arguments)
+
+private fun compiler_same_type_arguments(first: List[TypeReference], second: List[TypeReference]): bool =
+    match first[0] with
+    case None -> second.is_empty()
+    case Some { firstType } ->
+        match second[0] with
+        case None -> false
+        case Some { secondType } -> compiler_same_type(firstType, secondType) & compiler_same_type_arguments(first[1:], second[1:])
+
+private fun missing_type(): TypeReference =
+    TypeReference { name: "", arguments: [] }
+
+private fun compiler_byte_type(): TypeReference =
+    TypeReference { name: "byte", arguments: [] }
+
+private fun compiler_int_type(): TypeReference =
+    TypeReference { name: "int", arguments: [] }
+
+private fun compiler_long_type(): TypeReference =
+    TypeReference { name: "long", arguments: [] }
+
+private fun compiler_float_type(): TypeReference =
+    TypeReference { name: "float", arguments: [] }
+
+private fun compiler_double_type(): TypeReference =
+    TypeReference { name: "double", arguments: [] }
+
+private fun compiler_bool_type(): TypeReference =
+    TypeReference { name: "bool", arguments: [] }
+
+private fun compiler_string_type(): TypeReference =
+    TypeReference { name: "String", arguments: [] }
+
+private fun compiler_any_type(): TypeReference =
+    TypeReference { name: "any", arguments: [] }
+
+private fun nothing_type(): TypeReference =
+    TypeReference { name: "nothing", arguments: [] }
+
+private fun compiler_list_type(argument: TypeReference): TypeReference =
+    TypeReference { name: "List", arguments: [argument] }
+
+private fun compiler_set_type(argument: TypeReference): TypeReference =
+    TypeReference { name: "Set", arguments: [argument] }
+
+private fun compiler_dict_type(argument: TypeReference): TypeReference =
+    TypeReference { name: "Dict", arguments: [argument] }
+
+private fun compiler_tuple_type(arguments: List[TypeReference]): TypeReference =
+    TypeReference { name: "Tuple", arguments: arguments }
+
+private fun placeholder_source(source: String): bool =
+    source == "_"
+
+private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } -> [CompiledImportDeclaration {
+        modulePath: declaration.modulePath,
+        importedNames: declaration.importedNames,
+        excludedNames: declaration.excludedNames,
+        wildcard: declaration.wildcard,
+        qualified: declaration.qualified,
+        location: compile_location(declaration.location)
+    }] + compile_imports(imports[1:])
+
+private fun compile_parameters(parameters: List[FunctionParameter]): List[CompiledFunctionParameter] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } -> [CompiledFunctionParameter {
+        name: parameter.name,
+        typeReference: compile_type(parameter.typeReference),
+        location: compile_location(parameter.location)
+    }] + compile_parameters(parameters[1:])
+
+private fun compile_parameters_in_module(parameters: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunctionParameter] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } -> [CompiledFunctionParameter {
+        name: parameter.name,
+        typeReference: compile_type_in_module(parameter.typeReference, module, allModules),
+        location: compile_location(parameter.location)
+    }] + compile_parameters_in_module(parameters[1:], module, allModules)
+
+private fun compile_type(type: TypeReference): CompiledTypeReference =
+    CompiledTypeReference {
+        name: type.name,
+        arguments: compile_types(type.arguments)
+    }
+
+private fun compile_type_in_module(type: TypeReference, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
+    let objectTypeName = object_type_reference_name(type.name, module, allModules)
+    if objectTypeName.is_empty()
+    then CompiledTypeReference {
+        name: type.name,
+        arguments: compile_types_in_module(type.arguments, module, allModules)
+    }
+    else CompiledTypeReference {
+        name: objectTypeName,
+        arguments: []
+    }
+
+private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =
+    match types[0] with
+    case None -> []
+    case Some { type } -> [compile_type(type)] + compile_types(types[1:])
+
+private fun compile_types_in_module(types: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledTypeReference] =
+    match types[0] with
+    case None -> []
+    case Some { type } -> [compile_type_in_module(type, module, allModules)] + compile_types_in_module(types[1:], module, allModules)
+
+private fun object_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    let interfaceType = object_interface_type_reference_name(name, module, allModules)
+    if interfaceType.is_empty()
+    then object_class_type_reference_name(name, module, allModules)
+    else interfaceType
+
+private fun object_interface_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    if compiler_qualified_name(name)
+    then object_interface_type_reference_name_qualified(name, module, allModules)
+    else match find_object_interface_in_module(name, module) with
+        case true -> compiler_java_object_type_name(object_interface_java_name(module, name))
+        case false -> object_interface_type_reference_name_in_imports(name, module.imports, module, allModules)
+
+private fun object_class_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    if compiler_qualified_name(name)
+    then object_class_type_reference_name_qualified(name, module, allModules)
+    else match find_object_class_in_module(name, module) with
+        case true -> compiler_java_object_type_name(object_class_java_name(module, name))
+        case false -> object_class_type_reference_name_in_imports(name, module.imports, module, allModules)
+
+private fun object_interface_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    let className = compiler_qualified_class_name(name, module)
+    let member = compiler_qualified_member_name(name)
+    match find_parsed_module_by_class(className, allModules) with
+    case Some { parsedModule } ->
+        if find_object_interface_in_module(member, parsedModule)
+        then compiler_java_object_type_name(object_interface_java_name(parsedModule, member))
+        else ""
+    case None -> ""
+
+private fun object_class_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    let className = compiler_qualified_class_name(name, module)
+    let member = compiler_qualified_member_name(name)
+    match find_parsed_module_by_class(className, allModules) with
+    case Some { parsedModule } ->
+        if find_object_class_in_module(member, parsedModule)
+        then compiler_java_object_type_name(object_class_java_name(parsedModule, member))
+        else ""
+    case None -> ""
+
+private fun object_interface_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =
+    match imports[0] with
+    case None -> ""
+    case Some { declaration } ->
+        if compiler_import_includes_name(name, declaration)
+        then
+            match find_parsed_module_by_class(compiler_imported_module_class(module, declaration.modulePath), allModules) with
+            case Some { importedModule } ->
+                if find_object_interface_in_module(name, importedModule)
+                then compiler_java_object_type_name(object_interface_java_name(importedModule, name))
+                else object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
+            case None -> object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
+        else object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
+
+private fun object_class_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =
+    match imports[0] with
+    case None -> ""
+    case Some { declaration } ->
+        if compiler_import_includes_name(name, declaration)
+        then
+            match find_parsed_module_by_class(compiler_imported_module_class(module, declaration.modulePath), allModules) with
+            case Some { importedModule } ->
+                if find_object_class_in_module(name, importedModule)
+                then compiler_java_object_type_name(object_class_java_name(importedModule, name))
+                else object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
+            case None -> object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
+        else object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
+
+private fun find_object_interface_in_module(name: String, module: ParsedModule): bool =
+    find_object_interface_in_interfaces(name, module.objectOriented.interfaces)
+
+private fun find_object_interface_in_interfaces(name: String, interfaces: List[ObjectOrientedInterface]): bool =
+    match interfaces[0] with
+    case None -> false
+    case Some { interface } -> interface.name == name | find_object_interface_in_interfaces(name, interfaces[1:])
+
+private fun find_object_class_in_module(name: String, module: ParsedModule): bool =
+    find_object_class_in_classes(name, module.objectOriented.classes)
+
+private fun find_object_class_in_classes(name: String, classes: List[ObjectOrientedClass]): bool =
+    match classes[0] with
+    case None -> false
+    case Some { class } -> class.name == name | find_object_class_in_classes(name, classes[1:])
+
+private fun find_parsed_module_by_class(className: String, modules: List[ParsedModule]): /capy/lang/Option[ParsedModule] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        if parsed_module_fqcn(module) == className
+        then /capy/lang/Option.Some { module }
+        else find_parsed_module_by_class(className, modules[1:])
+
+private fun compiler_import_includes_name(name: String, declaration: ImportDeclaration): bool =
+    if declaration.qualified
+    then false
+    else if declaration.wildcard
+    then !compiler_string_list_contains(declaration.excludedNames, name)
+    else compiler_string_list_contains(declaration.importedNames, name)
+
+private fun compiler_string_list_contains(values: List[String], expected: String): bool =
+    match values[0] with
+    case None -> false
+    case Some { value } -> value == expected | compiler_string_list_contains(values[1:], expected)
+
+private fun compiler_qualified_name(name: String): bool =
+    let idx = compiler_last_index_of(name, ".", 0, -1)
+    idx > 0 & idx < name.size().value - 1
+
+private fun compiler_qualified_member_name(name: String): String =
+    name[compiler_last_index_of(name, ".", 0, -1) + 1, name.size().value]
+
+private fun compiler_qualified_class_name(name: String, module: ParsedModule): String =
+    let qualifier = name[0, compiler_last_index_of(name, ".", 0, -1)]
+    if compiler_string_has_prefix(qualifier, "/")
+    then normalize_import_module_path(qualifier).replace("/", ".")
+    else if qualifier ? "/"
+    then normalize_import_module_path(qualifier).replace("/", ".")
+    else compiler_imported_module_class(module, qualifier)
+
+private fun compiler_imported_module_class(module: ParsedModule, modulePath: String): String =
+    if compiler_string_has_prefix(modulePath, "/")
+    then normalize_import_module_path(modulePath).replace("/", ".")
+    else if modulePath ? "/"
+    then normalize_import_module_path(modulePath).replace("/", ".")
+    else if module.path.is_empty()
+    then modulePath
+    else normalize_module_path(module.path).replace("/", ".") + "." + modulePath
+
+private fun parsed_module_fqcn(module: ParsedModule): String =
+    if module.path.is_empty()
+    then module.name
+    else normalize_module_path(module.path).replace("/", ".") + "." + module.name
+
+private fun object_interface_java_name(module: ParsedModule, name: String): String =
+    let path = normalize_module_path(module.path)
+    if path.is_empty()
+    then name
+    else path.replace("/", ".") + "." + name
+
+private fun object_class_java_name(module: ParsedModule, name: String): String =
+    parsed_module_fqcn(module) + "." + name
+
+private fun compiler_java_object_type_name(javaName: String): String =
+    "__capy_oo|" + javaName
+
+private fun compile_location(location: SourceLocation): CompiledSourceLocation =
+    CompiledSourceLocation {
+        line: location.line,
+        column: location.column
+    }
+
+private fun expression_location(expression: Expression): SourceLocation =
+    match expression with
+    case UnsupportedExpression value -> value.location
+    case IntLiteral value -> value.location
+    case LongLiteral value -> value.location
+    case FloatLiteral value -> value.location
+    case DoubleLiteral value -> value.location
+    case BoolLiteral value -> value.location
+    case StringLiteral value -> value.location
+    case VariableExpression value -> value.location
+    case IfExpression value -> value.location
+    case BinaryExpression value -> value.location
+    case UnaryExpression value -> value.location
+    case FunctionCallExpression value -> value.location
+    case FunctionReferenceExpression value -> value.location
+    case MethodCallExpression value -> value.location
+    case WithExpression value -> value.location
+    case LambdaExpression value -> value.location
+    case ListLiteral value -> value.location
+    case SetLiteral value -> value.location
+    case DictLiteral value -> value.location
+    case TupleLiteral value -> value.location
+    case IndexExpression value -> value.location
+    case DataLiteral value -> value.location
+    case FieldAccessExpression value -> value.location
+    case ReduceExpression value -> value.location
+    case MatchExpression value -> value.location
+    case BlockExpression value -> value.location
+
+private fun compile_expression_in_function(expression: Expression, functionName: String): CompiledExpression =
+    match expression with
+    case UnsupportedExpression { source, location } -> CompiledUnsupportedExpression {
+        source: compiled_unsupported_source(source, functionName),
+        location: compile_location(location)
+    }
+    case IntLiteral { value, source, location } -> CompiledIntLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case LongLiteral { value, source, location } -> CompiledLongLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case FloatLiteral { value, source, location } -> CompiledFloatLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case DoubleLiteral { value, source, location } -> CompiledDoubleLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case BoolLiteral { value, source, location } -> CompiledBoolLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case StringLiteral { value, source, location } -> CompiledStringLiteral {
+        value: value,
+        source: source,
+        location: compile_location(location)
+    }
+    case VariableExpression { name, location } -> CompiledVariableExpression {
+        name: name,
+        location: compile_location(location)
+    }
+    case IfExpression { condition, thenBranch, elseBranch, location } -> CompiledIfExpression {
+        condition: compile_expression_in_function(condition, functionName),
+        thenBranch: compile_expression_in_function(thenBranch, functionName),
+        elseBranch: compile_expression_in_function(elseBranch, functionName),
+        location: compile_location(location)
+    }
+    case BinaryExpression { operator, left, right, location } -> CompiledBinaryExpression {
+        operator: operator,
+        left: compile_expression_in_function(left, functionName),
+        right: compile_expression_in_function(right, functionName),
+        location: compile_location(location)
+    }
+    case UnaryExpression unary -> CompiledUnaryExpression {
+        operator: unary.operator,
+        expression: compile_expression_in_function(unary.expression, functionName),
+        location: compile_location(unary.location)
+    }
+    case FunctionCallExpression { name, arguments, location } ->
+        compiled_function_call(name, compile_expressions(arguments, functionName), compile_location(location))
+    case FunctionReferenceExpression { name, location } -> CompiledFunctionReferenceExpression {
+        name: name,
+        location: compile_location(location)
+    }
+    case MethodCallExpression call -> compiled_method_call(call, functionName)
+    case WithExpression { receiver, fields, location } -> CompiledWithExpression {
+        receiver: compile_expression_in_function(receiver, functionName),
+        fields: compile_expression_data_fields(fields, functionName),
+        location: compile_location(location)
+    }
+    case LambdaExpression { parameters, body, location } -> CompiledLambdaExpression {
+        parameters: parameters,
+        body: compile_expression_in_function(body, functionName),
+        location: compile_location(location)
+    }
+    case ListLiteral { values, location } -> CompiledListLiteral {
+        values: compile_expressions(values, functionName),
+        location: compile_location(location)
+    }
+    case SetLiteral { values, location } -> CompiledSetLiteral {
+        values: compile_expressions(values, functionName),
+        location: compile_location(location)
+    }
+    case DictLiteral { entries, location } -> CompiledDictLiteral {
+        entries: compile_dict_entries(entries, functionName),
+        location: compile_location(location)
+    }
+    case TupleLiteral { values, location } -> CompiledTupleLiteral {
+        values: compile_expressions(values, functionName),
+        location: compile_location(location)
+    }
+    case IndexExpression { receiver, index, endIndex, hasEndIndex, location } -> CompiledIndexExpression {
+        receiver: compile_expression_in_function(receiver, functionName),
+        index: compile_expression_in_function(index, functionName),
+        endIndex: compile_expression_in_function(endIndex, functionName),
+        hasEndIndex: hasEndIndex,
+        location: compile_location(location)
+    }
+    case DataLiteral { typeName, fields, location } -> CompiledDataLiteral {
+        typeName: typeName,
+        fields: compile_expression_data_fields(fields, functionName),
+        location: compile_location(location)
+    }
+    case FieldAccessExpression access -> compile_field_access(access, functionName)
+    case ReduceExpression { receiver, initial, accumulatorName, keyName, valueName, body, location } -> CompiledReduceExpression {
+        receiver: compile_expression_in_function(receiver, functionName),
+        initial: compile_expression_in_function(initial, functionName),
+        accumulatorName: accumulatorName,
+        keyName: keyName,
+        valueName: valueName,
+        body: compile_expression_in_function(body, functionName),
+        location: compile_location(location)
+    }
+    case MatchExpression { value, cases, location } -> CompiledMatchExpression {
+        value: compile_expression_in_function(value, functionName),
+        cases: compile_match_cases(cases, functionName),
+        location: compile_location(location)
+    }
+    case BlockExpression { bindings, result, location } -> CompiledBlockExpression {
+        bindings: compile_let_bindings(bindings, functionName),
+        result: compile_expression_in_function(result, functionName),
+        location: compile_location(location)
+    }
+
+private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
+    let receiver = compile_expression_in_function(call.receiver, functionName)
+    let arguments = compile_expressions(call.arguments, functionName)
+    compiled_method_call_with_receiver(call, receiver, arguments)
+
+private fun compiled_method_call_with_receiver(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
+    match receiver with
+    case CompiledUnaryExpression { operator, expression, location } ->
+        if operator == "!"
+        then CompiledUnaryExpression {
+            operator: operator,
+            expression: CompiledMethodCallExpression {
+                receiver: expression,
+                name: call.name,
+                arguments: arguments,
+                location: compile_location(call.location)
+            },
+            location: location
+        }
+        else compiled_method_call_expression(call, receiver, arguments)
+    case _ -> compiled_method_call_expression(call, receiver, arguments)
+
+private fun compiled_method_call_expression(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
+    let location = compile_location(call.location)
+    let methodCall = CompiledMethodCallExpression {
+        receiver: receiver,
+        name: call.name,
+        arguments: arguments,
+        location: location
+    }
+    if compiled_expressions_have_placeholders(arguments)
+    then compiled_partial_application(arguments, methodCall, location)
+    else methodCall
+
+private fun compiled_function_call(name: String, arguments: List[CompiledExpression], location: CompiledSourceLocation): CompiledExpression =
+    let functionCall = CompiledFunctionCallExpression {
+        name: name,
+        arguments: arguments,
+        location: location
+    }
+    if compiled_expressions_have_placeholders(arguments)
+    then compiled_partial_application(arguments, functionCall, location)
+    else functionCall
+
+private fun compiled_partial_application(arguments: List[CompiledExpression], body: CompiledExpression, location: CompiledSourceLocation): CompiledExpression =
+    let partial = compiled_partial_arguments(arguments, 1)
+    CompiledLambdaExpression {
+        parameters: partial.parameters,
+        body: compiled_partial_body(body, partial.arguments),
+        location: location
+    }
+
+private fun compiled_partial_body(body: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
+    match body with
+    case CompiledFunctionCallExpression call -> call.with(arguments: arguments)
+    case CompiledMethodCallExpression call -> call.with(arguments: arguments)
+    case _ -> body
+
+private fun compiled_partial_arguments(arguments: List[CompiledExpression], idx: int): CompiledPartialArguments =
+    match arguments[0] with
+    case None -> CompiledPartialArguments { parameters: [], arguments: [] }
+    case Some { argument } ->
+        let rest = compiled_partial_arguments(arguments[1:], idx + 1)
+        match argument with
+        case CompiledUnsupportedExpression unsupported ->
+            if compiler_compiled_placeholder_source(unsupported.source)
+            then
+                let parameter = compiled_partial_parameter_name(unsupported.location, idx)
+                let replacement: CompiledExpression = CompiledVariableExpression { name: parameter, location: unsupported.location }
+                CompiledPartialArguments {
+                    parameters: [parameter] + rest.parameters,
+                    arguments: [replacement] + rest.arguments
+                }
+            else
+                let original: CompiledExpression = argument
+                CompiledPartialArguments {
+                    parameters: rest.parameters,
+                    arguments: [original] + rest.arguments
+                }
+        case _ -> CompiledPartialArguments {
+            parameters: rest.parameters,
+            arguments: [argument] + rest.arguments
+        }
+
+private fun compiled_expressions_have_placeholders(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } -> compiled_placeholder_expression(argument) | compiled_expressions_have_placeholders(arguments[1:])
+
+private fun compiled_placeholder_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledUnsupportedExpression unsupported -> compiler_compiled_placeholder_source(unsupported.source)
+    case _ -> false
+
+private fun compiler_compiled_placeholder_source(source: String): bool =
+    compiler_string_has_prefix(source, "__capy_placeholder__|")
+
+private fun compiled_partial_parameter_name(location: CompiledSourceLocation, idx: int): String =
+    "__capy_partial_" + location.line + "_" + location.column + "_" + idx
+
+private fun compile_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
+    match access.receiver with
+    case UnaryExpression { operator, expression, location } ->
+        if operator == "!"
+        then CompiledUnaryExpression {
+            operator: operator,
+            expression: CompiledFieldAccessExpression {
+                receiver: compile_expression_in_function(expression, functionName),
+                name: access.name,
+                location: compile_location(access.location)
+            },
+            location: compile_location(location)
+        }
+        else compiled_field_access(access, functionName)
+    case _ -> compiled_field_access(access, functionName)
+
+private fun compiled_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
+    CompiledFieldAccessExpression {
+        receiver: compile_expression_in_function(access.receiver, functionName),
+        name: access.name,
+        location: compile_location(access.location)
+    }
+
+private fun compile_expressions(expressions: List[Expression], functionName: String): List[CompiledExpression] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } -> [compile_expression_in_function(expression, functionName)] + compile_expressions(expressions[1:], functionName)
+
+private fun compile_dict_entries(entries: List[DictEntry], functionName: String): List[CompiledDictEntry] =
+    match entries[0] with
+    case None -> []
+    case Some { entry } -> [CompiledDictEntry {
+        key: compile_expression_in_function(entry.key, functionName),
+        value: compile_expression_in_function(entry.value, functionName),
+        location: compile_location(entry.location)
+    }] + compile_dict_entries(entries[1:], functionName)
+
+private fun compile_expression_data_fields(fields: List[DataField], functionName: String): List[CompiledDataField] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> [CompiledDataField {
+        name: field.name,
+        value: compile_expression_in_function(field.value, functionName),
+        spread: field.spread,
+        location: compile_location(field.location)
+    }] + compile_expression_data_fields(fields[1:], functionName)
+
+private fun compile_match_cases(cases: List[MatchCase], functionName: String): List[CompiledMatchCase] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } -> [CompiledMatchCase {
+        typeName: matchCase.typeName,
+        bindings: matchCase.bindings,
+        bindsWholeValue: matchCase.bindsWholeValue,
+        literal: compile_expression_in_function(matchCase.literal, functionName),
+        hasLiteral: matchCase.hasLiteral,
+        wildcard: matchCase.wildcard,
+        guard: compile_expression_in_function(matchCase.guard, functionName),
+        hasGuard: matchCase.hasGuard,
+        body: compile_expression_in_function(matchCase.body, functionName),
+        location: compile_location(matchCase.location)
+    }] + compile_match_cases(cases[1:], functionName)
+
+private fun compile_let_bindings(bindings: List[LetBinding], functionName: String): List[CompiledLetBinding] =
+    match bindings[0] with
+    case None -> []
+    case Some { binding } -> [CompiledLetBinding {
+        name: binding.name,
+        typeReference: compile_type(binding.typeReference),
+        operator: binding.operator,
+        value: compile_expression_in_function(binding.value, functionName),
+        location: compile_location(binding.location)
+    }] + compile_let_bindings(bindings[1:], functionName)
+
+private fun compiled_unsupported_source(source: String, functionName: String): String =
+    if placeholder_source(source)
+    then "__capy_placeholder__|" + functionName
+    else source

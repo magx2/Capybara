@@ -1,94 +1,46 @@
-import com.github.gradle.node.task.NodeTask
-import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
-import org.gradle.api.file.ConfigurableFileCollection
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.provider.ListProperty
-import org.gradle.api.provider.Property
+import javax.inject.Inject
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
-import org.gradle.api.tasks.Classpath
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.Optional
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.options.Option
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
-import java.net.URL
-import java.net.URLClassLoader
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.TreeSet
+buildscript {
+    repositories {
+        mavenCentral()
+        ivy {
+            name = 'CapybaraRelease'
+            url = uri("https://github.com/magx2/Capybara/releases/download/release/${capybaraVersion}")
+            patternLayout {
+                artifact('[artifact]-[revision].[ext]')
+            }
+            metadataSources {
+                artifact()
+            }
+        }
+    }
+    dependencies {
+        classpath "dev.capylang:gradle:${capybaraVersion}@jar"
+        classpath "dev.capylang:capy:${capybaraVersion}@jar"
+    }
+}
 
 plugins {
     id 'buildlogic.java-application-conventions'
     id 'antlr'
-    id "com.github.node-gradle.node" version "7.1.0"
-    id "com.pswidersk.python-plugin" version "3.2.9"
+    id 'idea'
 }
 
-node {
-    version = '22.11.0'
-    download = true
-}
+apply plugin: 'dev.capylang'
 
-pythonPlugin {
-    pythonVersion = '3.12.8'
-}
-
-def pythonEnvDir = providers.provider {
-    def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
-    def pythonOs = osName.contains('windows') ? 'Windows' : osName.contains('mac') ? 'MacOSX' : 'Linux'
-    pythonPlugin.installDir.get()
-            .dir("${pythonOs}/${pythonPlugin.condaInstaller.get()}-${pythonPlugin.condaVersion.get()}/envs/python-${pythonPlugin.pythonVersion.get()}")
-            .asFile
-}
-def pythonExecutable = pythonEnvDir.map { envDir ->
-    new File(envDir, System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'python.exe' : 'bin/python')
-}
-def pythonPath = pythonEnvDir.map { envDir ->
-    def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
-    def pathEntries = osName.contains('windows')
-            ? [
-                    envDir,
-                    new File(envDir, 'Library/mingw-w64/bin'),
-                    new File(envDir, 'Library/usr/bin'),
-                    new File(envDir, 'Library/bin'),
-                    new File(envDir, 'Scripts')
-            ]
-            : [new File(envDir, 'bin')]
-    (pathEntries.collect { it.absolutePath } + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
-}
-def configurePythonTask = { Exec task ->
-    task.dependsOn tasks.named('envSetup')
-    task.executable = pythonExecutable.get().absolutePath
-    task.environment 'CONDA_PREFIX', pythonEnvDir.get().absolutePath
-    task.environment 'PATH', pythonPath.get()
-}
-
-// The Python plugin's IDE SDK import finalizer runs locatePython during normal
-// builds when .idea exists. Test tasks run the environment Python directly.
-def pythonSdkImportRequested = gradle.startParameter.taskNames.any { taskName ->
-    def separator = taskName.lastIndexOf(':')
-    def basename = separator >= 0 ? taskName.substring(separator + 1) : taskName
-    basename == 'locatePython' || basename == 'saveSdkImportConfig'
-}
-
-tasks.named('locatePython') {
-    onlyIf { pythonSdkImportRequested }
-}
-
-tasks.named('saveSdkImportConfig') {
-    onlyIf { pythonSdkImportRequested }
+repositories {
+    ivy {
+        name = 'CapybaraRelease'
+        url = uri("https://github.com/magx2/Capybara/releases/download/release/${capybaraVersion}")
+        patternLayout {
+            artifact('[artifact]-[revision].[ext]')
+        }
+        metadataSources {
+            artifact()
+        }
+    }
 }
 
 abstract class InProcessCapybaraCompileTask extends DefaultTask {
@@ -99,9 +51,10 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     abstract DirectoryProperty getInputDir()
 
-    @InputFiles
+    @Optional
+    @InputDirectory
     @PathSensitive(PathSensitivity.RELATIVE)
-    abstract ConfigurableFileCollection getAdditionalInputDirs()
+    abstract DirectoryProperty getTestInputDir()
 
     @OutputDirectory
     abstract DirectoryProperty getLinkedOutputDir()
@@ -109,11 +62,9 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @OutputDirectory
     abstract DirectoryProperty getGeneratedOutputDir()
 
-    @Input
-    abstract Property<Boolean> getIncludeJavaLibResources()
-
-    @Input
-    abstract Property<Boolean> getCompileTests()
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getGeneratedTestOutputDir()
 
     @Input
     abstract Property<String> getCompilerVersion()
@@ -121,98 +72,42 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @Input
     abstract Property<String> getOutputTypeName()
 
-    @Optional
-    @InputFile
-    @PathSensitive(PathSensitivity.RELATIVE)
-    abstract RegularFileProperty getNativeWiringFile()
-
     @TaskAction
     void compileCapybara() {
         def errors = new ByteArrayOutputStream()
         def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
         URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
         try {
-            def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
-            def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
-            readLinkedProgram.accessible = true
-            def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-            def nativeProviderManifestClass = Class.forName('dev.capylang.compiler.NativeProviderManifest', true, classLoader)
-            def readNativeProviderManifest = capyClass.getDeclaredMethod('readNativeProviderManifest', Path)
-            readNativeProviderManifest.accessible = true
-            def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName.get() }
-            def compileGenerate = capyClass.getMethod(
-                    'compileGenerate',
-                    outputTypeClass,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    TreeSet,
-                    Boolean.TYPE,
-                    Boolean.TYPE,
+            def capyClass = Class.forName('dev.capylang.cli.Capy', true, classLoader)
+            def compileGenerateOptions = generatedMethod(
+                    capyClass,
+                    'compileGenerateOptions',
                     String,
-                    PrintStream
-            )
-            def compileGenerateWithNativeWiring = capyClass.getMethod(
-                    'compileGenerate',
-                    outputTypeClass,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    TreeSet,
-                    Boolean.TYPE,
-                    Boolean.TYPE,
-                    nativeProviderManifestClass,
                     String,
-                    PrintStream
+                    String,
+                    java.util.Optional,
+                    java.util.Optional,
+                    java.util.Optional,
+                    Boolean.TYPE,
+                    Boolean.TYPE
             )
-
-            def libraries = new TreeSet()
-            additionalInputDirs.files.each { libraryDir ->
-                Path libraryPath = libraryDir.toPath()
-                if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
-                    return
-                }
-                def program = readLinkedProgram.invoke(null, libraryPath, false)
-                libraries.addAll(program.modules())
-            }
-
-            def nativeProviders = nativeWiringFile.present
-                    ? readNativeProviderManifest.invoke(null, nativeWiringFile.get().asFile.toPath())
-                    : null
-            def exitCode = nativeProviders == null
-                    ? compileGenerate.invoke(
-                            null,
-                            outputType,
-                            inputDir.get().asFile.toPath(),
-                            generatedOutputDir.get().asFile.toPath(),
-                            linkedOutputDir.get().asFile.toPath(),
-                            null,
-                            null,
-                            libraries,
-                            compileTests.getOrElse(false),
-                            includeJavaLibResources.getOrElse(true),
-                            compilerVersion.get(),
-                            new PrintStream(errors)
-                    ) as Integer
-                    : compileGenerateWithNativeWiring.invoke(
-                            null,
-                            outputType,
-                            inputDir.get().asFile.toPath(),
-                            generatedOutputDir.get().asFile.toPath(),
-                            linkedOutputDir.get().asFile.toPath(),
-                            null,
-                            null,
-                            libraries,
-                            compileTests.getOrElse(false),
-                            includeJavaLibResources.getOrElse(true),
-                            nativeProviders,
-                            compilerVersion.get(),
-                            new PrintStream(errors)
-                    ) as Integer
+            def runCompileGenerate = generatedMethod(capyClass, 'runCompileGenerate', compileGenerateOptions.returnType)
+            def options = compileGenerateOptions.invoke(
+                    null,
+                    outputTypeArgument(outputTypeName.getOrElse('JAVA')),
+                    inputDir.get().asFile.toString(),
+                    generatedOutputDir.get().asFile.toString(),
+                    java.util.Optional.of(linkedOutputDir.get().asFile.toString()),
+                    testInputDir.isPresent()
+                            ? java.util.Optional.of(testInputDir.get().asFile.toString())
+                            : java.util.Optional.empty(),
+                    generatedTestOutputDir.isPresent()
+                            ? java.util.Optional.of(generatedTestOutputDir.get().asFile.toString())
+                            : java.util.Optional.empty(),
+                    true,
+                    false
+            )
+            def exitCode = runProgram(runCompileGenerate.invoke(null, options), new PrintStream(errors))
             if (exitCode != 0) {
                 def message = errors.toString().trim()
                 throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
@@ -221,14 +116,73 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
             classLoader.close()
         }
     }
+
+    private static def generatedMethod(Class<?> type, String name, Class<?>... parameterTypes) {
+        def exact = type.declaredMethods.find { method ->
+            method.name == name && java.util.Arrays.equals(method.parameterTypes, parameterTypes)
+        }
+        def generated = exact ?: type.declaredMethods.find { method ->
+            method.name.startsWith("${name}__") && java.util.Arrays.equals(method.parameterTypes, parameterTypes)
+        }
+        if (generated == null) {
+            throw new GradleException("Unable to find generated Capy method `${name}` on ${type.name}.")
+        }
+        generated.accessible = true
+        generated
+    }
+
+    private static String outputTypeArgument(String outputTypeName) {
+        switch (outputTypeName.toUpperCase(Locale.ROOT)) {
+            case 'JAVA':
+                return 'java'
+            case 'PYTHON':
+                return 'python'
+            case 'JAVASCRIPT':
+                return 'javascript'
+            default:
+                throw new GradleException("Unknown Capybara output type: ${outputTypeName}")
+        }
+    }
+
+    private static int runProgram(def effect, PrintStream errors) {
+        try {
+            def program = effect.unsafeRun()
+            if (program != null && program.class.simpleName == 'Failed') {
+                return program.class.getMethod('exit_code').invoke(program) as Integer
+            }
+            return 0
+        } catch (RuntimeException exception) {
+            errors.println(rootCauseMessage(exception))
+            return 1
+        }
+    }
+
+    private static String rootCauseMessage(Throwable throwable) {
+        def current = throwable
+        while (current.cause != null) {
+            current = current.cause
+        }
+        current.message ?: current.toString()
+    }
 }
 
-abstract class InProcessCapybaraTestTask extends DefaultTask {
-    @Classpath
-    abstract ConfigurableFileCollection getRuntimeClasspath()
+abstract class CapybaraJavaScriptTestTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
+
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract RegularFileProperty getRunnerFile()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getGeneratedDir()
 
     @OutputDirectory
     abstract DirectoryProperty getOutputDir()
+
+    @Internal
+    abstract DirectoryProperty getExecutionDir()
 
     @Input
     abstract Property<String> getReportType()
@@ -242,6 +196,9 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     @Input
     abstract Property<Boolean> getPrintAvailableTests()
 
+    @Input
+    abstract Property<String> getOperatingSystemName()
+
     @Option(option = 'tests', description = 'Run only matching Capybara tests. Can be provided multiple times.')
     void addTest(String test) {
         getTests().add(test)
@@ -253,170 +210,225 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     }
 
     @TaskAction
-    void runCapybaraTests() {
-        def directory = outputDir.get().asFile
-        if (directory.exists()) {
-            directory.deleteDir()
+    void runJavaScriptTests() {
+        if (!printAvailableTests.getOrElse(false)) {
+            def directory = outputDir.get().asFile
+            if (directory.exists()) {
+                directory.deleteDir()
+            }
+            directory.mkdirs()
         }
-        directory.mkdirs()
 
-        def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
-        URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
-        def originalContextClassLoader = Thread.currentThread().contextClassLoader
-        try {
-            Thread.currentThread().contextClassLoader = classLoader
-            def testRunnerClass = Class.forName('dev.capylang.test.TestRunner', true, classLoader)
-            def argumentsClass = Class.forName('dev.capylang.test.TestRunner$Arguments', true, classLoader)
-            def parseArguments = testRunnerClass.getMethod('parseArguments', String[].class)
-            def runTests = testRunnerClass.getMethod('runTests', argumentsClass)
-            def args = [
-                    '--output-dir', outputDir.get().asFile.absolutePath,
-                    '--report-type', reportType.get()
-            ]
-            def configuredLogType = logType.getOrElse('NONE')
-            if (!configuredLogType.isBlank() && !configuredLogType.equalsIgnoreCase('NONE')) {
-                args.addAll(['--log', configuredLogType])
-            }
-            tests.getOrElse([]).each { test ->
-                args.addAll(['--tests', test])
-            }
-            if (printAvailableTests.getOrElse(false)) {
-                args.add('--available-tests')
-            }
-
-            def parsedArguments = parseArguments.invoke(null, [args.toArray(new String[0])] as Object[])
-            def exitCode = runTests.invoke(null, [parsedArguments] as Object[]) as Integer
-            if (exitCode != 0) {
-                throw new GradleException("Capybara tests failed with exit code ${exitCode}")
-            }
-        } finally {
-            Thread.currentThread().contextClassLoader = originalContextClassLoader
-            classLoader.close()
+        def command = [
+                nodeExecutable(operatingSystemName.get()),
+                runnerFile.get().asFile.absolutePath,
+                '--generated-dir', generatedDir.get().asFile.absolutePath,
+                '--output-dir', outputDir.get().asFile.absolutePath,
+                '--report-type', reportType.get()
+        ]
+        def configuredLogType = logType.getOrElse('NONE')
+        if (!configuredLogType.isBlank() && !configuredLogType.equalsIgnoreCase('NONE')) {
+            command.addAll(['--log', configuredLogType])
         }
+        tests.getOrElse([]).each { test ->
+            command.addAll(['--tests', test])
+        }
+        if (printAvailableTests.getOrElse(false)) {
+            command.add('--available-tests')
+        }
+
+        getExecOperations().exec { execSpec ->
+            execSpec.workingDir(getExecutionDir().get().asFile)
+            execSpec.commandLine(command)
+        }
+    }
+
+    private static String nodeExecutable(String osName) {
+        def normalized = osName.toLowerCase(Locale.ROOT)
+        if (normalized.contains('windows')) {
+            return 'node.exe'
+        }
+        return 'node'
     }
 }
 
-abstract class CapyInProcessTaskService implements BuildService<BuildServiceParameters.None> {}
+abstract class CapybaraPythonTestTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
 
-def capyInProcessTaskService = gradle.sharedServices.registerIfAbsent('capyInProcessTaskService', CapyInProcessTaskService) {
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract RegularFileProperty getRunnerFile()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getGeneratedDir()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    @Internal
+    abstract DirectoryProperty getExecutionDir()
+
+    @Optional
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getNativePythonDir()
+
+    @Input
+    abstract Property<String> getReportType()
+
+    @Input
+    abstract Property<String> getLogType()
+
+    @Input
+    abstract ListProperty<String> getTests()
+
+    @Input
+    abstract Property<Boolean> getPrintAvailableTests()
+
+    @Input
+    abstract Property<String> getOperatingSystemName()
+
+    @Option(option = 'tests', description = 'Run only matching Capybara tests. Can be provided multiple times.')
+    void addTest(String test) {
+        getTests().add(test)
+    }
+
+    @Option(option = 'available-tests', description = 'Print available Capybara tests without running them.')
+    void setAvailableTests(boolean availableTests) {
+        getPrintAvailableTests().set(availableTests)
+    }
+
+    @TaskAction
+    void runPythonTests() {
+        if (!printAvailableTests.getOrElse(false)) {
+            def directory = outputDir.get().asFile
+            if (directory.exists()) {
+                directory.deleteDir()
+            }
+            directory.mkdirs()
+        }
+
+        def command = [
+                pythonExecutable(operatingSystemName.get()),
+                runnerFile.get().asFile.absolutePath,
+                '--generated-dir', generatedDir.get().asFile.absolutePath,
+                '--output-dir', outputDir.get().asFile.absolutePath,
+                '--report-type', reportType.get()
+        ]
+        def configuredLogType = logType.getOrElse('NONE')
+        if (!configuredLogType.isBlank() && !configuredLogType.equalsIgnoreCase('NONE')) {
+            command.addAll(['--log', configuredLogType])
+        }
+        tests.getOrElse([]).each { test ->
+            command.addAll(['--tests', test])
+        }
+        if (printAvailableTests.getOrElse(false)) {
+            command.add('--available-tests')
+        }
+
+        getExecOperations().exec { execSpec ->
+            execSpec.workingDir(getExecutionDir().get().asFile)
+            execSpec.commandLine(command)
+            if (getNativePythonDir().isPresent()) {
+                def nativeDir = getNativePythonDir().get().asFile
+                if (nativeDir.exists()) {
+                    def currentPythonPath = System.getenv('PYTHONPATH')
+                    execSpec.environment(
+                            'PYTHONPATH',
+                            currentPythonPath == null || currentPythonPath.isBlank()
+                                    ? nativeDir.absolutePath
+                                    : nativeDir.absolutePath + File.pathSeparator + currentPythonPath
+                    )
+                }
+            }
+        }
+    }
+
+    private static String pythonExecutable(String osName) {
+        def normalized = osName.toLowerCase(Locale.ROOT)
+        if (normalized.contains('windows')) {
+            return 'python.exe'
+        }
+        return 'python3'
+    }
+}
+
+abstract class CapybaraCompileTaskService implements BuildService<BuildServiceParameters.None> {}
+
+def capybaraCompileTaskService = gradle.sharedServices.registerIfAbsent('capybaraCompileTaskService', CapybaraCompileTaskService) {
     maxParallelUsages.set(1)
 }
 
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
-    usesService(capyInProcessTaskService)
-}
-
-abstract class CapybaraNodeTestTask extends NodeTask {
-    @Input
-    abstract ListProperty<String> getTests()
-
-    @Input
-    abstract Property<Boolean> getPrintAvailableTests()
-
-    @Option(option = 'tests', description = 'Run only matching Capybara tests. Can be provided multiple times.')
-    void addTest(String test) {
-        getTests().add(test)
-    }
-
-    @Option(option = 'available-tests', description = 'Print available Capybara tests without running them.')
-    void setAvailableTests(boolean availableTests) {
-        getPrintAvailableTests().set(availableTests)
-    }
-}
-
-abstract class CapybaraPythonTestTask extends Exec {
-    @Input
-    abstract ListProperty<String> getTests()
-
-    @Input
-    abstract Property<Boolean> getPrintAvailableTests()
-
-    @Option(option = 'tests', description = 'Run only matching Capybara tests. Can be provided multiple times.')
-    void addTest(String test) {
-        getTests().add(test)
-    }
-
-    @Option(option = 'available-tests', description = 'Print available Capybara tests without running them.')
-    void setAvailableTests(boolean availableTests) {
-        getPrintAvailableTests().set(availableTests)
-    }
+    usesService(capybaraCompileTaskService)
 }
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
-    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
+    implementation "dev.capylang:capybara-lib:${capybaraVersion}@jar"
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
-    implementation 'org.yaml:snakeyaml:2.4'
 
     testImplementation 'org.assertj:assertj-core:3.27.6'
 }
 
-configurations {
-    capyRuntimeDependenciesElements {
-        canBeConsumed = true
-        canBeResolved = false
-        visible = false
-        extendsFrom configurations.runtimeClasspath
-    }
-}
-
-def capybaraVersion = project.version.toString()
+def capybaraProjectVersion = project.version.toString()
+def capybaraTaskGroup = 'capybara'
 def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
 def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
 def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
 def capyResourcesDir = layout.buildDirectory.dir('resources/main')
-def capybaraLibClassesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('classes/java/main')
-def capybaraLibResourcesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('resources/main')
-def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
-def testRuntimeDependencies = configurations.testRuntimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
-}.files
+def capybaraLibSourceDir = project(':lib:capybara-lib').layout.projectDirectory.dir('src/main/capybara')
+def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources/capybara/main')
+def capybaraMainLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
+def capybaraMainPythonSourceDir = layout.projectDirectory.dir('src/main/py')
+def capybaraMainJavaScriptSourceDir = layout.projectDirectory.dir('src/main/js')
+def capybaraGeneratedCompilerPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/compiler')
+def capybaraLinkedCompilerPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/compiler')
+def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript/compiler')
+def capybaraRuntimeCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-runtime/compiler')
+def capybaraLinkedCompilerJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/compiler')
+def pythonAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/python-grammars')
+def pythonAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/python/main')
+def pythonAntlrRuntimeDir = layout.buildDirectory.dir('python/antlr4-runtime')
+def javascriptAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/javascript-grammars')
+def javascriptAntlrEsmGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/javascript-esm/main')
+def javascriptAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/javascript/main')
+def javascriptAntlrRuntimeDir = layout.buildDirectory.dir('javascript/antlr4-runtime')
+def pythonNativeParserSmokeScript = layout.projectDirectory.file('src/test/py/native_parser_smoke.py')
+def javascriptNativeParserSmokeScript = layout.projectDirectory.file('src/test/js/native_parser_smoke.js')
+def pythonNativeParserSmokeResultsDir = layout.buildDirectory.dir('test-results/python-native-parser-smoke')
+def javascriptNativeParserSmokeResultsDir = layout.buildDirectory.dir('test-results/javascript-native-parser-smoke')
+def functionalGrammarFile = layout.projectDirectory.file('src/main/antlr/Functional.g4')
+def objectOrientedGrammarFile = layout.projectDirectory.file('src/main/antlr/ObjectOriented.g4')
+def antlrToolVersion = antlrVersion.toString()
 
 def e2eCfunCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-cfun/capybara')
-def e2eCfunGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-cfun')
-def e2eCfunGeneratedJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-cfun')
-def e2eCfunGeneratedPyDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-cfun')
-def e2eCfunLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-cfun')
-def e2eCfunLinkedJsOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-cfun')
-def e2eCfunLinkedPyOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-cfun')
-def e2eCfunTestResultsDir = layout.buildDirectory.dir('test-results/e2e-cfun')
-def e2eCfunJsTestResultsDir = layout.buildDirectory.dir('test-results/e2e-cfun-js')
-def e2eCfunPyTestResultsDir = layout.buildDirectory.dir('test-results/e2e-cfun-python')
+def e2eCfunGeneratedJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-cfun')
+def e2eCfunLinkedJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/e2e-cfun')
+def e2eCfunJavaScriptTestResultsDir = layout.buildDirectory.dir('test-results/e2e-javascript-cfun')
+def e2eCfunGeneratedPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-cfun')
+def e2eCfunLinkedPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-cfun')
+def e2eCfunPythonTestResultsDir = layout.buildDirectory.dir('test-results/e2e-python-cfun')
 def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
-def e2eCooGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo')
-def e2eCooGeneratedJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-coo')
-def e2eCooGeneratedPyDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-coo')
-def e2eCooLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-coo')
-def e2eCooLinkedJsOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-coo')
-def e2eCooLinkedPyOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo')
-def e2eCooTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo')
-def e2eCooJsTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js')
-def e2eCooPyTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python')
-def e2eCooNativeJavaSourceDir = layout.projectDirectory.dir('src/e2e-coo/native/java')
-def e2eCooJavaNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/capybara')
-def e2eCooJavaNativeJavaSourceDir = layout.projectDirectory.dir('src/e2e-coo-java-native/java')
-def e2eCooJavaNativeGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo-java-native')
-def e2eCooJavaNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-coo-java-native')
-def e2eCooJavaNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-java-native')
-def e2eCooJsNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-js-native/capybara')
-def e2eCooJsNativeGeneratedJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-coo-js-native')
-def e2eCooJsNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-coo-js-native')
-def e2eCooJsNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-js-native')
-def e2eCooNativeJsSourceDir = layout.projectDirectory.dir('src/e2e-coo/native/js')
-def e2eCooJsNativeJsSourceDir = layout.projectDirectory.dir('src/e2e-coo-js-native/js')
-def e2eCooPyNativeCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo-py-native/capybara')
-def e2eCooPyNativeGeneratedPyDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-coo-py-native')
-def e2eCooPyNativeLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo-py-native')
-def e2eCooPyNativeTestResultsDir = layout.buildDirectory.dir('test-results/e2e-coo-python-native')
-def e2eCooNativePySourceDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
-def e2eCooPyNativePySourceDir = layout.projectDirectory.dir('src/e2e-coo-py-native/py')
-def jsTestSourcePath = 'src/test/js'
-def jsTestRunner = layout.projectDirectory.file("${jsTestSourcePath}/run-tests.js")
-def pyTestSourcePath = 'src/test/py'
-def pyTestRunner = layout.projectDirectory.file("${pyTestSourcePath}/run-tests.py")
-def capybaraJsTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
-def capybaraPyTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
+def e2eCooGeneratedJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-coo')
+def e2eCooLinkedJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/e2e-coo')
+def e2eCooJavaScriptTestResultsDir = layout.buildDirectory.dir('test-results/e2e-javascript-coo')
+def e2eCooGeneratedPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/e2e-coo')
+def e2eCooLinkedPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo')
+def e2eCooPythonTestResultsDir = layout.buildDirectory.dir('test-results/e2e-python-coo')
+def e2eCooNativePythonDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
+def intellijE2eTestSourceDirs = files(
+        'src/e2e-cfun',
+        'src/e2e-coo',
+        'src/e2e-coo-java-native',
+        'src/e2e-coo-js-native',
+        'src/e2e-coo-py-native'
+)
+def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
+def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
@@ -425,67 +437,366 @@ def capyRuntimeClasspath = files(
         capyResourcesDir,
         capyRuntimeDependencies
 )
+def capybaraMainJavaScriptSources = objects.sourceDirectorySet('js', 'main JavaScript sources')
+capybaraMainJavaScriptSources.srcDir(capybaraMainJavaScriptSourceDir)
+capybaraMainJavaScriptSources.include('**/*.js')
+def capybaraMainPythonSources = objects.sourceDirectorySet('py', 'main Python sources')
+capybaraMainPythonSources.srcDir(capybaraMainPythonSourceDir)
+capybaraMainPythonSources.include('**/*.py')
 
 sourceSets {
+    main {
+        java {
+            exclude 'e2e-*/**'
+        }
+        extensions.add('js', capybaraMainJavaScriptSources)
+        extensions.add('py', capybaraMainPythonSources)
+        allSource.source(capybaraMainJavaScriptSources)
+        allSource.source(capybaraMainPythonSources)
+    }
     integrationTest {
         java.srcDir file('src/integrationTest/java')
         resources.srcDir file('src/integrationTest/resources')
         compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
         runtimeClasspath += output + compileClasspath
     }
-    e2eCfun {
-        java.srcDir e2eCfunGeneratedJavaDir
-        resources.srcDir file('src/e2e-cfun/resources')
-        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-        runtimeClasspath += output + compileClasspath
+}
+
+idea {
+    module {
+        testSources.from(intellijE2eTestSourceDirs)
     }
-    e2eCoo {
-        java.srcDir e2eCooGeneratedJavaDir
-        java.srcDir e2eCooNativeJavaSourceDir
-        resources.srcDir file('src/e2e-coo/resources')
-        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-        runtimeClasspath += output + compileClasspath
+}
+
+tasks.withType(org.gradle.api.plugins.antlr.AntlrTask).configureEach {
+    group = capybaraTaskGroup
+}
+
+def prepareMainCapybaraSources = tasks.register('prepareMainCapybaraSources', Sync) {
+    group = capybaraTaskGroup
+    description = 'Prepares main Capybara compiler sources.'
+
+    inputs.property('capybaraProjectVersion', capybaraProjectVersion)
+    from(capybaraMainSourceDir) {
+        exclude 'dev/capylang/cli/Capy.cfun'
     }
-    e2eCooJavaNative {
-        java.srcDir e2eCooJavaNativeGeneratedJavaDir
-        java.srcDir e2eCooJavaNativeJavaSourceDir
-        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-        runtimeClasspath += output + compileClasspath
+    from(capybaraMainSourceDir) {
+        include 'dev/capylang/cli/Capy.cfun'
+        filter { String line ->
+            line.replace('const COMPILER_VERSION = "x.y.z"', "const COMPILER_VERSION = \"${capybaraProjectVersion}\"")
+        }
+    }
+    from(layout.projectDirectory.dir('src/main/java')) {
+        include 'dev/capylang/compiler/parser/NativeCapybaraParser.java'
+        include 'dev/capylang/compiler/NativeCompilerValidator.java'
+        into 'native/java'
+    }
+    from(capybaraMainPythonSourceDir) {
+        include 'dev/capylang/compiler/parser/NativeCapybaraParser.py'
+        into 'native/py'
+    }
+    into capybaraPreparedMainSourceDir
+}
+
+tasks.named('compileCapybara') {
+    group = capybaraTaskGroup
+    dependsOn prepareMainCapybaraSources
+    inputDir.set(capybaraPreparedMainSourceDir)
+    writeLinkedOutput.set(false)
+    includeJavaLibResources.set(false)
+}
+
+tasks.named('linkCapybaraLinked') {
+    group = capybaraTaskGroup
+    dependsOn prepareMainCapybaraSources
+    inputDir.set(capybaraPreparedMainSourceDir)
+    outputDir.set(capybaraMainLinkedOutputDir)
+}
+
+[
+        'compileTestCapybara',
+        'generateCapybaraJava',
+        'generateTestCapybaraJava',
+        'testCapybara'
+].each { taskName ->
+    tasks.named(taskName) {
+        group = capybaraTaskGroup
     }
 }
 
 configurations {
     integrationTestImplementation.extendsFrom testImplementation
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
-    e2eCfunImplementation.extendsFrom testImplementation
-    e2eCfunRuntimeOnly.extendsFrom testRuntimeOnly
-    e2eCooImplementation.extendsFrom testImplementation
-    e2eCooRuntimeOnly.extendsFrom testRuntimeOnly
-    e2eCooJavaNativeImplementation.extendsFrom testImplementation
-    e2eCooJavaNativeRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
-dependencies {
-    e2eCfunImplementation project(':lib:capybara-lib')
-    e2eCooImplementation project(':lib:capybara-lib')
-    e2eCooJavaNativeImplementation project(':lib:capybara-lib')
+def systemPythonExecutable = {
+    def normalized = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    if (normalized.contains('linux')) {
+        return 'python3'
+    }
+    if (normalized.contains('windows')) {
+        return 'python.exe'
+    }
+    throw new GradleException("Python parser smoke supports Linux and Windows only. Current OS: ${System.getProperty('os.name')}")
 }
 
-def e2eCfunRuntimeDependencies = configurations.e2eCfunRuntimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
-}.files
-def e2eCooRuntimeDependencies = configurations.e2eCooRuntimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
-}.files
-def e2eCooJavaNativeRuntimeDependencies = configurations.e2eCooJavaNativeRuntimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
-}.files
+tasks.register('preparePythonAntlrGrammars') {
+    group = capybaraTaskGroup
+    description = 'Prepares Python-target ANTLR grammar overlays.'
+
+    inputs.file(functionalGrammarFile)
+            .withPropertyName('functionalGrammar')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(objectOrientedGrammarFile)
+            .withPropertyName('objectOrientedGrammar')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(pythonAntlrGrammarDir)
+
+    doLast {
+        def outputDir = pythonAntlrGrammarDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+
+        def functionalSource = functionalGrammarFile.asFile.text
+        def programStart = functionalSource.indexOf('program :')
+        if (programStart < 0) {
+            throw new GradleException('Unable to locate Functional.g4 program rule.')
+        }
+        def functionalPrefix = functionalSource.substring(0, functionalSource.indexOf('@header')).trim() + System.lineSeparator() + System.lineSeparator()
+        def pythonLexerMembers = '''@lexer::members {
+lineStart = True
+
+def containsNewline(self, text):
+    return '\\n' in text or '\\r' in text
+
+def emit(self):
+    self.lineStart = False
+    return super().emit()
+}
+
+'''
+        def functionalPython = functionalPrefix + pythonLexerMembers + functionalSource.substring(programStart)
+        functionalPython = functionalPython
+                .replace('{ "multiple".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "multiple" }?')
+                .replace('{ "annotation".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "annotation" }?')
+                .replace('{ "on".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "on" }?')
+                .replace('{ "method".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "method" }?')
+                .replace('{ "class".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "class" }?')
+                .replace('{ "interface".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "interface" }?')
+                .replace('{ "trait".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "trait" }?')
+                .replace('{ "field".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "field" }?')
+                .replace('{ "init".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "init" }?')
+                .replace('{ "String".equals(_input.LT(1).getText()) }?', '{ self._input.LT(1).text == "String" }?')
+                .replace('{lineStart}?', '{self.lineStart}?')
+                .replace('{ if (containsNewline(getText())) lineStart = true; }', '{self.lineStart = self.lineStart or self.containsNewline(self.text)}')
+        new File(outputDir, 'Functional.g4').text = functionalPython
+
+        def objectSource = objectOrientedGrammarFile.asFile.text
+        def objectPython = objectSource.replaceFirst(/(?s)\n@header\s*\{.*?\}\s*/, System.lineSeparator())
+        new File(outputDir, 'ObjectOriented.g4').text = objectPython
+    }
+}
+
+tasks.register('generatePythonAntlr', JavaExec) {
+    group = capybaraTaskGroup
+    description = 'Generates Python ANTLR parser sources.'
+    dependsOn tasks.named('preparePythonAntlrGrammars')
+
+    inputs.dir(pythonAntlrGrammarDir)
+            .withPropertyName('pythonAntlrGrammars')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(pythonAntlrGeneratedDir)
+
+    classpath = configurations.antlr
+    mainClass = 'org.antlr.v4.Tool'
+
+    doFirst {
+        def outputDir = pythonAntlrGeneratedDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+        workingDir = pythonAntlrGrammarDir.get().asFile
+        setArgs(['-Dlanguage=Python3', '-o', outputDir.absolutePath, 'Functional.g4', 'ObjectOriented.g4'])
+    }
+}
+
+tasks.register('prepareJavaScriptAntlrGrammars') {
+    group = capybaraTaskGroup
+    description = 'Prepares JavaScript-target ANTLR grammar overlays.'
+
+    inputs.file(functionalGrammarFile)
+            .withPropertyName('functionalGrammar')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(objectOrientedGrammarFile)
+            .withPropertyName('objectOrientedGrammar')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptAntlrGrammarDir)
+
+    doLast {
+        def outputDir = javascriptAntlrGrammarDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+
+        def functionalSource = functionalGrammarFile.asFile.text
+        def programStart = functionalSource.indexOf('program :')
+        if (programStart < 0) {
+            throw new GradleException('Unable to locate Functional.g4 program rule.')
+        }
+        def functionalPrefix = functionalSource.substring(0, functionalSource.indexOf('@header')).trim() + System.lineSeparator() + System.lineSeparator()
+        def javascriptLexerMembers = '''@lexer::members {
+this.lineStart = true;
+this.containsNewline = function(text) {
+    return text.indexOf('\\n') >= 0 || text.indexOf('\\r') >= 0;
+};
+this.emit = function() {
+    this.lineStart = false;
+    return antlr4.Lexer.prototype.emit.call(this);
+};
+}
+
+'''
+        def functionalJavaScript = functionalPrefix + javascriptLexerMembers + functionalSource.substring(programStart)
+        functionalJavaScript = functionalJavaScript
+                .replace('{ "multiple".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "multiple"}?')
+                .replace('{ "annotation".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "annotation"}?')
+                .replace('{ "on".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "on"}?')
+                .replace('{ "method".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "method"}?')
+                .replace('{ "class".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "class"}?')
+                .replace('{ "interface".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "interface"}?')
+                .replace('{ "trait".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "trait"}?')
+                .replace('{ "field".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "field"}?')
+                .replace('{ "init".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "init"}?')
+                .replace('{ "String".equals(_input.LT(1).getText()) }?', '{this._input.LT(1).text === "String"}?')
+                .replace('{lineStart}?', '{this.lineStart}?')
+                .replace('{ if (containsNewline(getText())) lineStart = true; }', '{ this.lineStart = this.lineStart || this.containsNewline(this.text); }')
+        new File(outputDir, 'Functional.g4').text = functionalJavaScript
+
+        def objectSource = objectOrientedGrammarFile.asFile.text
+        def objectJavaScript = objectSource.replaceFirst(/(?s)\n@header\s*\{.*?\}\s*/, System.lineSeparator())
+        new File(outputDir, 'ObjectOriented.g4').text = objectJavaScript
+    }
+}
+
+tasks.register('generateJavaScriptAntlrEsm', JavaExec) {
+    group = capybaraTaskGroup
+    description = 'Generates JavaScript ANTLR parser sources in ANTLR ESM format.'
+    dependsOn tasks.named('prepareJavaScriptAntlrGrammars')
+
+    inputs.dir(javascriptAntlrGrammarDir)
+            .withPropertyName('javascriptAntlrGrammars')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptAntlrEsmGeneratedDir)
+
+    classpath = configurations.antlr
+    mainClass = 'org.antlr.v4.Tool'
+
+    doFirst {
+        def outputDir = javascriptAntlrEsmGeneratedDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+        workingDir = javascriptAntlrGrammarDir.get().asFile
+        setArgs(['-Dlanguage=JavaScript', '-o', outputDir.absolutePath, 'Functional.g4', 'ObjectOriented.g4'])
+    }
+}
+
+tasks.register('generateJavaScriptAntlr') {
+    group = capybaraTaskGroup
+    description = 'Converts ANTLR JavaScript parser sources to CommonJS for the Capybara JavaScript backend.'
+    dependsOn tasks.named('generateJavaScriptAntlrEsm')
+
+    inputs.dir(javascriptAntlrEsmGeneratedDir)
+            .withPropertyName('javascriptAntlrEsmSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptAntlrGeneratedDir)
+
+    doLast {
+        def inputDir = javascriptAntlrEsmGeneratedDir.get().asFile
+        def outputDir = javascriptAntlrGeneratedDir.get().asFile
+        outputDir.deleteDir()
+        outputDir.mkdirs()
+        inputDir.eachFile { sourceFile ->
+            def targetFile = new File(outputDir, sourceFile.name)
+            if (!sourceFile.name.endsWith('.js')) {
+                targetFile.bytes = sourceFile.bytes
+                return
+            }
+            def source = sourceFile.text
+            source = source.replace("import antlr4 from 'antlr4';", "const antlr4 = require('antlr4').default;")
+            source = source.replaceAll(/import (\w+) from '\.\/(\w+)\.js';/, "const \$1 = require('./\$2.js');")
+            def matcher = source =~ /export default class (\w+)/
+            if (matcher.find()) {
+                def className = matcher.group(1)
+                source = source.replace("export default class ${className}", "class ${className}")
+                source += System.lineSeparator() + "module.exports = ${className};" + System.lineSeparator()
+            }
+            targetFile.text = source
+        }
+    }
+}
+
+tasks.register('installPythonAntlrRuntime', Exec) {
+    group = capybaraTaskGroup
+    description = 'Installs the Python ANTLR runtime matching the ANTLR tool version.'
+
+    inputs.property('antlrVersion', antlrToolVersion)
+    outputs.dir(pythonAntlrRuntimeDir)
+
+    doFirst {
+        def outputDir = pythonAntlrRuntimeDir.get().asFile
+        outputDir.mkdirs()
+        def installer = '''
+import io
+import json
+import shutil
+import sys
+import urllib.request
+import zipfile
+from pathlib import Path
+
+version = sys.argv[1]
+target = Path(sys.argv[2])
+target.mkdir(parents=True, exist_ok=True)
+metadata_url = f"https://pypi.org/pypi/antlr4-python3-runtime/{version}/json"
+with urllib.request.urlopen(metadata_url) as response:
+    metadata = json.loads(response.read().decode("utf-8"))
+wheel_url = None
+for file_info in metadata["urls"]:
+    if file_info.get("packagetype") == "bdist_wheel":
+        wheel_url = file_info["url"]
+        break
+if wheel_url is None:
+    raise SystemExit(f"No wheel found for antlr4-python3-runtime {version}")
+with urllib.request.urlopen(wheel_url) as response:
+    wheel = response.read()
+for child in target.iterdir():
+    if child.is_dir():
+        shutil.rmtree(child)
+    else:
+        child.unlink()
+with zipfile.ZipFile(io.BytesIO(wheel)) as archive:
+    archive.extractall(target)
+'''
+        commandLine systemPythonExecutable(), '-c', installer, antlrToolVersion, outputDir.absolutePath
+    }
+}
+
+tasks.register('installJavaScriptAntlrRuntime', Exec) {
+    group = capybaraTaskGroup
+    description = 'Installs the JavaScript ANTLR runtime matching the ANTLR tool version.'
+
+    inputs.property('antlrVersion', antlrToolVersion)
+    outputs.dir(javascriptAntlrRuntimeDir)
+
+    doFirst {
+        def outputDir = javascriptAntlrRuntimeDir.get().asFile
+        outputDir.mkdirs()
+        commandLine 'npm', 'install', '--prefix', outputDir.absolutePath, "antlr4@${antlrToolVersion}"
+    }
+}
 
 processResources {
-    dependsOn tasks.named('compileJava')
     dependsOn ':lib:capybara-lib:linkCapybaraLinked'
     filesMatching('capybara-version.txt') {
-        expand(version: capybaraVersion)
+        expand(version: capybaraProjectVersion)
     }
     from(javaLibSourceDir) {
         into 'java-lib-src'
@@ -496,443 +807,288 @@ processResources {
 }
 
 application {
-    mainClass = 'dev.capylang.Capy'
-}
-
-test {
-    dependsOn ':lib:capybara-lib:classes'
-    classpath = files(
-            sourceSets.test.output,
-            capyClassesDir,
-            capyResourcesDir,
-            testRuntimeDependencies
-    )
+    mainClass = 'dev.capylang.cli.Capy'
 }
 
 def integrationTests = tasks.register('integrationTest', Test) {
     description = 'Runs compiler integration tests.'
-    group = 'verification'
+    group = capybaraTaskGroup
     testClassesDirs = sourceSets.integrationTest.output.classesDirs
     classpath = sourceSets.integrationTest.runtimeClasspath
     shouldRunAfter test
     useJUnitPlatform()
 }
 
-def registerE2eTestTask = { String taskName, String taskDescription, sourceSet, runtimeDependencies, String compileJavaTaskName, testResultsDir ->
-    tasks.register(taskName, InProcessCapybaraTestTask) {
-        description = taskDescription
-        group = 'verification'
-        dependsOn ':lib:capybara-lib:classes'
-        dependsOn tasks.named(compileJavaTaskName)
-        runtimeClasspath.from(files(
-                sourceSet.output,
-                sourceSets.main.output,
-                capybaraLibClassesDir,
-                capybaraLibResourcesDir,
-                runtimeDependencies
-        ))
-        outputDir.set(testResultsDir)
-        reportType.set('JUNIT')
-        logType.set('TC')
-        getTests().convention([])
-        getPrintAvailableTests().convention(false)
-        shouldRunAfter test
-    }
+def e2eJavaScriptTests = tasks.register('e2e-javascript') {
+    description = 'Runs Capybara e2e tests on JavaScript.'
+    group = capybaraTaskGroup
 }
 
-def e2eCfunTests = registerE2eTestTask(
-        'e2e-cfun',
-        'Runs functional Capybara e2e tests on Java.',
-        sourceSets.e2eCfun,
-        e2eCfunRuntimeDependencies,
-        'compileE2eCfunJava',
-        e2eCfunTestResultsDir
-)
-def e2eCooTests = registerE2eTestTask(
-        'e2e-coo',
-        'Runs object-oriented Capybara e2e tests on Java.',
-        sourceSets.e2eCoo,
-        e2eCooRuntimeDependencies,
-        'compileE2eCooJava',
-        e2eCooTestResultsDir
-)
-def e2eCooJavaNativeTests = registerE2eTestTask(
-        'e2e-coo-java-native',
-        'Runs object-oriented Java native provider Capybara e2e tests.',
-        sourceSets.e2eCooJavaNative,
-        e2eCooJavaNativeRuntimeDependencies,
-        'compileE2eCooJavaNativeJava',
-        e2eCooJavaNativeTestResultsDir
-)
-def jsTests = tasks.register('jsTests', NodeTask) {
-    description = 'Runs JavaScript tests.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    script.set(jsTestRunner)
-    workingDir.set(layout.projectDirectory)
-    args.set([jsTestSourcePath])
-    environment.put('CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath)
-    inputs.files(fileTree(jsTestSourcePath) {
-        include '**/*.js'
-    })
-            .withPropertyName('jsTestSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.files(capyRuntimeClasspath)
-            .withPropertyName('capyRuntimeClasspath')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    shouldRunAfter test
-}
-
-def pythonTests = tasks.register('pythonTests', Exec) {
-    description = 'Runs Python CLI tests.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    configurePythonTask(delegate)
-    workingDir layout.projectDirectory.asFile
-    args pyTestRunner.asFile.absolutePath, pyTestSourcePath
-    environment 'CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath
-    inputs.files(fileTree(pyTestSourcePath) {
-        include '**/*.py'
-    })
-            .withPropertyName('pyTestSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.files(capyRuntimeClasspath)
-            .withPropertyName('capyRuntimeClasspath')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    shouldRunAfter test
-}
-
-def capybaraRunnerArgs = { generatedDir, outputDir, tests, printAvailableTests ->
-    def runnerArgs = [
-            '--generated-dir', generatedDir.get().asFile.absolutePath,
-            '--output-dir', outputDir.get().asFile.absolutePath,
-            '--report-type', 'JUNIT',
-            '--log', 'TC'
-    ]
-    tests.getOrElse([]).each { test ->
-        runnerArgs.addAll(['--tests', test])
-    }
-    if (printAvailableTests.getOrElse(false)) {
-        runnerArgs.add('--available-tests')
-    }
-    runnerArgs
-}
-def resetCapybaraTestResults = { outputDir ->
-    def directory = outputDir.get().asFile
-    if (directory.exists()) {
-        directory.deleteDir()
-    }
-    directory.mkdirs()
-}
-
-def e2eCfunJsTests = tasks.register('e2e-cfun-js', CapybaraNodeTestTask) {
-    description = 'Runs functional Capybara e2e tests on JavaScript.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    script.set(capybaraJsTestRunner)
-    workingDir.set(layout.projectDirectory)
-    getTests().convention([])
-    getPrintAvailableTests().convention(false)
-    args.set(providers.provider { capybaraRunnerArgs(e2eCfunGeneratedJsDir, e2eCfunJsTestResultsDir, getTests(), getPrintAvailableTests()) })
-    doFirst {
-        resetCapybaraTestResults(e2eCfunJsTestResultsDir)
-    }
-    inputs.file(capybaraJsTestRunner)
-            .withPropertyName('capybaraJsTestRunner')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCfunGeneratedJsDir)
-            .withPropertyName('e2eCfunGeneratedJsSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(e2eCfunJsTestResultsDir)
-    shouldRunAfter e2eCfunTests
-}
-def e2eCooJsTests = tasks.register('e2e-coo-js', CapybaraNodeTestTask) {
-    description = 'Runs object-oriented Capybara e2e tests on JavaScript.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    script.set(capybaraJsTestRunner)
-    workingDir.set(layout.projectDirectory)
-    getTests().convention([])
-    getPrintAvailableTests().convention(false)
-    args.set(providers.provider { capybaraRunnerArgs(e2eCooGeneratedJsDir, e2eCooJsTestResultsDir, getTests(), getPrintAvailableTests()) })
-    doFirst {
-        resetCapybaraTestResults(e2eCooJsTestResultsDir)
-    }
-    inputs.file(capybaraJsTestRunner)
-            .withPropertyName('capybaraJsTestRunner')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooGeneratedJsDir)
-            .withPropertyName('e2eCooGeneratedJsSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(e2eCooJsTestResultsDir)
-    shouldRunAfter e2eCooTests
-}
-
-def e2eCooJsNativeTests = tasks.register('e2e-coo-js-native', CapybaraNodeTestTask) {
-    description = 'Runs object-oriented JavaScript native provider Capybara e2e tests.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    dependsOn 'copyE2eCooJsNativeFixtures'
-    script.set(capybaraJsTestRunner)
-    workingDir.set(layout.projectDirectory)
-    getTests().convention([])
-    getPrintAvailableTests().convention(false)
-    args.set(providers.provider { capybaraRunnerArgs(e2eCooJsNativeGeneratedJsDir, e2eCooJsNativeTestResultsDir, getTests(), getPrintAvailableTests()) })
-    doFirst {
-        resetCapybaraTestResults(e2eCooJsNativeTestResultsDir)
-    }
-    inputs.file(capybaraJsTestRunner)
-            .withPropertyName('capybaraJsTestRunner')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooJsNativeGeneratedJsDir)
-            .withPropertyName('e2eCooJsNativeGeneratedJsSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooJsNativeJsSourceDir)
-            .withPropertyName('e2eCooJsNativeJsSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(e2eCooJsNativeTestResultsDir)
-    shouldRunAfter e2eCooJsTests
-}
-
-def e2eCfunPythonTests = tasks.register('e2e-cfun-python', CapybaraPythonTestTask) {
-    description = 'Runs functional Capybara e2e tests on Python.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    configurePythonTask(delegate)
-    workingDir layout.projectDirectory.asFile
-    getTests().convention([])
-    getPrintAvailableTests().convention(false)
-    doFirst {
-        resetCapybaraTestResults(e2eCfunPyTestResultsDir)
-        setArgs([capybaraPyTestRunner.asFile.absolutePath] + capybaraRunnerArgs(e2eCfunGeneratedPyDir, e2eCfunPyTestResultsDir, getTests(), getPrintAvailableTests()))
-    }
-    inputs.file(capybaraPyTestRunner)
-            .withPropertyName('capybaraPyTestRunner')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCfunGeneratedPyDir)
-            .withPropertyName('e2eCfunGeneratedPySources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(e2eCfunPyTestResultsDir)
-    shouldRunAfter e2eCfunJsTests
-}
-
-def e2eCooPythonTests = tasks.register('e2e-coo-python', CapybaraPythonTestTask) {
-    description = 'Runs object-oriented Capybara e2e tests on Python.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    configurePythonTask(delegate)
-    workingDir layout.projectDirectory.asFile
-    getTests().convention([])
-    getPrintAvailableTests().convention(false)
-    doFirst {
-        resetCapybaraTestResults(e2eCooPyTestResultsDir)
-        setArgs([capybaraPyTestRunner.asFile.absolutePath] + capybaraRunnerArgs(e2eCooGeneratedPyDir, e2eCooPyTestResultsDir, getTests(), getPrintAvailableTests()))
-    }
-    inputs.file(capybaraPyTestRunner)
-            .withPropertyName('capybaraPyTestRunner')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooGeneratedPyDir)
-            .withPropertyName('e2eCooGeneratedPySources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(e2eCooPyTestResultsDir)
-    shouldRunAfter e2eCooJsTests
-}
-
-def e2eCooPythonNativeTests = tasks.register('e2e-coo-python-native', CapybaraPythonTestTask) {
-    description = 'Runs object-oriented Python native provider Capybara e2e tests.'
-    group = 'verification'
-    dependsOn ':capy:classes'
-    dependsOn 'copyE2eCooPyNativeFixtures'
-    configurePythonTask(delegate)
-    workingDir layout.projectDirectory.asFile
-    getTests().convention([])
-    getPrintAvailableTests().convention(false)
-    doFirst {
-        resetCapybaraTestResults(e2eCooPyNativeTestResultsDir)
-        setArgs([capybaraPyTestRunner.asFile.absolutePath] + capybaraRunnerArgs(e2eCooPyNativeGeneratedPyDir, e2eCooPyNativeTestResultsDir, getTests(), getPrintAvailableTests()))
-    }
-    inputs.file(capybaraPyTestRunner)
-            .withPropertyName('capybaraPyTestRunner')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooPyNativeGeneratedPyDir)
-            .withPropertyName('e2eCooPyNativeGeneratedPySources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.dir(e2eCooPyNativePySourceDir)
-            .withPropertyName('e2eCooPyNativePySources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(e2eCooPyNativeTestResultsDir)
-    shouldRunAfter e2eCooPythonTests
-}
-
-tasks.register('e2eTests') {
-    description = 'Runs all e2e tests.'
-    group = 'verification'
-    dependsOn e2eCfunTests
-    dependsOn e2eCfunJsTests
-    dependsOn e2eCfunPythonTests
-    dependsOn e2eCooTests
-    dependsOn e2eCooJavaNativeTests
-    dependsOn e2eCooJsTests
-    dependsOn e2eCooJsNativeTests
-    dependsOn e2eCooPythonTests
-    dependsOn e2eCooPythonNativeTests
+def e2ePythonTests = tasks.register('e2e-python') {
+    description = 'Runs Capybara e2e tests on Python.'
+    group = capybaraTaskGroup
 }
 
 check {
     dependsOn integrationTests
-    dependsOn e2eCfunTests
-    dependsOn e2eCfunJsTests
-    dependsOn e2eCfunPythonTests
-    dependsOn e2eCooTests
-    dependsOn e2eCooJavaNativeTests
-    dependsOn e2eCooJsTests
-    dependsOn e2eCooJsNativeTests
-    dependsOn e2eCooPythonTests
-    dependsOn e2eCooPythonNativeTests
-    dependsOn jsTests
-    dependsOn pythonTests
 }
 
-def registerCapybaraE2eLinkTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir ->
+def registerCapybaraE2eGenerationTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir, boolean compileAgainstCapybaraLibSources = false ->
     tasks.register(taskName, InProcessCapybaraCompileTask) {
-        group = 'build'
+        group = capybaraTaskGroup
         description = taskDescription
-        dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
         dependsOn ':capy:classes'
 
         runtimeClasspath.from(capyRuntimeClasspath)
-        inputDir.set(capybaraInputDir)
-        additionalInputDirs.from(capybaraLibLinkedDir)
-        linkedOutputDir.set(capybaraLinkedOutputDir)
-        generatedOutputDir.set(capybaraGeneratedOutputDir)
-        compileTests.set(true)
-        includeJavaLibResources.set(false)
+        if (compileAgainstCapybaraLibSources) {
+            getInputDir().set(capybaraLibSourceDir)
+            getTestInputDir().set(capybaraInputDir)
+            getGeneratedTestOutputDir().set(capybaraGeneratedOutputDir)
+        } else {
+            getInputDir().set(capybaraInputDir)
+        }
+        getLinkedOutputDir().set(capybaraLinkedOutputDir)
+        getGeneratedOutputDir().set(capybaraGeneratedOutputDir)
         compilerVersion.set(project.version.toString())
         getOutputTypeName().set(outputTypeName)
     }
 }
 
-def linkCapybaraE2eCfunSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCfunSources',
-        'Compiles functional e2e-test Capybara files and generates Java in one pass without launching a separate JVM.',
-        'JAVA',
-        e2eCfunCapybaraSourceDir,
-        e2eCfunLinkedOutputDir,
-        e2eCfunGeneratedJavaDir
-)
-def linkCapybaraE2eCfunJsSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCfunJsSources',
+def generateE2eJavaScriptCfun = registerCapybaraE2eGenerationTask(
+        'generateE2eJavaScriptCfun',
         'Compiles functional e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
         'JAVASCRIPT',
         e2eCfunCapybaraSourceDir,
-        e2eCfunLinkedJsOutputDir,
-        e2eCfunGeneratedJsDir
+        e2eCfunLinkedJavaScriptOutputDir,
+        e2eCfunGeneratedJavaScriptDir,
+        true
 )
-def linkCapybaraE2eCfunPySources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCfunPySources',
+
+def e2eJavaScriptCfunTests = tasks.register('e2e-javascript-cfun', CapybaraJavaScriptTestTask) {
+    description = 'Runs functional Capybara e2e tests on JavaScript.'
+    group = capybaraTaskGroup
+    dependsOn generateE2eJavaScriptCfun
+
+    runnerFile.set(capybaraJavaScriptTestRunner)
+    generatedDir.set(e2eCfunGeneratedJavaScriptDir)
+    outputDir.set(e2eCfunJavaScriptTestResultsDir)
+    executionDir.set(layout.projectDirectory)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
+}
+
+def generateE2ePythonCfun = registerCapybaraE2eGenerationTask(
+        'generateE2ePythonCfun',
         'Compiles functional e2e-test Capybara files and generates Python in one pass without launching a separate JVM.',
         'PYTHON',
         e2eCfunCapybaraSourceDir,
-        e2eCfunLinkedPyOutputDir,
-        e2eCfunGeneratedPyDir
+        e2eCfunLinkedPythonOutputDir,
+        e2eCfunGeneratedPythonDir,
+        true
 )
-def linkCapybaraE2eCooSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCooSources',
-        'Compiles object-oriented e2e-test Capybara files and generates Java in one pass without launching a separate JVM.',
-        'JAVA',
-        e2eCooCapybaraSourceDir,
-        e2eCooLinkedOutputDir,
-        e2eCooGeneratedJavaDir
+
+def generatePythonCompiler = registerCapybaraE2eGenerationTask(
+        'generatePythonCompiler',
+        'Compiles the Capybara compiler sources and generates Python.',
+        'PYTHON',
+        capybaraPreparedMainSourceDir,
+        capybaraLinkedCompilerPythonOutputDir,
+        capybaraGeneratedCompilerPythonDir
 )
-def linkCapybaraE2eCooJavaNativeSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCooJavaNativeSources',
-        'Compiles object-oriented Java native provider e2e-test Capybara files and generates Java in one pass without launching a separate JVM.',
-        'JAVA',
-        e2eCooJavaNativeCapybaraSourceDir,
-        e2eCooJavaNativeLinkedOutputDir,
-        e2eCooJavaNativeGeneratedJavaDir
+generatePythonCompiler.configure {
+    dependsOn prepareMainCapybaraSources
+    dependsOn tasks.named('generatePythonAntlr')
+}
+
+def generateJavaScriptCompiler = registerCapybaraE2eGenerationTask(
+        'generateJavaScriptCompiler',
+        'Compiles the Capybara compiler sources and generates JavaScript.',
+        'JAVASCRIPT',
+        capybaraPreparedMainSourceDir,
+        capybaraLinkedCompilerJavaScriptOutputDir,
+        capybaraGeneratedCompilerJavaScriptDir
 )
-def linkCapybaraE2eCooJsSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCooJsSources',
+generateJavaScriptCompiler.configure {
+    dependsOn prepareMainCapybaraSources
+    dependsOn tasks.named('generateJavaScriptAntlr')
+}
+
+def prepareJavaScriptCompilerRuntime = tasks.register('prepareJavaScriptCompilerRuntime', Sync) {
+    description = 'Prepares generated JavaScript compiler output with JavaScript native provider shims.'
+    group = capybaraTaskGroup
+    dependsOn generateJavaScriptCompiler
+
+    from(capybaraGeneratedCompilerJavaScriptDir) {
+        exclude 'dev/capylang/compiler/parser/CapybaraParserProvider.js'
+    }
+    from(capybaraMainJavaScriptSourceDir) {
+        include 'dev/**'
+    }
+    into capybaraRuntimeCompilerJavaScriptDir
+}
+
+tasks.register('pythonNativeParserSmoke', Exec) {
+    description = 'Runs the generated Python compiler parser through the Python native parser implementation.'
+    group = capybaraTaskGroup
+    dependsOn generatePythonCompiler
+    dependsOn tasks.named('generatePythonAntlr')
+    dependsOn tasks.named('installPythonAntlrRuntime')
+
+    inputs.file(pythonNativeParserSmokeScript)
+            .withPropertyName('pythonNativeParserSmokeScript')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(capybaraGeneratedCompilerPythonDir)
+            .withPropertyName('generatedPythonCompiler')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(capybaraMainPythonSourceDir)
+            .withPropertyName('mainPythonSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(pythonAntlrGeneratedDir)
+            .withPropertyName('pythonAntlrGeneratedSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(pythonAntlrRuntimeDir)
+            .withPropertyName('pythonAntlrRuntime')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(pythonNativeParserSmokeResultsDir)
+
+    doFirst {
+        def outputDir = pythonNativeParserSmokeResultsDir.get().asFile
+        outputDir.mkdirs()
+        def pythonPathEntries = [
+                capybaraGeneratedCompilerPythonDir.get().asFile.absolutePath,
+                capybaraMainPythonSourceDir.asFile.absolutePath,
+                pythonAntlrGeneratedDir.get().asFile.absolutePath,
+                pythonAntlrRuntimeDir.get().asFile.absolutePath
+        ]
+        def existingPythonPath = System.getenv('PYTHONPATH')
+        if (existingPythonPath != null && !existingPythonPath.isBlank()) {
+            pythonPathEntries.add(existingPythonPath)
+        }
+        commandLine systemPythonExecutable(), pythonNativeParserSmokeScript.asFile.absolutePath
+        environment 'PYTHONPATH', pythonPathEntries.join(File.pathSeparator)
+        environment 'PYTHON_NATIVE_PARSER_SMOKE_OUTPUT', outputDir.absolutePath
+    }
+}
+
+tasks.register('javascriptNativeParserSmoke', Exec) {
+    description = 'Runs the generated JavaScript compiler parser through the JavaScript native parser implementation.'
+    group = capybaraTaskGroup
+    dependsOn prepareJavaScriptCompilerRuntime
+    dependsOn tasks.named('generateJavaScriptAntlr')
+    dependsOn tasks.named('installJavaScriptAntlrRuntime')
+
+    inputs.file(javascriptNativeParserSmokeScript)
+            .withPropertyName('javascriptNativeParserSmokeScript')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(capybaraRuntimeCompilerJavaScriptDir)
+            .withPropertyName('runtimeJavaScriptCompiler')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(javascriptAntlrGeneratedDir)
+            .withPropertyName('javascriptAntlrGeneratedSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(javascriptAntlrRuntimeDir)
+            .withPropertyName('javascriptAntlrRuntime')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(javascriptNativeParserSmokeResultsDir)
+
+    doFirst {
+        def outputDir = javascriptNativeParserSmokeResultsDir.get().asFile
+        outputDir.mkdirs()
+        def nodePathEntries = [
+                capybaraRuntimeCompilerJavaScriptDir.get().asFile.absolutePath,
+                javascriptAntlrGeneratedDir.get().asFile.absolutePath,
+                new File(javascriptAntlrRuntimeDir.get().asFile, 'node_modules').absolutePath
+        ]
+        def existingNodePath = System.getenv('NODE_PATH')
+        if (existingNodePath != null && !existingNodePath.isBlank()) {
+            nodePathEntries.add(existingNodePath)
+        }
+        commandLine 'node', javascriptNativeParserSmokeScript.asFile.absolutePath
+        environment 'NODE_PATH', nodePathEntries.join(File.pathSeparator)
+        environment 'JAVASCRIPT_NATIVE_PARSER_SMOKE_OUTPUT', outputDir.absolutePath
+    }
+}
+
+def e2ePythonCfunTests = tasks.register('e2e-python-cfun', CapybaraPythonTestTask) {
+    description = 'Runs functional Capybara e2e tests on Python.'
+    group = capybaraTaskGroup
+    dependsOn generateE2ePythonCfun
+
+    runnerFile.set(capybaraPythonTestRunner)
+    generatedDir.set(e2eCfunGeneratedPythonDir)
+    outputDir.set(e2eCfunPythonTestResultsDir)
+    executionDir.set(layout.projectDirectory)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
+}
+
+def generateE2eJavaScriptCoo = registerCapybaraE2eGenerationTask(
+        'generateE2eJavaScriptCoo',
         'Compiles object-oriented e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
         'JAVASCRIPT',
         e2eCooCapybaraSourceDir,
-        e2eCooLinkedJsOutputDir,
-        e2eCooGeneratedJsDir
+        e2eCooLinkedJavaScriptOutputDir,
+        e2eCooGeneratedJavaScriptDir,
+        true
 )
-def linkCapybaraE2eCooJsNativeSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCooJsNativeSources',
-        'Compiles object-oriented JavaScript native provider e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
-        'JAVASCRIPT',
-        e2eCooJsNativeCapybaraSourceDir,
-        e2eCooJsNativeLinkedOutputDir,
-        e2eCooJsNativeGeneratedJsDir
-)
-def copyE2eCooJsNativeFixtures = tasks.register('copyE2eCooJsNativeFixtures', Copy) {
-    dependsOn linkCapybaraE2eCooJsNativeSources
-    from(e2eCooJsNativeJsSourceDir)
-    into(e2eCooJsNativeGeneratedJsDir)
+
+def e2eJavaScriptCooTests = tasks.register('e2e-javascript-coo', CapybaraJavaScriptTestTask) {
+    description = 'Runs object-oriented Capybara e2e tests on JavaScript.'
+    group = capybaraTaskGroup
+    dependsOn generateE2eJavaScriptCoo
+
+    runnerFile.set(capybaraJavaScriptTestRunner)
+    generatedDir.set(e2eCooGeneratedJavaScriptDir)
+    outputDir.set(e2eCooJavaScriptTestResultsDir)
+    executionDir.set(layout.projectDirectory)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
 }
-def copyE2eCooJsNativeWiringFixtures = tasks.register('copyE2eCooJsNativeWiringFixtures', Copy) {
-    dependsOn linkCapybaraE2eCooJsSources
-    from(e2eCooNativeJsSourceDir)
-    into(e2eCooGeneratedJsDir)
-}
-def linkCapybaraE2eCooPySources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCooPySources',
+
+def generateE2ePythonCoo = registerCapybaraE2eGenerationTask(
+        'generateE2ePythonCoo',
         'Compiles object-oriented e2e-test Capybara files and generates Python in one pass without launching a separate JVM.',
         'PYTHON',
         e2eCooCapybaraSourceDir,
-        e2eCooLinkedPyOutputDir,
-        e2eCooGeneratedPyDir
+        e2eCooLinkedPythonOutputDir,
+        e2eCooGeneratedPythonDir,
+        true
 )
-def linkCapybaraE2eCooPyNativeSources = registerCapybaraE2eLinkTask(
-        'linkCapybaraE2eCooPyNativeSources',
-        'Compiles object-oriented Python native provider e2e-test Capybara files and generates Python in one pass without launching a separate JVM.',
-        'PYTHON',
-        e2eCooPyNativeCapybaraSourceDir,
-        e2eCooPyNativeLinkedOutputDir,
-        e2eCooPyNativeGeneratedPyDir
-)
-def copyE2eCooPyNativeFixtures = tasks.register('copyE2eCooPyNativeFixtures', Copy) {
-    dependsOn linkCapybaraE2eCooPyNativeSources
-    from(e2eCooPyNativePySourceDir)
-    into(e2eCooPyNativeGeneratedPyDir)
-}
-def copyE2eCooPyNativeWiringFixtures = tasks.register('copyE2eCooPyNativeWiringFixtures', Copy) {
-    dependsOn linkCapybaraE2eCooPySources
-    from(e2eCooNativePySourceDir)
-    into(e2eCooGeneratedPyDir)
+
+def e2ePythonCooTests = tasks.register('e2e-python-coo', CapybaraPythonTestTask) {
+    description = 'Runs object-oriented Capybara e2e tests on Python.'
+    group = capybaraTaskGroup
+    dependsOn generateE2ePythonCoo
+
+    runnerFile.set(capybaraPythonTestRunner)
+    generatedDir.set(e2eCooGeneratedPythonDir)
+    outputDir.set(e2eCooPythonTestResultsDir)
+    executionDir.set(layout.projectDirectory)
+    nativePythonDir.set(e2eCooNativePythonDir)
+    reportType.set('JUNIT')
+    logType.set('TC')
+    operatingSystemName.set(providers.systemProperty('os.name'))
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
 }
 
-tasks.named('compileE2eCfunJava') {
-    dependsOn linkCapybaraE2eCfunSources
+e2eJavaScriptTests.configure {
+    dependsOn e2eJavaScriptCfunTests
+    dependsOn e2eJavaScriptCooTests
 }
 
-tasks.named('e2e-cfun-js') {
-    dependsOn linkCapybaraE2eCfunJsSources
-}
-
-tasks.named('e2e-cfun-python') {
-    dependsOn linkCapybaraE2eCfunPySources
-}
-
-tasks.named('compileE2eCooJava') {
-    dependsOn linkCapybaraE2eCooSources
-}
-
-tasks.named('compileE2eCooJavaNativeJava') {
-    dependsOn linkCapybaraE2eCooJavaNativeSources
-}
-
-tasks.named('e2e-coo-js') {
-    dependsOn linkCapybaraE2eCooJsSources
-    dependsOn copyE2eCooJsNativeWiringFixtures
-}
-
-tasks.named('e2e-coo-python') {
-    dependsOn linkCapybaraE2eCooPySources
-    dependsOn copyE2eCooPyNativeWiringFixtures
+e2ePythonTests.configure {
+    dependsOn e2ePythonCfunTests
+    dependsOn e2ePythonCooTests
 }
 
 jar {
@@ -945,53 +1101,5 @@ jar {
         configurations.runtimeClasspath
                 .findAll { it.exists() }
                 .collect { it.isDirectory() ? it : zipTree(it) }
-    }
-}
-
-def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
-def nativeImageExecutableName = isWindows ? 'native-image.cmd' : 'native-image'
-def nativeBinaryBaseName = "capyc-${project.version}"
-def nativeBinaryName = isWindows ? "${nativeBinaryBaseName}.exe" : nativeBinaryBaseName
-
-tasks.register('nativeCompile', Exec) {
-    group = 'build'
-    description = 'Builds a GraalVM native binary for the CLI application.'
-
-    def jarTask = tasks.named('jar')
-    def jarArchive = jarTask.flatMap { it.archiveFile }
-    def nativeRuntimeClasspath = files(jarArchive, sourceSets.main.runtimeClasspath)
-    def mainClassName = application.mainClass
-
-    dependsOn jarTask
-
-    def outputDir = layout.buildDirectory.dir('native/nativeCompile')
-    def nativeImageOutput = outputDir.map { it.file(nativeBinaryBaseName).asFile }
-    def outputBinary = outputDir.map { it.file(nativeBinaryName).asFile }
-
-    inputs.files(nativeRuntimeClasspath)
-    outputs.file(outputBinary)
-
-    doFirst {
-        var javaHome = System.getenv('GRAALVM_HOME') ?: System.getenv('JAVA_HOME')
-        if (javaHome == null || javaHome.isBlank()) {
-            throw new GradleException('Set GRAALVM_HOME (or JAVA_HOME pointing to GraalVM) to build native binary.')
-        }
-
-        var nativeImage = new File(javaHome, "bin/${nativeImageExecutableName}")
-        if (!nativeImage.exists()) {
-            throw new GradleException("native-image not found at `${nativeImage}`. Install GraalVM Native Image.")
-        }
-
-        var output = outputBinary.get()
-        output.parentFile.mkdirs()
-        var imageOutput = nativeImageOutput.get()
-
-        commandLine(
-                nativeImage.absolutePath,
-                '--no-fallback',
-                '-cp', nativeRuntimeClasspath.asPath,
-                mainClassName.get(),
-                imageOutput.absolutePath
-        )
     }
 }

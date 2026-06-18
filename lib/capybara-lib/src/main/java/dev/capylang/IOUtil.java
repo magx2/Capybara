@@ -1,8 +1,5 @@
 package dev.capylang;
 
-import capy.io.Path;
-import capy.lang.Result;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.CopyOption;
@@ -10,12 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Map;
 
 public final class IOUtil {
     private IOUtil() {
     }
 
-    public static Result<String> readText(Path path) {
+    public static Object readText(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(Files.readString(javaPath, StandardCharsets.UTF_8));
@@ -24,7 +22,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<String>> readLines(Path path) {
+    public static Object readLines(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(Files.readAllLines(javaPath, StandardCharsets.UTF_8));
@@ -33,7 +31,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<Byte>> readBytes(Path path) {
+    public static Object readBytes(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(toByteList(Files.readAllBytes(javaPath)));
@@ -42,7 +40,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<String> writeText(Path path, String text) {
+    public static Object writeText(Object path, String text) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             Files.writeString(
@@ -59,7 +57,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<String>> writeLines(Path path, List<String> lines) {
+    public static Object writeLines(Object path, List<String> lines) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             Files.write(
@@ -76,7 +74,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<Byte>> writeBytes(Path path, List<Byte> bytes) {
+    public static Object writeBytes(Object path, List<Byte> bytes) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             Files.write(
@@ -92,7 +90,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<String> appendText(Path path, String text) {
+    public static Object appendText(Object path, String text) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             Files.writeString(
@@ -109,7 +107,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<String>> appendLines(Path path, List<String> lines) {
+    public static Object appendLines(Object path, List<String> lines) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             Files.write(
@@ -126,7 +124,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<Byte>> appendBytes(Path path, List<Byte> bytes) {
+    public static Object appendBytes(Object path, List<Byte> bytes) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             Files.write(
@@ -142,19 +140,19 @@ public final class IOUtil {
         }
     }
 
-    public static boolean exists(Path path) {
+    public static boolean exists(Object path) {
         return Files.exists(PathUtil.toJavaPath(path));
     }
 
-    public static boolean isFile(Path path) {
+    public static boolean isFile(Object path) {
         return Files.isRegularFile(PathUtil.toJavaPath(path));
     }
 
-    public static boolean isDirectory(Path path) {
+    public static boolean isDirectory(Object path) {
         return Files.isDirectory(PathUtil.toJavaPath(path));
     }
 
-    public static Result<Long> size(Path path) {
+    public static Object size(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(Files.size(javaPath));
@@ -163,7 +161,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<Path> createFile(Path path) {
+    public static Object createFile(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(PathUtil.fromJavaPath(Files.createFile(javaPath)));
@@ -172,7 +170,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<Path> createDirectory(Path path) {
+    public static Object createDirectory(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(PathUtil.fromJavaPath(Files.createDirectory(javaPath)));
@@ -181,7 +179,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<Path> createDirectories(Path path) {
+    public static Object createDirectories(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(PathUtil.fromJavaPath(Files.createDirectories(javaPath)));
@@ -190,7 +188,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<List<Path>> listEntries(Path path) {
+    public static Object listEntries(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try (var entries = Files.list(javaPath)) {
             return success(entries
@@ -201,7 +199,7 @@ public final class IOUtil {
         }
     }
 
-    public static Result<Boolean> delete(Path path) {
+    public static Object delete(Object path) {
         var javaPath = PathUtil.toJavaPath(path);
         try {
             return success(Files.deleteIfExists(javaPath));
@@ -210,23 +208,23 @@ public final class IOUtil {
         }
     }
 
-    public static Result<Path> copy(Path source, Path target) {
+    public static Object copy(Object source, Object target) {
         return copyWithOptions(source, target, "copy");
     }
 
-    public static Result<Path> copyReplace(Path source, Path target) {
+    public static Object copyReplace(Object source, Object target) {
         return copyWithOptions(source, target, "copy_replace", StandardCopyOption.REPLACE_EXISTING);
     }
 
-    public static Result<Path> move(Path source, Path target) {
+    public static Object move(Object source, Object target) {
         return moveWithOptions(source, target, "move");
     }
 
-    public static Result<Path> moveReplace(Path source, Path target) {
+    public static Object moveReplace(Object source, Object target) {
         return moveWithOptions(source, target, "move_replace", StandardCopyOption.REPLACE_EXISTING);
     }
 
-    private static Result<Path> copyWithOptions(Path source, Path target, String operation, CopyOption... options) {
+    private static Object copyWithOptions(Object source, Object target, String operation, CopyOption... options) {
         var javaSource = PathUtil.toJavaPath(source);
         var javaTarget = PathUtil.toJavaPath(target);
         try {
@@ -236,7 +234,7 @@ public final class IOUtil {
         }
     }
 
-    private static Result<Path> moveWithOptions(Path source, Path target, String operation, CopyOption... options) {
+    private static Object moveWithOptions(Object source, Object target, String operation, CopyOption... options) {
         var javaSource = PathUtil.toJavaPath(source);
         var javaTarget = PathUtil.toJavaPath(target);
         try {
@@ -246,17 +244,17 @@ public final class IOUtil {
         }
     }
 
-    private static <T> Result<T> success(T value) {
-        return new Result.Success<>(value);
+    private static Object success(Object value) {
+        return Map.of("__type", "Success", "value", value);
     }
 
-    private static <T> Result<T> error(String operation, java.nio.file.Path path, Exception e) {
+    private static Object error(String operation, java.nio.file.Path path, Exception e) {
         return error(operation, path.toString(), e);
     }
 
-    private static <T> Result<T> error(String operation, String path, Exception e) {
+    private static Object error(String operation, String path, Exception e) {
         var message = operation + " failed for `" + path + "`: " + e.getMessage();
-        return new Result.Error<>(new CapybaraException(message, e));
+        return Map.of("__type", "Error", "message", message);
     }
 
     private static byte[] toByteArray(List<Byte> values) {

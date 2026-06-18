@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 This repository is a Gradle multi-project build (`settings.gradle`) with these main modules:
-- `capy/`: CLI entrypoint (`dev.capylang.Capy`), compiler/parser/generator sources (`src/main/antlr`, `src/main/java`), compiler tests, and integration/e2e tests (`src/e2e-cfun` and `src/e2e-coo` source sets).
+- `capy/`: CLI entrypoint (`dev.capylang.cli.Capy`), compiler/parser/generator sources (`src/main/antlr`, `src/main/java`), compiler tests, and integration/e2e tests (`src/e2e-cfun` and `src/e2e-coo` source sets).
 - `lib/java-lib/`: shared Java helpers.
 - `lib/capybara-lib/`: standard library written in Capybara (`src/main/capybara`) plus generated Java tests.
 - `Intellij/`: editor syntax bundle and related docs.

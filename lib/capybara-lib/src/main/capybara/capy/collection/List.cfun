@@ -7,6 +7,14 @@ from /capy/meta_prog/Recursive import { Recursive }
 
 /// Native ordered collection type backed by the runtime List implementation.
 /// List literals use square brackets: [1, 2, 3].
+///
+/// Example:
+/// ```cfun
+/// let values = [1, 2, 3]
+/// values + 4
+/// ```
+/// Lists are immutable: `values + 4` returns a new list and leaves `values`
+/// unchanged.
 data List[T] { <native> }
 
 /// Returns the number of values in this List.
@@ -75,6 +83,12 @@ fun List[T].contains(value: T): bool =
 fun List[T].`?`(value: T): bool = this.contains(value)
 
 /// Combines all values from left to right.
+///
+/// Example:
+/// ```cfun
+/// [1, 2, 3] |> 0, (total, value) => total + value
+/// ```
+/// Returns `6`.
 fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
     @Recursive
     fun reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
@@ -102,6 +116,15 @@ fun List[T].fold(reducer: (T, T) => T): Option[T] =
     case Some { value } -> Some { reduce(this, 1, value, reducer) }
 
 /// Transforms each value using `map`.
+///
+/// `map` returns a lazy `Seq`, so call `as_list()` when a materialized list is
+/// needed.
+///
+/// Example:
+/// ```cfun
+/// ([1, 2, 3] | value => value * 2).as_list()
+/// ```
+/// Returns `[2, 4, 6]`.
 fun List[T].map(map: T => Y): Seq[Y] =
     fun map_values(list: List[T], idx: int, map: T => Y): Seq[Y] =
         match list[idx] with
@@ -114,6 +137,12 @@ fun List[T].map(map: T => Y): Seq[Y] =
 fun List[T].`|`(map: T => Y): Seq[Y] = this.map(map)
 
 /// Returns a sequence containing only values that satisfy `predicate`.
+///
+/// Example:
+/// ```cfun
+/// ([1, 2, 3, 4] |- value => value > 2).as_list()
+/// ```
+/// Returns `[3, 4]`.
 fun List[T].filter(predicate: T => bool): Seq[T] =
     fun filter(list: List[T], idx: int, predicate: T => bool): Seq[T] =
         match list[idx] with
@@ -141,6 +170,12 @@ fun List[T].reject(predicate: T => bool): Seq[T] =
 fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
 
 /// Applies `map` to each value and concatenates the resulting lists.
+///
+/// Example:
+/// ```cfun
+/// ([1, 2] |* value => [value, value * 10]).as_list()
+/// ```
+/// Returns `[1, 10, 2, 20]`.
 fun List[T].flat_map(map: T => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, value) => acc + map(value)))
 
 /// Applies `map` to each value and concatenates the resulting lists.
@@ -152,9 +187,13 @@ fun List[T].`|*`(map: T => List[Y]): Seq[Y] = this.flat_map(map)
 fun List[T].sort(compare: (T, T) => Ordering): List[T] = sort_list(this, compare)
 
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
+///
+/// Example: `[10, 20, 30].get(-1)` returns `Some { value: 30 }`.
 fun List[T].get(idx: index): Option[T] = <native>
 
 /// Returns the values in the half-open range [from, to) using the same bounds and negative-index rules as list[from:to].
+///
+/// Example: `[10, 20, 30, 40].get(1, 3)` returns `[20, 30]`.
 fun List[T].get(from: int, to: int): List[T] = <native>
 
 private fun sort_list(list: List[T], compare: (T, T) => Ordering): List[T] =

@@ -1,0 +1,10 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+
+data CompiledDeriverDeclaration {
+    name: String,
+    visibility: String,
+    methods: List[CompiledFunction],
+    location: CompiledSourceLocation
+}

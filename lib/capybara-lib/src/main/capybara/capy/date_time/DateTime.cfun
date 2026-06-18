@@ -9,15 +9,26 @@ from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
 /// Combination of a UTC calendar date and time of day.
+///
+/// Example:
+/// ```cfun
+/// DateTime { date: UNIX_DATE, time: MIDNIGHT }
+/// ```
+/// Use `from_iso_8601` for parsing strings and `from_timestamp` for Unix
+/// timestamp values.
 data DateTime { date: Date, time: Time }
 
 /// Unix epoch date-time (`1970-01-01T00:00:00Z`).
 const UNIX_EPOCH: DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
+///
+/// Example: `UNIX_EPOCH.timestamp()` returns `0L`.
 fun DateTime.timestamp(): long = 1L * this.date.to_days_since_unix_epoch() * SECONDS_IN_DAY + this.time.to_seconds()
 
 /// Converts a Unix timestamp (seconds since `1970-01-01T00:00:00Z`) to a `DateTime`.
+///
+/// Example: `from_timestamp(86400L)` returns `1970-01-02T00:00:00Z`.
 fun from_timestamp(timestamp: long): DateTime =
     let seconds_in_day = 1L * SECONDS_IN_DAY
     let days = floor_div(timestamp, seconds_in_day)
@@ -29,6 +40,15 @@ fun from_timestamp(timestamp: long): DateTime =
     }
 
 /// Adds a `Duration` to this `DateTime`.
+///
+/// Example:
+/// ```cfun
+/// UNIX_EPOCH + DateDuration {
+///     years: 0, months: 0, days: 1,
+///     hours: 2, minutes: 0, seconds: 0
+/// }
+/// ```
+/// Returns `1970-01-02T02:00:00Z`.
 fun DateTime.plus(duration: Duration): DateTime =
     let date_with_months = this.date.add_years_months(duration.years(), duration.months())
     let days_from_hours = floor_div(duration.hours(), HOURS_IN_DAY)
@@ -55,6 +75,12 @@ fun DateTime.minus(duration: Duration): DateTime = this.plus(duration.negate())
 fun DateTime.`-`(duration: Duration): DateTime = this.minus(duration)
 
 /// Returns the duration from `other` to this `DateTime`.
+///
+/// Example:
+/// ```cfun
+/// from_timestamp(90L).minus(UNIX_EPOCH)
+/// ```
+/// Returns a duration of 1 minute and 30 seconds.
 fun DateTime.minus(other: DateTime): Duration =
     fun positive_duration_from_seconds(total_seconds: long): Duration =
         let days = floor_div(total_seconds, SECONDS_IN_DAY)
@@ -106,6 +132,13 @@ fun DateTime.`<`(other: DateTime): bool = this.less_than(other)
 fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)
 
 /// Formats this date-time as a canonical UTC ISO 8601 string.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("2026-06-18T14:30:00+02:00")
+///     .map(datetime => datetime.to_iso_8601())
+/// ```
+/// Returns `2026-06-18T12:30:00Z` after applying the offset.
 fun DateTime.to_iso_8601(): String =
     fun format_utc(datetime: DateTime): String =
         datetime.date.to_iso_8601() + "T" + datetime.time.to_iso_8601() + "Z"
@@ -131,6 +164,13 @@ fun DateTime.to_iso_8601(): String =
     format_utc(normalize_to_utc(this))
 
 /// Parses a UTC ISO 8601 date-time in basic or extended form.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("2026-06-18T12:30:00Z")
+/// from_iso_8601("20260618T123000Z")
+/// ```
+/// Both forms return the same UTC `DateTime`.
 fun from_iso_8601(iso: String): Result[DateTime] =
     data Split { left: String, right: String }
     data SplitScan { left: String, right: String, seen_separator: bool }

@@ -7,9 +7,25 @@ from /capy/collection/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
+/// Regular expression value used by matching, replacement, and split helpers.
+///
+/// Regex values can be created from regex literals or with `from_literal`.
+///
+/// Example:
+/// ```cfun
+/// let digits = from_literal("\\d+", "")
+/// digits.matches("123")
+/// ```
 data Regex { pattern: String, flags: String }
+/// Single regex match.
 data Match { group_value: String }
 
+/// Builds a regex value from a pattern and flags.
+///
+/// Prefer regex literals when the pattern is known at compile time:
+/// ```cfun
+/// let digits = regex/\d+/
+/// ```
 fun from_literal(pattern: String, flags: String): Regex = Regex { pattern, flags }
 
 private fun drop_prefix(value: String, size: int): String =
@@ -54,27 +70,62 @@ private fun split(pattern: String, input: String, current: String, acc: List[Str
     ---
     split(pattern, input, current, acc)
 
+/// Returns true when the input matches this regex pattern.
+///
+/// Example: `regex/capy/.matches("capybara")` returns true.
 fun Regex.matches(input: String): bool = input ? this.pattern
 
+/// Returns the first match, or `None` when no match exists.
 fun Regex.find(input: String): Option[Match] =
     match find_all(this.pattern, input, [])[0] with
     case Some { value } -> Some { value }
     case None -> None {}
 
+/// Returns all matches as a lazy sequence.
+///
+/// Example:
+/// ```cfun
+/// regex/na/.find_all("banana").map(match => match.group_value).as_list()
+/// ```
+/// Produces `["na", "na"]`.
 fun Regex.find_all(input: String): /capy/collection/Seq[Match] =
     /capy/collection/Seq.to_seq(find_all(this.pattern, input, []))
 
+/// Returns a function that replaces matches with `replacement`.
+///
+/// Example:
+/// ```cfun
+/// let redact_digits = regex/\d+/.replace("#")
+/// redact_digits("room 42")
+/// ```
+/// Returns `room #`.
 fun Regex.replace(replacement: String): String => String = value => value.replace(this.pattern, replacement)
 
+/// Splits `input` around this regex pattern.
 fun Regex.split(input: String): List[String] =
     split(this.pattern, input, "", [])
 
+/// Operator alias for `matches`.
 fun Regex.`?`(input: String): bool = this.matches(input)
+/// Operator alias for `find`.
 fun Regex.`~`(input: String): Option[Match] = this.find(input)
+/// Operator alias for `find_all`.
 fun Regex.`~~`(input: String): /capy/collection/Seq[Match] = this.find_all(input)
+/// Operator alias for `replace`.
+///
+/// Example:
+/// ```cfun
+/// (regex/\d+/ ~> "#")("a1b22")
+/// ```
+/// Returns `a#b#`.
 fun Regex.`~>`(replacement: String): String => String = this.replace(replacement)
+/// Operator alias for `split`.
 fun Regex.`/>`(input: String): List[String] = this.split(input)
 
+/// Returns the capture group at `idx`.
+///
+/// Current matches expose the full match at index `0`.
 fun Match.group(idx: index): Option[String] = if idx == FIRST_ELEMENT then Some { value: this.group_value } else None {}
 
+/// Returns all capture groups for this match.
 fun Match.groups(): List[Option[String]] = [Some { value: this.group_value }]

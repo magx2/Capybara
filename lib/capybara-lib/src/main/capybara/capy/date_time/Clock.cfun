@@ -1,5 +1,14 @@
 from /capy/date_time/DateTime import { * }
 from /capy/lang/Effect import { * }
 
+/// Returns the current date-time as an effect.
+///
+/// Example:
+/// ```cfun
+/// let current <- now()
+/// current.to_iso_8601()
+/// ```
+/// The value is effectful because the current time comes from the runtime
+/// environment.
 fun now(): Effect[DateTime] =
     delay(() => UNIX_EPOCH)

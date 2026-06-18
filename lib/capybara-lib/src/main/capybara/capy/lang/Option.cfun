@@ -1,4 +1,11 @@
 /// Optional value that is either present as Some or absent as None.
+///
+/// Example:
+/// ```cfun
+/// let nickname: Option[String] = Some { value: "Ada" }
+/// nickname.map(name => name + "!")
+/// ```
+/// The result is `Some { value: "Ada!" }`. Mapping `None` returns `None`.
 union Option[T] = Some[T] | None
 
 /// Present Option value.
@@ -8,6 +15,9 @@ data Some[T] { value: T }
 data None {}
 
 /// Transforms a present value using `map`; equivalent to `this.map(map)`.
+///
+/// Example: `Some { value: 2 } | value => value * 2` returns
+/// `Some { value: 4 }`.
 fun Option[T].`|`(map: T => Y): Option[Y] = this.map(map)
 
 /// Transforms a present value using `map`, or returns None when empty.
@@ -17,9 +27,17 @@ fun Option[T].map(map: T => Y): Option[Y] =
     case Some s -> Some { map(s.value) }
 
 /// Applies `flatmap` to a present value; equivalent to `this.flat_map(flatmap)`.
+///
+/// Use this when the mapping function already returns an `Option`.
 fun Option[T].`|*`(flatmap: T => Option[Y]): Option[Y] = this.flat_map(flatmap)
 
 /// Applies `flatmap` to a present value, or returns None when empty.
+///
+/// Example:
+/// ```cfun
+/// Some { value: "capy" }.flat_map(text => text[0])
+/// ```
+/// The outer option stays empty if the original value is `None`.
 fun Option[T].flat_map(flatmap: T => Option[Y]): Option[Y] =
     match this with
     case None -> None {}

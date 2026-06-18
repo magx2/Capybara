@@ -1,0 +1,5 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/FunctionAnnotationArgument import { FunctionAnnotationArgument }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+data FunctionAnnotationApplication { name: String, arguments: List[FunctionAnnotationArgument], location: SourceLocation }
