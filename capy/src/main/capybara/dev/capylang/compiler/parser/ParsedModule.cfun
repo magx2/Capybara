@@ -1,0 +1,18 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/Definition import { Definition }
+from /dev/capylang/compiler/parser/Functional import { Functional }
+from /dev/capylang/compiler/parser/ImportDeclaration import { ImportDeclaration }
+from /dev/capylang/compiler/parser/ObjectOriented import { ObjectOriented }
+from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
+
+data Parsed {}
+
+data ParsedModule {
+    name: String,
+    path: String,
+    functional: Functional,
+    definitions: List[Definition],
+    objectOriented: ObjectOriented,
+    imports: List[ImportDeclaration],
+    sourceKind: SourceKind
+}

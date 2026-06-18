@@ -1,0 +1,98 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
+from /dev/capylang/compiler/parser/FunctionDeclaration import { FunctionDeclaration }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+data AnnotationArgument { name: String, value: AnnotationValue, location: SourceLocation }
+data AnnotationApplication { name: String, arguments: List[AnnotationArgument], location: SourceLocation }
+data AnnotationStringValue { value: String, source: String, location: SourceLocation }
+data AnnotationIntValue { value: int, source: String, location: SourceLocation }
+data AnnotationLongValue { value: long, source: String, location: SourceLocation }
+data AnnotationDoubleValue { value: double, source: String, location: SourceLocation }
+data AnnotationFloatValue { value: float, source: String, location: SourceLocation }
+data AnnotationBoolValue { value: bool, source: String, location: SourceLocation }
+data AnnotationTypeNameValue { value: String, source: String, location: SourceLocation }
+data AnnotationNothingValue { source: String, location: SourceLocation }
+data AnnotationFieldDeclaration {
+    name: String,
+    typeReference: TypeReference,
+    defaultValue: AnnotationValue,
+    hasDefault: bool,
+    location: SourceLocation
+}
+data AnnotationDeclaration {
+    name: String,
+    visibility: String,
+    repeatable: bool,
+    targets: List[String],
+    fields: List[AnnotationFieldDeclaration],
+    documentation: List[String],
+    annotations: List[AnnotationApplication],
+    location: SourceLocation
+}
+data DeriveApplication { name: String, location: SourceLocation }
+data DataFieldDeclaration { name: String, typeReference: TypeReference, documentation: List[String], annotations: List[AnnotationApplication], location: SourceLocation }
+data DataParentDeclaration { typeReference: TypeReference, location: SourceLocation }
+data DataDeclaration {
+    name: String,
+    visibility: String,
+    parameters: List[String],
+    fields: List[DataFieldDeclaration],
+    parents: List[DataParentDeclaration],
+    documentation: List[String],
+    annotations: List[AnnotationApplication],
+    derives: List[DeriveApplication],
+    location: SourceLocation
+}
+data DeriverDeclaration {
+    name: String,
+    visibility: String,
+    methods: List[FunctionDeclaration],
+    documentation: List[String],
+    annotations: List[AnnotationApplication],
+    location: SourceLocation
+}
+data EnumValueDeclaration { name: String, location: SourceLocation }
+data EnumDeclaration { name: String, values: List[EnumValueDeclaration], documentation: List[String], annotations: List[AnnotationApplication], location: SourceLocation }
+data PrimitiveBackedTypeDeclaration {
+    name: String,
+    visibility: String,
+    backingType: TypeReference,
+    documentation: List[String],
+    annotations: List[AnnotationApplication],
+    location: SourceLocation
+}
+data TypeDeclaration {
+    name: String,
+    visibility: String,
+    parameters: List[String],
+    fields: List[DataFieldDeclaration],
+    variants: List[TypeReference],
+    documentation: List[String],
+    annotations: List[AnnotationApplication],
+    derives: List[DeriveApplication],
+    location: SourceLocation
+}
+data UnsupportedDefinition {}
+data ConstantDefinition { constant: ConstantDeclaration }
+data FunctionDefinition { function: FunctionDeclaration }
+
+union Definition = AnnotationDeclaration
+                 | ConstantDefinition
+                 | DataDeclaration
+                 | DeriverDeclaration
+                 | EnumDeclaration
+                 | FunctionDefinition
+                 | PrimitiveBackedTypeDeclaration
+                 | TypeDeclaration
+                 | UnsupportedDefinition
+
+union AnnotationValue = AnnotationBoolValue
+                      | AnnotationDoubleValue
+                      | AnnotationFloatValue
+                      | AnnotationIntValue
+                      | AnnotationLongValue
+                      | AnnotationNothingValue
+                      | AnnotationStringValue
+                      | AnnotationTypeNameValue

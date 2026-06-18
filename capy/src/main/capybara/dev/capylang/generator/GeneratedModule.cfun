@@ -1,0 +1,3 @@
+data Generated {}
+
+data GeneratedModule { relativePath: String, code: String }

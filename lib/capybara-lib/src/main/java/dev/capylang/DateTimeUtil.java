@@ -1,10 +1,5 @@
 package dev.capylang;
 
-import capy.dateTime.Date;
-import capy.dateTime.DateTime;
-import capy.dateTime.Time;
-import capy.dateTime.TimeModule;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -12,96 +7,120 @@ import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.Optional;
 
 public final class DateTimeUtil {
-    private static final int JAVA_MAX_OFFSET_MINUTES = 18 * TimeModule.MINUTES_IN_HOUR;
+    private static final int SECONDS_IN_MINUTE = 60;
+    private static final int MINUTES_IN_HOUR = 60;
+    private static final int JAVA_MAX_OFFSET_MINUTES = 18 * MINUTES_IN_HOUR;
 
     private DateTimeUtil() {
     }
 
-    public static LocalDate toJavaLocalDate(Date date) {
-        return LocalDate.of(date.year(), date.month(), date.day());
+    public static LocalDate toJavaLocalDate(Object date) {
+        return LocalDate.of(intField(date, "year"), intField(date, "month"), intField(date, "day"));
     }
 
-    public static Date fromJavaLocalDate(LocalDate date) {
-        return new Date(date.getDayOfMonth(), date.getMonthValue(), date.getYear());
+    public static Object fromJavaLocalDate(LocalDate date) {
+        return data("Date", Map.of(
+                "day", date.getDayOfMonth(),
+                "month", date.getMonthValue(),
+                "year", date.getYear()
+        ));
     }
 
-    /**
-     * Converts Capy {@link Time} to Java {@link LocalTime}.
-     * <p>
-     * Note: this conversion intentionally drops Capy offset information.
-     */
-    public static LocalTime toJavaLocalTime(Time time) {
-        return LocalTime.of(time.hour(), time.minute(), time.second());
+    public static LocalTime toJavaLocalTime(Object time) {
+        return LocalTime.of(intField(time, "hour"), intField(time, "minute"), intField(time, "second"));
     }
 
-    /**
-     * Converts Java {@link LocalTime} to Capy {@link Time}.
-     * <p>
-     * Capy time precision is whole seconds, so sub-second nanos are explicitly truncated.
-     */
-    public static Time fromJavaLocalTime(LocalTime time) {
+    public static Object fromJavaLocalTime(LocalTime time) {
         var truncated = time.truncatedTo(ChronoUnit.SECONDS);
-        return new Time(truncated.getHour(), truncated.getMinute(), truncated.getSecond(), Optional.empty());
+        return data("Time", Map.of(
+                "hour", truncated.getHour(),
+                "minute", truncated.getMinute(),
+                "second", truncated.getSecond(),
+                "offset_minutes", Optional.empty()
+        ));
     }
 
-    public static OffsetTime toJavaOffsetTime(Time time) {
+    public static OffsetTime toJavaOffsetTime(Object time) {
         var offset = offsetMinutes(time)
                 .map(DateTimeUtil::toJavaZoneOffset)
                 .orElseGet(() -> ZoneOffset.UTC);
         return OffsetTime.of(toJavaLocalTime(time), offset);
     }
 
-    /**
-     * Converts Java {@link OffsetTime} to Capy {@link Time}.
-     * <p>
-     * Capy time precision is whole seconds, so sub-second nanos are explicitly truncated.
-     */
-    public static Time fromJavaOffsetTime(OffsetTime time) {
+    public static Object fromJavaOffsetTime(OffsetTime time) {
         var totalSeconds = time.getOffset().getTotalSeconds();
-        if (Math.floorMod(totalSeconds, TimeModule.SECONDS_IN_MINUTE) != 0) {
+        if (Math.floorMod(totalSeconds, SECONDS_IN_MINUTE) != 0) {
             throw new IllegalArgumentException(
                     "Java offset with second precision is unsupported: " + time.getOffset()
             );
         }
-        var offsetMinutes = Math.floorDiv(totalSeconds, TimeModule.SECONDS_IN_MINUTE);
+        var offsetMinutes = Math.floorDiv(totalSeconds, SECONDS_IN_MINUTE);
         var truncated = time.toLocalTime().truncatedTo(ChronoUnit.SECONDS);
-        return new Time(truncated.getHour(), truncated.getMinute(), truncated.getSecond(), Optional.of(offsetMinutes));
+        return data("Time", Map.of(
+                "hour", truncated.getHour(),
+                "minute", truncated.getMinute(),
+                "second", truncated.getSecond(),
+                "offset_minutes", Optional.of(offsetMinutes)
+        ));
     }
 
-    public static LocalDateTime toJavaLocalDateTime(DateTime dateTime) {
-        return LocalDateTime.of(toJavaLocalDate(dateTime.date()), toJavaLocalTime(dateTime.time()));
+    public static LocalDateTime toJavaLocalDateTime(Object dateTime) {
+        return LocalDateTime.of(toJavaLocalDate(field(dateTime, "date")), toJavaLocalTime(field(dateTime, "time")));
     }
 
-    public static DateTime fromJavaLocalDateTime(LocalDateTime dateTime) {
-        return new DateTime(
-                fromJavaLocalDate(dateTime.toLocalDate()),
-                fromJavaLocalTime(dateTime.toLocalTime())
-        );
+    public static Object fromJavaLocalDateTime(LocalDateTime dateTime) {
+        return data("DateTime", Map.of(
+                "date", fromJavaLocalDate(dateTime.toLocalDate()),
+                "time", fromJavaLocalTime(dateTime.toLocalTime())
+        ));
     }
 
-    public static OffsetDateTime toJavaOffsetDateTime(DateTime dateTime) {
-        return OffsetDateTime.of(toJavaLocalDateTime(dateTime), toJavaOffsetTime(dateTime.time()).getOffset());
+    public static OffsetDateTime toJavaOffsetDateTime(Object dateTime) {
+        return OffsetDateTime.of(toJavaLocalDateTime(dateTime), toJavaOffsetTime(field(dateTime, "time")).getOffset());
     }
 
-    public static DateTime fromJavaOffsetDateTime(OffsetDateTime dateTime) {
-        return new DateTime(
-                fromJavaLocalDate(dateTime.toLocalDate()),
-                fromJavaOffsetTime(dateTime.toOffsetTime())
-        );
+    public static Object fromJavaOffsetDateTime(OffsetDateTime dateTime) {
+        return data("DateTime", Map.of(
+                "date", fromJavaLocalDate(dateTime.toLocalDate()),
+                "time", fromJavaOffsetTime(dateTime.toOffsetTime())
+        ));
     }
 
     private static ZoneOffset toJavaZoneOffset(int minutes) {
         if (minutes < -JAVA_MAX_OFFSET_MINUTES || minutes > JAVA_MAX_OFFSET_MINUTES) {
             throw new IllegalArgumentException("Capy offset out of Java ZoneOffset range: " + minutes + " minutes");
         }
-        return ZoneOffset.ofTotalSeconds(Math.multiplyExact(minutes, TimeModule.SECONDS_IN_MINUTE));
+        return ZoneOffset.ofTotalSeconds(Math.multiplyExact(minutes, SECONDS_IN_MINUTE));
     }
 
-    private static Optional<Integer> offsetMinutes(Time time) {
-        return OptionUtil.toJavaOptional(OptionUtil.toCapyOption(time.offset_minutes()))
-                .map(Integer.class::cast);
+    private static Optional<Integer> offsetMinutes(Object time) {
+        return OptionUtil.<Integer>toJavaOptional(field(time, "offset_minutes"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object field(Object value, String name) {
+        return ((Map<String, Object>) value).get(name);
+    }
+
+    private static int intField(Object value, String name) {
+        var raw = field(value, name);
+        if (raw instanceof Number number) {
+            return number.intValue();
+        }
+        if (raw instanceof Map<?, ?> map && map.get("value") instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(String.valueOf(raw));
+    }
+
+    private static Object data(String type, Map<String, Object> fields) {
+        var result = new java.util.LinkedHashMap<String, Object>();
+        result.put("__type", type);
+        result.putAll(fields);
+        return Map.copyOf(result);
     }
 }

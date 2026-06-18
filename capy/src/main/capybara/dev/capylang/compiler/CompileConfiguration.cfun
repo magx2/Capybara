@@ -1,0 +1,8 @@
+from /capy/collection/Set import { Set }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+
+data CompileConfiguration {
+    libraries: Set[CompiledModule],
+    native_providers: NativeProviderManifest
+}

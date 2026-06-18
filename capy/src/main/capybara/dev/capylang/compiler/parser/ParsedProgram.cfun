@@ -1,0 +1,3 @@
+from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
+
+data ParsedProgram { modules: List[ParsedModule] }

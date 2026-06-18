@@ -1,0 +1,8 @@
+from /capy/lang/Option import { Option }
+
+data NativeProviderBackendBinding {
+    className: Option[String],
+    moduleName: Option[String],
+    exportName: Option[String],
+    factory: Option[String]
+}

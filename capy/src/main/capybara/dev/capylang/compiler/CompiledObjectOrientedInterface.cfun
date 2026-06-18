@@ -1,0 +1,13 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+
+data CompiledObjectOrientedInterface {
+    name: String,
+    visibility: String,
+    kind: String,
+    parents: List[CompiledTypeReference],
+    methods: List[CompiledObjectOrientedMethod],
+    location: CompiledSourceLocation
+}

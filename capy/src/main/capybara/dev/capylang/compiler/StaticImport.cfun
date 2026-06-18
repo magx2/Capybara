@@ -1,0 +1,5 @@
+data StaticImport {
+    className: String,
+    memberName: String,
+    enumValue: bool
+}

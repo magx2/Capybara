@@ -11,6 +11,7 @@ fun tests(): Effect[TestFile] =
         test("fail_result returns error message", () => fail_result_returns_error_message()),
         test("parse_and_add_rest_size adds parsed value and rest size", () => parse_and_add_rest_size_adds_parsed_value_and_rest_size()),
         test("parse_and_add_rest_size propagates parse errors", () => parse_and_add_rest_size_propagates_parse_errors()),
+        test("qualified_success_pipe maps success value", () => qualified_success_pipe_maps_success_value()),
         test("map_untyped_result maps success value", () => map_untyped_result_maps_success_value()),
         test("flatmap_untyped_result maps success value", () => flatmap_untyped_result_maps_success_value()),
         test("dict_reduce_then_map keeps entries and final suffix", () => dict_reduce_then_map_keeps_entries_and_final_suffix()),
@@ -27,6 +28,9 @@ private fun parse_and_add_rest_size_adds_parsed_value_and_rest_size(): Assert =
 
 private fun parse_and_add_rest_size_propagates_parse_errors(): Assert =
     result_error_assert_failed_message_contains(parse_and_add_rest_size("abc"), "Cannot parse string to long")
+
+private fun qualified_success_pipe_maps_success_value(): Assert =
+    assert_that(qualified_success_pipe()).succeeds(7)
 
 private fun map_untyped_result_maps_success_value(): Assert =
     assert_that(map_untyped_result()).succeeds("mapped_success_value")
