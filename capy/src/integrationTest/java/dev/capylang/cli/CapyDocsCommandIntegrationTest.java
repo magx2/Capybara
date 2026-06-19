@@ -45,7 +45,7 @@ class CapyDocsCommandIntegrationTest {
                 fun Tone.describe(): String = "tone"
 
                 /// Function docs
-                fun documented_function(message: String): String = message
+                fun documented_function(box: Box, wrapped: GenericBox[Box]): GenericBox[Box] = wrapped
                 """);
         writeSource(input.resolve("sample/Objects.coo"), """
                 /// Named docs
@@ -95,21 +95,21 @@ class CapyDocsCommandIntegrationTest {
         var docsContent = Files.readString(docsFile);
         assertThat(docsContent)
                 .contains("= Module Docs")
-                .contains("documented_function(message: String): String")
+                .contains("documented_function(box: xref:#type-Box[Box], wrapped: xref:#type-GenericBox[GenericBox][xref:#type-Box[Box]]): xref:#type-GenericBox[GenericBox][xref:#type-Box[Box]]")
                 .contains("Function docs")
-                .contains("=== data Box")
+                .contains("[[type-Box]]\n=== data Box")
                 .contains("Box docs")
-                .contains("* `value`: `String`")
+                .contains("* `value`: String")
                 .contains("===== public Box.describe(): String")
                 .contains("Describes a box")
-                .contains("=== data GenericBox[T]")
+                .contains("[[type-GenericBox]]\n=== data GenericBox[T]")
                 .contains("Generic box docs")
                 .contains("===== public GenericBox[T].describe(): String")
                 .contains("Describes a generic box")
-                .contains("=== union Shape")
+                .contains("[[type-Shape]]\n=== union Shape")
                 .contains("Shape docs")
-                .contains("* `Circle`")
-                .contains("* `Square`")
+                .contains("* xref:#type-Circle[Circle]")
+                .contains("* xref:#type-Square[Square]")
                 .contains("=== enum Tone")
                 .contains("Tone docs")
                 .contains("* `LOW`")
@@ -139,10 +139,10 @@ class CapyDocsCommandIntegrationTest {
                 .contains("=== public open class Widget(label: String)")
                 .contains("Widget docs")
                 .contains("==== Parents")
-                .contains("* `Named`")
-                .contains("* `Greeting`")
+                .contains("* xref:#type-oo-sample-Greeting[Greeting]")
+                .contains("* xref:#type-oo-sample-Named[Named]")
                 .contains("==== Fields")
-                .contains("* `public label`: `String` (default)")
+                .contains("* `public label`: String (default)")
                 .contains("Label field docs")
                 .contains("===== init 1")
                 .contains("Init docs")
@@ -150,7 +150,7 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Render docs")
                 .doesNotContain("__capy_oo_method|Widget|render")
                 .doesNotContain("\n=== oo:");
-        assertThat(objectsContent).containsSubsequence("* `Greeting`", "* `Named`");
+        assertThat(objectsContent).containsSubsequence("* xref:#type-oo-sample-Greeting[Greeting]", "* xref:#type-oo-sample-Named[Named]");
     }
 
     private static void writeSource(Path file, String source) throws IOException {
