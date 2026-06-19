@@ -1,0 +1,8 @@
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+fun object_write_missing_parent(path: Path): Effect[Result[String]] =
+    let worker <- FileIoWorker()
+    let result <- worker.write_missing_parent(path)
+    result
