@@ -12,13 +12,38 @@ from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference
 from Documentation import { Documentation }
 
 fun generate_asciidoc_docs(program: CompiledProgram): List[Documentation] =
-    program.modules
+    [generate_asciidoc_index(program)]
+    + program.modules
         .map(module => generate_asciidoc_docs_for_module(module))
         .reduce([], (docs, doc) => docs + doc)
 
+private fun generate_asciidoc_index(program: CompiledProgram): Documentation =
+    Documentation {
+        path: "/index.adoc",
+        content: "= Capybara Documentation\n\n"
+        + "== Modules\n\n"
+        + generate_module_index_entries(program.modules)
+    }
+
+private fun generate_module_index_entries(modules: List[CompiledModule]): String =
+    modules
+        .sort((a,b) => module_display_name(a).compare(module_display_name(b)))
+        .map(module => "* xref:{module_doc_path(module)}[{module_display_name(module)}]\n")
+        .reduce("", (content, entry) => content + entry)
+
+private fun module_doc_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then "{module.name}.adoc"
+    else "{module.path}/{module.name}.adoc"
+
+private fun module_display_name(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else "{module.path}/{module.name}"
+
 private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documentation =
     Documentation {
-        path: "/{module.path}/{module.name}.adoc",
+        path: "/" + module_doc_path(module),
         content: "= Module {module.name}\n\n"
         + "== Functions\n\n"
         + generate_function_docs(module.functions) + "\n\n"

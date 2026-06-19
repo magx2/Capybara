@@ -27,6 +27,12 @@ class CapyDocsCommandIntegrationTest {
         var program = Capy.main(List.of("docs", "-i", input.toString(), "-o", output.toString())).unsafeRun();
 
         assertThat(program).isSameAs(Program.Success.INSTANCE);
+        var indexFile = output.resolve("index.adoc");
+        assertThat(indexFile).isRegularFile();
+        assertThat(Files.readString(indexFile))
+                .contains("= Capybara Documentation")
+                .contains("* xref:sample/Docs.adoc[sample/Docs]");
+
         var docsFile = output.resolve("sample/Docs.adoc");
         assertThat(docsFile).isRegularFile();
         assertThat(Files.readString(docsFile))
