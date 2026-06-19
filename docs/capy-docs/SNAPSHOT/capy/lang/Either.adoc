@@ -12,8 +12,8 @@ the primary success branch.
 
 ==== Variants
 
-* xref:#type-Left[Left][L, R]
-* xref:#type-Right[Right][L, R]
+* xref:#type-Left[Left]&#91;L, R&#93;
+* xref:#type-Right[Right]&#91;L, R&#93;
 
 ==== Functions
 
@@ -22,22 +22,22 @@ the primary success branch.
 Reduces this value by applying the function for the current branch.
 
 
-===== fun Either[L,R].flat_map_left(map: L=>Either[Y,R]): xref:#type-Either[Either][Y, R]
+===== fun Either[L,R].flat_map_left(map: L=>Either[Y,R]): xref:#type-Either[Either]&#91;Y, R&#93;
 
 Transforms the `Left` value into another `Either`.
 
 
-===== fun Either[L,R].flat_map_right(map: R=>Either[L,Y]): xref:#type-Either[Either][L, Y]
+===== fun Either[L,R].flat_map_right(map: R=>Either[L,Y]): xref:#type-Either[Either]&#91;L, Y&#93;
 
 Transforms the `Right` value into another `Either`.
 
 
-===== fun Either[L,R].map_left(map: L=>Y): xref:#type-Either[Either][Y, R]
+===== fun Either[L,R].map_left(map: L=>Y): xref:#type-Either[Either]&#91;Y, R&#93;
 
 Transforms the `Left` value and leaves `Right` unchanged.
 
 
-===== fun Either[L,R].map_right(map: R=>Y): xref:#type-Either[Either][L, Y]
+===== fun Either[L,R].map_right(map: R=>Y): xref:#type-Either[Either]&#91;L, Y&#93;
 
 Transforms the `Right` value and leaves `Left` unchanged.
 
@@ -47,12 +47,12 @@ Transforms the `Right` value and leaves `Left` unchanged.
 Reduces this value by applying the function for the current branch.
 
 
-===== fun Either[L,R].swap(): xref:#type-Either[Either][R, L]
+===== fun Either[L,R].swap(): xref:#type-Either[Either]&#91;R, L&#93;
 
 Swaps `Left` and `Right`.
 
 
-===== fun Either[L,R].to_result(left_to_message: L=>String): xref:../../capy/lang/Result.adoc#type-Result[Result][R]
+===== fun Either[L,R].to_result(left_to_message: L=>String): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;R&#93;
 
 Converts this `Either` into a string-error `Result`.
 

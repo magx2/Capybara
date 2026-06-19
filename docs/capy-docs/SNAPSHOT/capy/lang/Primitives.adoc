@@ -6,31 +6,31 @@
 
 
 
-=== fun safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+=== fun safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
 
 
 
-=== fun to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][bool]
+=== fun to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;bool&#93;
 
 Parses this String as a bool.
 
 
-=== fun to_double(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][double]
+=== fun to_double(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;double&#93;
 
 Parses this String as a double.
 
 
-=== fun to_float(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][float]
+=== fun to_float(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;float&#93;
 
 Parses this String as a float.
 
 
-=== fun to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+=== fun to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
 
 Parses this String as an int.
 
 
-=== fun to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][long]
+=== fun to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;long&#93;
 
 Parses this String as a long.
 

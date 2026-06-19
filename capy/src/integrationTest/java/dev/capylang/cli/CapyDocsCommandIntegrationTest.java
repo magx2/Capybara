@@ -54,6 +54,7 @@ class CapyDocsCommandIntegrationTest {
                 fun Tone.describe(): String = "tone"
 
                 /// Function docs
+                /// [Spec](https://example.com/spec)
                 fun documented_function(box: Box, wrapped: GenericBox[Box]): GenericBox[Box] = wrapped
 
                 /// Hidden function docs
@@ -149,8 +150,9 @@ class CapyDocsCommandIntegrationTest {
         var docsContent = Files.readString(docsFile);
         assertThat(docsContent)
                 .contains("= Module Docs")
-                .contains("documented_function(box: xref:#type-Box[Box], wrapped: xref:#type-GenericBox[GenericBox][xref:#type-Box[Box]]): xref:#type-GenericBox[GenericBox][xref:#type-Box[Box]]")
+                .contains("documented_function(box: xref:#type-Box[Box], wrapped: xref:#type-GenericBox[GenericBox]&#91;xref:#type-Box[Box]&#93;): xref:#type-GenericBox[GenericBox]&#91;xref:#type-Box[Box]&#93;")
                 .contains("Function docs")
+                .contains("https://example.com/spec[Spec]")
                 .contains("[[type-Box]]\n=== data Box")
                 .contains("Box docs")
                 .contains("* `value`: String")
@@ -194,6 +196,8 @@ class CapyDocsCommandIntegrationTest {
                 .doesNotContain("\n=== fun Box.describe")
                 .doesNotContain("\n=== fun GenericBox[T].describe")
                 .doesNotContain("* `name`: `String`")
+                .doesNotContain("xref:#type-GenericBox[GenericBox][xref:#type-Box[Box]]")
+                .doesNotContain("[Spec](https://example.com/spec)")
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
         assertThat(docsContent).containsSubsequence("* `HIGH`", "* `LOW`");

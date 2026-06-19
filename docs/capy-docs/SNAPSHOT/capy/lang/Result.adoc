@@ -12,7 +12,7 @@ Creates a generic Error with kind `capy.error`.
 Creates an Error with an explicit source location.
 
 
-=== fun error_full(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: xref:../../capy/lang/Option.adoc#type-Option[Option][data], location: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-SourceLocation[SourceLocation]], stack_trace: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]], raw_stack: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]], cause: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Error[Error]], suppressed: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]): xref:#type-Error[Error]
+=== fun error_full(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;data&#93;, location: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-SourceLocation[SourceLocation]&#93;, stack_trace: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-StackFrame[StackFrame]&#93;, raw_stack: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;, cause: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Error[Error]&#93;, suppressed: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-Error[Error]&#93;): xref:#type-Error[Error]
 
 Creates an Error with all structured fields supplied by the caller.
 
@@ -27,22 +27,22 @@ Creates an Error with a stable kind and no structured details.
 Creates an Error with a stable kind and structured details.
 
 
-=== fun fail(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result][T]
+=== fun fail(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result]&#91;T&#93;
 
 Returns a failed Result with a generic Error.
 
 
-=== fun fail_error(error: xref:#type-Error[Error]): xref:#type-Result[Result][T]
+=== fun fail_error(error: xref:#type-Error[Error]): xref:#type-Result[Result]&#91;T&#93;
 
 Returns a failed Result from an existing Error.
 
 
-=== fun fail_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result][T]
+=== fun fail_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result]&#91;T&#93;
 
 Returns a failed Result with a stable error kind.
 
 
-=== fun fail_with(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: data): xref:#type-Result[Result][T]
+=== fun fail_with(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: data): xref:#type-Result[Result]&#91;T&#93;
 
 Returns a failed Result with structured error details.
 
@@ -58,14 +58,14 @@ Structured recoverable failure value.
 
 ==== Fields
 
-* `cause`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Error[Error]]
-* `details`: xref:../../capy/lang/Option.adoc#type-Option[Option][data]
+* `cause`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Error[Error]&#93;
+* `details`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;data&#93;
 * `kind`: xref:../../capy/lang/String.adoc#type-String[String]
-* `location`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-SourceLocation[SourceLocation]]
+* `location`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-SourceLocation[SourceLocation]&#93;
 * `message`: xref:../../capy/lang/String.adoc#type-String[String]
-* `raw_stack`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
-* `stack_trace`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]]
-* `suppressed`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]
+* `raw_stack`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+* `stack_trace`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-StackFrame[StackFrame]&#93;
+* `suppressed`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-Error[Error]&#93;
 
 ==== Functions
 
@@ -119,12 +119,12 @@ Returns a copy of this Error with another message.
 Returns a copy of this Error with another raw backend stack.
 
 
-===== fun Error.with_stack_trace(stack_trace: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]]): xref:#type-Error[Error]
+===== fun Error.with_stack_trace(stack_trace: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-StackFrame[StackFrame]&#93;): xref:#type-Error[Error]
 
 Returns a copy of this Error with another stack trace.
 
 
-===== fun Error.with_suppressed(suppressed: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]): xref:#type-Error[Error]
+===== fun Error.with_suppressed(suppressed: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-Error[Error]&#93;): xref:#type-Error[Error]
 
 Returns a copy of this Error with another suppressed error list.
 
@@ -141,21 +141,21 @@ exceptions.
 ==== Variants
 
 * xref:#type-Error[Error]
-* xref:#type-Success[Success][T]
+* xref:#type-Success[Success]&#91;T&#93;
 
 ==== Functions
 
-===== fun Result[T].`|*`(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
+===== fun Result[T].`|*`(flatmap: T=>Result[Y]): xref:#type-Result[Result]&#91;Y&#93;
 
 Applies `flatmap` to a successful value; equivalent to `this.flat_map(flatmap)`.
 
 
-===== fun Result[T].`|>`(reduce: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][T=>R, Error=>R]): R
+===== fun Result[T].`|>`(reduce: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple]&#91;T=>R, Error=>R&#93;): R
 
 Reduces a Result by applying the first function to Success or the second function to Error.
 
 
-===== fun Result[T].`|`(map: T=>Y): xref:#type-Result[Result][Y]
+===== fun Result[T].`|`(map: T=>Y): xref:#type-Result[Result]&#91;Y&#93;
 
 Transforms a successful value using `map`; equivalent to `this.map(map)`.
 
@@ -165,22 +165,22 @@ Transforms a successful value using `map`; equivalent to `this.map(map)`.
 Returns the error message, or an empty string when this Result is successful.
 
 
-===== fun Result[T].flat_map(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
+===== fun Result[T].flat_map(flatmap: T=>Result[Y]): xref:#type-Result[Result]&#91;Y&#93;
 
 Applies `flatmap` to a successful value, or propagates an Error unchanged.
 
 
-===== fun Result[T].map(map: T=>Y): xref:#type-Result[Result][Y]
+===== fun Result[T].map(map: T=>Y): xref:#type-Result[Result]&#91;Y&#93;
 
 Transforms a successful value using `map`, or propagates an Error unchanged.
 
 
-===== fun Result[T].map_error(map: Error=>Error): xref:#type-Result[Result][T]
+===== fun Result[T].map_error(map: Error=>Error): xref:#type-Result[Result]&#91;T&#93;
 
 Maps an Error while preserving successful values.
 
 
-===== fun Result[T].or(r: xref:#type-Result[Result][T]): xref:#type-Result[Result][T]
+===== fun Result[T].or(r: xref:#type-Result[Result]&#91;T&#93;): xref:#type-Result[Result]&#91;T&#93;
 
 Returns this Result when successful, or `r` when this Result is an Error.
 
@@ -195,7 +195,7 @@ Returns the successful value, or `v` when this Result is an Error.
 Recovers an Error into a plain value.
 
 
-===== fun Result[T].recover_result(recover: Error=>Result[T]): xref:#type-Result[Result][T]
+===== fun Result[T].recover_result(recover: Error=>Result[T]): xref:#type-Result[Result]&#91;T&#93;
 
 Recovers an Error into another Result.
 
@@ -217,9 +217,9 @@ Optional source location attached to an Error.
 
 ==== Fields
 
-* `column`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
-* `end_column`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
-* `end_line`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
+* `column`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+* `end_column`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+* `end_line`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
 * `file`: xref:../../capy/lang/String.adoc#type-String[String]
 * `line`: int
 
@@ -231,17 +231,17 @@ Portable backend stack frame attached to an Error.
 ==== Fields
 
 * `backend`: xref:../../capy/lang/String.adoc#type-String[String]
-* `column`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
-* `end_column`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
-* `end_line`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
-* `file`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
-* `function`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
-* `line`: xref:../../capy/lang/Option.adoc#type-Option[Option][int]
-* `module`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+* `column`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+* `end_column`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+* `end_line`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+* `file`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+* `function`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+* `line`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+* `module`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 * `native`: bool
 * `raw`: xref:../../capy/lang/String.adoc#type-String[String]
-* `source_line`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
-* `type_name`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+* `source_line`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+* `type_name`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 [[type-Success]]
 === data Success[T]

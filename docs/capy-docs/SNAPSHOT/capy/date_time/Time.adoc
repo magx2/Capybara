@@ -2,7 +2,7 @@
 
 == Functions
 
-=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Time[Time]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Time[Time]&#93;
 
 Parses an ISO 8601 time in basic or extended complete form.
 
@@ -94,7 +94,7 @@ Time {
 
 * `hour`: xref:#type-hour[hour]
 * `minute`: xref:#type-minute[minute]
-* `offset_minutes`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-offset_minutes[offset_minutes]]
+* `offset_minutes`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-offset_minutes[offset_minutes]&#93;
 * `second`: xref:#type-second[second]
 
 ==== Functions

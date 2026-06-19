@@ -2,9 +2,9 @@
 
 == Functions
 
-=== fun parse_semver(version: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-SemVer[SemVer]]
+=== fun parse_semver(version: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-SemVer[SemVer]&#93;
 
-[Backus–Naur Form Grammar for Valid SemVer Versions](https://semver.org/#backusnaur-form-grammar-for-valid-semver-versions)
+https://semver.org/#backusnaur-form-grammar-for-valid-semver-versions[Backus–Naur Form Grammar for Valid SemVer Versions]
 
 ```
 <valid semver> ::= <version core>
@@ -14,7 +14,7 @@
 ```
 
 
-=== fun sem_ver(major_value: int, minor_value: int, patch_value: int, pre_release: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]], build_metadata: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-SemVer[SemVer]]
+=== fun sem_ver(major_value: int, minor_value: int, patch_value: int, pre_release: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;, build_metadata: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-SemVer[SemVer]&#93;
 
 Creates a semantic version after validating the numeric components.
 
@@ -37,11 +37,11 @@ Full specification: https://semver.org/
 
 ==== Fields
 
-* `build_metadata`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+* `build_metadata`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 * `major`: xref:#type-major[major]
 * `minor`: xref:#type-minor[minor]
 * `patch`: xref:#type-patch[patch]
-* `pre_release`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+* `pre_release`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 ==== Functions
 

@@ -2,7 +2,7 @@
 
 == Functions
 
-=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Interval[Interval]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Interval[Interval]&#93;
 
 Parses an ISO 8601 interval in one of these forms:
 - `<start>/<end>`

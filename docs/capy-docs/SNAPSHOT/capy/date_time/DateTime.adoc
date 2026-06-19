@@ -2,7 +2,7 @@
 
 == Functions
 
-=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-DateTime[DateTime]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-DateTime[DateTime]&#93;
 
 Parses a UTC ISO 8601 date-time in basic or extended form.
 

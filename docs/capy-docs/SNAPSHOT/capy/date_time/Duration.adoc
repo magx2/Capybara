@@ -2,7 +2,7 @@
 
 == Functions
 
-=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Duration[Duration]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Duration[Duration]&#93;
 
 Parses an ISO 8601 duration string.
 
@@ -72,7 +72,7 @@ DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 
 [[type-Duration]]
 === union Duration
 
-[ISO 8601 - Durations](https://en.wikipedia.org/wiki/ISO_860101)
+https://en.wikipedia.org/wiki/ISO_860101[ISO 8601 - Durations]
 
 Represents a calendar/time duration using integer components.
 
