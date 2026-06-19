@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common"
+
+"${SCRIPTS_DIR}/assemble-compiler" >/dev/null
+
+declare -A timings=()
+
+measure() {
+    local start end
+    start="$(date +%s%N)"
+    "$@"
+    end="$(date +%s%N)"
+    python3 - "${start}" "${end}" <<'PY'
+import sys
+start = int(sys.argv[1])
+end = int(sys.argv[2])
+print(f"{(end - start) / 1_000_000_000:.3f}")
+PY
+}
+
+for runner in java python js; do
+    "${SCRIPTS_DIR}/clean"
+    timings["${runner}-compile"]="$(measure "${SCRIPTS_DIR}/compile" "${runner}")"
+
+    for backend in java python js; do
+        "${SCRIPTS_DIR}/clean"
+        linked_input="${PROJECT_BUILD_DIR}/linked/${runner}/generate-${backend}"
+        prepare_linked_input "${linked_input}"
+        timings["${runner}-generate-${backend}"]="$(measure "${SCRIPTS_DIR}/generate" "${backend}" "${runner}" "${linked_input}")"
+    done
+
+    "${SCRIPTS_DIR}/clean"
+    timings["${runner}-compile-test"]="$(measure "${SCRIPTS_DIR}/test" "${runner}")"
+done
+
+run_date="${PERFORMANCE_DATE:-$(date -u +%F)}"
+short_sha="${PERFORMANCE_COMMIT_SHA:-$(git -C "${ROOT_DIR}" rev-parse --short=7 HEAD)}"
+
+mapfile -t headers < <(metric_headers)
+pairs=()
+for header in "${headers[@]}"; do
+    pairs+=("${header}=${timings[${header}]}")
+done
+
+python3 - "${RESULTS_CSV}" "${run_date}" "${short_sha}" "${pairs[@]}" <<'PY'
+import csv
+import pathlib
+import sys
+
+csv_path = pathlib.Path(sys.argv[1])
+run_date = sys.argv[2]
+short_sha = sys.argv[3]
+pairs = sys.argv[4:]
+
+metrics = []
+row = {"date": run_date, "commit_sha": short_sha}
+for pair in pairs:
+    key, value = pair.split("=", 1)
+    metrics.append(key)
+    row[key] = value
+
+fieldnames = ["date", "commit_sha"] + metrics
+rows = []
+if csv_path.exists():
+    with csv_path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        for existing in reader:
+            rows.append({name: existing.get(name, "") for name in fieldnames})
+
+replaced = False
+for index, existing in enumerate(rows):
+    if existing.get("date") == run_date and existing.get("commit_sha") == short_sha:
+        rows[index] = row
+        replaced = True
+        break
+if not replaced:
+    rows.append(row)
+
+csv_path.parent.mkdir(parents=True, exist_ok=True)
+with csv_path.open("w", newline="") as handle:
+    writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+PY
+
+"${SCRIPTS_DIR}/render-readme"

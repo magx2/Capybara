@@ -1,0 +1,32 @@
+from /capy/collection/Dict import { * }
+from /capy/collection/List import { * }
+from /performance/sample/domain/Catalog import { Catalog, sample_catalog, select }
+from /performance/sample/domain/Customer import { Customer, retail_customer, vip_customer }
+from /performance/sample/domain/Order import { Order, OrderLine, draft_order, line }
+from /performance/sample/domain/Money import { usd }
+
+fun benchmark_catalog(): Catalog = sample_catalog()
+
+fun benchmark_customer(): Customer = vip_customer("C-100", "Ada Buyer")
+
+fun secondary_customer(): Customer = retail_customer("C-200", "Bob Retail")
+
+fun fixture_lines(): List[OrderLine] =
+    [
+        line("capy-mug", 2, usd(1299L)),
+        line("capy-hoodie", 1, usd(4999L)),
+        line("capy-sticker", 3, usd(599L)),
+    ]
+
+fun fixture_order(): Order =
+    draft_order("O-243", benchmark_customer(), fixture_lines())
+
+fun invalid_order(): Order =
+    draft_order("O-BAD", secondary_customer(), [])
+
+fun fixture_stock(): Dict[int] =
+    {
+        "capy-mug": 8,
+        "capy-hoodie": 2,
+        "capy-sticker": 25,
+    }

@@ -1,0 +1,20 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /performance/sample/domain/Order import { describe_status, submit, summary }
+from /performance/sample/domain/ResultTypes import { WorkflowAccepted, WorkflowRejected }
+from /performance/sample/interop/ObjectFunctionalInterop import { run_workflow }
+from /performance/sample/support/Fixtures import { fixture_order, invalid_order }
+
+fun happy_path_summary(): Effect[String] =
+    let result <- run_workflow(fixture_order())
+    match result with
+    case WorkflowAccepted { order_id, total_cents, stamp } -> "accepted:{order_id}:{total_cents}:{stamp}"
+    case WorkflowRejected { reason } -> "rejected:{reason}"
+
+fun validation_message(): String =
+    submit(invalid_order()).reduce_left(
+        value => "submitted:" + describe_status(value),
+        message => message
+    )
+
+fun deterministic_summary(): String = summary(fixture_order())

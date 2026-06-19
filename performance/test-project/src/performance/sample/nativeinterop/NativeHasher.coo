@@ -1,0 +1,8 @@
+interface NativeHasher {
+}
+
+class StableHasher(hasher: NativeHasher) {
+    field hasher: NativeHasher = hasher
+
+    def stable_hash(value: String): String = "stable-O-243-4242"
+}
