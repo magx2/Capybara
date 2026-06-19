@@ -1895,6 +1895,21 @@ private fun linked_list_field(node: any, name: String, decode: any => Result[T])
     let items <- linked_list_value(value, decode)
     Success { items }
 
+private fun linked_list_field_or_empty(node: any, name: String, decode: any => Result[T]): Result[List[T]] =
+    match node with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData typed_node -> {
+            match typed_node.fields.get(name) with
+            case Some { value } ->
+                let items <- linked_list_value(value, decode)
+                Success { items }
+            case None -> Success { [] }
+        }
+        case _ -> Error { message: "Expected typed JSON field `" + name + "`" }
+    }
+    case _ -> Error { message: "Expected typed JSON field `" + name + "`" }
+
 private fun linked_dict_value(value: any, decode: any => Result[T]): Result[any] =
     match value with
     case TypedJson typed -> {
@@ -2019,7 +2034,7 @@ private fun linked_decode_function(node: any): Result[CompiledFunction] =
     let checked <- linked_expect_data(node, "CompiledFunction")
     let name <- linked_string_field(node, "name")
     let visibility <- linked_string_field(node, "visibility")
-    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let documentation <- linked_list_field_or_empty(node, "documentation", value => linked_string_value(value))
     let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
     let returnTypeData <- linked_data_field(node, "returnType")
     let returnType <- linked_decode_type_reference(returnTypeData)
