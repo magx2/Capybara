@@ -171,10 +171,11 @@ class CapyDocsCommandIntegrationTest {
                 .contains("* `LOW`")
                 .contains("* `HIGH`")
                 .contains("== Constants")
-                .contains("=== const:public ANSWER: int")
+                .contains("=== public ANSWER: int")
                 .contains("Answer docs")
                 .contains("===== public Tone.describe(): String")
                 .doesNotContain("=== const:public ANSWER(): int")
+                .doesNotContain("=== const:public ANSWER: int")
                 .doesNotContain("== Annotations")
                 .doesNotContain("HiddenBox")
                 .doesNotContain("HiddenCircle")
@@ -195,7 +196,7 @@ class CapyDocsCommandIntegrationTest {
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
         assertThat(docsContent).containsSubsequence("* `HIGH`", "* `LOW`");
-        assertThat(docsContent).containsSubsequence("== Functions", "=== public documented_function", "== Constants", "=== const:public ANSWER: int", "== Types");
+        assertThat(docsContent).containsSubsequence("== Functions", "=== public documented_function", "== Constants", "=== public ANSWER: int", "== Types");
 
         var objectsFile = output.resolve("sample/Objects.adoc");
         assertThat(objectsFile).isRegularFile();
