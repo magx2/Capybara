@@ -179,14 +179,10 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule, objectOrie
     Documentation {
         path: "/" + module_doc_path(module),
         content: "= Module {module.name}\n\n"
-        + "== Functions\n\n"
-        + generate_function_docs(asciidoc_top_level_functions(module.functions, typeNames), "===", module, typeTargets) + "\n\n"
+        + generate_top_level_function_docs(module.functions, typeNames, module, typeTargets)
         + generate_top_level_constant_docs(module.functions, typeNames, module, typeTargets)
-        + "== Annotations\n\n"
-        + generate_annotation_docs(module.annotations) + "\n\n"
-        + "== Types\n\n"
-        + generate_schema_type_docs(module.functions, module, typeTargets)
-        + generate_backend_type_docs(module.visiblePrimitiveBackedTypes, module.functions, module, typeTargets)
+        + generate_annotation_section_docs(module.annotations)
+        + generate_type_docs(module, typeTargets)
         + generate_object_oriented_docs(module, objectOrientedUnits, typeTargets)
     }
 
@@ -201,6 +197,12 @@ private fun generate_constant_docs(constants: List[CompiledFunction], heading: S
         .sort((a,b) => a.name.compare(b.name))
         .map(constant => "{heading} {constant.visibility} {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
         .reduce("", (content, constantDoc) => content + constantDoc)
+
+private fun generate_top_level_function_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let topLevelFunctions = asciidoc_top_level_functions(functions, typeNames)
+    if topLevelFunctions.is_empty()
+    then ""
+    else "== Functions\n\n" + generate_function_docs(topLevelFunctions, "===", module, typeTargets) + "\n\n"
 
 private fun generate_top_level_constant_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     let constants = asciidoc_top_level_constants(functions, typeNames)
@@ -554,6 +556,13 @@ private fun generate_schema_type_docs(functions: List[CompiledFunction], module:
             else content + generate_schema_type_doc(typeName, functions, module, typeTargets)
         )
 
+private fun generate_type_docs(module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let content = generate_schema_type_docs(module.functions, module, typeTargets)
+        + generate_backend_type_docs(module.visiblePrimitiveBackedTypes, module.functions, module, typeTargets)
+    if content.is_empty()
+    then ""
+    else "== Types\n\n" + content
+
 private fun generate_schema_type_doc(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     "[[{asciidoc_type_anchor(typeName)}]]\n"
     + "=== {asciidoc_type_kind(typeName, functions)} {asciidoc_type_display_name(typeName, functions)}\n\n"
@@ -889,6 +898,11 @@ private fun generate_annotation_docs(annotations: Dict[CompiledAnnotationDeclara
         .entries()
         .sort((a,b) => a[0].compare(b[0]))
         .reduce("", (content, entry) => content + generate_annotation_doc(entry[1]))
+
+private fun generate_annotation_section_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
+    if annotations.is_empty()
+    then ""
+    else "== Annotations\n\n" + generate_annotation_docs(annotations) + "\n\n"
 
 private fun generate_annotation_doc(annotation: CompiledAnnotationDeclaration): String =
     "=== {annotation.visibility} @{annotation.name}\n\n"

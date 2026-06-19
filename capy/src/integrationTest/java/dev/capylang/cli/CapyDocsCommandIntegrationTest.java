@@ -80,6 +80,10 @@ class CapyDocsCommandIntegrationTest {
                     def render(prefix: String): String = prefix + this.name()
                 }
                 """);
+        writeSource(input.resolve("sample/Markers.cfun"), """
+                /// Marker docs
+                annotation DocMarker on fun {}
+                """);
         writeSource(input.resolve("sample/nested/More.cfun"), """
                 /// More docs
                 data More { value: String }
@@ -94,6 +98,7 @@ class CapyDocsCommandIntegrationTest {
                 .contains("= Capybara Documentation")
                 .contains("=== sample")
                 .contains("* xref:sample/Docs.adoc[Docs]")
+                .contains("* xref:sample/Markers.adoc[Markers]")
                 .contains("* xref:sample/Objects.adoc[Objects]")
                 .contains("==== nested")
                 .contains("* xref:sample/nested/More.adoc[More]")
@@ -129,13 +134,14 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Answer docs")
                 .contains("===== public Tone.describe(): String")
                 .doesNotContain("=== const:public ANSWER(): int")
+                .doesNotContain("== Annotations")
                 .doesNotContain("\n=== public Box.describe")
                 .doesNotContain("\n=== public GenericBox[T].describe")
                 .doesNotContain("* `name`: `String`")
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
         assertThat(docsContent).containsSubsequence("* `HIGH`", "* `LOW`");
-        assertThat(docsContent).containsSubsequence("== Functions", "=== public documented_function", "== Constants", "=== const:public ANSWER: int", "== Annotations");
+        assertThat(docsContent).containsSubsequence("== Functions", "=== public documented_function", "== Constants", "=== const:public ANSWER: int", "== Types");
 
         var objectsFile = output.resolve("sample/Objects.adoc");
         assertThat(objectsFile).isRegularFile();
@@ -163,9 +169,36 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Init docs")
                 .contains("===== public render(prefix: String): String")
                 .contains("Render docs")
+                .doesNotContain("== Functions")
+                .doesNotContain("== Constants")
+                .doesNotContain("== Annotations")
+                .doesNotContain("== Types")
                 .doesNotContain("__capy_oo_method|Widget|render")
                 .doesNotContain("\n=== oo:");
         assertThat(objectsContent).containsSubsequence("* xref:#type-oo-sample-Greeting[Greeting]", "* xref:#type-oo-sample-Named[Named]");
+
+        var markersFile = output.resolve("sample/Markers.adoc");
+        assertThat(markersFile).isRegularFile();
+        assertThat(Files.readString(markersFile))
+                .contains("= Module Markers")
+                .contains("== Annotations")
+                .contains("=== public @DocMarker")
+                .contains("Marker docs")
+                .contains("* Repeatable: no")
+                .contains("* Targets: fun")
+                .doesNotContain("== Functions")
+                .doesNotContain("== Constants")
+                .doesNotContain("== Types");
+
+        var moreFile = output.resolve("sample/nested/More.adoc");
+        assertThat(moreFile).isRegularFile();
+        assertThat(Files.readString(moreFile))
+                .contains("= Module More")
+                .contains("== Types")
+                .contains("=== data More")
+                .doesNotContain("== Functions")
+                .doesNotContain("== Constants")
+                .doesNotContain("== Annotations");
     }
 
     private static void writeSource(Path file, String source) throws IOException {
