@@ -2,7 +2,7 @@
 
 == Annotations
 
-=== public @Deprecated
+=== annotation @Deprecated
 
 Marks a declaration as deprecated while preserving it for compatibility.
 

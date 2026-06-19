@@ -2,7 +2,7 @@
 
 == Annotations
 
-=== public @NativeProvider
+=== annotation @NativeProvider
 
 Marks a function returning `Effect[Interface]` as a compile-time native provider.
 

@@ -2,7 +2,7 @@
 
 == Annotations
 
-=== public @Recursive
+=== annotation @Recursive
 
 Marks a function as a compiler-verified direct tail-recursion contract.
 

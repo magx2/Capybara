@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public reflection(obj: data): xref:#type-DataValueInfo[DataValueInfo]
+=== fun reflection(obj: data): xref:#type-DataValueInfo[DataValueInfo]
 
 Returns reflection metadata and field values for a concrete data value.
 

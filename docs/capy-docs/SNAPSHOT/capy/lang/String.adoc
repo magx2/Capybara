@@ -10,199 +10,199 @@ String literals use quotes: "hello".
 
 ==== Functions
 
-===== public String.`+`(value: any): xref:#type-String[String]
+===== fun String.`+`(value: any): xref:#type-String[String]
 
 Returns this String with `value` appended.
 
 
-===== public String.`?`(part: xref:#type-String[String]): bool
+===== fun String.`?`(part: xref:#type-String[String]): bool
 
 Returns true when this String contains the given substring.
 
 
-===== public String.`|*`(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.`|*`(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Applies `map` to each character and concatenates the resulting lists.
 
 
-===== public String.`|-`(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
+===== fun String.`|-`(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
 
 Returns a sequence containing only characters that satisfy `predicate`.
 
 
-===== public String.`|>`(initial: R, reducer: (R,String)=>R): R
+===== fun String.`|>`(initial: R, reducer: (R,String)=>R): R
 
 Combines all characters from left to right.
 
 
-===== public String.`|`(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.`|`(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Transforms each character using `map`.
 
 
-===== public String.all(predicate: String=>bool): bool
+===== fun String.all(predicate: String=>bool): bool
 
 Returns true when every character satisfies `predicate`.
 
 Empty strings return true.
 
 
-===== public String.all(predicate: (String,int)=>bool): bool
+===== fun String.all(predicate: (String,int)=>bool): bool
 
 Returns true when every character and index pair satisfies `predicate`.
 
 Empty strings return true.
 
 
-===== public String.any(predicate: String=>bool): bool
+===== fun String.any(predicate: String=>bool): bool
 
 Returns true when at least one character satisfies `predicate`.
 
 
-===== public String.any(predicate: (String,int)=>bool): bool
+===== fun String.any(predicate: (String,int)=>bool): bool
 
 Returns true when at least one character and index pair satisfies `predicate`.
 
 
-===== public String.chars(): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-char[char]]
+===== fun String.chars(): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-char[char]]
 
 Returns this String's characters as a finite lazy sequence.
 
 Empty strings return an empty sequence.
 
 
-===== public String.compare(other: xref:#type-String[String]): xref:../../capy/lang/Ordering.adoc#type-Ordering[Ordering]
+===== fun String.compare(other: xref:#type-String[String]): xref:../../capy/lang/Ordering.adoc#type-Ordering[Ordering]
 
 Compares this String with `other` using case-sensitive lexicographic ordering.
 
 
-===== public String.contains(part: xref:#type-String[String]): bool
+===== fun String.contains(part: xref:#type-String[String]): bool
 
 Returns true when this String contains the given substring.
 
 
-===== public String.end_with(part: xref:#type-String[String]): bool
+===== fun String.end_with(part: xref:#type-String[String]): bool
 
 Returns true when this String ends with the given substring.
 
 
-===== public String.filter(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
+===== fun String.filter(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
 
 Returns a sequence containing only characters that satisfy `predicate`.
 
 
-===== public String.flat_map(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.flat_map(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Applies `map` to each character and concatenates the resulting lists.
 
 
-===== public String.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-char[char]]
+===== fun String.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-char[char]]
 
 Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
 
 
-===== public String.get(from: int, to: int): xref:#type-String[String]
+===== fun String.get(from: int, to: int): xref:#type-String[String]
 
 Returns the substring in the half-open range [from, to) using negative-index rules.
 
 
-===== public String.index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
+===== fun String.index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
 
 Returns the first zero-based index where `part` occurs.
 
 Empty `part` matches at the first index. Missing `part` returns None.
 
 
-===== public String.is_blank(): bool
+===== fun String.is_blank(): bool
 
 Returns true when this String is empty or contains only trim whitespace.
 
 Trim whitespace is space, tab, newline, carriage return, or form feed.
 
 
-===== public String.is_empty(): bool
+===== fun String.is_empty(): bool
 
 Returns true when this String has no characters.
 
 
-===== public String.last_index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
+===== fun String.last_index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
 
 Returns the last zero-based index where `part` occurs.
 
 Empty `part` matches at this String's size. Missing `part` returns None.
 
 
-===== public String.map(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.map(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Transforms each character using `map`.
 
 
-===== public String.plus(value: any): xref:#type-String[String]
+===== fun String.plus(value: any): xref:#type-String[String]
 
 Returns this String with `value` appended.
 
 
-===== public String.reduce(initial: R, reducer: (R,String)=>R): R
+===== fun String.reduce(initial: R, reducer: (R,String)=>R): R
 
 Combines all characters from left to right.
 
 
-===== public String.reject(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
+===== fun String.reject(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
 
 Returns a sequence without characters that satisfy `predicate`.
 
 
-===== public String.repeat(times: int): xref:#type-String[String]
+===== fun String.repeat(times: int): xref:#type-String[String]
 
 Returns this String repeated `times` times.
 
 Values less than or equal to zero return an empty String.
 
 
-===== public String.replace(old: xref:#type-String[String], new: xref:#type-String[String]): xref:#type-String[String]
+===== fun String.replace(old: xref:#type-String[String], new: xref:#type-String[String]): xref:#type-String[String]
 
 Replaces every occurrence of old with new.
 
 
-===== public String.size(): xref:../../capy/collection/CollectionTypes.adoc#type-size[size]
+===== fun String.size(): xref:../../capy/collection/CollectionTypes.adoc#type-size[size]
 
 Returns the number of characters in this String.
 
 
-===== public String.starts_with(part: xref:#type-String[String]): bool
+===== fun String.starts_with(part: xref:#type-String[String]): bool
 
 Returns true when this String starts with the given substring.
 
 
-===== public String.to_lower_case(): xref:#type-String[String]
+===== fun String.to_lower_case(): xref:#type-String[String]
 
 Returns this String with ASCII uppercase letters converted to lowercase.
 
 Characters outside `A` through `Z` are unchanged.
 
 
-===== public String.to_upper_case(): xref:#type-String[String]
+===== fun String.to_upper_case(): xref:#type-String[String]
 
 Returns this String with ASCII lowercase letters converted to uppercase.
 
 Characters outside `a` through `z` are unchanged.
 
 
-===== public String.trim(): xref:#type-String[String]
+===== fun String.trim(): xref:#type-String[String]
 
 Returns this String without leading and trailing whitespace.
 
 Trim whitespace is space, tab, newline, carriage return, or form feed.
 
 
-===== public String.trim_end(): xref:#type-String[String]
+===== fun String.trim_end(): xref:#type-String[String]
 
 Returns this String without trailing trim whitespace.
 
 Trim whitespace is space, tab, newline, carriage return, or form feed.
 
 
-===== public String.trim_start(): xref:#type-String[String]
+===== fun String.trim_start(): xref:#type-String[String]
 
 Returns this String without leading trim whitespace.
 
@@ -210,30 +210,30 @@ Trim whitespace is space, tab, newline, carriage return, or form feed.
 
 
 [[type-char]]
-=== public char: xref:#type-String[String]
+=== type char: xref:#type-String[String]
 
 Single-character String value.
 
 ==== Functions
 
-===== public char.`==`(other: xref:#type-char[char]): bool
+===== fun char.`==`(other: xref:#type-char[char]): bool
 
 Returns true when both chars contain the same character.
 
 
-===== public char.compare(other: xref:#type-char[char]): xref:../../capy/lang/Ordering.adoc#type-Ordering[Ordering]
+===== fun char.compare(other: xref:#type-char[char]): xref:../../capy/lang/Ordering.adoc#type-Ordering[Ordering]
 
 Compares this char with `other` using case-sensitive lexicographic ordering.
 
 
-===== public char.to_lower_case(): xref:#type-char[char]
+===== fun char.to_lower_case(): xref:#type-char[char]
 
 Returns this char converted to lowercase when it is an ASCII uppercase letter.
 
 Characters outside `A` through `Z` are unchanged.
 
 
-===== public char.to_upper_case(): xref:#type-char[char]
+===== fun char.to_upper_case(): xref:#type-char[char]
 
 Returns this char converted to uppercase when it is an ASCII lowercase letter.
 

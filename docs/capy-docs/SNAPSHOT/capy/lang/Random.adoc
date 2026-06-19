@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public seed(): xref:#type-seed[seed]
+=== fun seed(): xref:#type-seed[seed]
 
 Returns a native random seed.
 
@@ -22,58 +22,58 @@ Random value paired with the seed to use for the next random step.
 * `value`: T
 
 [[type-seed]]
-=== public seed: long
+=== type seed: long
 
 Immutable random generator state.
 
 ==== Functions
 
-===== public seed.random_bool(): xref:#type-RandomResult[RandomResult][bool]
+===== fun seed.random_bool(): xref:#type-RandomResult[RandomResult][bool]
 
 Returns a random `bool` and the next seed.
 
 
-===== public seed.random_bools(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][bool]
+===== fun seed.random_bools(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][bool]
 
 Returns an infinite sequence of random `bool` values.
 
 
-===== public seed.random_double(): xref:#type-RandomResult[RandomResult][double]
+===== fun seed.random_double(): xref:#type-RandomResult[RandomResult][double]
 
 Returns a random `double` in `[0.0, 1.0]` and the next seed.
 
 
-===== public seed.random_doubles(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][double]
+===== fun seed.random_doubles(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][double]
 
 Returns an infinite sequence of random `double` values in `[0.0, 1.0]`.
 
 
-===== public seed.random_float(): xref:#type-RandomResult[RandomResult][float]
+===== fun seed.random_float(): xref:#type-RandomResult[RandomResult][float]
 
 Returns a random `float` in `[0.0f, 1.0f]` and the next seed.
 
 
-===== public seed.random_floats(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][float]
+===== fun seed.random_floats(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][float]
 
 Returns an infinite sequence of random `float` values in `[0.0f, 1.0f]`.
 
 
-===== public seed.random_int(): xref:#type-RandomResult[RandomResult][int]
+===== fun seed.random_int(): xref:#type-RandomResult[RandomResult][int]
 
 Returns a random `int` and the next seed.
 
 
-===== public seed.random_ints(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][int]
+===== fun seed.random_ints(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][int]
 
 Returns an infinite sequence of random `int` values.
 
 
-===== public seed.random_long(): xref:#type-RandomResult[RandomResult][long]
+===== fun seed.random_long(): xref:#type-RandomResult[RandomResult][long]
 
 Returns a random `long` and the next seed.
 
 
-===== public seed.random_longs(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][long]
+===== fun seed.random_longs(): xref:../../capy/collection/Seq.adoc#type-Cons[Cons][long]
 
 Returns an infinite sequence of random `long` values.
 

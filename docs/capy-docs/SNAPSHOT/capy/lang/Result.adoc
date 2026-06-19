@@ -2,47 +2,47 @@
 
 == Functions
 
-=== public error(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
+=== fun error(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
 
 Creates a generic Error with kind `capy.error`.
 
 
-=== public error_at(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], location: xref:#type-SourceLocation[SourceLocation]): xref:#type-Error[Error]
+=== fun error_at(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], location: xref:#type-SourceLocation[SourceLocation]): xref:#type-Error[Error]
 
 Creates an Error with an explicit source location.
 
 
-=== public error_full(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: xref:../../capy/lang/Option.adoc#type-Option[Option][data], location: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-SourceLocation[SourceLocation]], stack_trace: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]], raw_stack: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]], cause: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Error[Error]], suppressed: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]): xref:#type-Error[Error]
+=== fun error_full(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: xref:../../capy/lang/Option.adoc#type-Option[Option][data], location: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-SourceLocation[SourceLocation]], stack_trace: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]], raw_stack: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]], cause: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Error[Error]], suppressed: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]): xref:#type-Error[Error]
 
 Creates an Error with all structured fields supplied by the caller.
 
 
-=== public error_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
+=== fun error_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
 
 Creates an Error with a stable kind and no structured details.
 
 
-=== public error_with(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: data): xref:#type-Error[Error]
+=== fun error_with(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: data): xref:#type-Error[Error]
 
 Creates an Error with a stable kind and structured details.
 
 
-=== public fail(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result][T]
+=== fun fail(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result][T]
 
 Returns a failed Result with a generic Error.
 
 
-=== public fail_error(error: xref:#type-Error[Error]): xref:#type-Result[Result][T]
+=== fun fail_error(error: xref:#type-Error[Error]): xref:#type-Result[Result][T]
 
 Returns a failed Result from an existing Error.
 
 
-=== public fail_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result][T]
+=== fun fail_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Result[Result][T]
 
 Returns a failed Result with a stable error kind.
 
 
-=== public fail_with(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: data): xref:#type-Result[Result][T]
+=== fun fail_with(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String], details: data): xref:#type-Result[Result][T]
 
 Returns a failed Result with structured error details.
 
@@ -69,62 +69,62 @@ Structured recoverable failure value.
 
 ==== Functions
 
-===== public Error.add_suppressed(error: xref:#type-Error[Error]): xref:#type-Error[Error]
+===== fun Error.add_suppressed(error: xref:#type-Error[Error]): xref:#type-Error[Error]
 
 Returns a copy of this Error with one additional suppressed error.
 
 
-===== public Error.full_message(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun Error.full_message(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Returns a human-readable error message including the cause when present.
 
 
-===== public Error.has_kind(kind: xref:../../capy/lang/String.adoc#type-String[String]): bool
+===== fun Error.has_kind(kind: xref:../../capy/lang/String.adoc#type-String[String]): bool
 
 Returns true when this Error has the supplied stable kind.
 
 
-===== public Error.short_message(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun Error.short_message(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Returns a compact human-readable error message.
 
 
-===== public Error.with_cause(cause: xref:#type-Error[Error]): xref:#type-Error[Error]
+===== fun Error.with_cause(cause: xref:#type-Error[Error]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another cause.
 
 
-===== public Error.with_details(details: data): xref:#type-Error[Error]
+===== fun Error.with_details(details: data): xref:#type-Error[Error]
 
 Returns a copy of this Error with another details payload.
 
 
-===== public Error.with_kind(kind: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
+===== fun Error.with_kind(kind: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another kind.
 
 
-===== public Error.with_location(location: xref:#type-SourceLocation[SourceLocation]): xref:#type-Error[Error]
+===== fun Error.with_location(location: xref:#type-SourceLocation[SourceLocation]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another source location.
 
 
-===== public Error.with_message(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
+===== fun Error.with_message(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another message.
 
 
-===== public Error.with_raw_stack(raw_stack: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
+===== fun Error.with_raw_stack(raw_stack: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another raw backend stack.
 
 
-===== public Error.with_stack_trace(stack_trace: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]]): xref:#type-Error[Error]
+===== fun Error.with_stack_trace(stack_trace: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-StackFrame[StackFrame]]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another stack trace.
 
 
-===== public Error.with_suppressed(suppressed: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]): xref:#type-Error[Error]
+===== fun Error.with_suppressed(suppressed: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Error[Error]]): xref:#type-Error[Error]
 
 Returns a copy of this Error with another suppressed error list.
 
@@ -145,67 +145,67 @@ exceptions.
 
 ==== Functions
 
-===== public Result[T].`|*`(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
+===== fun Result[T].`|*`(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
 
 Applies `flatmap` to a successful value; equivalent to `this.flat_map(flatmap)`.
 
 
-===== public Result[T].`|>`(reduce: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][T=>R, Error=>R]): R
+===== fun Result[T].`|>`(reduce: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][T=>R, Error=>R]): R
 
 Reduces a Result by applying the first function to Success or the second function to Error.
 
 
-===== public Result[T].`|`(map: T=>Y): xref:#type-Result[Result][Y]
+===== fun Result[T].`|`(map: T=>Y): xref:#type-Result[Result][Y]
 
 Transforms a successful value using `map`; equivalent to `this.map(map)`.
 
 
-===== public Result[T].error_message(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun Result[T].error_message(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Returns the error message, or an empty string when this Result is successful.
 
 
-===== public Result[T].flat_map(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
+===== fun Result[T].flat_map(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
 
 Applies `flatmap` to a successful value, or propagates an Error unchanged.
 
 
-===== public Result[T].map(map: T=>Y): xref:#type-Result[Result][Y]
+===== fun Result[T].map(map: T=>Y): xref:#type-Result[Result][Y]
 
 Transforms a successful value using `map`, or propagates an Error unchanged.
 
 
-===== public Result[T].map_error(map: Error=>Error): xref:#type-Result[Result][T]
+===== fun Result[T].map_error(map: Error=>Error): xref:#type-Result[Result][T]
 
 Maps an Error while preserving successful values.
 
 
-===== public Result[T].or(r: xref:#type-Result[Result][T]): xref:#type-Result[Result][T]
+===== fun Result[T].or(r: xref:#type-Result[Result][T]): xref:#type-Result[Result][T]
 
 Returns this Result when successful, or `r` when this Result is an Error.
 
 
-===== public Result[T].or_else(v: T): T
+===== fun Result[T].or_else(v: T): T
 
 Returns the successful value, or `v` when this Result is an Error.
 
 
-===== public Result[T].recover(recover: Error=>T): T
+===== fun Result[T].recover(recover: Error=>T): T
 
 Recovers an Error into a plain value.
 
 
-===== public Result[T].recover_result(recover: Error=>Result[T]): xref:#type-Result[Result][T]
+===== fun Result[T].recover_result(recover: Error=>Result[T]): xref:#type-Result[Result][T]
 
 Recovers an Error into another Result.
 
 
-===== public Result[T].reduce(on_success: T=>R, on_error: Error=>R): R
+===== fun Result[T].reduce(on_success: T=>R, on_error: Error=>R): R
 
 Reduces a Result by applying `on_success` to Success or `on_error` to Error.
 
 
-===== public Result[T].reduce_left(on_success: T=>R, on_error: Error=>R): R
+===== fun Result[T].reduce_left(on_success: T=>R, on_error: Error=>R): R
 
 Reduces a Result by applying `on_success` to Success or `on_error` to Error.
 
