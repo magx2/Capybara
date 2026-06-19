@@ -96,8 +96,11 @@ if csv_path.exists():
 
 previous_by_metric = {}
 delta_by_index = {}
+previous_run_by_index = {}
 for index, row in enumerate(rows):
     delta_by_index[index] = {}
+    if index > 0:
+        previous_run_by_index[index] = rows[index - 1]
     for backend, _ in backends:
         for step, _ in steps:
             metric = f"{backend}-{step}"
@@ -123,10 +126,11 @@ else:
     for index, row in reversed(list(enumerate(rows))):
         short_sha = row["commit_sha"]
         lines.append(f"## {row['date']} [{short_sha}]({commit_url(short_sha)})")
-        if index > 0:
-            previous_sha = rows[index - 1]["commit_sha"]
+        previous_run = previous_run_by_index.get(index)
+        if previous_run:
+            previous_sha = previous_run["commit_sha"]
             lines.append("")
-            lines.append(f"[Changes since previous run]({compare_url(previous_sha, short_sha)})")
+            lines.append(f"[Changes since previous benchmark check]({compare_url(previous_sha, short_sha)})")
         lines.append("")
         for backend, backend_title in backends:
             lines.append(f"### {backend_title}")

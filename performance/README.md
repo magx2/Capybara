@@ -6,7 +6,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 ## 2026-06-19 [f46942a](https://github.com/magx2/Capybara/commit/f46942aa64ec07cf07baefcc59bb83d06d70421e)
 
-[Changes since previous run](https://github.com/magx2/Capybara/compare/176dd6b54b5660641e58da2187cc6ef623bf4d72...f46942aa64ec07cf07baefcc59bb83d06d70421e)
+[Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/176dd6b54b5660641e58da2187cc6ef623bf4d72...f46942aa64ec07cf07baefcc59bb83d06d70421e)
 
 ### Java
 
