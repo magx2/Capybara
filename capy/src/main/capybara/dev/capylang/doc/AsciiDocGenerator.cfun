@@ -135,7 +135,7 @@ private fun asciidoc_type_targets(program: CompiledProgram): List[AsciiDocTypeTa
 
 private fun asciidoc_schema_type_targets(module: CompiledModule): List[AsciiDocTypeTarget] =
     asciidoc_schema_type_names(module.functions).reduce([], (targets, typeName) =>
-        if asciidoc_primitive_schema_type(typeName, module.functions)
+        if asciidoc_primitive_schema_type(typeName, module.functions) | !asciidoc_public_schema_type(typeName, module.functions)
         then targets
         else targets + asciidoc_type_target(typeName, typeName, module_doc_path(module))
     )
@@ -145,7 +145,9 @@ private fun asciidoc_backend_type_targets(module: CompiledModule): List[AsciiDoc
         .entries()
         .reduce([], (targets, entry) =>
             let type = entry[1]
-            targets + asciidoc_type_target(type.name, type.name, module_doc_path(module))
+            if asciidoc_private_visibility(type.visibility)
+            then targets
+            else targets + asciidoc_type_target(type.name, type.name, module_doc_path(module))
         )
 
 private fun asciidoc_object_type_targets(module: CompiledModule, units: List[CompiledObjectOrientedUnit]): List[AsciiDocTypeTarget] =
@@ -158,12 +160,16 @@ private fun asciidoc_object_type_targets(module: CompiledModule, units: List[Com
 
 private fun asciidoc_object_interface_type_targets(unit: CompiledObjectOrientedUnit, module: CompiledModule): List[AsciiDocTypeTarget] =
     unit.interfaces.reduce([], (targets, interface) =>
-        targets + asciidoc_type_target(asciidoc_object_interface_type_name(unit, interface.name), interface.name, module_doc_path(module))
+        if asciidoc_private_visibility(interface.visibility)
+        then targets
+        else targets + asciidoc_type_target(asciidoc_object_interface_type_name(unit, interface.name), interface.name, module_doc_path(module))
     )
 
 private fun asciidoc_object_class_type_targets(unit: CompiledObjectOrientedUnit, module: CompiledModule): List[AsciiDocTypeTarget] =
     unit.classes.reduce([], (targets, class) =>
-        targets + asciidoc_type_target(asciidoc_object_class_type_name(unit, class.name), class.name, module_doc_path(module))
+        if asciidoc_private_visibility(class.visibility)
+        then targets
+        else targets + asciidoc_type_target(asciidoc_object_class_type_name(unit, class.name), class.name, module_doc_path(module))
     )
 
 private fun asciidoc_type_target(name: String, displayName: String, path: String): AsciiDocTypeTarget =
@@ -218,7 +224,8 @@ private fun asciidoc_top_level_functions(functions: List[CompiledFunction], type
     )
 
 private fun asciidoc_top_level_function(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
-    !asciidoc_schema_function(function)
+    !asciidoc_private_visibility(function.visibility)
+    & !asciidoc_schema_function(function)
     & !asciidoc_constant_function(function)
     & !asciidoc_object_helper_function(function)
     & !asciidoc_generated_local_function(function)
@@ -235,6 +242,7 @@ private fun asciidoc_top_level_constants(functions: List[CompiledFunction], type
 
 private fun asciidoc_top_level_constant(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
     asciidoc_constant_function(function)
+    & !asciidoc_private_visibility(function.visibility)
     & !asciidoc_schema_function(function)
     & !asciidoc_object_helper_function(function)
     & !asciidoc_generated_local_function(function)
@@ -263,6 +271,16 @@ private fun asciidoc_constant_function(function: CompiledFunction): bool =
 
 private fun asciidoc_object_helper_function(function: CompiledFunction): bool =
     function.visibility.starts_with("oo")
+
+private fun asciidoc_private_visibility(visibility: String): bool =
+    visibility == "private"
+    | visibility == "local"
+    | visibility == "const:private"
+    | visibility == "const:local"
+    | visibility == "oo:private"
+    | visibility == "oo:local"
+    | visibility == "oo_interface_method:private"
+    | visibility == "oo_interface_method:local"
 
 private fun generate_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     parameters
@@ -551,7 +569,7 @@ private fun generate_schema_type_docs(functions: List[CompiledFunction], module:
     asciidoc_schema_type_names(functions)
         .sort((a,b) => a.compare(b))
         .reduce("", (content, typeName) =>
-            if asciidoc_primitive_schema_type(typeName, functions)
+            if asciidoc_primitive_schema_type(typeName, functions) | !asciidoc_public_schema_type(typeName, functions)
             then content
             else content + generate_schema_type_doc(typeName, functions, module, typeTargets)
         )
@@ -610,7 +628,7 @@ private fun generate_type_field_documentation(function: CompiledFunction): Strin
     else "+\n" + generate_documentation(function) + "\n"
 
 private fun generate_union_variant_docs(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
-    let variants = asciidoc_union_variant_names(typeName, functions)
+    let variants = asciidoc_public_union_variant_names(typeName, functions)
     if variants.is_empty()
     then ""
     else "==== Variants\n\n"
@@ -618,6 +636,13 @@ private fun generate_union_variant_docs(typeName: String, functions: List[Compil
             .sort((a,b) => asciidoc_type_display_name(a, functions).compare(asciidoc_type_display_name(b, functions)))
             .reduce("", (content, variant) => content + "* {asciidoc_type_text(asciidoc_type_display_name(variant, functions), module, typeTargets)}\n")
         + "\n"
+
+private fun asciidoc_public_union_variant_names(typeName: String, functions: List[CompiledFunction]): List[String] =
+    asciidoc_union_variant_names(typeName, functions).reduce([], (acc, variant) =>
+        if asciidoc_public_schema_type(variant, functions)
+        then acc + variant
+        else acc
+    )
 
 private fun generate_enum_value_docs(typeName: String, functions: List[CompiledFunction]): String =
     let values = asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions)
@@ -645,7 +670,8 @@ private fun generate_type_constant_docs(typeName: String, functions: List[Compil
 
 private fun asciidoc_type_functions(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
     functions.reduce([], (acc, function) =>
-        if !asciidoc_schema_function(function)
+        if !asciidoc_private_visibility(function.visibility)
+            & !asciidoc_schema_function(function)
             & !asciidoc_constant_function(function)
             & !asciidoc_object_helper_function(function)
             & !asciidoc_generated_local_function(function)
@@ -658,6 +684,7 @@ private fun asciidoc_type_functions(typeName: String, functions: List[CompiledFu
 private fun asciidoc_type_constants(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
     functions.reduce([], (acc, function) =>
         if asciidoc_constant_function(function)
+            & !asciidoc_private_visibility(function.visibility)
             & !asciidoc_schema_function(function)
             & !asciidoc_object_helper_function(function)
             & !asciidoc_generated_local_function(function)
@@ -699,6 +726,9 @@ private fun asciidoc_schema_parent_child_name(name: String): String =
 
 private fun asciidoc_primitive_schema_type(typeName: String, functions: List[CompiledFunction]): bool =
     !asciidoc_schema_value_named("__capy_schema_primitive|" + typeName, functions).is_empty()
+
+private fun asciidoc_public_schema_type(typeName: String, functions: List[CompiledFunction]): bool =
+    !asciidoc_private_visibility(asciidoc_schema_value_named("__capy_schema_visibility|" + typeName, functions))
 
 private fun asciidoc_schema_function(function: CompiledFunction): bool =
     function.visibility.starts_with("const:schema")
@@ -773,11 +803,13 @@ private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType],
         .sort((a,b) => a[0].compare(b[0]))
         .reduce("", (content, entry) =>
             let type = entry[1]
-            content
-            + "[[{asciidoc_type_anchor(type.name)}]]\n"
-            + "=== {type.visibility} {type.name}: {type_name(type.backingType, module, typeTargets)}\n\n{generate_documentation_for_backend_type(type)}\n"
-            + generate_type_function_docs(type.name, functions, module, typeTargets)
-            + "\n"
+            if asciidoc_private_visibility(type.visibility)
+            then content
+            else content
+                + "[[{asciidoc_type_anchor(type.name)}]]\n"
+                + "=== {type.visibility} {type.name}: {type_name(type.backingType, module, typeTargets)}\n\n{generate_documentation_for_backend_type(type)}\n"
+                + generate_type_function_docs(type.name, functions, module, typeTargets)
+                + "\n"
         )
 
 private fun generate_documentation_for_backend_type(type: CompiledPrimitiveBackedType): String =
@@ -800,7 +832,11 @@ private fun generate_object_oriented_unit_docs(unit: CompiledObjectOrientedUnit,
 private fun generate_object_interface_docs(interfaces: List[CompiledObjectOrientedInterface], unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     interfaces
         .sort((a,b) => a.name.compare(b.name))
-        .map(interface => generate_object_interface_doc(interface, unit, module, typeTargets))
+        .map(interface =>
+            if asciidoc_private_visibility(interface.visibility)
+            then ""
+            else generate_object_interface_doc(interface, unit, module, typeTargets)
+        )
         .reduce("", (content, doc) => content + doc)
 
 private fun generate_object_interface_doc(interface: CompiledObjectOrientedInterface, unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
@@ -814,7 +850,11 @@ private fun generate_object_interface_doc(interface: CompiledObjectOrientedInter
 private fun generate_object_class_docs(classes: List[CompiledObjectOrientedClass], unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     classes
         .sort((a,b) => a.name.compare(b.name))
-        .map(class => generate_object_class_doc(class, unit, module, typeTargets))
+        .map(class =>
+            if asciidoc_private_visibility(class.visibility)
+            then ""
+            else generate_object_class_doc(class, unit, module, typeTargets)
+        )
         .reduce("", (content, doc) => content + doc)
 
 private fun generate_object_class_doc(class: CompiledObjectOrientedClass, unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
@@ -845,10 +885,11 @@ private fun generate_object_parent_docs(parents: List[CompiledTypeReference], mo
         + "\n"
 
 private fun generate_object_field_docs(fields: List[CompiledObjectOrientedField], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
-    if fields.is_empty()
+    let visibleFields = asciidoc_public_object_fields(fields)
+    if visibleFields.is_empty()
     then ""
     else "==== Fields\n\n"
-        + fields
+        + visibleFields
             .sort((a,b) => a.name.compare(b.name))
             .reduce("", (content, field) => content + generate_object_field_doc(field, module, typeTargets))
         + "\n"
@@ -856,6 +897,13 @@ private fun generate_object_field_docs(fields: List[CompiledObjectOrientedField]
 private fun generate_object_field_doc(field: CompiledObjectOrientedField, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     "* `{field.visibility} {field.name}`: {type_name(field.typeReference, module, typeTargets)}{object_field_initializer_label(field)}\n"
     + generate_object_member_documentation(field.documentation)
+
+private fun asciidoc_public_object_fields(fields: List[CompiledObjectOrientedField]): List[CompiledObjectOrientedField] =
+    fields.reduce([], (acc, field) =>
+        if asciidoc_private_visibility(field.visibility)
+        then acc
+        else acc + field
+    )
 
 private fun object_field_initializer_label(field: CompiledObjectOrientedField): String =
     if field.hasValue then " (default)" else ""
@@ -875,10 +923,11 @@ private fun generate_object_init_items(initBlocks: List[CompiledObjectOrientedIn
         + generate_object_init_items(initBlocks[1:], idx + 1)
 
 private fun generate_object_method_docs(methods: List[CompiledObjectOrientedMethod], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
-    if methods.is_empty()
+    let visibleMethods = asciidoc_public_object_methods(methods)
+    if visibleMethods.is_empty()
     then ""
     else "==== Methods\n\n"
-        + methods
+        + visibleMethods
             .sort((a,b) => a.name.compare(b.name))
             .map(method => generate_object_method_doc(method, module, typeTargets))
             .reduce("", (content, doc) => content + doc)
@@ -887,6 +936,13 @@ private fun generate_object_method_doc(method: CompiledObjectOrientedMethod, mod
     "===== {method.visibility} {method.name}({generate_parameters(method.parameters, module, typeTargets)}): {type_name(method.returnType, module, typeTargets)}\n\n"
     + generate_text_documentation(method.documentation)
     + "\n"
+
+private fun asciidoc_public_object_methods(methods: List[CompiledObjectOrientedMethod]): List[CompiledObjectOrientedMethod] =
+    methods.reduce([], (acc, method) =>
+        if asciidoc_private_visibility(method.visibility)
+        then acc
+        else acc + method
+    )
 
 private fun generate_object_member_documentation(documentation: List[String]): String =
     if documentation.is_empty()
@@ -897,12 +953,18 @@ private fun generate_annotation_docs(annotations: Dict[CompiledAnnotationDeclara
     annotations
         .entries()
         .sort((a,b) => a[0].compare(b[0]))
-        .reduce("", (content, entry) => content + generate_annotation_doc(entry[1]))
+        .reduce("", (content, entry) =>
+            let annotation = entry[1]
+            if asciidoc_private_visibility(annotation.visibility)
+            then content
+            else content + generate_annotation_doc(annotation)
+        )
 
 private fun generate_annotation_section_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
-    if annotations.is_empty()
+    let content = generate_annotation_docs(annotations)
+    if content.is_empty()
     then ""
-    else "== Annotations\n\n" + generate_annotation_docs(annotations) + "\n\n"
+    else "== Annotations\n\n" + content + "\n\n"
 
 private fun generate_annotation_doc(annotation: CompiledAnnotationDeclaration): String =
     "=== {annotation.visibility} @{annotation.name}\n\n"

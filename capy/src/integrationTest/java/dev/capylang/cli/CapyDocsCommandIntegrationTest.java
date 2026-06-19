@@ -26,6 +26,9 @@ class CapyDocsCommandIntegrationTest {
                 /// Describes a box
                 fun Box.describe(): String = "box"
 
+                /// Hides a box
+                private fun Box.hidden(): String = "hidden"
+
                 /// Generic box docs
                 data GenericBox[T] { value: T }
 
@@ -44,11 +47,41 @@ class CapyDocsCommandIntegrationTest {
                 /// Answer docs
                 const ANSWER: int = 42
 
+                /// Hidden answer docs
+                private const HIDDEN_ANSWER: int = 7
+
                 /// Describes a tone
                 fun Tone.describe(): String = "tone"
 
                 /// Function docs
                 fun documented_function(box: Box, wrapped: GenericBox[Box]): GenericBox[Box] = wrapped
+
+                /// Hidden function docs
+                private fun hidden_function(): String = "hidden"
+
+                /// Hidden box docs
+                private data HiddenBox { value: String }
+
+                /// Hidden circle docs
+                private data HiddenCircle { radius: int }
+
+                /// Hidden visible circle docs
+                private data HiddenVisibleCircle { radius: int }
+
+                /// Visible shape docs
+                union VisibleShape = HiddenVisibleCircle | Box
+
+                /// Hidden square docs
+                private data HiddenSquare { size: int }
+
+                /// Hidden shape docs
+                private union HiddenShape = HiddenCircle | HiddenSquare
+
+                /// Hidden id docs
+                private type hidden_id -> String
+
+                /// Hidden marker docs
+                private annotation HiddenMarker on fun {}
                 """);
         writeSource(input.resolve("sample/Objects.coo"), """
                 /// Named docs
@@ -68,6 +101,9 @@ class CapyDocsCommandIntegrationTest {
                     /// Label field docs
                     field label: String = label
 
+                    /// Internal field docs
+                    private field internal: String = "secret"
+
                     /// Init docs
                     init {
                         return "ready"
@@ -78,6 +114,9 @@ class CapyDocsCommandIntegrationTest {
 
                     /// Render docs
                     def render(prefix: String): String = prefix + this.name()
+
+                    /// Internal render docs
+                    private def internal_render(): String = this.internal
                 }
                 """);
         writeSource(input.resolve("sample/Markers.cfun"), """
@@ -125,6 +164,8 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Shape docs")
                 .contains("* xref:#type-Circle[Circle]")
                 .contains("* xref:#type-Square[Square]")
+                .contains("[[type-VisibleShape]]\n=== union VisibleShape")
+                .contains("Visible shape docs")
                 .contains("=== enum Tone")
                 .contains("Tone docs")
                 .contains("* `LOW`")
@@ -135,6 +176,19 @@ class CapyDocsCommandIntegrationTest {
                 .contains("===== public Tone.describe(): String")
                 .doesNotContain("=== const:public ANSWER(): int")
                 .doesNotContain("== Annotations")
+                .doesNotContain("HiddenBox")
+                .doesNotContain("HiddenCircle")
+                .doesNotContain("HiddenVisibleCircle")
+                .doesNotContain("HiddenSquare")
+                .doesNotContain("HiddenShape")
+                .doesNotContain("hidden_id")
+                .doesNotContain("hidden_function")
+                .doesNotContain("HIDDEN_ANSWER")
+                .doesNotContain("HiddenMarker")
+                .doesNotContain("Hidden box docs")
+                .doesNotContain("Hidden answer docs")
+                .doesNotContain("Hidden marker docs")
+                .doesNotContain("Hides a box")
                 .doesNotContain("\n=== public Box.describe")
                 .doesNotContain("\n=== public GenericBox[T].describe")
                 .doesNotContain("* `name`: `String`")
@@ -169,6 +223,9 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Init docs")
                 .contains("===== public render(prefix: String): String")
                 .contains("Render docs")
+                .doesNotContain("internal")
+                .doesNotContain("Internal field docs")
+                .doesNotContain("Internal render docs")
                 .doesNotContain("== Functions")
                 .doesNotContain("== Constants")
                 .doesNotContain("== Annotations")
