@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public print(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
+=== fun print(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Writes a string to standard output without a trailing newline and returns the consumed value.
 
@@ -14,42 +14,42 @@ println("ready")
 Use `println` when a trailing newline should be written.
 
 
-=== public print(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
+=== fun print(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
 
 Writes a byte to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
+=== fun print(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
 
 Writes an int to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
+=== fun print(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
 
 Writes a long to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
+=== fun print(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
 
 Writes a float to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
+=== fun print(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
 
 Writes a double to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun print(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
 
 Writes a bool to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
+=== fun print(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
 
 Writes bytes to standard output without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
+=== fun print_error(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Writes a string to standard error without a trailing newline and returns the consumed value.
 
@@ -60,42 +60,42 @@ println_error("configuration missing")
 ```
 
 
-=== public print_error(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
+=== fun print_error(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
 
 Writes a byte to standard error without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
+=== fun print_error(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
 
 Writes an int to standard error without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
+=== fun print_error(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
 
 Writes a long to standard error without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
+=== fun print_error(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
 
 Writes a float to standard error without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
+=== fun print_error(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
 
 Writes a double to standard error without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun print_error(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
 
 Writes a bool to standard error without a trailing newline and returns the consumed value.
 
 
-=== public print_error(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
+=== fun print_error(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
 
 Writes bytes to standard error without a trailing newline and returns the consumed value.
 
 
-=== public println(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
+=== fun println(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Writes a string to standard output followed by a newline and returns the consumed value.
 
@@ -103,42 +103,42 @@ Writes a string to standard output followed by a newline and returns the consume
 for later effect composition.
 
 
-=== public println(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
+=== fun println(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
 
 Writes a byte to standard output followed by a newline and returns the consumed value.
 
 
-=== public println(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
+=== fun println(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
 
 Writes an int to standard output followed by a newline and returns the consumed value.
 
 
-=== public println(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
+=== fun println(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
 
 Writes a long to standard output followed by a newline and returns the consumed value.
 
 
-=== public println(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
+=== fun println(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
 
 Writes a float to standard output followed by a newline and returns the consumed value.
 
 
-=== public println(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
+=== fun println(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
 
 Writes a double to standard output followed by a newline and returns the consumed value.
 
 
-=== public println(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun println(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
 
 Writes a bool to standard output followed by a newline and returns the consumed value.
 
 
-=== public println(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
+=== fun println(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
 
 Writes bytes to standard output followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
+=== fun println_error(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Writes a string to standard error followed by a newline and returns the consumed value.
 
@@ -146,42 +146,42 @@ Use this for diagnostics, progress messages, or errors that should not be
 mixed with normal program output.
 
 
-=== public println_error(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
+=== fun println_error(text: byte): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][byte]
 
 Writes a byte to standard error followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
+=== fun println_error(text: int): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][int]
 
 Writes an int to standard error followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
+=== fun println_error(text: long): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
 
 Writes a long to standard error followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
+=== fun println_error(text: float): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][float]
 
 Writes a float to standard error followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
+=== fun println_error(text: double): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][double]
 
 Writes a double to standard error followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun println_error(text: bool): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
 
 Writes a bool to standard error followed by a newline and returns the consumed value.
 
 
-=== public println_error(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
+=== fun println_error(text: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][byte]]
 
 Writes bytes to standard error followed by a newline and returns the consumed value.
 
 
-=== public read_line(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]]
+=== fun read_line(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]]
 
 Reads one line from standard input, or None at end of input.
 

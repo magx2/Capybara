@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Duration[Duration]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Duration[Duration]]
 
 Parses an ISO 8601 duration string.
 
@@ -34,7 +34,7 @@ extended duration respectively.
 
 == Constants
 
-=== public ZERO: xref:#type-Duration[Duration]
+=== const ZERO: xref:#type-Duration[Duration]
 
 
 
@@ -102,27 +102,27 @@ Returns a `DateDuration` with date and time components populated.
 
 ==== Functions
 
-===== public Duration.days(): int
+===== fun Duration.days(): int
 
 Returns day component (`weeks * 7` for week durations).
 
 
-===== public Duration.hours(): int
+===== fun Duration.hours(): int
 
 Returns hour component (`0` for week durations).
 
 
-===== public Duration.minutes(): int
+===== fun Duration.minutes(): int
 
 Returns minute component (`0` for week durations).
 
 
-===== public Duration.months(): int
+===== fun Duration.months(): int
 
 Returns month component (`0` for week durations).
 
 
-===== public Duration.negate(): xref:#type-Duration[Duration]
+===== fun Duration.negate(): xref:#type-Duration[Duration]
 
 Returns this duration with all components negated.
 Returns the same duration with every component sign inverted.
@@ -131,12 +131,12 @@ Example: `DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, sec
 returns a negative one-day duration.
 
 
-===== public Duration.seconds(): int
+===== fun Duration.seconds(): int
 
 Returns second component (`0` for week durations).
 
 
-===== public Duration.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun Duration.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Formats this duration as a canonical ISO 8601 string.
 
@@ -150,7 +150,7 @@ WeekDuration { weeks: 2 }.to_iso_8601() == "P2W"
 The output uses the symbolic ISO 8601 form and omits zero-valued components.
 
 
-===== public Duration.years(): int
+===== fun Duration.years(): int
 
 Returns year component (`0` for week durations).
 

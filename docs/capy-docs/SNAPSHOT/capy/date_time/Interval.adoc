@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Interval[Interval]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Interval[Interval]]
 
 Parses an ISO 8601 interval in one of these forms:
 - `<start>/<end>`
@@ -79,12 +79,12 @@ DateTimeStartDuration {
 
 ==== Functions
 
-===== public Interval.duration(): xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]
+===== fun Interval.duration(): xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]
 
 Returns the interval duration.
 
 
-===== public Interval.end(): xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]
+===== fun Interval.end(): xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]
 
 Returns the interval end date-time.
 
@@ -92,7 +92,7 @@ For `DateTimeStartDuration`, the end is calculated by adding the duration to
 the start.
 
 
-===== public Interval.start(): xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]
+===== fun Interval.start(): xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]
 
 Returns the interval start date-time.
 
@@ -100,7 +100,7 @@ For `DateTimeDurationEnd`, the start is calculated by subtracting the
 duration from the end.
 
 
-===== public Interval.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun Interval.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Formats this interval as canonical ISO 8601 using `/` as the separator.
 

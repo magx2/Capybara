@@ -2,62 +2,62 @@
 
 == Constants
 
-=== public DEFAULT_FAILED_EXIT_CODE: 
+=== const DEFAULT_FAILED_EXIT_CODE: 
 
 Default failure exit code for generic program errors.
 
 
-=== public LAST_FAILED_EXIT_CODE: 
+=== const LAST_FAILED_EXIT_CODE: 
 
 Last valid failure exit code.
 
 
-=== public SIGABRT: 
+=== const SIGABRT: 
 
 Abort signal exit code.
 
 
-=== public SIGALRM: 
+=== const SIGALRM: 
 
 Alarm or timeout signal exit code.
 
 
-=== public SIGFPE: 
+=== const SIGFPE: 
 
 Floating point exception signal exit code.
 
 
-=== public SIGHUP: 
+=== const SIGHUP: 
 
 Hangup signal exit code.
 
 
-=== public SIGINT: 
+=== const SIGINT: 
 
 Interrupt signal exit code.
 
 
-=== public SIGKILL: 
+=== const SIGKILL: 
 
 Forced kill signal exit code.
 
 
-=== public SIGPIPE: 
+=== const SIGPIPE: 
 
 Broken pipe signal exit code.
 
 
-=== public SIGQUIT: 
+=== const SIGQUIT: 
 
 Quit signal exit code.
 
 
-=== public SIGSEGV: 
+=== const SIGSEGV: 
 
 Segmentation fault signal exit code.
 
 
-=== public SIGTERM: 
+=== const SIGTERM: 
 
 Termination signal exit code.
 
@@ -91,18 +91,18 @@ Process result returned by an executable Capybara `main` function.
 Successful program completion with exit code `0`.
 
 [[type-failed_exit_code]]
-=== public failed_exit_code: int
+=== type failed_exit_code: int
 
 Valid process failure exit code in the portable range `1..255`.
 
 ==== Functions
 
-===== public failed_exit_code.next(): xref:#type-failed_exit_code[failed_exit_code]
+===== fun failed_exit_code.next(): xref:#type-failed_exit_code[failed_exit_code]
 
 Returns the next failure exit code, clamped to `LAST_FAILED_EXIT_CODE`.
 
 
-===== public failed_exit_code.previous(): xref:#type-failed_exit_code[failed_exit_code]
+===== fun failed_exit_code.previous(): xref:#type-failed_exit_code[failed_exit_code]
 
 Returns the previous failure exit code, clamped to `DEFAULT_FAILED_EXIT_CODE`.
 

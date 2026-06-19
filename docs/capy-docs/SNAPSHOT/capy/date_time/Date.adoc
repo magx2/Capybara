@@ -2,14 +2,14 @@
 
 == Functions
 
-=== public from_days_since_unix_epoch(days_since_epoch: int): xref:#type-Date[Date]
+=== fun from_days_since_unix_epoch(days_since_epoch: int): xref:#type-Date[Date]
 
 Converts days since Unix epoch (`1970-01-01`) to `Date`.
 
 Example: `from_days_since_unix_epoch(1)` returns `1970-01-02`.
 
 
-=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Date[Date]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Date[Date]]
 
 Parses an ISO 8601 calendar date in basic or extended complete form.
 
@@ -25,55 +25,55 @@ Both forms return the same `Date`.
 
 == Constants
 
-=== public APRIL: xref:#type-month[month]
+=== const APRIL: xref:#type-month[month]
 
 
 
-=== public AUGUST: xref:#type-month[month]
+=== const AUGUST: xref:#type-month[month]
 
 
 
-=== public DECEMBER: xref:#type-month[month]
+=== const DECEMBER: xref:#type-month[month]
 
 
 
-=== public FEBRUARY: xref:#type-month[month]
+=== const FEBRUARY: xref:#type-month[month]
 
 
 
-=== public JANUARY: xref:#type-month[month]
+=== const JANUARY: xref:#type-month[month]
 
 
 
-=== public JULY: xref:#type-month[month]
+=== const JULY: xref:#type-month[month]
 
 
 
-=== public JUNE: xref:#type-month[month]
+=== const JUNE: xref:#type-month[month]
 
 
 
-=== public MARCH: xref:#type-month[month]
+=== const MARCH: xref:#type-month[month]
 
 
 
-=== public MAY: xref:#type-month[month]
+=== const MAY: xref:#type-month[month]
 
 
 
-=== public NOVEMBER: xref:#type-month[month]
+=== const NOVEMBER: xref:#type-month[month]
 
 
 
-=== public OCTOBER: xref:#type-month[month]
+=== const OCTOBER: xref:#type-month[month]
 
 
 
-=== public SEPTEMBER: xref:#type-month[month]
+=== const SEPTEMBER: xref:#type-month[month]
 
 
 
-=== public UNIX_DATE: xref:#type-Date[Date]
+=== const UNIX_DATE: xref:#type-Date[Date]
 
 
 
@@ -104,14 +104,14 @@ The leap-year date succeeds; the invalid 2025 date returns `Error`.
 
 ==== Functions
 
-===== public Date.add_days(days: int): xref:#type-Date[Date]
+===== fun Date.add_days(days: int): xref:#type-Date[Date]
 
 Adds days to this date.
 
 Example: `UNIX_DATE.add_days(31)` returns `1970-02-01`.
 
 
-===== public Date.add_years_months(years: int, months: int): xref:#type-Date[Date]
+===== fun Date.add_years_months(years: int, months: int): xref:#type-Date[Date]
 
 Adds years and months to this date, clamping the day to target month length.
 
@@ -122,29 +122,29 @@ Date! { day: 31, month: JANUARY, year: 2024 }.add_years_months(0, 1)
 Returns `2024-02-29`, because February 2024 has no day 31.
 
 
-===== public Date.first_day_of_month(): xref:#type-Date[Date]
+===== fun Date.first_day_of_month(): xref:#type-Date[Date]
 
 Returns the first day of this date's month.
 
 
-===== public Date.last_day_of_month(): xref:#type-Date[Date]
+===== fun Date.last_day_of_month(): xref:#type-Date[Date]
 
 Returns the last valid day of this date's month.
 
 
-===== public Date.leap_year(): bool
+===== fun Date.leap_year(): bool
 
 Returns `true` when this date is in a leap year.
 
 
-===== public Date.to_days_since_unix_epoch(): int
+===== fun Date.to_days_since_unix_epoch(): int
 
 Converts this date to days since Unix epoch (`1970-01-01`).
 
 Example: `UNIX_DATE.to_days_since_unix_epoch()` returns `0`.
 
 
-===== public Date.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun Date.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Formats this date as an ISO 8601 calendar date.
 
@@ -153,37 +153,37 @@ returns `2026-06-05`.
 
 
 [[type-month]]
-=== public month: int
+=== type month: int
 
 Calendar month number in the range 1..12.
 
 ==== Functions
 
-===== public month.`<=`(other: xref:#type-month[month]): bool
+===== fun month.`<=`(other: xref:#type-month[month]): bool
 
 
 
-===== public month.`<`(other: xref:#type-month[month]): bool
+===== fun month.`<`(other: xref:#type-month[month]): bool
 
 
 
-===== public month.`==`(other: xref:#type-month[month]): bool
+===== fun month.`==`(other: xref:#type-month[month]): bool
 
 
 
-===== public month.`>=`(other: xref:#type-month[month]): bool
+===== fun month.`>=`(other: xref:#type-month[month]): bool
 
 
 
-===== public month.`>`(other: xref:#type-month[month]): bool
+===== fun month.`>`(other: xref:#type-month[month]): bool
 
 
 
-===== public month.next(): xref:#type-month[month]
+===== fun month.next(): xref:#type-month[month]
 
 
 
-===== public month.previous(): xref:#type-month[month]
+===== fun month.previous(): xref:#type-month[month]
 
 
 

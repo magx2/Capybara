@@ -2,19 +2,19 @@
 
 == Functions
 
-=== public abs(number: long): long
+=== fun abs(number: long): long
 
 
 
-=== public abs(number: int): int
+=== fun abs(number: int): int
 
 
 
-=== public digits(number: int): int
+=== fun digits(number: int): int
 
 
 
-=== public floor_div(a: int, b: int): int
+=== fun floor_div(a: int, b: int): int
 
 Floor division for integers.
 
@@ -22,7 +22,7 @@ Unlike `/`, this always rounds toward negative infinity.
 `b` must be non-zero.
 
 
-=== public floor_div(a: long, b: long): long
+=== fun floor_div(a: long, b: long): long
 
 Floor division for long integers.
 
@@ -30,7 +30,7 @@ Unlike `/`, this always rounds toward negative infinity.
 `b` must be non-zero.
 
 
-=== public floor_mod(a: int, b: int): int
+=== fun floor_mod(a: int, b: int): int
 
 Floor modulo for integers.
 
@@ -38,7 +38,7 @@ Result has the same sign as divisor `b` (or is zero).
 `b` must be non-zero.
 
 
-=== public floor_mod(a: long, b: long): long
+=== fun floor_mod(a: long, b: long): long
 
 Floor modulo for long integers.
 
@@ -46,55 +46,55 @@ Result has the same sign as divisor `b` (or is zero).
 `b` must be non-zero.
 
 
-=== public max(a: int, b: int): int
+=== fun max(a: int, b: int): int
 
 Returns the greater of two integers.
 
 
-=== public max(values: xref:../../capy/collection/List.adoc#type-List[List][int]): xref:../../capy/lang/Option.adoc#type-Option[Option][int]
+=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List][int]): xref:../../capy/lang/Option.adoc#type-Option[Option][int]
 
 Returns the greatest integer in `values`.
 
 Returns `None` when the List is empty.
 
 
-=== public max(a: long, b: long): long
+=== fun max(a: long, b: long): long
 
 Returns the greater of two long integers.
 
 
-=== public max(values: xref:../../capy/collection/List.adoc#type-List[List][long]): xref:../../capy/lang/Option.adoc#type-Option[Option][long]
+=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List][long]): xref:../../capy/lang/Option.adoc#type-Option[Option][long]
 
 Returns the greatest long integer in `values`.
 
 Returns `None` when the List is empty.
 
 
-=== public min(a: int, b: int): int
+=== fun min(a: int, b: int): int
 
 Returns the smaller of two integers.
 
 
-=== public min(values: xref:../../capy/collection/List.adoc#type-List[List][int]): xref:../../capy/lang/Option.adoc#type-Option[Option][int]
+=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List][int]): xref:../../capy/lang/Option.adoc#type-Option[Option][int]
 
 Returns the smallest integer in `values`.
 
 Returns `None` when the List is empty.
 
 
-=== public min(a: long, b: long): long
+=== fun min(a: long, b: long): long
 
 Returns the smaller of two long integers.
 
 
-=== public min(values: xref:../../capy/collection/List.adoc#type-List[List][long]): xref:../../capy/lang/Option.adoc#type-Option[Option][long]
+=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List][long]): xref:../../capy/lang/Option.adoc#type-Option[Option][long]
 
 Returns the smallest long integer in `values`.
 
 Returns `None` when the List is empty.
 
 
-=== public round(value: double, mode: xref:#type-RoundMode[RoundMode]): long
+=== fun round(value: double, mode: xref:#type-RoundMode[RoundMode]): long
 
 Rounds `value` to a `long` using the selected `RoundMode`.
 

@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public delay(thunk: ()=>T): xref:#type-Effect[Effect][T]
+=== fun delay(thunk: ()=>T): xref:#type-Effect[Effect][T]
 
 Defers a thunk until the effect is executed.
 
@@ -10,7 +10,7 @@ Use this for computations that should not happen while the effect is being
 constructed.
 
 
-=== public pure(value: T): xref:#type-Effect[Effect][T]
+=== fun pure(value: T): xref:#type-Effect[Effect][T]
 
 Wraps a pure value in an effect.
 
@@ -38,17 +38,17 @@ let program =
 
 ==== Functions
 
-===== public Effect[T].`|*`(flatmap: T=>Effect[Y]): xref:#type-Effect[Effect][Y]
+===== fun Effect[T].`|*`(flatmap: T=>Effect[Y]): xref:#type-Effect[Effect][Y]
 
 Operator alias for `flat_map`.
 
 
-===== public Effect[T].`|`(map: T=>Y): xref:#type-Effect[Effect][Y]
+===== fun Effect[T].`|`(map: T=>Y): xref:#type-Effect[Effect][Y]
 
 Operator alias for `map`.
 
 
-===== public Effect[T].flat_map(flatmap: T=>Effect[Y]): xref:#type-Effect[Effect][Y]
+===== fun Effect[T].flat_map(flatmap: T=>Effect[Y]): xref:#type-Effect[Effect][Y]
 
 Sequences this effect and then returns the effect produced by `flatmap`.
 
@@ -60,12 +60,12 @@ read_text(path).flat_map(result =>
 ```
 
 
-===== public Effect[T].map(map: T=>Y): xref:#type-Effect[Effect][Y]
+===== fun Effect[T].map(map: T=>Y): xref:#type-Effect[Effect][Y]
 
 Transforms the produced value without executing the effect immediately.
 
 
-===== public Effect[T].unsafe_run(): T
+===== fun Effect[T].unsafe_run(): T
 
 Executes the effect immediately and returns its value.
 

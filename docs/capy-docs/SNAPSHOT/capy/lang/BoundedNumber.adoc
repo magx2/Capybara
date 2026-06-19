@@ -2,19 +2,19 @@
 
 == Functions
 
-=== public percentage_to_ratio(value: xref:#type-percentage[percentage]): xref:#type-ratio[ratio]
+=== fun percentage_to_ratio(value: xref:#type-percentage[percentage]): xref:#type-ratio[ratio]
 
 
 
-=== public probability_to_ratio(value: xref:#type-probability[probability]): xref:#type-ratio[ratio]
+=== fun probability_to_ratio(value: xref:#type-probability[probability]): xref:#type-ratio[ratio]
 
 
 
-=== public ratio_to_percentage(value: xref:#type-ratio[ratio]): xref:#type-percentage[percentage]
+=== fun ratio_to_percentage(value: xref:#type-ratio[ratio]): xref:#type-percentage[percentage]
 
 
 
-=== public ratio_to_probability(value: xref:#type-ratio[ratio]): xref:#type-probability[probability]
+=== fun ratio_to_probability(value: xref:#type-ratio[ratio]): xref:#type-probability[probability]
 
 
 
@@ -22,27 +22,27 @@
 
 == Constants
 
-=== public CERTAIN_PROBABILITY: xref:#type-probability[probability]
+=== const CERTAIN_PROBABILITY: xref:#type-probability[probability]
 
 
 
-=== public FULL_PERCENTAGE: xref:#type-percentage[percentage]
+=== const FULL_PERCENTAGE: xref:#type-percentage[percentage]
 
 
 
-=== public IMPOSSIBLE_PROBABILITY: xref:#type-probability[probability]
+=== const IMPOSSIBLE_PROBABILITY: xref:#type-probability[probability]
 
 
 
-=== public WHOLE_RATIO: xref:#type-ratio[ratio]
+=== const WHOLE_RATIO: xref:#type-ratio[ratio]
 
 
 
-=== public ZERO_PERCENTAGE: xref:#type-percentage[percentage]
+=== const ZERO_PERCENTAGE: xref:#type-percentage[percentage]
 
 
 
-=== public ZERO_RATIO: xref:#type-ratio[ratio]
+=== const ZERO_RATIO: xref:#type-ratio[ratio]
 
 
 
@@ -51,101 +51,101 @@
 == Types
 
 [[type-percentage]]
-=== public percentage: double
+=== type percentage: double
 
 Percentage value between zero and one hundred.
 
 ==== Functions
 
-===== public percentage.`<=`(other: xref:#type-percentage[percentage]): bool
+===== fun percentage.`<=`(other: xref:#type-percentage[percentage]): bool
 
 
 
-===== public percentage.`<`(other: xref:#type-percentage[percentage]): bool
+===== fun percentage.`<`(other: xref:#type-percentage[percentage]): bool
 
 
 
-===== public percentage.`==`(other: xref:#type-percentage[percentage]): bool
+===== fun percentage.`==`(other: xref:#type-percentage[percentage]): bool
 
 
 
-===== public percentage.`>=`(other: xref:#type-percentage[percentage]): bool
+===== fun percentage.`>=`(other: xref:#type-percentage[percentage]): bool
 
 
 
-===== public percentage.`>`(other: xref:#type-percentage[percentage]): bool
+===== fun percentage.`>`(other: xref:#type-percentage[percentage]): bool
 
 
 
-===== public percentage.to_ratio(): xref:#type-ratio[ratio]
+===== fun percentage.to_ratio(): xref:#type-ratio[ratio]
 
 
 
 
 [[type-probability]]
-=== public probability: double
+=== type probability: double
 
 Probability value between zero and one.
 
 ==== Functions
 
-===== public probability.`<=`(other: xref:#type-probability[probability]): bool
+===== fun probability.`<=`(other: xref:#type-probability[probability]): bool
 
 
 
-===== public probability.`<`(other: xref:#type-probability[probability]): bool
+===== fun probability.`<`(other: xref:#type-probability[probability]): bool
 
 
 
-===== public probability.`==`(other: xref:#type-probability[probability]): bool
+===== fun probability.`==`(other: xref:#type-probability[probability]): bool
 
 
 
-===== public probability.`>=`(other: xref:#type-probability[probability]): bool
+===== fun probability.`>=`(other: xref:#type-probability[probability]): bool
 
 
 
-===== public probability.`>`(other: xref:#type-probability[probability]): bool
+===== fun probability.`>`(other: xref:#type-probability[probability]): bool
 
 
 
-===== public probability.to_ratio(): xref:#type-ratio[ratio]
+===== fun probability.to_ratio(): xref:#type-ratio[ratio]
 
 
 
 
 [[type-ratio]]
-=== public ratio: double
+=== type ratio: double
 
 Fractional value between zero and one.
 
 ==== Functions
 
-===== public ratio.`<=`(other: xref:#type-ratio[ratio]): bool
+===== fun ratio.`<=`(other: xref:#type-ratio[ratio]): bool
 
 
 
-===== public ratio.`<`(other: xref:#type-ratio[ratio]): bool
+===== fun ratio.`<`(other: xref:#type-ratio[ratio]): bool
 
 
 
-===== public ratio.`==`(other: xref:#type-ratio[ratio]): bool
+===== fun ratio.`==`(other: xref:#type-ratio[ratio]): bool
 
 
 
-===== public ratio.`>=`(other: xref:#type-ratio[ratio]): bool
+===== fun ratio.`>=`(other: xref:#type-ratio[ratio]): bool
 
 
 
-===== public ratio.`>`(other: xref:#type-ratio[ratio]): bool
+===== fun ratio.`>`(other: xref:#type-ratio[ratio]): bool
 
 
 
-===== public ratio.to_percentage(): xref:#type-percentage[percentage]
+===== fun ratio.to_percentage(): xref:#type-percentage[percentage]
 
 
 
-===== public ratio.to_probability(): xref:#type-probability[probability]
+===== fun ratio.to_probability(): xref:#type-probability[probability]
 
 
 

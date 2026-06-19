@@ -2,35 +2,35 @@
 
 == Functions
 
-=== public clamp_long_to_int(value: long): int
+=== fun clamp_long_to_int(value: long): int
 
 
 
-=== public safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+=== fun safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
 
 
 
-=== public to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][bool]
+=== fun to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][bool]
 
 Parses this String as a bool.
 
 
-=== public to_double(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][double]
+=== fun to_double(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][double]
 
 Parses this String as a double.
 
 
-=== public to_float(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][float]
+=== fun to_float(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][float]
 
 Parses this String as a float.
 
 
-=== public to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+=== fun to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
 
 Parses this String as an int.
 
 
-=== public to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][long]
+=== fun to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][long]
 
 Parses this String as a long.
 
@@ -39,39 +39,39 @@ Parses this String as a long.
 
 == Constants
 
-=== public DOUBLE_BOUND: long
+=== const DOUBLE_BOUND: long
 
 Number of distinct mantissa steps used to map random long values into `double`.
 
 
-=== public DOUBLE_BOUND_AS_DOUBLE: double
+=== const DOUBLE_BOUND_AS_DOUBLE: double
 
 Floating-point representation of `DOUBLE_BOUND`.
 
 
-=== public FLOAT_BOUND: long
+=== const FLOAT_BOUND: long
 
 Number of distinct mantissa steps used to map random long values into `float`.
 
 
-=== public FLOAT_BOUND_AS_FLOAT: float
+=== const FLOAT_BOUND_AS_FLOAT: float
 
 Floating-point representation of `FLOAT_BOUND`.
 
 
-=== public MAX_INT_VALUE: int
+=== const MAX_INT_VALUE: int
 
 
 
-=== public MAX_LONG_VALUE: long
+=== const MAX_LONG_VALUE: long
 
 
 
-=== public MIN_INT_VALUE: int
+=== const MIN_INT_VALUE: int
 
 
 
-=== public MIN_LONG_VALUE: long
+=== const MIN_LONG_VALUE: long
 
 
 

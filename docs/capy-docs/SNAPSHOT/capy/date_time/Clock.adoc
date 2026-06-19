@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public now(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]]
+=== fun now(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]]
 
 Returns the current date-time as an effect.
 

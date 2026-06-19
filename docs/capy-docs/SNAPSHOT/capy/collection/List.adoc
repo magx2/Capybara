@@ -18,69 +18,69 @@ unchanged.
 
 ==== Functions
 
-===== public List[T].`+`(value: T): xref:#type-List[List][T]
+===== fun List[T].`+`(value: T): xref:#type-List[List][T]
 
 Returns a new List with `value` appended.
 
 
-===== public List[T].`+`(other: xref:#type-List[List][T]): xref:#type-List[List][T]
+===== fun List[T].`+`(other: xref:#type-List[List][T]): xref:#type-List[List][T]
 
 Returns a new List with all values from `other` appended.
 
 
-===== public List[T].`-`(value: T): xref:#type-List[List][T]
+===== fun List[T].`-`(value: T): xref:#type-List[List][T]
 
 Returns a new List without values equal to `value`.
 
 
-===== public List[T].`-`(other: xref:#type-List[List][T]): xref:#type-List[List][T]
+===== fun List[T].`-`(other: xref:#type-List[List][T]): xref:#type-List[List][T]
 
 Returns a new List without values contained in `other`.
 
 
-===== public List[T].`?`(value: T): bool
+===== fun List[T].`?`(value: T): bool
 
 Returns true when this List contains the given value.
 
 
-===== public List[T].`|*`(map: T=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun List[T].`|*`(map: T=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Applies `map` to each value and concatenates the resulting lists.
 
 
-===== public List[T].`|-`(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
+===== fun List[T].`|-`(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
 
 Returns a sequence containing only values that satisfy `predicate`.
 
 
-===== public List[T].`|>`(initial: R, reducer: (R,T)=>R): R
+===== fun List[T].`|>`(initial: R, reducer: (R,T)=>R): R
 
 Combines all values from left to right.
 
 
-===== public List[T].`|`(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun List[T].`|`(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Transforms each value using `map`.
 
 
-===== public List[T].all(predicate: T=>bool): bool
+===== fun List[T].all(predicate: T=>bool): bool
 
 Returns true when every value satisfies `predicate`.
 
 Empty lists return true.
 
 
-===== public List[T].any(predicate: T=>bool): bool
+===== fun List[T].any(predicate: T=>bool): bool
 
 Returns true when at least one value satisfies `predicate`.
 
 
-===== public List[T].contains(value: T): bool
+===== fun List[T].contains(value: T): bool
 
 Returns true when this List contains the given value.
 
 
-===== public List[T].filter(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
+===== fun List[T].filter(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
 
 Returns a sequence containing only values that satisfy `predicate`.
 
@@ -91,7 +91,7 @@ Example:
 Returns `[3, 4]`.
 
 
-===== public List[T].flat_map(map: T=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun List[T].flat_map(map: T=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Applies `map` to each value and concatenates the resulting lists.
 
@@ -102,33 +102,33 @@ Example:
 Returns `[1, 10, 2, 20]`.
 
 
-===== public List[T].fold(reducer: (T,T)=>T): xref:../../capy/lang/Option.adoc#type-Option[Option][T]
+===== fun List[T].fold(reducer: (T,T)=>T): xref:../../capy/lang/Option.adoc#type-Option[Option][T]
 
 Combines values from left to right using the first value as the accumulator.
 
 Empty lists return `None`. Non-empty lists return `Some` with the folded value.
 
 
-===== public List[T].get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][T]
+===== fun List[T].get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][T]
 
 Returns the value at idx using the same bounds and negative-index rules as list[idx].
 
 Example: `[10, 20, 30].get(-1)` returns `Some { value: 30 }`.
 
 
-===== public List[T].get(from: int, to: int): xref:#type-List[List][T]
+===== fun List[T].get(from: int, to: int): xref:#type-List[List][T]
 
 Returns the values in the half-open range [from, to) using the same bounds and negative-index rules as list[from:to].
 
 Example: `[10, 20, 30, 40].get(1, 3)` returns `[20, 30]`.
 
 
-===== public List[T].is_empty(): bool
+===== fun List[T].is_empty(): bool
 
 Returns true when this List has no values.
 
 
-===== public List[T].map(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun List[T].map(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
 
 Transforms each value using `map`.
 
@@ -142,27 +142,27 @@ Example:
 Returns `[2, 4, 6]`.
 
 
-===== public List[T].minus(value: T): xref:#type-List[List][T]
+===== fun List[T].minus(value: T): xref:#type-List[List][T]
 
 Returns a new List without values equal to `value`.
 
 
-===== public List[T].minus(other: xref:#type-List[List][T]): xref:#type-List[List][T]
+===== fun List[T].minus(other: xref:#type-List[List][T]): xref:#type-List[List][T]
 
 Returns a new List without values contained in `other`.
 
 
-===== public List[T].plus(value: T): xref:#type-List[List][T]
+===== fun List[T].plus(value: T): xref:#type-List[List][T]
 
 Returns a new List with `value` appended.
 
 
-===== public List[T].plus(other: xref:#type-List[List][T]): xref:#type-List[List][T]
+===== fun List[T].plus(other: xref:#type-List[List][T]): xref:#type-List[List][T]
 
 Returns a new List with all values from `other` appended.
 
 
-===== public List[T].reduce(initial: R, reducer: (R,T)=>R): R
+===== fun List[T].reduce(initial: R, reducer: (R,T)=>R): R
 
 Combines all values from left to right.
 
@@ -173,17 +173,17 @@ Example:
 Returns `6`.
 
 
-===== public List[T].reject(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
+===== fun List[T].reject(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
 
 Returns a sequence without values that satisfy `predicate`.
 
 
-===== public List[T].size(): xref:../../capy/collection/CollectionTypes.adoc#type-size[size]
+===== fun List[T].size(): xref:../../capy/collection/CollectionTypes.adoc#type-size[size]
 
 Returns the number of values in this List.
 
 
-===== public List[T].sort(compare: (T,T)=>Ordering): xref:#type-List[List][T]
+===== fun List[T].sort(compare: (T,T)=>Ordering): xref:#type-List[List][T]
 
 Returns this List sorted with `compare`.
 

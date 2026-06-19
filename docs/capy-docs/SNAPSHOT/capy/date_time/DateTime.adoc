@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-DateTime[DateTime]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-DateTime[DateTime]]
 
 Parses a UTC ISO 8601 date-time in basic or extended form.
 
@@ -14,7 +14,7 @@ from_iso_8601("20260618T123000Z")
 Both forms return the same UTC `DateTime`.
 
 
-=== public from_timestamp(timestamp: long): xref:#type-DateTime[DateTime]
+=== fun from_timestamp(timestamp: long): xref:#type-DateTime[DateTime]
 
 Converts a Unix timestamp (seconds since `1970-01-01T00:00:00Z`) to a `DateTime`.
 
@@ -25,7 +25,7 @@ Example: `from_timestamp(86400L)` returns `1970-01-02T00:00:00Z`.
 
 == Constants
 
-=== public UNIX_EPOCH: xref:#type-DateTime[DateTime]
+=== const UNIX_EPOCH: xref:#type-DateTime[DateTime]
 
 Unix epoch date-time (`1970-01-01T00:00:00Z`).
 
@@ -53,52 +53,52 @@ timestamp values.
 
 ==== Functions
 
-===== public DateTime.`+`(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+===== fun DateTime.`+`(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
 
 Adds a `Duration` to this `DateTime`.
 
 
-===== public DateTime.`-`(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+===== fun DateTime.`-`(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
 
 Subtracts a `Duration` from this `DateTime`.
 
 
-===== public DateTime.`<`(other: xref:#type-DateTime[DateTime]): bool
+===== fun DateTime.`<`(other: xref:#type-DateTime[DateTime]): bool
 
 Returns `true` when this date-time is before `other`.
 
 
-===== public DateTime.`>`(other: xref:#type-DateTime[DateTime]): bool
+===== fun DateTime.`>`(other: xref:#type-DateTime[DateTime]): bool
 
 Returns `true` when this date-time is after `other`.
 
 
-===== public DateTime.greater(other: xref:#type-DateTime[DateTime]): bool
+===== fun DateTime.greater(other: xref:#type-DateTime[DateTime]): bool
 
 Comparison function used by `>`.
 
 
-===== public DateTime.greater_than(other: xref:#type-DateTime[DateTime]): bool
+===== fun DateTime.greater_than(other: xref:#type-DateTime[DateTime]): bool
 
 Returns `true` when this date-time is after `other`.
 
 
-===== public DateTime.less(other: xref:#type-DateTime[DateTime]): bool
+===== fun DateTime.less(other: xref:#type-DateTime[DateTime]): bool
 
 Comparison function used by `<`.
 
 
-===== public DateTime.less_than(other: xref:#type-DateTime[DateTime]): bool
+===== fun DateTime.less_than(other: xref:#type-DateTime[DateTime]): bool
 
 Returns `true` when this date-time is before `other`.
 
 
-===== public DateTime.minus(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+===== fun DateTime.minus(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
 
 Subtracts a `Duration` from this `DateTime`.
 
 
-===== public DateTime.minus(other: xref:#type-DateTime[DateTime]): xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]
+===== fun DateTime.minus(other: xref:#type-DateTime[DateTime]): xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]
 
 Returns the duration from `other` to this `DateTime`.
 
@@ -109,7 +109,7 @@ from_timestamp(90L).minus(UNIX_EPOCH)
 Returns a duration of 1 minute and 30 seconds.
 
 
-===== public DateTime.plus(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+===== fun DateTime.plus(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
 
 Adds a `Duration` to this `DateTime`.
 
@@ -123,14 +123,14 @@ UNIX_EPOCH + DateDuration {
 Returns `1970-01-02T02:00:00Z`.
 
 
-===== public DateTime.timestamp(): long
+===== fun DateTime.timestamp(): long
 
 Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
 
 Example: `UNIX_EPOCH.timestamp()` returns `0L`.
 
 
-===== public DateTime.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+===== fun DateTime.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
 
 Formats this date-time as a canonical UTC ISO 8601 string.
 

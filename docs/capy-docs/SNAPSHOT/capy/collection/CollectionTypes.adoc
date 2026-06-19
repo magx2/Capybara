@@ -2,11 +2,11 @@
 
 == Constants
 
-=== public EMPTY: xref:#type-size[size]
+=== const EMPTY: xref:#type-size[size]
 
 
 
-=== public FIRST_ELEMENT: xref:#type-index[index]
+=== const FIRST_ELEMENT: xref:#type-index[index]
 
 
 
@@ -15,157 +15,157 @@
 == Types
 
 [[type-index]]
-=== public index: int
+=== type index: int
 
 Zero-based collection position.
 
 ==== Functions
 
-===== public index.`+`(offset: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
+===== fun index.`+`(offset: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
 
 
 
-===== public index.`+`(offset: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
+===== fun index.`+`(offset: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
 
 
 
-===== public index.`<=`(other: xref:#type-index[index]): bool
+===== fun index.`<=`(other: xref:#type-index[index]): bool
 
 
 
-===== public index.`<=`(other: int): bool
+===== fun index.`<=`(other: int): bool
 
 
 
-===== public index.`<`(other: xref:#type-index[index]): bool
+===== fun index.`<`(other: xref:#type-index[index]): bool
 
 
 
-===== public index.`<`(other: int): bool
+===== fun index.`<`(other: int): bool
 
 
 
-===== public index.`==`(other: xref:#type-index[index]): bool
+===== fun index.`==`(other: xref:#type-index[index]): bool
 
 
 
-===== public index.`==`(other: int): bool
+===== fun index.`==`(other: int): bool
 
 
 
-===== public index.`>=`(other: xref:#type-index[index]): bool
+===== fun index.`>=`(other: xref:#type-index[index]): bool
 
 
 
-===== public index.`>=`(other: int): bool
+===== fun index.`>=`(other: int): bool
 
 
 
-===== public index.`>`(other: xref:#type-index[index]): bool
+===== fun index.`>`(other: xref:#type-index[index]): bool
 
 
 
-===== public index.`>`(other: int): bool
+===== fun index.`>`(other: int): bool
 
 
 
-===== public index.next(): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
+===== fun index.next(): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
 
 
 
-===== public index.plus(offset: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
+===== fun index.plus(offset: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
 
 
 
-===== public index.plus(offset: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
+===== fun index.plus(offset: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-index[index]]
 
 
 
-===== public index.to_size(): xref:#type-size[size]
+===== fun index.to_size(): xref:#type-size[size]
 
 
 
 
 [[type-size]]
-=== public size: int
+=== type size: int
 
 Collection size value.
 
 ==== Functions
 
-===== public size.`+`(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.`+`(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.`+`(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.`+`(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.`-`(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.`-`(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.`-`(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.`-`(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.`<=`(other: xref:#type-size[size]): bool
+===== fun size.`<=`(other: xref:#type-size[size]): bool
 
 
 
-===== public size.`<=`(other: int): bool
+===== fun size.`<=`(other: int): bool
 
 
 
-===== public size.`<`(other: xref:#type-size[size]): bool
+===== fun size.`<`(other: xref:#type-size[size]): bool
 
 
 
-===== public size.`<`(other: int): bool
+===== fun size.`<`(other: int): bool
 
 
 
-===== public size.`==`(other: xref:#type-size[size]): bool
+===== fun size.`==`(other: xref:#type-size[size]): bool
 
 
 
-===== public size.`==`(other: int): bool
+===== fun size.`==`(other: int): bool
 
 
 
-===== public size.`>=`(other: xref:#type-size[size]): bool
+===== fun size.`>=`(other: xref:#type-size[size]): bool
 
 
 
-===== public size.`>=`(other: int): bool
+===== fun size.`>=`(other: int): bool
 
 
 
-===== public size.`>`(other: xref:#type-size[size]): bool
+===== fun size.`>`(other: xref:#type-size[size]): bool
 
 
 
-===== public size.`>`(other: int): bool
+===== fun size.`>`(other: int): bool
 
 
 
-===== public size.minus(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.minus(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.minus(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.minus(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.plus(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.plus(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.plus(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
+===== fun size.plus(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-size[size]]
 
 
 
-===== public size.to_index(): xref:#type-index[index]
+===== fun size.to_index(): xref:#type-index[index]
 
 
 

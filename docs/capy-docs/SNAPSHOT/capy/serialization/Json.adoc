@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public deserialize(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
+=== fun deserialize(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
 
 Parses a JSON object string into a `JsonObject`.
 
@@ -14,7 +14,7 @@ Returns `Success` with `JsonString` and `JsonBool` field values. Invalid JSON
 returns `Error` with a parser message.
 
 
-=== public deserialize(dict: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
+=== fun deserialize(dict: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
 
 Converts a Capy dictionary of supported values into a JSON object.
 
@@ -33,7 +33,7 @@ need a custom data declaration. Supported values are strings, numeric
 primitives, nested dictionaries, and existing `Json` values.
 
 
-=== public deserialize_typed(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+=== fun deserialize_typed(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
 
 Parses a JSON string produced by `serialize_typed` into typed JSON metadata.
 
@@ -41,19 +41,19 @@ This does not reconstruct the original runtime Capy data value. It returns a
 typed AST that callers can inspect without Java reflection.
 
 
-=== public serialize(obj: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun serialize(obj: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/String.adoc#type-String[String]
 
 Converts a JSON object to a compact JSON string.
 
 This is a convenience wrapper around `stringify` for object roots.
 
 
-=== public serialize_typed(obj: xref:#type-TypedJsonData[TypedJsonData]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun serialize_typed(obj: xref:#type-TypedJsonData[TypedJsonData]): xref:../../capy/lang/String.adoc#type-String[String]
 
 Serializes a typed data value to a JSON string.
 
 
-=== public stringify(json: xref:#type-Json[Json]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun stringify(json: xref:#type-Json[Json]): xref:../../capy/lang/String.adoc#type-String[String]
 
 Converts any JSON node to a compact JSON string.
 
@@ -67,7 +67,7 @@ Returns `["Ada",42]`. Strings and object keys are escaped according to JSON
 string rules.
 
 
-=== public stringify_typed(json: xref:#type-TypedJson[TypedJson]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun stringify_typed(json: xref:#type-TypedJson[TypedJson]): xref:../../capy/lang/String.adoc#type-String[String]
 
 Converts typed JSON to a JSON string using the reserved typed envelope.
 
@@ -75,7 +75,7 @@ The envelope field is `$capybaraTypedJson`, which separates typed data,
 object, array, and primitive value nodes from ordinary user JSON objects.
 
 
-=== public to_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
+=== fun to_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
 
 Converts a Capy data value into a plain JSON object.
 
@@ -108,7 +108,7 @@ If any field cannot be represented as JSON, the result is `Error` with the
 failing field name in the message.
 
 
-=== public to_typed_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+=== fun to_typed_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
 
 Converts a Capy data value into typed JSON metadata.
 
@@ -162,17 +162,17 @@ JSON array represented as an ordered list of JSON values.
 
 ==== Functions
 
-===== public JsonArray.`+`(other: xref:#type-JsonArray[JsonArray]): xref:#type-JsonArray[JsonArray]
+===== fun JsonArray.`+`(other: xref:#type-JsonArray[JsonArray]): xref:#type-JsonArray[JsonArray]
 
 Returns an array with values from both arrays.
 
 
-===== public JsonArray.`+`(other: xref:#type-Json[Json]): xref:#type-JsonArray[JsonArray]
+===== fun JsonArray.`+`(other: xref:#type-Json[Json]): xref:#type-JsonArray[JsonArray]
 
 Returns an array with one value appended.
 
 
-===== public JsonArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+===== fun JsonArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
 
 Returns the value at `idx`, or `None` when the index is outside the array.
 
@@ -231,7 +231,7 @@ JSON object represented as a dictionary of JSON values keyed by strings.
 
 ==== Functions
 
-===== public JsonObject.`+`(other: xref:#type-JsonObject[JsonObject]): xref:#type-JsonObject[JsonObject]
+===== fun JsonObject.`+`(other: xref:#type-JsonObject[JsonObject]): xref:#type-JsonObject[JsonObject]
 
 Returns an object containing entries from both objects.
 
@@ -239,7 +239,7 @@ When both objects contain the same key, the value from `other` replaces the
 value from `this`.
 
 
-===== public JsonObject.`+`(other: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/String.adoc#type-String[String], xref:#type-Json[Json]]): xref:#type-JsonObject[JsonObject]
+===== fun JsonObject.`+`(other: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/String.adoc#type-String[String], xref:#type-Json[Json]]): xref:#type-JsonObject[JsonObject]
 
 Returns an object with one entry added or replaced.
 
@@ -251,7 +251,7 @@ JsonObject { value: { "name": JsonString { value: "Ada" } } }
 The resulting object has both `name` and `active` fields.
 
 
-===== public JsonObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+===== fun JsonObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
 
 Returns the JSON value for `key`, or `None` when the field is missing.
 
@@ -290,7 +290,7 @@ JSON array value wrapper.
 
 ==== Functions
 
-===== public JsonValueArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+===== fun JsonValueArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
 
 
 
@@ -305,7 +305,7 @@ JSON object value wrapper.
 
 ==== Functions
 
-===== public JsonValueObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+===== fun JsonValueObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
 
 
 

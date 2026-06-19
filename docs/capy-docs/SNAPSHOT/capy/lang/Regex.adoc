@@ -2,7 +2,7 @@
 
 == Functions
 
-=== public from_literal(pattern: xref:../../capy/lang/String.adoc#type-String[String], flags: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Regex[Regex]
+=== fun from_literal(pattern: xref:../../capy/lang/String.adoc#type-String[String], flags: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Regex[Regex]
 
 Builds a regex value from a pattern and flags.
 
@@ -27,14 +27,14 @@ Single regex match.
 
 ==== Functions
 
-===== public Match.group(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+===== fun Match.group(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Returns the capture group at `idx`.
 
 Current matches expose the full match at index `0`.
 
 
-===== public Match.groups(): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]]
+===== fun Match.groups(): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]]
 
 Returns all capture groups for this match.
 
@@ -59,17 +59,17 @@ digits.matches("123")
 
 ==== Functions
 
-===== public Regex.`/>`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+===== fun Regex.`/>`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Operator alias for `split`.
 
 
-===== public Regex.`?`(input: xref:../../capy/lang/String.adoc#type-String[String]): bool
+===== fun Regex.`?`(input: xref:../../capy/lang/String.adoc#type-String[String]): bool
 
 Operator alias for `matches`.
 
 
-===== public Regex.`~>`(replacement: xref:../../capy/lang/String.adoc#type-String[String]): String=>String
+===== fun Regex.`~>`(replacement: xref:../../capy/lang/String.adoc#type-String[String]): String=>String
 
 Operator alias for `replace`.
 
@@ -80,22 +80,22 @@ Example:
 Returns `a#b#`.
 
 
-===== public Regex.`~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Match[Match]]
+===== fun Regex.`~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Match[Match]]
 
 Operator alias for `find`.
 
 
-===== public Regex.`~~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-Match[Match]]
+===== fun Regex.`~~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-Match[Match]]
 
 Operator alias for `find_all`.
 
 
-===== public Regex.find(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Match[Match]]
+===== fun Regex.find(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Match[Match]]
 
 Returns the first match, or `None` when no match exists.
 
 
-===== public Regex.find_all(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-Match[Match]]
+===== fun Regex.find_all(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-Match[Match]]
 
 Returns all matches as a lazy sequence.
 
@@ -106,14 +106,14 @@ regex/na/.find_all("banana").map(match => match.group_value).as_list()
 Produces `["na", "na"]`.
 
 
-===== public Regex.matches(input: xref:../../capy/lang/String.adoc#type-String[String]): bool
+===== fun Regex.matches(input: xref:../../capy/lang/String.adoc#type-String[String]): bool
 
 Returns true when the input matches this regex pattern.
 
 Example: `regex/capy/.matches("capybara")` returns true.
 
 
-===== public Regex.replace(replacement: xref:../../capy/lang/String.adoc#type-String[String]): String=>String
+===== fun Regex.replace(replacement: xref:../../capy/lang/String.adoc#type-String[String]): String=>String
 
 Returns a function that replaces matches with `replacement`.
 
@@ -125,7 +125,7 @@ redact_digits("room 42")
 Returns `room #`.
 
 
-===== public Regex.split(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+===== fun Regex.split(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
 
 Splits `input` around this regex pattern.
 
