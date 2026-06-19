@@ -4,21 +4,21 @@ from /capy/lang/Result import { * }
 type ratio -> double with constructor {
     if value >= 0.0 & value <= 1.0
     then Success { value }
-    else Error { message: "ratio must be between 0.0 and 1.0" }
+    else Error { kind: "capy.lang.number.out_of_range", message: "ratio must be between 0.0 and 1.0" }
 }
 
 /// Percentage value between zero and one hundred.
 type percentage -> double with constructor {
     if value >= 0.0 & value <= 100.0
     then Success { value }
-    else Error { message: "percentage must be between 0.0 and 100.0" }
+    else Error { kind: "capy.lang.number.out_of_range", message: "percentage must be between 0.0 and 100.0" }
 }
 
 /// Probability value between zero and one.
 type probability -> double with constructor {
     if value >= 0.0 & value <= 1.0
     then Success { value }
-    else Error { message: "probability must be between 0.0 and 1.0" }
+    else Error { kind: "capy.lang.number.out_of_range", message: "probability must be between 0.0 and 1.0" }
 }
 
 const ZERO_RATIO: ratio = ratio! { 0.0 }

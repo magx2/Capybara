@@ -29,6 +29,8 @@ union CompiledExpression =
     | CompiledFieldAccessExpression
     | CompiledReduceExpression
     | CompiledMatchExpression
+    | CompiledThrowExpression
+    | CompiledTryCatchExpression
     | CompiledBlockExpression
 
 /// compiled AST node for unsupported expression semantics.
@@ -87,6 +89,12 @@ data CompiledReduceExpression { receiver: CompiledExpression, initial: CompiledE
 data CompiledMatchCase { typeName: String, bindings: List[String], bindsWholeValue: bool, literal: CompiledExpression, hasLiteral: bool, wildcard: bool, guard: CompiledExpression, hasGuard: bool, body: CompiledExpression, location: CompiledSourceLocation }
 /// compiled AST node for match expression semantics.
 data CompiledMatchExpression { value: CompiledExpression, cases: List[CompiledMatchCase], location: CompiledSourceLocation }
+/// compiled AST node for throw expression semantics.
+data CompiledThrowExpression { value: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST helper node for one try/catch branch.
+data CompiledTryCatchBranch { kind: String, hasKind: bool, catchName: String, catchBody: CompiledExpression, location: CompiledSourceLocation }
+/// compiled AST node for try/catch expression semantics.
+data CompiledTryCatchExpression { body: CompiledExpression, branches: List[CompiledTryCatchBranch], location: CompiledSourceLocation }
 /// compiled AST helper node for one let binding.
 data CompiledLetBinding { name: String, typeReference: CompiledTypeReference, operator: String, value: CompiledExpression, location: CompiledSourceLocation }
 /// compiled AST node for block expression semantics.

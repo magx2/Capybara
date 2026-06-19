@@ -172,7 +172,7 @@ from /capy/lang/String import { * }
 
 data User { age: int } with constructor {
     if age <= 0 then
-        Error { "Age has to be greater than 0. Was " + age + "." }
+        fail_kind("app.user.invalid_age", "Age has to be greater than 0. Was " + age + ".")
     else
         Success { * { age: age } }
 }
@@ -199,7 +199,7 @@ from /capy/lang/Result import { * }
 type user_id -> int with constructor {
     if value > 0
     then Success { value }
-    else Error { message: "bad user id" }
+    else fail_kind("app.user.invalid_id", "bad user id")
 }
 
 fun new_user_id(value: int): Result[user_id] = user_id { value }
@@ -510,11 +510,13 @@ class Counter(seed: int) {
     def recover(flag: bool): String {
         try {
             if flag {
-                throw "boom"
+                throw error_kind("app.counter.boom", "boom")
             }
             return "ok"
+        } catch "app.counter.boom" error {
+            return "handled:" + error.message
         } catch error {
-            return error.getMessage()
+            return error.message
         }
     }
 }

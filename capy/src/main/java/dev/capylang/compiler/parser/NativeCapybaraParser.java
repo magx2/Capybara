@@ -490,22 +490,89 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     private static Expression objectStatementBlock(
             dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext ctx
     ) {
+        return objectStatementSequence(ctx.statement(), 0, location(ctx));
+    }
+
+    private static Expression objectStatementSequence(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext> statements,
+            int start,
+            SourceLocation location
+    ) {
         var bindings = new ArrayList<Expression.LetBinding>();
-        for (var idx = 0; idx < ctx.statement().size(); idx++) {
-            var statement = ctx.statement().get(idx);
+        var idx = start;
+        while (idx < statements.size()) {
+            var statement = statements.get(idx);
             if (statement.letStatement() != null) {
                 bindings.add(objectLetBinding(statement.letStatement()));
-            } else if (idx == ctx.statement().size() - 1) {
-                var result = objectStatement(statement);
-                if (bindings.isEmpty()) {
-                    return result;
-                }
-                return new Expression.BlockExpression(List.copyOf(bindings), result, location(ctx));
+                idx++;
             } else {
-                return unsupported(ctx);
+                break;
             }
         }
+        var result = idx >= statements.size()
+                ? new Expression.UnsupportedExpression("", location)
+                : idx == statements.size() - 1
+                ? objectStatement(statements.get(idx))
+                : objectNonFinalStatement(statements.get(idx), objectStatementSequence(statements, idx + 1, location));
+        if (bindings.isEmpty()) {
+            return result;
+        }
+        return new Expression.BlockExpression(List.copyOf(bindings), result, location);
+    }
+
+    private static Expression objectNonFinalStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext ctx,
+            Expression rest
+    ) {
+        if (ctx.ifStatement() != null
+                && ctx.ifStatement().ifStatement() == null
+                && ctx.ifStatement().statementBlock().size() == 1
+                && objectStatementBlockTerminates(ctx.ifStatement().statementBlock(0))) {
+            return new Expression.IfExpression(
+                    objectExpression(ctx.ifStatement().expression()),
+                    objectStatementBlock(ctx.ifStatement().statementBlock(0)),
+                    rest,
+                    location(ctx.ifStatement())
+            );
+        }
         return unsupported(ctx);
+    }
+
+    private static boolean objectStatementBlockTerminates(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext ctx
+    ) {
+        var statements = ctx.statement();
+        if (statements.isEmpty()) {
+            return false;
+        }
+        return objectStatementTerminates(statements.get(statements.size() - 1));
+    }
+
+    private static boolean objectStatementTerminates(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext ctx
+    ) {
+        if (ctx.returnStatement() != null || ctx.throwStatement() != null) {
+            return true;
+        }
+        if (ctx.ifStatement() != null) {
+            return objectIfStatementTerminates(ctx.ifStatement());
+        }
+        if (ctx.statementBlock() != null) {
+            return objectStatementBlockTerminates(ctx.statementBlock());
+        }
+        return false;
+    }
+
+    private static boolean objectIfStatementTerminates(
+            dev.capylang.parser.antlr.ObjectOrientedParser.IfStatementContext ctx
+    ) {
+        if (!objectStatementBlockTerminates(ctx.statementBlock(0))) {
+            return false;
+        }
+        if (ctx.ifStatement() != null) {
+            return objectIfStatementTerminates(ctx.ifStatement());
+        }
+        return ctx.statementBlock().size() > 1 && objectStatementBlockTerminates(ctx.statementBlock(1));
     }
 
     private static Expression objectStatement(
@@ -523,7 +590,47 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         if (ctx.expressionStatement() != null) {
             return objectCallExpression(ctx.expressionStatement().callExpression());
         }
+        if (ctx.throwStatement() != null) {
+            return new Expression.ThrowExpression(
+                    objectExpression(ctx.throwStatement().expression()),
+                    location(ctx.throwStatement())
+            );
+        }
+        if (ctx.tryCatchStatement() != null) {
+            return objectTryCatchStatement(ctx.tryCatchStatement());
+        }
         return unsupported(ctx);
+    }
+
+    private static Expression objectTryCatchStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.TryCatchStatementContext ctx
+    ) {
+        return new Expression.TryCatchExpression(
+                objectStatementBlock(ctx.statementBlock()),
+                objectTryCatchBranches(ctx.catchClause()),
+                location(ctx)
+        );
+    }
+
+    private static List<Expression.TryCatchBranch> objectTryCatchBranches(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.CatchClauseContext> clauses
+    ) {
+        return clauses.stream()
+                .map(NativeCapybaraParser::objectTryCatchBranch)
+                .toList();
+    }
+
+    private static Expression.TryCatchBranch objectTryCatchBranch(
+            dev.capylang.parser.antlr.ObjectOrientedParser.CatchClauseContext ctx
+    ) {
+        var kind = ctx.STRING_LITERAL() == null ? "" : unquote(ctx.STRING_LITERAL().getText());
+        return new Expression.TryCatchBranch(
+                kind,
+                ctx.STRING_LITERAL() != null,
+                ctx.identifier().getText(),
+                objectStatementBlock(ctx.statementBlock()),
+                location(ctx)
+        );
     }
 
     private static Expression.LetBinding objectLetBinding(

@@ -1,4 +1,5 @@
 from /capy/io/Stdout import { * }
+from /capy/lang/Result import { * }
 
 open class GreeterBase {
     field prefix: String = "hello"
@@ -98,11 +99,13 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
     def recover(flag: bool): String {
         try {
             if flag {
-                throw "boom"
+                throw error_kind("capy.test.runtime.boom", "boom")
             }
             return "ok"
+        } catch "capy.test.runtime.boom" error {
+            return "kind:" + error.message
         } catch error {
-            return error.getMessage()
+            return "fallback:" + error.kind
         }
     }
 
@@ -110,7 +113,22 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
         try {
             return values[3]
         } catch error {
-            return error.getClass().getSimpleName()
+            return error.kind
+        }
+    }
+
+    def throw_structured_error(): Error {
+        let cause: Error = error_kind("capy.test.runtime.cause", "cause")
+        let suppressed: Error = error_kind("capy.test.runtime.suppressed", "suppressed")
+        let thrown: Error = error_kind("capy.test.runtime.structured", "structured boom")
+            .with_cause(cause)
+            .add_suppressed(suppressed)
+        try {
+            throw thrown
+        } catch "capy.test.runtime.structured" error {
+            return error
+        } catch error {
+            return error
         }
     }
 

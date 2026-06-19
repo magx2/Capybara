@@ -42,7 +42,7 @@ private fun should_advance_index(value: int, expected: int): Assert =
 private fun should_reject_index_advance(value: int): Assert =
     let message: String =
         (index { value }).reduce(
-            actual => actual.next().reduce(_ => "unexpected success", message => message),
+            actual => actual.next().reduce(_ => "unexpected success", error => error.message),
             _ => "unexpected constructor failure"
         )
     assert_that(message).is_equal_to("index increment overflow")
@@ -62,7 +62,7 @@ private fun should_reject_index_addition(value: int, offset: int): Assert =
     let message: String =
         (index { value }).reduce(
             index_value => (size { offset }).reduce(
-                size_value => index_value.plus(size_value).reduce(_ => "unexpected success", message => message),
+                size_value => index_value.plus(size_value).reduce(_ => "unexpected success", error => error.message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -100,7 +100,7 @@ private fun should_reject_size_addition(left: int, right: int): Assert =
     let message: String =
         (size { left }).reduce(
             left_value => (size { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", error => error.message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -130,7 +130,7 @@ private fun should_reject_size_subtraction(left: int, right: int): Assert =
     let message: String =
         (size { left }).reduce(
             left_value => (size { right }).reduce(
-                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", error => error.message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"

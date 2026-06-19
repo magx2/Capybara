@@ -65,7 +65,7 @@ throwStatement: 'throw' expression ';'?;
 returnStatement: 'return' expression ';'?;
 ifStatement: 'if' expression statementBlock ('else' (ifStatement | statementBlock))?;
 tryCatchStatement: 'try' statementBlock catchClause+;
-catchClause: 'catch' identifier statementBlock;
+catchClause: 'catch' STRING_LITERAL? identifier statementBlock;
 whileStatement: 'while' expression statementBlock;
 doWhileStatement: 'do' statementBlock 'while' expression ';'?;
 forEachStatement: ('for' | 'foreach') identifier (':' type)? 'in' expression statementBlock;

@@ -2,7 +2,7 @@ from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -232,6 +232,8 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_type_matches",
         "__capy_match_binding",
         "__capy_no_match",
+        "__capy_throw",
+        "__capy_try",
         "__capy_unsupported",
         "__capy_not_implemented",
         "__capy_data",
@@ -1483,6 +1485,8 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
         if java_script_compiled_placeholder_source(unsupported.source)
         then java_script_placeholder_code(unsupported, module)
         else "__capy_unsupported(" + java_script_string_literal(unsupported.source) + ")"
+    case CompiledThrowExpression throwExpression -> java_script_throw_expression_code(throwExpression, env, module, allModules)
+    case CompiledTryCatchExpression tryCatch -> java_script_try_catch_expression_code(tryCatch, env, module, allModules)
     case CompiledIntLiteral literal -> literal.source
     case CompiledLongLiteral literal -> java_script_integer_literal(literal.source)
     case CompiledFloatLiteral literal -> java_script_decimal_literal(literal.source)
@@ -1518,6 +1522,40 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledReduceExpression reduce -> java_script_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> java_script_match_expression_code(matchExpression, env, module, allModules)
     case CompiledBlockExpression block -> java_script_block_expression_code(block, env, module, allModules)
+
+/// Emits JavaScript code for OO throw expression.
+private fun java_script_throw_expression_code(throwExpression: CompiledThrowExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_throw(" + java_script_expression_code(throwExpression.value, env, module, allModules) + ")"
+
+/// Emits JavaScript code for OO try/catch expression.
+private fun java_script_try_catch_expression_code(tryCatch: CompiledTryCatchExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_try(() => "
+        + java_script_expression_code(tryCatch.body, env, module, allModules)
+        + ", ["
+        + java_script_try_catch_branch_codes(tryCatch.branches, env, module, allModules)
+        + "])"
+
+/// Emits JavaScript branch tuples for OO try/catch expression.
+private fun java_script_try_catch_branch_codes(branches: List[CompiledTryCatchBranch], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match branches[0] with
+    case None -> ""
+    case Some { branch } ->
+        let catchName = java_script_identifier(branch.catchName)
+        let catchEnv = [JavaScriptBinding { name: branch.catchName, jsName: catchName, typeName: "Error" }] + env
+        "["
+            + (if branch.hasKind then java_script_string_literal(branch.kind) else "null")
+            + ", ("
+            + catchName
+            + ") => "
+            + java_script_expression_code(branch.catchBody, catchEnv, module, allModules)
+            + "]"
+            + java_script_try_catch_branch_tail_codes(branches[1:], env, module, allModules)
+
+/// Emits JavaScript branch tuple tails for OO try/catch expression.
+private fun java_script_try_catch_branch_tail_codes(branches: List[CompiledTryCatchBranch], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match branches[0] with
+    case None -> ""
+    case Some _ -> ", " + java_script_try_catch_branch_codes(branches, env, module, allModules)
 
 /// Emits JavaScript code for placeholder.
 private fun java_script_placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
@@ -5640,6 +5678,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + java_script_io_runtime_code()
     + java_script_assert_runtime_code()
     + java_script_numeric_runtime_code()
+    + java_script_error_runtime_code()
     + java_script_collection_runtime_code()
     + java_script_constructor_runtime_code()
     + java_script_module_export_runtime_code()
@@ -5830,7 +5869,7 @@ private fun java_script_numeric_runtime_code(): String =
     + "function __capy_to_int(value) { if (typeof value === 'bigint') return Number(BigInt.asIntN(32, value)); if (Number.isNaN(value)) return 0; if (value >= 2147483647) return 2147483647; if (value <= -2147483648) return -2147483648; return Math.trunc(value); }" + java_script_newline()
     + "function __capy_to_long(value) { if (typeof value === 'bigint') return __capy_long(value); if (Number.isNaN(value)) return 0n; if (value >= 9223372036854775807) return 9223372036854775807n; if (value <= -9223372036854775808) return -9223372036854775808n; return BigInt(Math.trunc(value)); }" + java_script_newline()
     + "function __capy_success(value) { return __capy_data('Success', Object.fromEntries([['value', value]])); }" + java_script_newline()
-    + "function __capy_error(message) { return __capy_data('Error', Object.fromEntries([['message', message]])); }" + java_script_newline()
+    + "function __capy_error(message) { return __capy_error_kind('capy.error', message); }" + java_script_newline()
     + "function __capy_parse_integral(value, label, minimum, maximum) { const text = String(value); try { if (!/^[+-]?\\d+$/.test(text)) throw new Error(); const parsed = BigInt(text); if (parsed < minimum || parsed > maximum) throw new Error(); return __capy_success(label === 'long' ? parsed : Number(parsed)); } catch (_) { return __capy_error('Cannot parse string to ' + label + ': ' + text); } }" + java_script_newline()
     + "function __capy_parse_int(value) { return __capy_parse_integral(value, 'int', -2147483648n, 2147483647n); }" + java_script_newline()
     + "function __capy_parse_long(value) { return __capy_parse_integral(value, 'long', -9223372036854775808n, 9223372036854775807n); }" + java_script_newline()
@@ -5859,6 +5898,52 @@ private fun java_script_numeric_runtime_code(): String =
     + "function __capy_div(left, right) { if (__capy_path_is(left)) return __capy_path_join(left, right); if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) / __capy_number(right) : __capy_long(__capy_bigint(left) / __capy_bigint(right)); const value = left / right; return Number.isInteger(left) && Number.isInteger(right) ? Math.trunc(value) : value; }" + java_script_newline()
     + "function __capy_mod(left, right) { if (__capy_has_bigint(left, right)) return __capy_has_fractional_number(left, right) ? __capy_number(left) % __capy_number(right) : __capy_long(__capy_bigint(left) % __capy_bigint(right)); return left % right; }" + java_script_newline()
     + "function __capy_pow(left, right) { if (typeof left === 'string') return __capy_str(left) + __capy_str(right); if (__capy_has_bigint(left, right)) { if (__capy_has_fractional_number(left, right)) return Math.pow(__capy_number(left), __capy_number(right)); let exponent = __capy_bigint(right); if (exponent <= 0n) return 1n; let result = 1n; const base = __capy_bigint(left); while (exponent > 0n) { result = __capy_long(result * base); exponent--; } return result; } if (Number.isInteger(left) && Number.isInteger(right)) { if (right <= 0) return 1; let result = 1; for (let index = 0; index < right; index++) result *= left; return result; } return Math.pow(left, right); }" + java_script_newline()
+
+/// Emits the JavaScript runtime support source for structured errors.
+private fun java_script_error_runtime_code(): String =
+    "function __capy_error_kind(kind, message) { return __capy_error_full(kind, message, __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), []); }" + java_script_newline()
+    + "function __capy_error_full(kind, message, details, location, stackTrace, rawStack, cause, suppressed) { return __capy_data('Error', { kind: String(kind), message: String(message), details, location, stack_trace: stackTrace, raw_stack: rawStack, cause, suppressed }); }" + java_script_newline()
+    + "function __capy_some(value) { return __capy_data('Some', Object.fromEntries([['value', value]])); }" + java_script_newline()
+    + "function __capy_stack_frames(rawStack) {" + java_script_newline()
+    + "    return String(rawStack || '').split('\\n').slice(1).filter(line => line.trim().length > 0).map(raw => {" + java_script_newline()
+    + "        const trimmed = raw.trim();" + java_script_newline()
+    + "        const match = trimmed.match(/^at\\s+(?:(.*?)\\s+\\()?(.+?):(\\d+):(\\d+)\\)?$/);" + java_script_newline()
+    + "        const fn = match && match[1] ? match[1] : '';" + java_script_newline()
+    + "        const file = match && match[2] ? match[2] : '';" + java_script_newline()
+    + "        const line = match && match[3] ? Number(match[3]) : 0;" + java_script_newline()
+    + "        const column = match && match[4] ? Number(match[4]) : 0;" + java_script_newline()
+    + "        return __capy_data('StackFrame', { backend: 'javascript', module: __capy_none(), type_name: __capy_none(), function: fn ? __capy_some(fn) : __capy_none(), file: file ? __capy_some(file) : __capy_none(), line: line > 0 ? __capy_some(line) : __capy_none(), column: column > 0 ? __capy_some(column) : __capy_none(), end_line: __capy_none(), end_column: __capy_none(), source_line: __capy_none(), native: trimmed.includes('[native code]'), raw: trimmed });" + java_script_newline()
+    + "    });" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_source_location_from_stack(stackTrace) {" + java_script_newline()
+    + "    for (const frame of stackTrace) {" + java_script_newline()
+    + "        if (__capy_data_is(frame.file, 'Some')) return __capy_some(__capy_data('SourceLocation', { file: __capy_match_binding(frame.file, 'value', 0), line: __capy_data_is(frame.line, 'Some') ? __capy_match_binding(frame.line, 'value', 0) : 0, column: frame.column, end_line: __capy_none(), end_column: __capy_none() }));" + java_script_newline()
+    + "    }" + java_script_newline()
+    + "    return __capy_none();" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_enrich_thrown_error(error, hostError) {" + java_script_newline()
+    + "    const rawStack = hostError && hostError.stack ? String(hostError.stack) : '';" + java_script_newline()
+    + "    const stackTrace = __capy_stack_frames(rawStack);" + java_script_newline()
+    + "    if (!__capy_data_is(error, 'Error')) return __capy_error_full('capy.runtime.invalid_thrown_error', 'OO throw expected capy/lang/Result.Error', __capy_none(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []);" + java_script_newline()
+    + "    return __capy_error_full(error.kind || 'capy.error', error.message || '', error.details || __capy_none(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), error.cause || __capy_none(), Array.isArray(error.suppressed) ? error.suppressed : []);" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_host_error(error) {" + java_script_newline()
+    + "    const host = error instanceof Error ? error : new Error(String(error));" + java_script_newline()
+    + "    const rawStack = host.stack ? String(host.stack) : '';" + java_script_newline()
+    + "    const stackTrace = __capy_stack_frames(rawStack);" + java_script_newline()
+    + "    return __capy_error_full('capy.runtime.host_exception', host.message || String(error), __capy_none(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []);" + java_script_newline()
+    + "}" + java_script_newline()
+    + "class __CapyThrownError extends Error {" + java_script_newline()
+    + "    constructor(error) { super(String(error && error.message ? error.message : '')); this.error = __capy_enrich_thrown_error(error, this); }" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_throw(error) { throw new __CapyThrownError(error); }" + java_script_newline()
+    + "function __capy_try(body, branches) {" + java_script_newline()
+    + "    try { return body(); } catch (caught) {" + java_script_newline()
+    + "        const error = caught instanceof __CapyThrownError ? caught.error : __capy_host_error(caught);" + java_script_newline()
+    + "        for (const branch of branches) if (branch[0] == null || error.kind === branch[0]) return branch[1](error);" + java_script_newline()
+    + "        throw new __CapyThrownError(error);" + java_script_newline()
+    + "    }" + java_script_newline()
+    + "}" + java_script_newline()
 
 /// Emits the JavaScript runtime support source for collection.
 private fun java_script_collection_runtime_code(): String =
@@ -5903,7 +5988,7 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_option_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'None')) return value; if (__capy_data_is(value, 'Some')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); return (__capy_data_is(mapped, 'Some') || __capy_data_is(mapped, 'None')) ? mapped : __capy_data('Some', Object.fromEntries([['value', mapped]])); } return __capy_unsupported('option flat_map'); }" + java_script_newline()
     + "function __capy_result_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) return __capy_data('Success', Object.fromEntries([['value', __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0)))]])); return __capy_unsupported('result map'); }" + java_script_newline()
     + "function __capy_result_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(mapped, 'Error') || __capy_data_is(mapped, 'Success')) return mapped; } return __capy_unsupported('result flat_map'); }" + java_script_newline()
-    + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(__capy_match_binding(value, 'message', 0))); return __capy_unsupported('result reduce'); }" + java_script_newline()
+    + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(value)); return __capy_unsupported('result reduce'); }" + java_script_newline()
     + "function __capy_result_or_else(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return __capy_match_binding(value, 'value', 0); return __capy_unsupported('result or_else'); }" + java_script_newline()
     + "function __capy_result_or(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return value; return __capy_unsupported('result or'); }" + java_script_newline()
     + "function __capy_define_method(data, name, fn) { Object.defineProperty(data, name, { value: fn, enumerable: false, configurable: true }); }" + java_script_newline()
@@ -6245,6 +6330,10 @@ private fun java_script_native_function_body(function: CompiledFunction): bool =
 private fun java_script_expression_gatherable(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
     case CompiledUnsupportedExpression _ -> false
+    case CompiledThrowExpression throwExpression -> java_script_expression_gatherable(throwExpression.value, env, module, allModules)
+    case CompiledTryCatchExpression tryCatch ->
+        java_script_expression_gatherable(tryCatch.body, env, module, allModules)
+            & java_script_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
@@ -6280,6 +6369,15 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
     case CompiledBlockExpression block ->
         java_script_bindings_gatherable(block.bindings, env, module, allModules)
             & java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
+
+/// Checks whether OO try/catch branches can be included in generated test gathering.
+private fun java_script_try_catch_branches_gatherable(branches: List[CompiledTryCatchBranch], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match branches[0] with
+    case None -> true
+    case Some { branch } ->
+        let catchEnv = [JavaScriptBinding { name: branch.catchName, jsName: java_script_identifier(branch.catchName), typeName: "Error" }] + env
+        java_script_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
+            & java_script_try_catch_branches_gatherable(branches[1:], env, module, allModules)
 
 /// Checks whether binary expression can be included in generated test gathering.
 private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

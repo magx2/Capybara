@@ -29,6 +29,8 @@ union Expression =
     | FieldAccessExpression
     | ReduceExpression
     | MatchExpression
+    | ThrowExpression
+    | TryCatchExpression
     | BlockExpression
 
 /// Parsed AST node for unsupported expression semantics.
@@ -87,6 +89,12 @@ data ReduceExpression { receiver: Expression, initial: Expression, accumulatorNa
 data MatchCase { typeName: String, bindings: List[String], bindsWholeValue: bool, literal: Expression, hasLiteral: bool, wildcard: bool, guard: Expression, hasGuard: bool, body: Expression, location: SourceLocation }
 /// Parsed AST node for match expression semantics.
 data MatchExpression { value: Expression, cases: List[MatchCase], location: SourceLocation }
+/// Parsed AST node for throw expression semantics.
+data ThrowExpression { value: Expression, location: SourceLocation }
+/// Parsed AST helper node for one try/catch branch.
+data TryCatchBranch { kind: String, hasKind: bool, catchName: String, catchBody: Expression, location: SourceLocation }
+/// Parsed AST node for try/catch expression semantics.
+data TryCatchExpression { body: Expression, branches: List[TryCatchBranch], location: SourceLocation }
 /// Parsed AST helper node for one let binding.
 data LetBinding { name: String, typeReference: TypeReference, operator: String, value: Expression, documentation: List[String], location: SourceLocation }
 /// Parsed AST node for block expression semantics.

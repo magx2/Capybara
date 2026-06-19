@@ -82,15 +82,21 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 - Capybara OO adopts the smallest common denominator shared by Java, Python, and JavaScript:
   - `throw expression`
   - `try { ... } catch error { ... }`
+  - `try { ... } catch "capy.error.kind" error { ... } catch error { ... }`
 - `try` / `catch` is statement-only in v1.
-- `catch` binds one immutable local exception variable.
+- `catch` binds one immutable local `capy/lang/Result.Error` variable.
+- A catch branch may specify an error `kind` string before the variable name. Branches are checked in source order.
+- A catch branch without a kind is the fallback. If no branch matches and no fallback exists, the `Error` is rethrown.
 - `finally` is postponed.
-- Checked exceptions and `throws` declarations are postponed.
+- Java-style checked exceptions and generated `throws` declarations are not used for value-level failures.
 - Java lowering is the reference implementation:
-  - `throw` lowers through `dev.capylang.CapybaraException.wrap(...)`
-  - `catch` lowers to `catch (RuntimeException error)`
-- Functional `Result.Error` remains a value-level error representation, not an exception.
-- There is no implicit compiler conversion between thrown OO exceptions and functional `Result.Error`.
+  - `throw` type-checks its expression as `capy/lang/Result.Error`
+  - `throw` lowers through an unchecked backend wrapper that preserves the structured `Error` value
+  - `catch` catches that wrapper and binds the original structured `Error`
+  - host `RuntimeException` values caught at this boundary are normalized into structured `Error` values
+- Functional `Result.Error` remains the value-level recoverable failure representation.
+- OO `throw` / `catch` carries the same structured `Error` value, but remains a separate control-flow mechanism.
+- There is no implicit compiler conversion between thrown OO `Error` values and functional `Result` failures.
 - If interop is needed, it must stay explicit at library or user-code boundaries rather than becoming hidden control flow.
 
 ## Java Backend v1

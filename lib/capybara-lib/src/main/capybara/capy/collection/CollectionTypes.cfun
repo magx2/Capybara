@@ -5,14 +5,14 @@ from /capy/lang/Result import { * }
 type index -> int with constructor {
     if value >= 0
     then Success { value }
-    else Error { message: "index must be greater than or equal to 0" }
+    else Error { kind: "capy.lang.index.out_of_bounds", message: "index must be greater than or equal to 0" }
 }
 
 /// Collection size value.
 type size -> int with constructor {
     if value >= 0
     then Success { value }
-    else Error { message: "size must be greater than or equal to 0" }
+    else Error { kind: "capy.lang.number.out_of_range", message: "size must be greater than or equal to 0" }
 }
 
 const FIRST_ELEMENT: index = index! { 0 }
@@ -23,12 +23,12 @@ fun size.to_index(): index = index! { this.value }
 
 fun index.next(): Result[index] =
     if this.value == MAX_INT_VALUE
-    then Error { message: "index increment overflow" }
+    then Error { kind: "capy.lang.index.out_of_bounds", message: "index increment overflow" }
     else Success { index! { this.value + 1 } }
 
 fun index.plus(offset: size): Result[index] =
     if this.value > MAX_INT_VALUE - offset.value
-    then Error { message: "index addition overflow" }
+    then Error { kind: "capy.lang.index.out_of_bounds", message: "index addition overflow" }
     else Success { index! { this.value + offset.value } }
 
 fun index.plus(offset: int): Result[index] =
@@ -51,7 +51,7 @@ fun index.`==`(other: int): bool = this.value == other
 
 fun size.plus(other: size): Result[size] =
     if this.value > MAX_INT_VALUE - other.value
-    then Error { message: "size addition overflow" }
+    then Error { kind: "capy.lang.number.out_of_range", message: "size addition overflow" }
     else Success { size! { this.value + other.value } }
 
 fun size.plus(other: int): Result[size] =

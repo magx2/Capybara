@@ -12,6 +12,7 @@ fun tests(): Effect[TestFile] =
         file_effects_manage_directories_and_delete_files().map(assertion => test("file effects manage directories and delete files", () => assertion)),
         file_effects_copy_and_move_files().map(assertion => test("file effects copy and move files", () => assertion)),
         file_effects_replace_existing_copy_and_move_targets().map(assertion => test("file effects replace existing copy and move targets", () => assertion)),
+        file_effects_return_errors_for_write_failures().map(assertion => test("file effects return errors for write failures", () => assertion)),
         file_effects_return_errors_for_failed_operations().map(assertion => test("file effects return errors for failed operations", () => assertion)),
     ])
 
@@ -140,6 +141,31 @@ private fun file_effects_replace_existing_copy_and_move_targets_effect(): Effect
 
 fun file_effects_return_errors_for_failed_operations(): Effect[Assert] =
     file_effects_return_errors_for_failed_operations_effect()
+
+fun file_effects_return_errors_for_write_failures(): Effect[Assert] =
+    file_effects_return_errors_for_write_failures_effect()
+
+private fun file_effects_return_errors_for_write_failures_effect(): Effect[Assert] =
+    let base <- unique_base_path("write-errors")
+    let target = base / "missing-parent" / "payload.txt"
+    let created <- create_directories_at(base)
+    let write_text_result <- write_text_file(target, "payload")
+    let write_lines_result <- write_lines_file(target, ["payload"])
+    let write_bytes_result <- write_bytes_file(target, [0x41])
+    let append_text_result <- append_text_file(target, "payload")
+    let append_lines_result <- append_lines_file(target, ["payload"])
+    let append_bytes_result <- append_bytes_file(target, [0x41])
+    let target_exists <- exists_path(target)
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_failed_message_contains(write_text_result, "write_text failed"),
+        assert_failed_message_contains(write_lines_result, "write_lines failed"),
+        assert_failed_message_contains(write_bytes_result, "write_bytes failed"),
+        assert_failed_message_contains(append_text_result, "append_text failed"),
+        assert_failed_message_contains(append_lines_result, "append_lines failed"),
+        assert_failed_message_contains(append_bytes_result, "append_bytes failed"),
+        assert_that(target_exists).is_false(),
+    ])
 
 private fun file_effects_return_errors_for_failed_operations_effect(): Effect[Assert] =
     let base <- unique_base_path("errors")

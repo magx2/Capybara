@@ -23,4 +23,4 @@ fun users_with_regular_let(name1: String, name2: String): Result[String] =
     user1.name + separator + user2.name
 
 fun first_error_message(name1: String, name2: String): String =
-    users_with_regular_let(name1, name2).reduce_left(value => value, message => message)
+    users_with_regular_let(name1, name2).reduce_left(value => value, error => error.message)

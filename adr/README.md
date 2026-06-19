@@ -1,5 +1,6 @@
 # Architecture Decision Records
 
+- [ADR-2026-06-19: Result-Based Error Handling](ADR-2026-06-19-result-error-handling.md)
 - [ADR-2026-05-07: `.cfun` Compile-Time Derive v1](ADR-2026-05-07-cfun-derive-v1.md)
 - [ADR-2026-05-08: Reflection v1](ADR-2026-05-08-reflection-v1.md)
 - [ADR-2026-05-21: `.cfun` Empty Data v1](ADR-2026-05-21-cfun-empty-data-v1.md)

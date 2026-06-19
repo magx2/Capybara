@@ -70,7 +70,7 @@ private fun parse_from_string_and_order_returns_result(): Assert =
     ])
 
 private fun parse_message(result: Result[Color]): String =
-    result.reduce(value => value.name, message => message)
+    result.reduce(value => value.name, error => error.message)
 
 private fun enum_values_can_be_used_without_braces_in_expressions(): Assert =
     assert_all([

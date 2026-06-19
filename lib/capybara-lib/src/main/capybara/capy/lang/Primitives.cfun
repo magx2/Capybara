@@ -42,7 +42,7 @@ fun clamp_long_to_int(value: long): int =
 
 fun safe_long_to_int(value: long): Result[int] =
     if value > MAX_INT_VALUE
-    then Error { "long value `{value}` is greater than max int value" }
+    then Error { kind: "capy.lang.number.out_of_range", message: "long value `{value}` is greater than max int value" }
     else if value < MIN_INT_VALUE
-    then Error { "long value `{value}` is smaller than min int value" }
+    then Error { kind: "capy.lang.number.out_of_range", message: "long value `{value}` is smaller than min int value" }
     else Success { value.to_int() }

@@ -8,7 +8,15 @@ data ParseState { value: String, parsing_string: String }
 
 fun success_result(): Result[int] = Success { value: 7 }
 
-fun fail_result(): Result[int] = Error { message: "boom" }
+fun fail_result(): Result[int] = fail_kind("capy.test.result.boom", "boom")
+
+fun fail_result_kind(): String =
+    match fail_result() with
+    case Error error -> error.kind
+    case Success _ -> "success"
+
+fun reduce_error_kind(): String =
+    fail_result().reduce(_ => "success", error => error.kind)
 
 fun parse_state(input: String): Result[ParseState] =
     Success { value: ParseState { value: input, parsing_string: "xyz" } }

@@ -550,6 +550,79 @@ fun ResultAssert[T].fails(message: String): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the result is `Error` with the expected stable kind.
+fun ResultAssert[T].fails_with_kind(kind: String): ResultAssert[T] =
+    let assertion = Assertion {
+        result: {
+            match this.value with
+            case Error e -> e.kind == kind
+            case Success s -> false
+        },
+        message: "Expected result:\n" + this.value + "\nto fail with kind:\n" + kind,
+        type: 'ResultAssert[T].fails_with_kind'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+/// Adds an assertion that the result is `Error` with the expected stable kind and message.
+fun ResultAssert[T].fails_with_kind(kind: String, message: String): ResultAssert[T] =
+    let assertion = Assertion {
+        result: {
+            match this.value with
+            case Error e -> e.kind == kind & e.message == message
+            case Success s -> false
+        },
+        message: "Expected result:\n" + this.value + "\nto fail with kind:\n" + kind + "\nand message:\n" + message,
+        type: 'ResultAssert[T].fails_with_kind'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+/// Adds an assertion that the result is `Error` with a message containing `message`.
+fun ResultAssert[T].fails_with_message_containing(message: String): ResultAssert[T] =
+    let assertion = Assertion {
+        result: {
+            match this.value with
+            case Error e -> e.message ? message
+            case Success s -> false
+        },
+        message: "Expected result:\n" + this.value + "\nto fail with message containing:\n" + message,
+        type: 'ResultAssert[T].fails_with_message_containing'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+/// Adds an assertion that the result is `Error`, then runs nested assertions
+/// against the structured error value.
+///
+/// Example:
+/// ```cfun
+/// assert_that(load_user()).fails(error =>
+///     assert_that(error.kind).is_equal_to("capy.user.not_found")
+/// )
+/// ```
+fun ResultAssert[T].fails(assert: Error => Assert): ResultAssert[T] =
+    let assertions: List[() => Assertion] =
+        match this.value with
+        case Error e -> assert(e).assertions
+        case Success s -> [() => Assertion {
+            result: false,
+            message: "Expected result:\n"
+                + this.value
+                + "\nto fail with error that satisfies assertion",
+            type: 'ResultAssert[T].fails'
+        }]
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + assertions
+    }
+
 fun DateAssert.is_equal_to(other: Date): DateAssert =
     let assertion = Assertion {
         result: this.value == other,

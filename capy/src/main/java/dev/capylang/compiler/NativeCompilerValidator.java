@@ -15,25 +15,34 @@ import dev.capylang.compiler.parser.Definition.TypeDeclaration;
 import dev.capylang.compiler.parser.Expression;
 import dev.capylang.compiler.parser.Expression.BinaryExpression;
 import dev.capylang.compiler.parser.Expression.BlockExpression;
+import dev.capylang.compiler.parser.Expression.BoolLiteral;
 import dev.capylang.compiler.parser.Expression.DataField;
 import dev.capylang.compiler.parser.Expression.DataLiteral;
 import dev.capylang.compiler.parser.Expression.DictEntry;
 import dev.capylang.compiler.parser.Expression.DictLiteral;
+import dev.capylang.compiler.parser.Expression.DoubleLiteral;
 import dev.capylang.compiler.parser.Expression.FieldAccessExpression;
+import dev.capylang.compiler.parser.Expression.FloatLiteral;
 import dev.capylang.compiler.parser.Expression.FunctionCallExpression;
 import dev.capylang.compiler.parser.Expression.IfExpression;
 import dev.capylang.compiler.parser.Expression.IndexExpression;
+import dev.capylang.compiler.parser.Expression.IntLiteral;
 import dev.capylang.compiler.parser.Expression.LambdaExpression;
 import dev.capylang.compiler.parser.Expression.LetBinding;
 import dev.capylang.compiler.parser.Expression.ListLiteral;
+import dev.capylang.compiler.parser.Expression.LongLiteral;
 import dev.capylang.compiler.parser.Expression.MatchCase;
 import dev.capylang.compiler.parser.Expression.MatchExpression;
 import dev.capylang.compiler.parser.Expression.MethodCallExpression;
 import dev.capylang.compiler.parser.Expression.ReduceExpression;
 import dev.capylang.compiler.parser.Expression.SetLiteral;
+import dev.capylang.compiler.parser.Expression.StringLiteral;
 import dev.capylang.compiler.parser.Expression.TupleLiteral;
+import dev.capylang.compiler.parser.Expression.ThrowExpression;
+import dev.capylang.compiler.parser.Expression.TryCatchExpression;
 import dev.capylang.compiler.parser.Expression.UnaryExpression;
 import dev.capylang.compiler.parser.Expression.UnsupportedExpression;
+import dev.capylang.compiler.parser.Expression.VariableExpression;
 import dev.capylang.compiler.parser.Expression.WithExpression;
 import dev.capylang.compiler.parser.FunctionAnnotationApplication;
 import dev.capylang.compiler.parser.FunctionAnnotationArgument;
@@ -419,7 +428,7 @@ public final class NativeCompilerValidator {
         for (var module : context.modules) {
             for (var objectInterface : module.objectOriented().interfaces()) {
                 for (var method : objectInterface.methods()) {
-                    validateObjectExpression(module, method.body(), errors);
+                    validateObjectExpression(module, method.body(), errors, objectMethodEnv(method));
                 }
             }
             for (var objectClass : module.objectOriented().classes()) {
@@ -432,13 +441,22 @@ public final class NativeCompilerValidator {
                     validateObjectExpression(module, initBlock.body(), errors);
                 }
                 for (var method : objectClass.methods()) {
-                    validateObjectExpression(module, method.body(), errors);
+                    validateObjectExpression(module, method.body(), errors, objectMethodEnv(method));
                 }
             }
         }
     }
 
     private void validateObjectExpression(ParsedModule module, Expression expression, List<CompilerError> errors) {
+        validateObjectExpression(module, expression, errors, Map.of());
+    }
+
+    private void validateObjectExpression(
+            ParsedModule module,
+            Expression expression,
+            List<CompilerError> errors,
+            Map<String, TypeReference> env
+    ) {
         switch (expression) {
             case UnsupportedExpression unsupported -> {
                 if (unsupported.location().line() != 0 || unsupported.location().column() != 0) {
@@ -446,67 +464,179 @@ public final class NativeCompilerValidator {
                 }
             }
             case BinaryExpression binary -> {
-                validateObjectExpression(module, binary.left(), errors);
-                validateObjectExpression(module, binary.right(), errors);
+                validateObjectExpression(module, binary.left(), errors, env);
+                validateObjectExpression(module, binary.right(), errors, env);
             }
             case BlockExpression block -> {
+                var localEnv = new HashMap<>(env);
                 for (var binding : block.bindings()) {
-                    validateObjectExpression(module, binding.value(), errors);
+                    validateObjectExpression(module, binding.value(), errors, localEnv);
+                    var bindingType = objectBindingType(binding, localEnv);
+                    if (!bindingType.name().isBlank()) {
+                        localEnv.put(binding.name(), bindingType);
+                    }
                 }
-                validateObjectExpression(module, block.result(), errors);
+                validateObjectExpression(module, block.result(), errors, localEnv);
             }
-            case DataLiteral literal -> literal.fields().forEach(field -> validateObjectExpression(module, field.value(), errors));
+            case DataLiteral literal -> literal.fields().forEach(field -> validateObjectExpression(module, field.value(), errors, env));
             case DictLiteral literal -> literal.entries().forEach(entry -> {
-                validateObjectExpression(module, entry.key(), errors);
-                validateObjectExpression(module, entry.value(), errors);
+                validateObjectExpression(module, entry.key(), errors, env);
+                validateObjectExpression(module, entry.value(), errors, env);
             });
-            case FieldAccessExpression access -> validateObjectExpression(module, access.receiver(), errors);
-            case FunctionCallExpression call -> call.arguments().forEach(argument -> validateObjectExpression(module, argument, errors));
+            case FieldAccessExpression access -> validateObjectExpression(module, access.receiver(), errors, env);
+            case FunctionCallExpression call -> call.arguments().forEach(argument -> validateObjectExpression(module, argument, errors, env));
             case IfExpression ifExpression -> {
-                validateObjectExpression(module, ifExpression.condition(), errors);
-                validateObjectExpression(module, ifExpression.thenBranch(), errors);
-                validateObjectExpression(module, ifExpression.elseBranch(), errors);
+                validateObjectExpression(module, ifExpression.condition(), errors, env);
+                validateObjectExpression(module, ifExpression.thenBranch(), errors, env);
+                validateObjectExpression(module, ifExpression.elseBranch(), errors, env);
             }
             case IndexExpression index -> {
-                validateObjectExpression(module, index.receiver(), errors);
-                validateObjectExpression(module, index.index(), errors);
+                validateObjectExpression(module, index.receiver(), errors, env);
+                validateObjectExpression(module, index.index(), errors, env);
                 if (index.hasEndIndex()) {
-                    validateObjectExpression(module, index.endIndex(), errors);
+                    validateObjectExpression(module, index.endIndex(), errors, env);
                 }
             }
-            case LambdaExpression lambda -> validateObjectExpression(module, lambda.body(), errors);
-            case ListLiteral literal -> literal.values().forEach(value -> validateObjectExpression(module, value, errors));
+            case LambdaExpression lambda -> validateObjectExpression(module, lambda.body(), errors, env);
+            case ListLiteral literal -> literal.values().forEach(value -> validateObjectExpression(module, value, errors, env));
             case MatchExpression match -> {
-                validateObjectExpression(module, match.value(), errors);
+                validateObjectExpression(module, match.value(), errors, env);
                 for (var matchCase : match.cases()) {
                     if (matchCase.hasLiteral()) {
-                        validateObjectExpression(module, matchCase.literal(), errors);
+                        validateObjectExpression(module, matchCase.literal(), errors, env);
                     }
                     if (matchCase.hasGuard()) {
-                        validateObjectExpression(module, matchCase.guard(), errors);
+                        validateObjectExpression(module, matchCase.guard(), errors, env);
                     }
-                    validateObjectExpression(module, matchCase.body(), errors);
+                    validateObjectExpression(module, matchCase.body(), errors, env);
                 }
             }
+            case ThrowExpression throwExpression -> {
+                validateObjectExpression(module, throwExpression.value(), errors, env);
+                var valueType = inferObjectExpressionType(throwExpression.value(), env);
+                if (knownObjectExpressionType(valueType) && !resultErrorType(valueType)) {
+                    errors.add(error(module, throwExpression.location(), "OO throw expression must have type `/capy/lang/Result.Error`."));
+                }
+            }
+            case TryCatchExpression tryCatch -> {
+                validateObjectExpression(module, tryCatch.body(), errors, env);
+                tryCatch.branches().forEach(branch -> {
+                    var catchEnv = new HashMap<>(env);
+                    catchEnv.put(branch.catchName(), resultErrorType());
+                    validateObjectExpression(module, branch.catchBody(), errors, catchEnv);
+                });
+            }
             case MethodCallExpression call -> {
-                validateObjectExpression(module, call.receiver(), errors);
-                call.arguments().forEach(argument -> validateObjectExpression(module, argument, errors));
+                validateObjectExpression(module, call.receiver(), errors, env);
+                call.arguments().forEach(argument -> validateObjectExpression(module, argument, errors, env));
             }
             case ReduceExpression reduce -> {
-                validateObjectExpression(module, reduce.receiver(), errors);
-                validateObjectExpression(module, reduce.initial(), errors);
-                validateObjectExpression(module, reduce.body(), errors);
+                validateObjectExpression(module, reduce.receiver(), errors, env);
+                validateObjectExpression(module, reduce.initial(), errors, env);
+                validateObjectExpression(module, reduce.body(), errors, env);
             }
-            case SetLiteral literal -> literal.values().forEach(value -> validateObjectExpression(module, value, errors));
-            case TupleLiteral literal -> literal.values().forEach(value -> validateObjectExpression(module, value, errors));
-            case UnaryExpression unary -> validateObjectExpression(module, unary.expression(), errors);
+            case SetLiteral literal -> literal.values().forEach(value -> validateObjectExpression(module, value, errors, env));
+            case TupleLiteral literal -> literal.values().forEach(value -> validateObjectExpression(module, value, errors, env));
+            case UnaryExpression unary -> validateObjectExpression(module, unary.expression(), errors, env);
             case WithExpression with -> {
-                validateObjectExpression(module, with.receiver(), errors);
-                with.fields().forEach(field -> validateObjectExpression(module, field.value(), errors));
+                validateObjectExpression(module, with.receiver(), errors, env);
+                with.fields().forEach(field -> validateObjectExpression(module, field.value(), errors, env));
             }
             default -> {
             }
         }
+    }
+
+    private Map<String, TypeReference> objectMethodEnv(ObjectOrientedMethod method) {
+        var env = new HashMap<String, TypeReference>();
+        for (var parameter : method.parameters()) {
+            env.put(parameter.name(), parameter.typeReference());
+        }
+        return env;
+    }
+
+    private TypeReference objectBindingType(LetBinding binding, Map<String, TypeReference> env) {
+        if (!binding.typeReference().name().isBlank()) {
+            return binding.typeReference();
+        }
+        return inferObjectExpressionType(binding.value(), env);
+    }
+
+    private TypeReference inferObjectExpressionType(Expression expression, Map<String, TypeReference> env) {
+        return switch (expression) {
+            case BoolLiteral ignored -> builtinType("bool");
+            case DataLiteral literal -> new TypeReference(literal.typeName(), List.of());
+            case DoubleLiteral ignored -> builtinType("double");
+            case FloatLiteral ignored -> builtinType("float");
+            case FunctionCallExpression call -> resultErrorFunctionCall(call.name()) ? resultErrorType() : missingType();
+            case IfExpression ifExpression -> preferredObjectBranchType(
+                    inferObjectExpressionType(ifExpression.thenBranch(), env),
+                    inferObjectExpressionType(ifExpression.elseBranch(), env)
+            );
+            case IntLiteral ignored -> builtinType("int");
+            case LongLiteral ignored -> builtinType("long");
+            case StringLiteral ignored -> builtinType("String");
+            case TryCatchExpression tryCatch -> inferObjectExpressionType(tryCatch.body(), env);
+            case VariableExpression variable -> env.getOrDefault(variable.name(), missingType());
+            case BlockExpression block -> inferObjectBlockType(block, env);
+            default -> missingType();
+        };
+    }
+
+    private TypeReference inferObjectBlockType(BlockExpression block, Map<String, TypeReference> env) {
+        var localEnv = new HashMap<>(env);
+        for (var binding : block.bindings()) {
+            var bindingType = objectBindingType(binding, localEnv);
+            if (!bindingType.name().isBlank()) {
+                localEnv.put(binding.name(), bindingType);
+            }
+        }
+        return inferObjectExpressionType(block.result(), localEnv);
+    }
+
+    private TypeReference preferredObjectBranchType(TypeReference thenType, TypeReference elseType) {
+        if (thenType.name().isBlank()) {
+            return elseType;
+        }
+        if (elseType.name().isBlank() || sameType(thenType, elseType)) {
+            return thenType;
+        }
+        return missingType();
+    }
+
+    private boolean knownObjectExpressionType(TypeReference type) {
+        return !type.name().isBlank();
+    }
+
+    private boolean resultErrorType(TypeReference type) {
+        var name = type.name();
+        return "Error".equals(name)
+                || "Result.Error".equals(name)
+                || "/capy/lang/Result.Error".equals(name)
+                || "capy/lang/Result.Error".equals(name);
+    }
+
+    private TypeReference resultErrorType() {
+        return new TypeReference("/capy/lang/Result.Error", List.of());
+    }
+
+    private boolean resultErrorFunctionCall(String name) {
+        return switch (unqualified(name)) {
+            case "error", "error_kind", "error_with", "error_at", "error_full" -> true;
+            default -> false;
+        };
+    }
+
+    private TypeReference builtinType(String name) {
+        return new TypeReference(name, List.of());
+    }
+
+    private TypeReference missingType() {
+        return new TypeReference("", List.of());
+    }
+
+    private boolean sameType(TypeReference left, TypeReference right) {
+        return left.name().equals(right.name()) && left.arguments().equals(right.arguments());
     }
 
     private void validateDuplicateAnnotationFields(ParsedModule module, AnnotationDeclaration annotation, List<CompilerError> errors) {
