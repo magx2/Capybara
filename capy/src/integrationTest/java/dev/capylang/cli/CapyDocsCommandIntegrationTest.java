@@ -26,6 +26,9 @@ class CapyDocsCommandIntegrationTest {
                 /// Describes a box
                 fun Box.describe(): String = "box"
 
+                /// Hides a box
+                private fun Box.hidden(): String = "hidden"
+
                 /// Generic box docs
                 data GenericBox[T] { value: T }
 
@@ -41,11 +44,44 @@ class CapyDocsCommandIntegrationTest {
                 /// Tone docs
                 enum Tone { LOW, HIGH }
 
+                /// Answer docs
+                const ANSWER: int = 42
+
+                /// Hidden answer docs
+                private const HIDDEN_ANSWER: int = 7
+
                 /// Describes a tone
                 fun Tone.describe(): String = "tone"
 
                 /// Function docs
                 fun documented_function(box: Box, wrapped: GenericBox[Box]): GenericBox[Box] = wrapped
+
+                /// Hidden function docs
+                private fun hidden_function(): String = "hidden"
+
+                /// Hidden box docs
+                private data HiddenBox { value: String }
+
+                /// Hidden circle docs
+                private data HiddenCircle { radius: int }
+
+                /// Hidden visible circle docs
+                private data HiddenVisibleCircle { radius: int }
+
+                /// Visible shape docs
+                union VisibleShape = HiddenVisibleCircle | Box
+
+                /// Hidden square docs
+                private data HiddenSquare { size: int }
+
+                /// Hidden shape docs
+                private union HiddenShape = HiddenCircle | HiddenSquare
+
+                /// Hidden id docs
+                private type hidden_id -> String
+
+                /// Hidden marker docs
+                private annotation HiddenMarker on fun {}
                 """);
         writeSource(input.resolve("sample/Objects.coo"), """
                 /// Named docs
@@ -65,6 +101,9 @@ class CapyDocsCommandIntegrationTest {
                     /// Label field docs
                     field label: String = label
 
+                    /// Internal field docs
+                    private field internal: String = "secret"
+
                     /// Init docs
                     init {
                         return "ready"
@@ -75,7 +114,14 @@ class CapyDocsCommandIntegrationTest {
 
                     /// Render docs
                     def render(prefix: String): String = prefix + this.name()
+
+                    /// Internal render docs
+                    private def internal_render(): String = this.internal
                 }
+                """);
+        writeSource(input.resolve("sample/Markers.cfun"), """
+                /// Marker docs
+                annotation DocMarker on fun {}
                 """);
         writeSource(input.resolve("sample/nested/More.cfun"), """
                 /// More docs
@@ -91,6 +137,7 @@ class CapyDocsCommandIntegrationTest {
                 .contains("= Capybara Documentation")
                 .contains("=== sample")
                 .contains("* xref:sample/Docs.adoc[Docs]")
+                .contains("* xref:sample/Markers.adoc[Markers]")
                 .contains("* xref:sample/Objects.adoc[Objects]")
                 .contains("==== nested")
                 .contains("* xref:sample/nested/More.adoc[More]")
@@ -117,17 +164,38 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Shape docs")
                 .contains("* xref:#type-Circle[Circle]")
                 .contains("* xref:#type-Square[Square]")
+                .contains("[[type-VisibleShape]]\n=== union VisibleShape")
+                .contains("Visible shape docs")
                 .contains("=== enum Tone")
                 .contains("Tone docs")
                 .contains("* `LOW`")
                 .contains("* `HIGH`")
+                .contains("== Constants")
+                .contains("=== const:public ANSWER: int")
+                .contains("Answer docs")
                 .contains("===== public Tone.describe(): String")
+                .doesNotContain("=== const:public ANSWER(): int")
+                .doesNotContain("== Annotations")
+                .doesNotContain("HiddenBox")
+                .doesNotContain("HiddenCircle")
+                .doesNotContain("HiddenVisibleCircle")
+                .doesNotContain("HiddenSquare")
+                .doesNotContain("HiddenShape")
+                .doesNotContain("hidden_id")
+                .doesNotContain("hidden_function")
+                .doesNotContain("HIDDEN_ANSWER")
+                .doesNotContain("HiddenMarker")
+                .doesNotContain("Hidden box docs")
+                .doesNotContain("Hidden answer docs")
+                .doesNotContain("Hidden marker docs")
+                .doesNotContain("Hides a box")
                 .doesNotContain("\n=== public Box.describe")
                 .doesNotContain("\n=== public GenericBox[T].describe")
                 .doesNotContain("* `name`: `String`")
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
         assertThat(docsContent).containsSubsequence("* `HIGH`", "* `LOW`");
+        assertThat(docsContent).containsSubsequence("== Functions", "=== public documented_function", "== Constants", "=== const:public ANSWER: int", "== Types");
 
         var objectsFile = output.resolve("sample/Objects.adoc");
         assertThat(objectsFile).isRegularFile();
@@ -155,9 +223,39 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Init docs")
                 .contains("===== public render(prefix: String): String")
                 .contains("Render docs")
+                .doesNotContain("internal")
+                .doesNotContain("Internal field docs")
+                .doesNotContain("Internal render docs")
+                .doesNotContain("== Functions")
+                .doesNotContain("== Constants")
+                .doesNotContain("== Annotations")
+                .doesNotContain("== Types")
                 .doesNotContain("__capy_oo_method|Widget|render")
                 .doesNotContain("\n=== oo:");
         assertThat(objectsContent).containsSubsequence("* xref:#type-oo-sample-Greeting[Greeting]", "* xref:#type-oo-sample-Named[Named]");
+
+        var markersFile = output.resolve("sample/Markers.adoc");
+        assertThat(markersFile).isRegularFile();
+        assertThat(Files.readString(markersFile))
+                .contains("= Module Markers")
+                .contains("== Annotations")
+                .contains("=== public @DocMarker")
+                .contains("Marker docs")
+                .contains("* Repeatable: no")
+                .contains("* Targets: fun")
+                .doesNotContain("== Functions")
+                .doesNotContain("== Constants")
+                .doesNotContain("== Types");
+
+        var moreFile = output.resolve("sample/nested/More.adoc");
+        assertThat(moreFile).isRegularFile();
+        assertThat(Files.readString(moreFile))
+                .contains("= Module More")
+                .contains("== Types")
+                .contains("=== data More")
+                .doesNotContain("== Functions")
+                .doesNotContain("== Constants")
+                .doesNotContain("== Annotations");
     }
 
     private static void writeSource(Path file, String source) throws IOException {

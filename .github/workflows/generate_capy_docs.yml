@@ -69,27 +69,76 @@ jobs:
 
           DOC_BRANCH="automation/capy-docs-${DOC_VERSION}"
           DOC_DIR="docs/capy-docs/${DOC_VERSION}"
+          GENERATED_DOC_DIR="build/capy-docs/${DOC_VERSION}"
 
           {
             echo "source_branch=${SOURCE_BRANCH}"
             echo "doc_version=${DOC_VERSION}"
             echo "doc_branch=${DOC_BRANCH}"
             echo "doc_dir=${DOC_DIR}"
+            echo "generated_doc_dir=${GENERATED_DOC_DIR}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Assemble Capy project
         run: ./gradlew :capy:assemble --no-daemon
 
       - name: Generate Capybara library docs
+        shell: bash
         run: |
-          ./gradlew :capy:run --no-daemon --args="docs -i ../lib/capybara-lib/src/main/capybara -o ../${{ steps.docs.outputs.doc_dir }}"
+          set -euo pipefail
+          GENERATED_DOC_DIR="${{ steps.docs.outputs.generated_doc_dir }}"
+          rm -rf "${GENERATED_DOC_DIR}"
+          CAPY_JAR="$(find capy/build/libs -maxdepth 1 -name 'capy-*.jar' ! -name '*-plain.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort | head -n 1)"
+          if [[ -z "${CAPY_JAR}" ]]; then
+            echo "::error::Capy jar was not assembled."
+            exit 1
+          fi
+          java -jar "${CAPY_JAR}" docs -i lib/capybara-lib/src/main/capybara -o "${GENERATED_DOC_DIR}"
+          if [[ ! -d "${GENERATED_DOC_DIR}" ]]; then
+            echo "::error::Capy docs were not generated into ${GENERATED_DOC_DIR}."
+            exit 1
+          fi
+
+      - name: Check generated docs changes
+        id: docs_diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOC_VERSION="${{ steps.docs.outputs.doc_version }}"
+          DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
+          GENERATED_DOC_DIR="${{ steps.docs.outputs.generated_doc_dir }}"
+
+          if [[ -d "${DOC_DIR}" ]] && diff -qr -- "${DOC_DIR}" "${GENERATED_DOC_DIR}" >/tmp/capy-docs.diff; then
+            echo "Capy docs are already up to date for ${DOC_VERSION}."
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Generated Capy docs differ for ${DOC_VERSION}."
+          if [[ -s /tmp/capy-docs.diff ]]; then
+            cat /tmp/capy-docs.diff
+          fi
+          echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Apply generated docs
+        if: steps.docs_diff.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
+          GENERATED_DOC_DIR="${{ steps.docs.outputs.generated_doc_dir }}"
+          rm -rf "${DOC_DIR}"
+          mkdir -p "$(dirname "${DOC_DIR}")"
+          cp -a "${GENERATED_DOC_DIR}" "${DOC_DIR}"
 
       - name: Configure git user
+        if: steps.docs_diff.outputs.has_changes == 'true'
         run: |
           git config user.name "CapyAutomata"
           git config user.email "CapyAutomata@capylang.dev"
 
       - name: Create docs pull request
+        if: steps.docs_diff.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -100,13 +149,12 @@ jobs:
           DOC_BRANCH="${{ steps.docs.outputs.doc_branch }}"
           DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
 
-          if [[ -z "$(git status --short -- "${DOC_DIR}")" ]]; then
-            echo "Capy docs are already up to date for ${DOC_VERSION}."
-            exit 0
-          fi
-
           git switch -C "${DOC_BRANCH}"
           git add -A "${DOC_DIR}"
+          if git diff --cached --quiet; then
+            echo "No tracked Capy docs changes after applying generated docs for ${DOC_VERSION}."
+            exit 0
+          fi
           git commit -m "docs: update Capy docs ${DOC_VERSION}"
 
           REMOTE_DOC_SHA="$(git ls-remote --heads origin "${DOC_BRANCH}" | awk '{ print $1 }')"

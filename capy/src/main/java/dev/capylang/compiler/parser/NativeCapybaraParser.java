@@ -1492,6 +1492,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 location
         ));
         definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, documentation, location));
+        definitions.add(schemaConstantDefinition("__capy_schema_visibility|" + name, visibility, location));
 
         var typeParameters = dataTypeParameters(unionDeclaration);
         for (var i = 0; i < typeParameters.size(); i++) {
@@ -1580,6 +1581,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 location
         ));
         definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, docComments(ctx.docComment()), location));
+        definitions.add(schemaConstantDefinition("__capy_schema_visibility|" + name, visibility, location));
         definitions.add(schemaConstantDefinition("__capy_schema_primitive|" + name, backingType.name(), location));
         definitions.add(schemaConstantDefinition(
                 "__capy_schema_field|" + name + "|0",

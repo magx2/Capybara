@@ -971,6 +971,7 @@ private fun compile_functions(definitions: List[Definition], allDefinitions: Lis
 /// Converts parsed data declaration into compiled metadata.
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
     [compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location)]
+        + [compile_schema_constant("__capy_schema_visibility|" + declaration.name, declaration.visibility, declaration.location)]
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
         + compile_data_schema_fields(declaration.name, declaration.fields, 0)
         + compile_data_schema_parents(declaration.name, declaration.parents, 0)
@@ -981,6 +982,7 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
     [
         compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
+        compile_schema_constant("__capy_schema_visibility|" + declaration.name, "public", declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|0", "name|String", declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|1", "order|int", declaration.location),
     ] + compile_annotation_application_schema("__capy_schema_annotation|enum|" + declaration.name + "|", declaration.annotations, 0)
