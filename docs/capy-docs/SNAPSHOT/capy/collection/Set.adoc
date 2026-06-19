@@ -20,22 +20,22 @@ Sets are immutable and contain each value at most once.
 
 ==== Functions
 
-===== fun Set[T].`+`(value: T): xref:#type-Set[Set][T]
+===== fun Set[T].`+`(value: T): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set with `value` included.
 
 
-===== fun Set[T].`+`(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].`+`(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set with all values from `other` included.
 
 
-===== fun Set[T].`-`(value: T): xref:#type-Set[Set][T]
+===== fun Set[T].`-`(value: T): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set without `value`.
 
 
-===== fun Set[T].`-`(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].`-`(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set without values contained in `other`.
 
@@ -45,12 +45,12 @@ Returns a new Set without values contained in `other`.
 Returns true when this Set contains the given value.
 
 
-===== fun Set[T].`|*`(map: T=>Set[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun Set[T].`|*`(map: T=>Set[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Applies `map` to each value and concatenates the resulting sets.
 
 
-===== fun Set[T].`|-`(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
+===== fun Set[T].`|-`(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;T&#93;
 
 Returns a sequence containing only values that satisfy `predicate`.
 
@@ -60,12 +60,12 @@ Returns a sequence containing only values that satisfy `predicate`.
 Combines all values from left to right.
 
 
-===== fun Set[T].`|`(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun Set[T].`|`(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Transforms each value using `map`.
 
 
-===== fun Set[T].`×`(other: xref:#type-Set[Set][U]): xref:#type-Set[Set][xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][T, U]]
+===== fun Set[T].`×`(other: xref:#type-Set[Set]&#91;U&#93;): xref:#type-Set[Set]&#91;xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple]&#91;T, U&#93;&#93;
 
 Returns all ordered pairs from this Set and `other`.
 
@@ -78,7 +78,7 @@ Examples:
 Symbolic alias for `cartesian_product`.
 
 
-===== fun Set[T].`℘`(): xref:#type-Set[Set][xref:#type-Set[Set][T]]
+===== fun Set[T].`℘`(): xref:#type-Set[Set]&#91;xref:#type-Set[Set]&#91;T&#93;&#93;
 
 Returns the Set of all subsets of this Set.
 
@@ -91,7 +91,7 @@ Examples:
 Symbolic alias for `power_set`.
 
 
-===== fun Set[T].`∩`(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].`∩`(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns values present in both Sets.
 
@@ -104,7 +104,7 @@ Examples and counter-examples:
 Symbolic alias for `intersection`.
 
 
-===== fun Set[T].`∪`(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].`∪`(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Combines all values from both Sets.
 
@@ -117,7 +117,7 @@ Examples and counter-examples:
 Symbolic alias for `union`.
 
 
-===== fun Set[T].`⊂`(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].`⊂`(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when this Set is strictly contained in `other`.
 
@@ -130,7 +130,7 @@ Examples and counter-examples:
 Symbolic alias for `is_proper_subset_of`.
 
 
-===== fun Set[T].`⊃`(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].`⊃`(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when this Set strictly contains `other`.
 
@@ -143,7 +143,7 @@ Examples and counter-examples:
 Symbolic alias for `is_proper_superset_of`.
 
 
-===== fun Set[T].`⊆`(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].`⊆`(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when every value in this Set exists in `other`.
 
@@ -157,7 +157,7 @@ Examples and counter-examples:
 Symbolic alias for `is_subset_of`.
 
 
-===== fun Set[T].`⊇`(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].`⊇`(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when this Set contains every value in `other`.
 
@@ -171,7 +171,7 @@ Examples and counter-examples:
 Symbolic alias for `is_superset_of`.
 
 
-===== fun Set[T].`△`(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].`△`(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns values present in exactly one of the Sets.
 
@@ -196,7 +196,7 @@ Empty sets return true.
 Returns true when at least one value satisfies `predicate`.
 
 
-===== fun Set[T].cartesian_product(other: xref:#type-Set[Set][U]): xref:#type-Set[Set][xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][T, U]]
+===== fun Set[T].cartesian_product(other: xref:#type-Set[Set]&#91;U&#93;): xref:#type-Set[Set]&#91;xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple]&#91;T, U&#93;&#93;
 
 Returns all ordered pairs from this Set and `other`.
 
@@ -216,7 +216,7 @@ Examples:
 Returns true when this Set contains the given value.
 
 
-===== fun Set[T].difference(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].difference(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns values present in this Set but not in `other`.
 
@@ -230,7 +230,7 @@ Examples and counter-examples:
 ```
 
 
-===== fun Set[T].filter(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
+===== fun Set[T].filter(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;T&#93;
 
 Returns a sequence containing only values that satisfy `predicate`.
 
@@ -240,7 +240,7 @@ Example:
 ```
 
 
-===== fun Set[T].flat_map(map: T=>Set[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun Set[T].flat_map(map: T=>Set[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Applies `map` to each value and concatenates the resulting sets.
 
@@ -250,7 +250,7 @@ Example:
 ```
 
 
-===== fun Set[T].intersection(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].intersection(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns values present in both Sets.
 
@@ -269,7 +269,7 @@ Examples and counter-examples:
 Returns true when this Set has no values.
 
 
-===== fun Set[T].is_proper_subset_of(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].is_proper_subset_of(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when this Set is strictly contained in `other`.
 
@@ -283,7 +283,7 @@ Examples and counter-examples:
 ```
 
 
-===== fun Set[T].is_proper_superset_of(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].is_proper_superset_of(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when this Set strictly contains `other`.
 
@@ -297,7 +297,7 @@ Examples and counter-examples:
 ```
 
 
-===== fun Set[T].is_subset_of(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].is_subset_of(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when every value in this Set exists in `other`.
 
@@ -310,7 +310,7 @@ Examples and counter-examples:
 ```
 
 
-===== fun Set[T].is_superset_of(other: xref:#type-Set[Set][T]): bool
+===== fun Set[T].is_superset_of(other: xref:#type-Set[Set]&#91;T&#93;): bool
 
 Returns true when this Set contains every value in `other`.
 
@@ -323,7 +323,7 @@ Examples and counter-examples:
 ```
 
 
-===== fun Set[T].map(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun Set[T].map(map: T=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Transforms each value using `map`.
 
@@ -335,27 +335,27 @@ Example:
 ```
 
 
-===== fun Set[T].minus(value: T): xref:#type-Set[Set][T]
+===== fun Set[T].minus(value: T): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set without `value`.
 
 
-===== fun Set[T].minus(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].minus(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set without values contained in `other`.
 
 
-===== fun Set[T].plus(value: T): xref:#type-Set[Set][T]
+===== fun Set[T].plus(value: T): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set with `value` included.
 
 
-===== fun Set[T].plus(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].plus(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns a new Set with all values from `other` included.
 
 
-===== fun Set[T].power_set(): xref:#type-Set[Set][xref:#type-Set[Set][T]]
+===== fun Set[T].power_set(): xref:#type-Set[Set]&#91;xref:#type-Set[Set]&#91;T&#93;&#93;
 
 Returns the Set of all subsets of this Set.
 
@@ -382,7 +382,7 @@ The iteration order is runtime-defined, so use reducers that do not depend
 on a specific set order.
 
 
-===== fun Set[T].reject(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][T]
+===== fun Set[T].reject(predicate: T=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;T&#93;
 
 Returns a sequence without values that satisfy `predicate`.
 
@@ -392,7 +392,7 @@ Returns a sequence without values that satisfy `predicate`.
 Returns the number of values in this Set.
 
 
-===== fun Set[T].symmetric_difference(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].symmetric_difference(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Returns values present in exactly one of the Sets.
 
@@ -406,12 +406,12 @@ Examples:
 ```
 
 
-===== fun Set[T].to_list(): xref:../../capy/collection/List.adoc#type-List[List][T]
+===== fun Set[T].to_list(): xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;
 
 Returns the Set values as a List.
 
 
-===== fun Set[T].union(other: xref:#type-Set[Set][T]): xref:#type-Set[Set][T]
+===== fun Set[T].union(other: xref:#type-Set[Set]&#91;T&#93;): xref:#type-Set[Set]&#91;T&#93;
 
 Combines all values from both Sets.
 

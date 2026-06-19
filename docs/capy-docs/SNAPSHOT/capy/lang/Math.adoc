@@ -51,7 +51,7 @@ Result has the same sign as divisor `b` (or is zero).
 Returns the greater of two integers.
 
 
-=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List][int]): xref:../../capy/lang/Option.adoc#type-Option[Option][int]
+=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;int&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
 
 Returns the greatest integer in `values`.
 
@@ -63,7 +63,7 @@ Returns `None` when the List is empty.
 Returns the greater of two long integers.
 
 
-=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List][long]): xref:../../capy/lang/Option.adoc#type-Option[Option][long]
+=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;long&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;long&#93;
 
 Returns the greatest long integer in `values`.
 
@@ -75,7 +75,7 @@ Returns `None` when the List is empty.
 Returns the smaller of two integers.
 
 
-=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List][int]): xref:../../capy/lang/Option.adoc#type-Option[Option][int]
+=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;int&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
 
 Returns the smallest integer in `values`.
 
@@ -87,7 +87,7 @@ Returns `None` when the List is empty.
 Returns the smaller of two long integers.
 
 
-=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List][long]): xref:../../capy/lang/Option.adoc#type-Option[Option][long]
+=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;long&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;long&#93;
 
 Returns the smallest long integer in `values`.
 

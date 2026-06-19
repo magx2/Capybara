@@ -20,12 +20,12 @@ Returns this String with `value` appended.
 Returns true when this String contains the given substring.
 
 
-===== fun String.`|*`(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.`|*`(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Applies `map` to each character and concatenates the resulting lists.
 
 
-===== fun String.`|-`(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
+===== fun String.`|-`(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-String[String]&#93;
 
 Returns a sequence containing only characters that satisfy `predicate`.
 
@@ -35,7 +35,7 @@ Returns a sequence containing only characters that satisfy `predicate`.
 Combines all characters from left to right.
 
 
-===== fun String.`|`(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.`|`(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Transforms each character using `map`.
 
@@ -64,7 +64,7 @@ Returns true when at least one character satisfies `predicate`.
 Returns true when at least one character and index pair satisfies `predicate`.
 
 
-===== fun String.chars(): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-char[char]]
+===== fun String.chars(): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-char[char]&#93;
 
 Returns this String's characters as a finite lazy sequence.
 
@@ -86,17 +86,17 @@ Returns true when this String contains the given substring.
 Returns true when this String ends with the given substring.
 
 
-===== fun String.filter(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
+===== fun String.filter(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-String[String]&#93;
 
 Returns a sequence containing only characters that satisfy `predicate`.
 
 
-===== fun String.flat_map(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.flat_map(map: String=>List[Y]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Applies `map` to each character and concatenates the resulting lists.
 
 
-===== fun String.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-char[char]]
+===== fun String.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-char[char]&#93;
 
 Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
 
@@ -106,7 +106,7 @@ Returns the character at idx as a String using the same bounds and negative-inde
 Returns the substring in the half-open range [from, to) using negative-index rules.
 
 
-===== fun String.index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
+===== fun String.index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/collection/CollectionTypes.adoc#type-index[index]&#93;
 
 Returns the first zero-based index where `part` occurs.
 
@@ -125,14 +125,14 @@ Trim whitespace is space, tab, newline, carriage return, or form feed.
 Returns true when this String has no characters.
 
 
-===== fun String.last_index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
+===== fun String.last_index_of(part: xref:#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/collection/CollectionTypes.adoc#type-index[index]&#93;
 
 Returns the last zero-based index where `part` occurs.
 
 Empty `part` matches at this String's size. Missing `part` returns None.
 
 
-===== fun String.map(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][Y]
+===== fun String.map(map: String=>Y): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;Y&#93;
 
 Transforms each character using `map`.
 
@@ -147,7 +147,7 @@ Returns this String with `value` appended.
 Combines all characters from left to right.
 
 
-===== fun String.reject(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-String[String]]
+===== fun String.reject(predicate: String=>bool): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-String[String]&#93;
 
 Returns a sequence without characters that satisfy `predicate`.
 

@@ -66,7 +66,7 @@ Reflected annotation with package metadata and argument values.
 
 ==== Fields
 
-* `arguments`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationArgumentInfo[AnnotationArgumentInfo]]
+* `arguments`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationArgumentInfo[AnnotationArgumentInfo]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
 * `pkg`: xref:#type-PackageInfo[PackageInfo]
 
@@ -188,7 +188,7 @@ Data declaration metadata without runtime field values.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
 * `pkg`: xref:#type-PackageInfo[PackageInfo]
 
@@ -199,8 +199,8 @@ Runtime data value metadata, including constructor name and field values.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
-* `fields`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-FieldValueInfo[FieldValueInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
+* `fields`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-FieldValueInfo[FieldValueInfo]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
 * `pkg`: xref:#type-PackageInfo[PackageInfo]
 
@@ -220,7 +220,7 @@ Field declaration metadata.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
 * `type`: xref:#type-AnyInfo[AnyInfo]
 
@@ -231,7 +231,7 @@ Field metadata plus the runtime value stored in a reflected data instance.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
 * `type`: xref:#type-AnyInfo[AnyInfo]
 * `value`: any
@@ -243,7 +243,7 @@ Function type metadata.
 
 ==== Fields
 
-* `params`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnyInfo[AnyInfo]]
+* `params`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnyInfo[AnyInfo]&#93;
 * `return_type`: xref:#type-AnyInfo[AnyInfo]
 
 [[type-InterfaceInfo]]
@@ -253,9 +253,9 @@ Interface metadata.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
-* `methods`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-MethodInfo[MethodInfo]]
-* `parents`: xref:../../capy/collection/Set.adoc#type-Set[Set][xref:#type-AnyInfo[AnyInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
+* `methods`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-MethodInfo[MethodInfo]&#93;
+* `parents`: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;xref:#type-AnyInfo[AnyInfo]&#93;
 
 [[type-ListInfo]]
 === data ListInfo
@@ -273,9 +273,9 @@ Method metadata.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
-* `params`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-FieldInfo[FieldInfo]]
+* `params`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-FieldInfo[FieldInfo]&#93;
 * `pkg`: xref:#type-PackageInfo[PackageInfo]
 * `return_type`: xref:#type-AnyInfo[AnyInfo]
 
@@ -286,11 +286,11 @@ Object metadata.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
-* `fields`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-FieldInfo[FieldInfo]]
-* `methods`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-MethodInfo[MethodInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
+* `fields`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-FieldInfo[FieldInfo]&#93;
+* `methods`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-MethodInfo[MethodInfo]&#93;
 * `open`: bool
-* `parents`: xref:../../capy/collection/Set.adoc#type-Set[Set][xref:#type-AnyInfo[AnyInfo]]
+* `parents`: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;xref:#type-AnyInfo[AnyInfo]&#93;
 
 [[type-PackageInfo]]
 === data PackageInfo
@@ -318,9 +318,9 @@ Trait metadata.
 
 ==== Fields
 
-* `annotations`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnnotationInfo[AnnotationInfo]]
-* `methods`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-MethodInfo[MethodInfo]]
-* `parents`: xref:../../capy/collection/Set.adoc#type-Set[Set][xref:#type-AnyInfo[AnyInfo]]
+* `annotations`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnnotationInfo[AnnotationInfo]&#93;
+* `methods`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-MethodInfo[MethodInfo]&#93;
+* `parents`: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;xref:#type-AnyInfo[AnyInfo]&#93;
 
 [[type-TupleInfo]]
 === data TupleInfo
@@ -329,5 +329,5 @@ Tuple type metadata.
 
 ==== Fields
 
-* `elements`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-AnyInfo[AnyInfo]]
+* `elements`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-AnyInfo[AnyInfo]&#93;
 

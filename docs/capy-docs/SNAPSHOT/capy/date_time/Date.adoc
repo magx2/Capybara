@@ -9,7 +9,7 @@ Converts days since Unix epoch (`1970-01-01`) to `Date`.
 Example: `from_days_since_unix_epoch(1)` returns `1970-01-02`.
 
 
-=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Date[Date]]
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Date[Date]&#93;
 
 Parses an ISO 8601 calendar date in basic or extended complete form.
 

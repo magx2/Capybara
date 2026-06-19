@@ -2,17 +2,17 @@
 
 == Functions
 
-=== fun append_bytes(path: xref:../../capy/io/Path.adoc#type-Path[Path], bytes: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][byte]]]
+=== fun append_bytes(path: xref:../../capy/io/Path.adoc#type-Path[Path], bytes: xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;&#93;&#93;
 
 Appends bytes to the file, creating the file when needed, and returns the consumed bytes.
 
 
-=== fun append_lines(path: xref:../../capy/io/Path.adoc#type-Path[Path], lines: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]]]
+=== fun append_lines(path: xref:../../capy/io/Path.adoc#type-Path[Path], lines: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;&#93;
 
 Appends UTF-8 lines to the file, creating the file when needed, and returns the consumed lines.
 
 
-=== fun append_text(path: xref:../../capy/io/Path.adoc#type-Path[Path], text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+=== fun append_text(path: xref:../../capy/io/Path.adoc#type-Path[Path], text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
 
 Appends UTF-8 text to the file, creating the file when needed, and returns the consumed text.
 
@@ -23,19 +23,19 @@ let _ <- append_text(from_string("app.log"), "started\n")
 The file is created if it does not already exist.
 
 
-=== fun copy(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun copy(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Copies a file and returns the target path. Fails if the target already exists.
 
 Use `copy_replace` when overwriting the target is intentional.
 
 
-=== fun copy_replace(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun copy_replace(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Copies a file and returns the target path, replacing an existing target.
 
 
-=== fun create_directories(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun create_directories(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Creates a directory and any missing parent directories, returning the created path.
 
@@ -46,22 +46,22 @@ let created <- create_directories(from_string("reports/2026/06"))
 Use this for nested output directories where parent paths may not exist yet.
 
 
-=== fun create_directory(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun create_directory(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Creates a single directory and returns the created path.
 
 
-=== fun create_file(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun create_file(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Creates a new empty file and returns the created path.
 
 
-=== fun delete(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][bool]]
+=== fun delete(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;bool&#93;&#93;
 
 Deletes a file or empty directory and returns true when something was deleted.
 
 
-=== fun exists(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun exists(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;bool&#93;
 
 Returns true when the path exists.
 
@@ -72,39 +72,39 @@ if present then "configured" else "missing config"
 ```
 
 
-=== fun is_directory(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun is_directory(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;bool&#93;
 
 Returns true when the path exists and is a directory.
 
 
-=== fun is_file(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+=== fun is_file(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;bool&#93;
 
 Returns true when the path exists and is a regular file.
 
 
-=== fun list_entries(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
+=== fun list_entries(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;&#93;
 
 Lists direct child entries of a directory.
 
 
-=== fun move(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun move(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Moves a file or directory and returns the target path. Fails if the target already exists.
 
 Use `move_replace` when overwriting the target is intentional.
 
 
-=== fun move_replace(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
+=== fun move_replace(source: xref:../../capy/io/Path.adoc#type-Path[Path], target: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;
 
 Moves a file or directory and returns the target path, replacing an existing target.
 
 
-=== fun read_bytes(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][byte]]]
+=== fun read_bytes(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;&#93;&#93;
 
 Reads the entire file as bytes.
 
 
-=== fun read_lines(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]]]
+=== fun read_lines(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;&#93;
 
 Reads all lines from the file as UTF-8 text.
 
@@ -112,7 +112,7 @@ The returned list contains text lines without requiring callers to split the
 file manually.
 
 
-=== fun read_text(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+=== fun read_text(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
 
 Reads the entire file as UTF-8 text.
 
@@ -127,24 +127,24 @@ File operations are effects because they interact with the host file system.
 The inner `Result` reports path, permission, or decoding failures.
 
 
-=== fun size(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/ByteSize.adoc#type-byte_count[byte_count]]]
+=== fun size(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/ByteSize.adoc#type-byte_count[byte_count]&#93;&#93;
 
 Returns the size of a file in bytes.
 
 The byte count can be converted with `to_kib`, `to_mib`, or `to_gib`.
 
 
-=== fun write_bytes(path: xref:../../capy/io/Path.adoc#type-Path[Path], bytes: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][byte]]]
+=== fun write_bytes(path: xref:../../capy/io/Path.adoc#type-Path[Path], bytes: xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;&#93;&#93;
 
 Writes bytes to the file, replacing existing content, and returns the consumed bytes.
 
 
-=== fun write_lines(path: xref:../../capy/io/Path.adoc#type-Path[Path], lines: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]]]
+=== fun write_lines(path: xref:../../capy/io/Path.adoc#type-Path[Path], lines: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;&#93;
 
 Writes UTF-8 lines to the file, replacing existing content, and returns the consumed lines.
 
 
-=== fun write_text(path: xref:../../capy/io/Path.adoc#type-Path[Path], text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+=== fun write_text(path: xref:../../capy/io/Path.adoc#type-Path[Path], text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
 
 Writes UTF-8 text to the file, replacing existing content, and returns the consumed text.
 

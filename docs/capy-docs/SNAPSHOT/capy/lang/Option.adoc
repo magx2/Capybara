@@ -22,18 +22,18 @@ The result is `Some { value: "Ada!" }`. Mapping `None` returns `None`.
 ==== Variants
 
 * xref:#type-None[None]
-* xref:#type-Some[Some][T]
+* xref:#type-Some[Some]&#91;T&#93;
 
 ==== Functions
 
-===== fun Option[T].`|*`(flatmap: T=>Option[Y]): xref:#type-Option[Option][Y]
+===== fun Option[T].`|*`(flatmap: T=>Option[Y]): xref:#type-Option[Option]&#91;Y&#93;
 
 Applies `flatmap` to a present value; equivalent to `this.flat_map(flatmap)`.
 
 Use this when the mapping function already returns an `Option`.
 
 
-===== fun Option[T].`|`(map: T=>Y): xref:#type-Option[Option][Y]
+===== fun Option[T].`|`(map: T=>Y): xref:#type-Option[Option]&#91;Y&#93;
 
 Transforms a present value using `map`; equivalent to `this.map(map)`.
 
@@ -41,7 +41,7 @@ Example: `Some { value: 2 } | value => value * 2` returns
 `Some { value: 4 }`.
 
 
-===== fun Option[T].flat_map(flatmap: T=>Option[Y]): xref:#type-Option[Option][Y]
+===== fun Option[T].flat_map(flatmap: T=>Option[Y]): xref:#type-Option[Option]&#91;Y&#93;
 
 Applies `flatmap` to a present value, or returns None when empty.
 
@@ -52,7 +52,7 @@ Some { value: "capy" }.flat_map(text => text[0])
 The outer option stays empty if the original value is `None`.
 
 
-===== fun Option[T].map(map: T=>Y): xref:#type-Option[Option][Y]
+===== fun Option[T].map(map: T=>Y): xref:#type-Option[Option]&#91;Y&#93;
 
 Transforms a present value using `map`, or returns None when empty.
 

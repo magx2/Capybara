@@ -295,10 +295,59 @@ private fun generate_documentation(function: CompiledFunction): String =
     generate_text_documentation(function.documentation)
 
 private fun generate_text_documentation(documentation: List[String]): String =
-    documentation.reduce("", (content, docLine) => content + docLine + "\n")
+    documentation.reduce("", (content, docLine) => content + asciidoc_documentation_line(docLine) + "\n")
 
 private fun generate_documentation_for_annotation(annotation: CompiledAnnotationDeclaration): String =
-    annotation.documentation.reduce("", (content, docLine) => content + docLine + "\n")
+    generate_text_documentation(annotation.documentation)
+
+private fun asciidoc_documentation_line(line: String): String =
+    asciidoc_markdown_links(line)
+
+private fun asciidoc_markdown_links(value: String): String =
+    let open = asciidoc_first_index_of(value, "[", 0)
+    if open < 0
+    then value
+    else asciidoc_markdown_link_from_open(value, open)
+
+private fun asciidoc_markdown_link_from_open(value: String, open: int): String =
+    if asciidoc_markdown_link_image(value, open)
+    then asciidoc_markdown_link_skip(value, open)
+    else asciidoc_markdown_link_from_close(value, open, asciidoc_first_index_of(value, "]", open + 1))
+
+private fun asciidoc_markdown_link_from_close(value: String, open: int, close: int): String =
+    if close < 0 | !asciidoc_markdown_link_has_url_start(value, close)
+    then asciidoc_markdown_link_skip(value, open)
+    else asciidoc_markdown_link_from_url_end(value, open, close, asciidoc_first_index_of(value, ")", close + 2))
+
+private fun asciidoc_markdown_link_from_url_end(value: String, open: int, close: int, urlEnd: int): String =
+    if urlEnd < 0
+    then value
+    else asciidoc_markdown_link_from_parts(value, open, close, urlEnd)
+
+private fun asciidoc_markdown_link_from_parts(value: String, open: int, close: int, urlEnd: int): String =
+    let label = value[open + 1, close]
+    let url = value[close + 2, urlEnd]
+    if label.is_empty() | !asciidoc_external_url(url)
+    then asciidoc_markdown_link_skip(value, open)
+    else value[0, open] + url + "[" + label + "]" + asciidoc_markdown_links(value[urlEnd + 1, value.size().value])
+
+private fun asciidoc_markdown_link_skip(value: String, open: int): String =
+    value[0, open + 1] + asciidoc_markdown_links(value[open + 1, value.size().value])
+
+private fun asciidoc_markdown_link_image(value: String, open: int): bool =
+    if open <= 0
+    then false
+    else match value[open - 1] with
+    case None -> false
+    case Some { char } -> char == "!"
+
+private fun asciidoc_markdown_link_has_url_start(value: String, close: int): bool =
+    match value[close + 1] with
+    case None -> false
+    case Some { char } -> char == "("
+
+private fun asciidoc_external_url(url: String): bool =
+    url.starts_with("https://") | url.starts_with("http://")
 
 private fun generate_parameter(parameter: CompiledFunctionParameter, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     "{parameter.name}: {type_name(parameter.typeReference, module, typeTargets)}"
@@ -328,7 +377,13 @@ private fun asciidoc_simple_qualified_name(name: String): String =
 private fun type_arguments(arguments: List[CompiledTypeReference], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     if arguments.is_empty()
     then ""
-    else "[" + join_type_names(arguments, module, typeTargets) + "]"
+    else asciidoc_generic_start() + join_type_names(arguments, module, typeTargets) + asciidoc_generic_end()
+
+private fun asciidoc_generic_start(): String =
+    "&#91;"
+
+private fun asciidoc_generic_end(): String =
+    "&#93;"
 
 private fun join_type_names(arguments: List[CompiledTypeReference], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     match arguments[0] with
@@ -372,9 +427,9 @@ private fun asciidoc_type_text(typeText: String, module: CompiledModule, typeTar
         if bracket < 0
         then asciidoc_type_reference_link(typeText.trim(), module, typeTargets)
         else asciidoc_type_reference_link(typeText[0, bracket].trim(), module, typeTargets)
-            + "["
+            + asciidoc_generic_start()
             + asciidoc_type_text_arguments(typeText[bracket + 1, typeText.size().value - 1], module, typeTargets)
-            + "]"
+            + asciidoc_generic_end()
 
 private fun asciidoc_type_text_arguments(typeText: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     let comma = asciidoc_top_level_comma(typeText, 0, 0)
@@ -813,7 +868,7 @@ private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType],
         )
 
 private fun generate_documentation_for_backend_type(type: CompiledPrimitiveBackedType): String =
-    type.documentation.reduce("", (content, docLine) => content + docLine + "\n")
+    generate_text_documentation(type.documentation)
 
 private fun generate_object_oriented_docs(module: CompiledModule, units: List[CompiledObjectOrientedUnit], typeTargets: List[AsciiDocTypeTarget]): String =
     match units[0] with

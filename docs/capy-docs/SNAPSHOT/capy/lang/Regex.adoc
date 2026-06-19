@@ -27,14 +27,14 @@ Single regex match.
 
 ==== Functions
 
-===== fun Match.group(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+===== fun Match.group(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 Returns the capture group at `idx`.
 
 Current matches expose the full match at index `0`.
 
 
-===== fun Match.groups(): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]]
+===== fun Match.groups(): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
 
 Returns all capture groups for this match.
 
@@ -59,7 +59,7 @@ digits.matches("123")
 
 ==== Functions
 
-===== fun Regex.`/>`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+===== fun Regex.`/>`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 Operator alias for `split`.
 
@@ -80,22 +80,22 @@ Example:
 Returns `a#b#`.
 
 
-===== fun Regex.`~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Match[Match]]
+===== fun Regex.`~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Match[Match]&#93;
 
 Operator alias for `find`.
 
 
-===== fun Regex.`~~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-Match[Match]]
+===== fun Regex.`~~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-Match[Match]&#93;
 
 Operator alias for `find_all`.
 
 
-===== fun Regex.find(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Match[Match]]
+===== fun Regex.find(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Match[Match]&#93;
 
 Returns the first match, or `None` when no match exists.
 
 
-===== fun Regex.find_all(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq][xref:#type-Match[Match]]
+===== fun Regex.find_all(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-Match[Match]&#93;
 
 Returns all matches as a lazy sequence.
 
@@ -125,7 +125,7 @@ redact_digits("room 42")
 Returns `room #`.
 
 
-===== fun Regex.split(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+===== fun Regex.split(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 Splits `input` around this regex pattern.
 

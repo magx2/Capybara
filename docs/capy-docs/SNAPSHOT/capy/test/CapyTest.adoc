@@ -2,15 +2,15 @@
 
 == Functions
 
-=== fun ctrf_report(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun ctrf_report(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
 
 
-=== fun failure_summary(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun failure_summary(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
 
 
-=== fun jest_report(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
+=== fun jest_report(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
 
 
@@ -18,7 +18,7 @@
 
 
 
-=== fun run_tests(rtype: xref:#type-ReportType[ReportType], test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]
+=== fun run_tests(rtype: xref:#type-ReportType[ReportType], test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestOutput[TestOutput]&#93;
 
 Generates report outputs in memory from already executed test files.
 
@@ -46,13 +46,13 @@ let outputs = run_tests(JUNIT, [reported_suite])
 Use the overload with `output_dir` to write report files.
 
 
-=== fun run_tests(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TestRun[TestRun]]]
+=== fun run_tests(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-TestRun[TestRun]&#93;&#93;
 
 Runs test files, writes reports under `output_dir`, and returns the written
 output summary.
 
 
-=== fun run_tests(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], log_type: xref:#type-LogType[LogType], test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TestRun[TestRun]]]
+=== fun run_tests(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], log_type: xref:#type-LogType[LogType], test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-TestRun[TestRun]&#93;&#93;
 
 Runs test files with the requested report type and logging mode.
 
@@ -68,12 +68,12 @@ run_tests(JUNIT, from_string("build/test-results"), LOG, [suite])
 `TEAM_CITY` emits service messages while tests execute.
 
 
-=== fun run_tests_and_print_summary(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TestRun[TestRun]]]
+=== fun run_tests_and_print_summary(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-TestRun[TestRun]&#93;&#93;
 
 Runs tests, writes reports, and prints a failure summary.
 
 
-=== fun run_tests_and_print_summary(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], log_type: xref:#type-LogType[LogType], test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TestRun[TestRun]]]
+=== fun run_tests_and_print_summary(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], log_type: xref:#type-LogType[LogType], test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-TestRun[TestRun]&#93;&#93;
 
 Runs tests with logging, writes reports, and prints a failure summary.
 
@@ -82,7 +82,7 @@ Runs tests with logging, writes reports, and prints a failure summary.
 
 
 
-=== fun team_city_messages(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+=== fun team_city_messages(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 
 
@@ -94,7 +94,7 @@ The supplier is evaluated by the runner, so expensive or failing assertions
 should stay inside the lambda.
 
 
-=== fun test_file(file_name: xref:../../capy/lang/String.adoc#type-String[String], test_cases: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestCase[TestCase]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:#type-TestFile[TestFile]]
+=== fun test_file(file_name: xref:../../capy/lang/String.adoc#type-String[String], test_cases: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestCase[TestCase]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:#type-TestFile[TestFile]&#93;
 
 Builds a test file from already constructed test cases.
 
@@ -109,7 +109,7 @@ test_file("/capy/lang/StringTest.cfun", [
 The timestamp is captured from `now()` when the effect runs.
 
 
-=== fun test_file(file_name: xref:../../capy/lang/String.adoc#type-String[String], test_cases: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:#type-TestCase[TestCase]]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:#type-TestFile[TestFile]]
+=== fun test_file(file_name: xref:../../capy/lang/String.adoc#type-String[String], test_cases: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:#type-TestCase[TestCase]&#93;&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:#type-TestFile[TestFile]&#93;
 
 Builds a test file from effectful test cases.
 
@@ -117,18 +117,18 @@ Use this overload when test cases need setup effects before they can be
 added to the suite.
 
 
-=== fun test_log_lines(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+=== fun test_log_lines(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
 
 
-=== fun write_test_outputs(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_outputs: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
+=== fun write_test_outputs(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_outputs: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestOutput[TestOutput]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;&#93;
 
 Writes every test output under the given output directory and returns normalized relative paths.
 
 Existing files that already have the same content are left untouched.
 
 
-=== fun write_text_if_changed(path: xref:../../capy/io/Path.adoc#type-Path[Path], content: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+=== fun write_text_if_changed(path: xref:../../capy/io/Path.adoc#type-Path[Path], content: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
 
 Writes text only when the target file content is different.
 
@@ -199,11 +199,11 @@ Failed test execution with assertion message and assertion type.
 [[type-JUnitReport]]
 === data JUnitReport
 
-See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
+See: https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml[Complete JUnit XML example]
 
 ==== Fields
 
-* `suites`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-JUnitTestSuite[JUnitTestSuite]]
+* `suites`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-JUnitTestSuite[JUnitTestSuite]&#93;
 
 [[type-JUnitTestCase]]
 === data JUnitTestCase
@@ -219,7 +219,7 @@ line        (not implemented) Source code line number of the start of this test 
 
 * `assertions`: int
 * `classname`: xref:../../capy/lang/String.adoc#type-String[String]
-* `failure`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-JUnitFailure[JUnitFailure]]
+* `failure`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-JUnitFailure[JUnitFailure]&#93;
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
 
 [[type-JUnitTestSuite]]
@@ -237,7 +237,7 @@ timestamp   Date and time of when the test run was executed (in ISO 8601 format)
 ==== Fields
 
 * `assertions`: int
-* `cases`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-JUnitTestCase[JUnitTestCase]]
+* `cases`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-JUnitTestCase[JUnitTestCase]&#93;
 * `error`: int
 * `failures`: int
 * `name`: xref:../../capy/lang/String.adoc#type-String[String]
@@ -326,7 +326,7 @@ Test suite source file with test cases and a run timestamp.
 ==== Fields
 
 * `file_name`: xref:../../capy/lang/String.adoc#type-String[String]
-* `test_cases`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestCase[TestCase]]
+* `test_cases`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestCase[TestCase]&#93;
 * `timestamp_millis`: long
 
 [[type-TestOutput]]
@@ -359,6 +359,6 @@ Result of writing a test run to disk.
 
 * `failed`: bool
 * `failure_summary`: xref:../../capy/lang/String.adoc#type-String[String]
-* `outputs`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]
-* `written_files`: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]
+* `outputs`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestOutput[TestOutput]&#93;
+* `written_files`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;
 

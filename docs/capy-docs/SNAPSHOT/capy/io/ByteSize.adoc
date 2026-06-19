@@ -2,7 +2,7 @@
 
 == Functions
 
-=== fun add_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+=== fun add_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
 Function form of `left + right`.
 
@@ -22,7 +22,7 @@ Function form of `value.to_kib()`.
 Function form of `value.to_mib()`.
 
 
-=== fun subtract_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+=== fun subtract_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
 Function form of `left - right`.
 
@@ -70,11 +70,11 @@ Non-negative number of bytes.
 
 ==== Functions
 
-===== fun byte_count.`+`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+===== fun byte_count.`+`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
 
 
-===== fun byte_count.`-`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+===== fun byte_count.`-`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
 
 
@@ -98,14 +98,14 @@ Non-negative number of bytes.
 
 
 
-===== fun byte_count.minus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+===== fun byte_count.minus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
 Subtracts `other` from this byte count.
 
 The result is an error when subtraction would produce a negative byte count.
 
 
-===== fun byte_count.plus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+===== fun byte_count.plus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
 Adds two byte counts, returning `Error` on long overflow.
 
