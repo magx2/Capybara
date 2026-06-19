@@ -21,6 +21,7 @@ from Documentation import { Documentation }
 fun generate_asciidoc_docs(program: CompiledProgram): List[Documentation] =
     [generate_asciidoc_index(program)]
     + program.modules
+        .sort((a,b) => module_display_name(a).compare(module_display_name(b)))
         .map(module => generate_asciidoc_docs_for_module(module, program.objectOrientedModules))
         .reduce([], (docs, doc) => docs + doc)
 
@@ -209,7 +210,9 @@ private fun generate_type_field_docs(typeName: String, functions: List[CompiledF
     else if fields.is_empty()
     then ""
     else "==== Fields\n\n"
-        + fields.reduce("", (content, field) => content + generate_type_field_doc(field))
+        + fields
+            .sort((a,b) => asciidoc_schema_field_name(asciidoc_schema_value(a)).compare(asciidoc_schema_field_name(asciidoc_schema_value(b))))
+            .reduce("", (content, field) => content + generate_type_field_doc(field))
         + "\n"
 
 private fun generate_type_field_doc(function: CompiledFunction): String =
@@ -227,7 +230,9 @@ private fun generate_union_variant_docs(typeName: String, functions: List[Compil
     if variants.is_empty()
     then ""
     else "==== Variants\n\n"
-        + variants.reduce("", (content, variant) => content + "* `{asciidoc_type_display_name(variant, functions)}`\n")
+        + variants
+            .sort((a,b) => asciidoc_type_display_name(a, functions).compare(asciidoc_type_display_name(b, functions)))
+            .reduce("", (content, variant) => content + "* `{asciidoc_type_display_name(variant, functions)}`\n")
         + "\n"
 
 private fun generate_enum_value_docs(typeName: String, functions: List[CompiledFunction]): String =
@@ -235,7 +240,9 @@ private fun generate_enum_value_docs(typeName: String, functions: List[CompiledF
     if values.is_empty()
     then ""
     else "==== Values\n\n"
-        + values.reduce("", (content, value) => content + "* `{value}`\n")
+        + values
+            .sort((a,b) => a.compare(b))
+            .reduce("", (content, value) => content + "* `{value}`\n")
         + "\n"
 
 private fun generate_type_function_docs(typeName: String, functions: List[CompiledFunction]): String =
@@ -359,7 +366,10 @@ private fun asciidoc_string_list_contains(values: List[String], expected: String
 
 private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType], functions: List[CompiledFunction]): String =
     types
-        .reduce("", (content, name, type) =>
+        .entries()
+        .sort((a,b) => a[0].compare(b[0]))
+        .reduce("", (content, entry) =>
+            let type = entry[1]
             content
             + "=== {type.visibility} {type.name}: {type_name(type.backingType)}\n\n{generate_documentation_for_backend_type(type)}\n"
             + generate_type_function_docs(type.name, functions)
@@ -423,14 +433,18 @@ private fun generate_object_parent_docs(parents: List[CompiledTypeReference]): S
     if parents.is_empty()
     then ""
     else "==== Parents\n\n"
-        + parents.reduce("", (content, parent) => content + "* `{type_name(parent)}`\n")
+        + parents
+            .sort((a,b) => type_name(a).compare(type_name(b)))
+            .reduce("", (content, parent) => content + "* `{type_name(parent)}`\n")
         + "\n"
 
 private fun generate_object_field_docs(fields: List[CompiledObjectOrientedField]): String =
     if fields.is_empty()
     then ""
     else "==== Fields\n\n"
-        + fields.reduce("", (content, field) => content + generate_object_field_doc(field))
+        + fields
+            .sort((a,b) => a.name.compare(b.name))
+            .reduce("", (content, field) => content + generate_object_field_doc(field))
         + "\n"
 
 private fun generate_object_field_doc(field: CompiledObjectOrientedField): String =
@@ -475,14 +489,16 @@ private fun generate_object_member_documentation(documentation: List[String]): S
 
 private fun generate_annotation_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
     annotations
-        .reduce("", (content, name, annotation) => content + generate_annotation_doc(annotation))
+        .entries()
+        .sort((a,b) => a[0].compare(b[0]))
+        .reduce("", (content, entry) => content + generate_annotation_doc(entry[1]))
 
 private fun generate_annotation_doc(annotation: CompiledAnnotationDeclaration): String =
     "=== {annotation.visibility} @{annotation.name}\n\n"
     + generate_documentation_for_annotation(annotation)
     + "\n"
     + "* Repeatable: {annotation_repeatable_value(annotation)}\n"
-    + "* Targets: " + join_strings(annotation.targets, ", ") + "\n"
+    + "* Targets: " + join_strings(annotation.targets.sort((a,b) => a.compare(b)), ", ") + "\n"
     + generate_annotation_fields(annotation.fields)
     + "\n"
 
@@ -492,7 +508,12 @@ private fun annotation_repeatable_value(annotation: CompiledAnnotationDeclaratio
 private fun generate_annotation_fields(fields: List[String]): String =
     match fields[0] with
     case None -> ""
-    case Some _ -> "\n==== Fields\n\n" + fields.reduce("", (content, field) => content + annotation_field_doc(field)) + "\n"
+    case Some _ ->
+        "\n==== Fields\n\n"
+        + fields
+            .sort((a,b) => annotation_field_name(a).compare(annotation_field_name(b)))
+            .reduce("", (content, field) => content + annotation_field_doc(field))
+        + "\n"
 
 private fun annotation_field_doc(field: String): String =
     "* `{annotation_field_name(field)}`: `{annotation_field_type(field)}` ({annotation_field_presence(field)})\n"

@@ -92,7 +92,8 @@ class CapyDocsCommandIntegrationTest {
 
         var docsFile = output.resolve("sample/Docs.adoc");
         assertThat(docsFile).isRegularFile();
-        assertThat(Files.readString(docsFile))
+        var docsContent = Files.readString(docsFile);
+        assertThat(docsContent)
                 .contains("= Module Docs")
                 .contains("documented_function(message: String): String")
                 .contains("Function docs")
@@ -119,10 +120,12 @@ class CapyDocsCommandIntegrationTest {
                 .doesNotContain("* `name`: `String`")
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
+        assertThat(docsContent).containsSubsequence("* `HIGH`", "* `LOW`");
 
         var objectsFile = output.resolve("sample/Objects.adoc");
         assertThat(objectsFile).isRegularFile();
-        assertThat(Files.readString(objectsFile))
+        var objectsContent = Files.readString(objectsFile);
+        assertThat(objectsContent)
                 .contains("= Module Objects")
                 .contains("== Object-Oriented")
                 .contains("=== public interface Named")
@@ -147,6 +150,7 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Render docs")
                 .doesNotContain("__capy_oo_method|Widget|render")
                 .doesNotContain("\n=== oo:");
+        assertThat(objectsContent).containsSubsequence("* `Greeting`", "* `Named`");
     }
 
     private static void writeSource(Path file, String source) throws IOException {
