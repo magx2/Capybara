@@ -3,6 +3,7 @@ from /capy/collection/Dict import { * }
 from /capy/collection/Seq import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
+from /dev/capylang/compiler/CompiledExpression import { CompiledExpression, CompiledStringLiteral }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
@@ -42,24 +43,55 @@ private fun module_display_name(module: CompiledModule): String =
     else "{module.path}/{module.name}"
 
 private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documentation =
+    let typeNames = asciidoc_schema_type_names(module.functions)
     Documentation {
         path: "/" + module_doc_path(module),
         content: "= Module {module.name}\n\n"
         + "== Functions\n\n"
-        + generate_function_docs(module.functions) + "\n\n"
+        + generate_function_docs(asciidoc_top_level_functions(module.functions, typeNames), "===") + "\n\n"
         + "== Annotations\n\n"
         + generate_annotation_docs(module.annotations) + "\n\n"
-        //+ "== Types\n\n"
-        //+ generate_type_docs(module.types, module.functions)
         + "== Types\n\n"
-        + generate_backend_type_docs(module.visiblePrimitiveBackedTypes)
+        + generate_schema_type_docs(module.functions)
+        + generate_backend_type_docs(module.visiblePrimitiveBackedTypes, module.functions)
     }
 
-private fun generate_function_docs(functions: List[CompiledFunction]): String =
+private fun generate_function_docs(functions: List[CompiledFunction], heading: String): String =
     functions
         .sort((a,b) => a.name.compare(b.name))
-        .map(function => "=== {function.visibility} {function.name}({generate_parameters(function.parameters)}): {type_name(function.returnType)}\n\n{generate_documentation(function)}\n\n")
+        .map(function => "{heading} {function.visibility} {function.name}({generate_parameters(function.parameters)}): {type_name(function.returnType)}\n\n{generate_documentation(function)}\n\n")
         .reduce("", (content, functionDoc) => content + functionDoc)
+
+private fun asciidoc_top_level_functions(functions: List[CompiledFunction], typeNames: List[String]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_top_level_function(function, functions, typeNames)
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_top_level_function(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
+    !asciidoc_schema_function(function)
+    & !asciidoc_generated_local_function(function)
+    & !function.name.starts_with("__capy_constructor|")
+    & !asciidoc_function_belongs_to_type(function, typeNames)
+    & !asciidoc_enum_value_function(function, functions)
+
+private fun asciidoc_function_belongs_to_type(function: CompiledFunction, typeNames: List[String]): bool =
+    let owner = asciidoc_function_owner(function)
+    !owner.is_empty() & asciidoc_string_list_contains(typeNames, owner)
+
+private fun asciidoc_function_owner(function: CompiledFunction): String =
+    let dot = asciidoc_first_index_of(function.name, ".", 0)
+    if dot < 0
+    then ""
+    else asciidoc_schema_base_type_name(function.name[0, dot])
+
+private fun asciidoc_enum_value_function(function: CompiledFunction, functions: List[CompiledFunction]): bool =
+    function.visibility.starts_with("const:")
+    & asciidoc_string_list_contains(asciidoc_enum_value_names(functions), function.name)
+
+private fun asciidoc_generated_local_function(function: CompiledFunction): bool =
+    function.name.contains("__local__")
 
 private fun generate_parameters(parameters: List[CompiledFunctionParameter]): String =
     parameters
@@ -79,24 +111,217 @@ private fun generate_documentation_for_annotation(annotation: CompiledAnnotation
 private fun generate_parameter(parameter: CompiledFunctionParameter): String =
     "{parameter.name}: {type_name(parameter.typeReference)}"
 
-private fun type_name(type: CompiledTypeReference): String = type.name
+private fun type_name(type: CompiledTypeReference): String =
+    type.name + type_arguments(type.arguments)
 
-private fun generate_type_docs(types: List[String], functions: List[CompiledFunction]): String = ''
-    //types
-    //    .map(type => "=== {type}\n\n{type_documentation(type, functions)}\n\n")
-    //    .reduce("", (content, typeDoc) => content + typeDoc)
+private fun type_arguments(arguments: List[CompiledTypeReference]): String =
+    if arguments.is_empty()
+    then ""
+    else "[" + join_type_names(arguments) + "]"
 
-private fun type_documentation(type: String, functions: List[CompiledFunction]): String =
+private fun join_type_names(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> type_name(argument) + join_type_names_tail(arguments[1:])
+
+private fun join_type_names_tail(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> ", " + type_name(argument) + join_type_names_tail(arguments[1:])
+
+private fun generate_schema_type_docs(functions: List[CompiledFunction]): String =
+    asciidoc_schema_type_names(functions)
+        .sort((a,b) => a.compare(b))
+        .reduce("", (content, typeName) =>
+            if asciidoc_primitive_schema_type(typeName, functions)
+            then content
+            else content + generate_schema_type_doc(typeName, functions)
+        )
+
+private fun generate_schema_type_doc(typeName: String, functions: List[CompiledFunction]): String =
+    "=== {asciidoc_type_kind(typeName, functions)} {asciidoc_type_display_name(typeName, functions)}\n\n"
+    + asciidoc_schema_documentation_named("__capy_schema_type|" + typeName, functions)
+    + "\n"
+    + generate_type_field_docs(typeName, functions)
+    + generate_union_variant_docs(typeName, functions)
+    + generate_enum_value_docs(typeName, functions)
+    + generate_type_function_docs(typeName, functions)
+
+private fun asciidoc_type_kind(typeName: String, functions: List[CompiledFunction]): String =
+    if !asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions).is_empty()
+    then "enum"
+    else if !asciidoc_union_variant_names(typeName, functions).is_empty()
+    then "union"
+    else "data"
+
+private fun asciidoc_type_display_name(typeName: String, functions: List[CompiledFunction]): String =
+    let parameters = asciidoc_schema_values("__capy_schema_param|" + typeName + "|", functions)
+    if parameters.is_empty()
+    then typeName
+    else typeName + "[" + join_strings(parameters, ", ") + "]"
+
+private fun generate_type_field_docs(typeName: String, functions: List[CompiledFunction]): String =
+    let fields = asciidoc_schema_functions("__capy_schema_field|" + typeName + "|", functions)
+    if !asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions).is_empty()
+    then ""
+    else if fields.is_empty()
+    then ""
+    else "==== Fields\n\n"
+        + fields.reduce("", (content, field) => content + generate_type_field_doc(field))
+        + "\n"
+
+private fun generate_type_field_doc(function: CompiledFunction): String =
+    let field = asciidoc_schema_value(function)
+    "* `{asciidoc_schema_field_name(field)}`: `{asciidoc_schema_field_type(field)}`\n"
+    + generate_type_field_documentation(function)
+
+private fun generate_type_field_documentation(function: CompiledFunction): String =
+    if function.documentation.is_empty()
+    then ""
+    else "+\n" + generate_documentation(function) + "\n"
+
+private fun generate_union_variant_docs(typeName: String, functions: List[CompiledFunction]): String =
+    let variants = asciidoc_union_variant_names(typeName, functions)
+    if variants.is_empty()
+    then ""
+    else "==== Variants\n\n"
+        + variants.reduce("", (content, variant) => content + "* `{asciidoc_type_display_name(variant, functions)}`\n")
+        + "\n"
+
+private fun generate_enum_value_docs(typeName: String, functions: List[CompiledFunction]): String =
+    let values = asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions)
+    if values.is_empty()
+    then ""
+    else "==== Values\n\n"
+        + values.reduce("", (content, value) => content + "* `{value}`\n")
+        + "\n"
+
+private fun generate_type_function_docs(typeName: String, functions: List[CompiledFunction]): String =
+    let ownedFunctions = asciidoc_type_functions(typeName, functions)
+    if ownedFunctions.is_empty()
+    then ""
+    else "==== Functions\n\n"
+        + generate_function_docs(ownedFunctions, "=====")
+
+private fun asciidoc_type_functions(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if !asciidoc_schema_function(function)
+            & !asciidoc_generated_local_function(function)
+            & !function.name.starts_with("__capy_constructor|")
+            & asciidoc_function_owner(function) == typeName
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_schema_type_names(functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with("__capy_schema_type|")
+        then asciidoc_add_string_if_missing(acc, function.name["__capy_schema_type|".size().value, function.name.size().value])
+        else acc
+    )
+
+private fun asciidoc_union_variant_names(typeName: String, functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function)
+            & function.name.starts_with("__capy_schema_parent|")
+            & asciidoc_schema_base_type_name(asciidoc_schema_value(function)) == typeName
+        then asciidoc_add_string_if_missing(acc, asciidoc_schema_parent_child_name(function.name))
+        else acc
+    )
+
+private fun asciidoc_enum_value_names(functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with("__capy_schema_enum|")
+        then asciidoc_add_string_if_missing(acc, asciidoc_schema_value(function))
+        else acc
+    )
+
+private fun asciidoc_schema_parent_child_name(name: String): String =
+    let prefixSize = "__capy_schema_parent|".size().value
+    let rest = name[prefixSize, name.size().value]
+    let separator = asciidoc_first_index_of(rest, "|", 0)
+    if separator < 0
+    then rest
+    else rest[0, separator]
+
+private fun asciidoc_primitive_schema_type(typeName: String, functions: List[CompiledFunction]): bool =
+    !asciidoc_schema_value_named("__capy_schema_primitive|" + typeName, functions).is_empty()
+
+private fun asciidoc_schema_function(function: CompiledFunction): bool =
+    function.visibility.starts_with("const:schema")
+
+private fun asciidoc_schema_functions(prefix: String, functions: List[CompiledFunction]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with(prefix)
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with(prefix)
+        then acc + asciidoc_schema_value(function)
+        else acc
+    )
+
+private fun asciidoc_schema_value_named(name: String, functions: List[CompiledFunction]): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if function.name == "__capy_schema_type|" + type
-        then generate_documentation(function)
-        else type_documentation(type, functions[1:])
+        if asciidoc_schema_function(function) & function.name == name
+        then asciidoc_schema_value(function)
+        else asciidoc_schema_value_named(name, functions[1:])
 
-private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType]): String =
+private fun asciidoc_schema_documentation_named(name: String, functions: List[CompiledFunction]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if asciidoc_schema_function(function) & function.name == name
+        then generate_documentation(function)
+        else asciidoc_schema_documentation_named(name, functions[1:])
+
+private fun asciidoc_schema_value(function: CompiledFunction): String =
+    match function.body with
+    case CompiledStringLiteral literal -> literal.value
+    case _ -> ""
+
+private fun asciidoc_schema_field_name(value: String): String =
+    let separator = asciidoc_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun asciidoc_schema_field_type(value: String): String =
+    let separator = asciidoc_first_index_of(value, "|", 0)
+    if separator < 0
+    then "any"
+    else value[separator + 1, value.size().value]
+
+private fun asciidoc_schema_base_type_name(value: String): String =
+    let trimmed = value.trim()
+    let bracket = asciidoc_first_index_of(trimmed, "[", 0)
+    if bracket < 0
+    then trimmed
+    else trimmed[0, bracket]
+
+private fun asciidoc_add_string_if_missing(values: List[String], value: String): List[String] =
+    if asciidoc_string_list_contains(values, value)
+    then values
+    else values + value
+
+private fun asciidoc_string_list_contains(values: List[String], expected: String): bool =
+    match values[0] with
+    case None -> false
+    case Some { value } -> value == expected | asciidoc_string_list_contains(values[1:], expected)
+
+private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType], functions: List[CompiledFunction]): String =
     types
-        .reduce("", (content, name, type) => content + "=== {type.visibility} {type.name}: {type_name(type.backingType)}\n\n{generate_documentation_for_backend_type(type)}\n\n")
+        .reduce("", (content, name, type) =>
+            content
+            + "=== {type.visibility} {type.name}: {type_name(type.backingType)}\n\n{generate_documentation_for_backend_type(type)}\n"
+            + generate_type_function_docs(type.name, functions)
+            + "\n"
+        )
 
 private fun generate_documentation_for_backend_type(type: CompiledPrimitiveBackedType): String =
     type.documentation.reduce("", (content, docLine) => content + docLine + "\n")
