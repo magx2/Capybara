@@ -1,0 +1,50 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/collection/List import { * }
+from /capy/io/IO import { * }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/System import { current_millis, nano_time }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/io/IO.cfun", [
+        io_write_operations_fail_when_parent_directory_is_missing().map(assertion => test("IO write operations fail when parent directory is missing", () => assertion)),
+    ])
+
+fun io_write_operations_fail_when_parent_directory_is_missing(): Effect[Assert] =
+    let base <- unique_temp_path("write-errors")
+    let target = resolve(base, ["missing-parent", "payload.txt"])
+    let write_text_result <- write_text(target, "payload")
+    let write_lines_result <- write_lines(target, ["payload"])
+    let write_bytes_result <- write_bytes(target, [0x41])
+    let append_text_result <- append_text(target, "payload")
+    let append_lines_result <- append_lines(target, ["payload"])
+    let append_bytes_result <- append_bytes(target, [0x41])
+    let target_exists <- exists(target)
+    assert_all([
+        assert_failed_message_contains(write_text_result, "write_text failed"),
+        assert_failed_message_contains(write_lines_result, "write_lines failed"),
+        assert_failed_message_contains(write_bytes_result, "write_bytes failed"),
+        assert_failed_message_contains(append_text_result, "append_text failed"),
+        assert_failed_message_contains(append_lines_result, "append_lines failed"),
+        assert_failed_message_contains(append_bytes_result, "append_bytes failed"),
+        assert_that(target_exists).is_false(),
+    ])
+
+private fun unique_temp_path(name: String): Effect[Path] =
+    let millis <- current_millis()
+    let nanos <- nano_time()
+    from_string("build/capybara-io-test/" + name + "-" + millis + "-" + nanos)
+
+private fun resolve(path: Path, segments: List[String]): Path =
+    Path {
+        root: path.root,
+        prefix: path.prefix,
+        segments: path.segments + segments
+    }
+
+private fun assert_failed_message_contains(result: Result[T], expected: String): Assert =
+    match result with
+    case Error e -> assert_that(e.message).contains(expected)
+    case Success _ -> assert_that(false).is_true()
