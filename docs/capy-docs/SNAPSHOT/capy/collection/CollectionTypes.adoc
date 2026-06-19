@@ -1,18 +1,14 @@
 = Module CollectionTypes
 
-== Functions
+== Constants
 
-=== const:public EMPTY(): xref:#type-size[size]
-
-
-
-=== const:public FIRST_ELEMENT(): xref:#type-index[index]
+=== const:public EMPTY: xref:#type-size[size]
 
 
 
+=== const:public FIRST_ELEMENT: xref:#type-index[index]
 
 
-== Annotations
 
 
 

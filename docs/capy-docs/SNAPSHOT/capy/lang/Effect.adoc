@@ -2,10 +2,6 @@
 
 == Functions
 
-=== private _run(effect: xref:#type-Effect[Effect][T]): T
-
-
-
 === public delay(thunk: ()=>T): xref:#type-Effect[Effect][T]
 
 Defers a thunk until the effect is executed.
@@ -18,10 +14,6 @@ constructed.
 
 Wraps a pure value in an effect.
 
-
-
-
-== Annotations
 
 
 
@@ -43,10 +35,6 @@ let program =
         .map(name => "hello " + name)
 ```
 `program` is still an `Effect[String]`; the thunk has not run yet.
-
-==== Variants
-
-* xref:#type-UnsafeEffect[UnsafeEffect][T]
 
 ==== Functions
 
@@ -85,12 +73,4 @@ Prefer normal effect composition in application code. `unsafe_run` is useful
 for tests, adapters, or runtime boundaries that intentionally leave the
 effect model.
 
-
-[[type-UnsafeEffect]]
-=== data UnsafeEffect[T]
-
-
-==== Fields
-
-* `unsafe_thunk`: ()=>T
 

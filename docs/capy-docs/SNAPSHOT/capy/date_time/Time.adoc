@@ -2,58 +2,6 @@
 
 == Functions
 
-=== const:public HOURS_IN_DAY(): int
-
-
-
-=== const:public MAX_OFFSET_MINUTES(): int
-
-
-
-=== const:public MIDNIGHT(): xref:#type-Time[Time]
-
-
-
-=== const:public MINUTES_IN_DAY(): int
-
-
-
-=== const:public MINUTES_IN_HOUR(): int
-
-
-
-=== const:public NOON(): xref:#type-Time[Time]
-
-
-
-=== const:public NOON_HOUR(): xref:#type-hour[hour]
-
-
-
-=== const:public SECONDS_IN_DAY(): int
-
-
-
-=== const:public SECONDS_IN_HOUR(): int
-
-
-
-=== const:public SECONDS_IN_MINUTE(): int
-
-
-
-=== const:public ZERO_HOUR(): xref:#type-hour[hour]
-
-
-
-=== const:public ZERO_MINUTE(): xref:#type-minute[minute]
-
-
-
-=== const:public ZERO_SECOND(): xref:#type-second[second]
-
-
-
 === public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Time[Time]]
 
 Parses an ISO 8601 time in basic or extended complete form.
@@ -68,20 +16,63 @@ Offset-aware inputs preserve their offset in `offset_minutes`.
 
 
 
-== Annotations
+== Constants
+
+=== const:public HOURS_IN_DAY: int
+
+
+
+=== const:public MAX_OFFSET_MINUTES: int
+
+
+
+=== const:public MIDNIGHT: xref:#type-Time[Time]
+
+
+
+=== const:public MINUTES_IN_DAY: int
+
+
+
+=== const:public MINUTES_IN_HOUR: int
+
+
+
+=== const:public NOON: xref:#type-Time[Time]
+
+
+
+=== const:public NOON_HOUR: xref:#type-hour[hour]
+
+
+
+=== const:public SECONDS_IN_DAY: int
+
+
+
+=== const:public SECONDS_IN_HOUR: int
+
+
+
+=== const:public SECONDS_IN_MINUTE: int
+
+
+
+=== const:public ZERO_HOUR: xref:#type-hour[hour]
+
+
+
+=== const:public ZERO_MINUTE: xref:#type-minute[minute]
+
+
+
+=== const:public ZERO_SECOND: xref:#type-second[second]
+
+
 
 
 
 == Types
-
-[[type-Parse]]
-=== data Parse[T]
-
-
-==== Fields
-
-* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: T
 
 [[type-Time]]
 === data Time
@@ -167,15 +158,6 @@ Converts this time to seconds since midnight.
 
 Example: `NOON.to_seconds()` returns `43200`.
 
-
-[[type-ZoneParse]]
-=== data ZoneParse
-
-
-==== Fields
-
-* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
-* `offset_minutes`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-offset_minutes[offset_minutes]]
 
 [[type-hour]]
 === public hour: int

@@ -2,135 +2,7 @@
 
 == Functions
 
-=== const:public CTRF_REPORT_FILE(): 
-
-
-
-=== const:public CTRF_SPEC_VERSION(): 
-
-
-
-=== const:public JEST_REPORT_FILE(): 
-
-
-
-=== const:public JUNIT_PREFIX(): 
-
-
-
-=== const:public OUTPUT_MANIFEST_FILE(): 
-
-
-
-=== private create_test_output_parent(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
-
-
-
-=== private ctrf_comma(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_duration_millis(test_case: xref:#type-TestCase[TestCase]): long
-
-
-
-=== private ctrf_failed_count(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): int
-
-
-
-=== private ctrf_failure_fields(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_json_string(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_passed_count(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): int
-
-
-
 === public ctrf_report(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_run_tests(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]
-
-
-
-=== private ctrf_start_millis(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): long
-
-
-
-=== private ctrf_status(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_test_case(test_file: xref:#type-TestFile[TestFile], test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_test_cases(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_test_cases_for_file(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_test_file_duration_millis(test_file: xref:#type-TestFile[TestFile]): long
-
-
-
-=== private ctrf_test_file_failed_count(test_file: xref:#type-TestFile[TestFile]): int
-
-
-
-=== private ctrf_test_file_passed_count(test_file: xref:#type-TestFile[TestFile]): int
-
-
-
-=== private ctrf_tests_count(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): int
-
-
-
-=== private ctrf_timestamp(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private ctrf_total_duration_millis(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): long
-
-
-
-=== private delete_empty_parent_directories(path: xref:../../capy/io/Path.adoc#type-Path[Path], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
-
-
-
-=== private delete_stale_outputs(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], stale_files: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
-
-
-
-=== private drop_prefix_segments(prefix: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]], segments: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private execute(assertions: xref:../../capy/collection/List.adoc#type-List[List][()=>Assertion]): xref:#type-TestResult[TestResult]
-
-
-
-=== private execute_test_case(log_type: xref:#type-LogType[LogType], test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:#type-TestCase[TestCase]]
-
-
-
-=== private execute_test_cases(log_type: xref:#type-LogType[LogType], test_cases: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestCase[TestCase]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestCase[TestCase]]]
-
-
-
-=== private execute_test_file(log_type: xref:#type-LogType[LogType], test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:#type-TestFile[TestFile]]
-
-
-
-=== private execute_test_files(log_type: xref:#type-LogType[LogType], test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]]
 
 
 
@@ -138,151 +10,11 @@
 
 
 
-=== private failure_summary_file(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private failure_summary_message(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private has_failures(test_outputs: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]): bool
-
-
-
-=== private jest_assertion_result(test_file: xref:#type-TestFile[TestFile], test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private jest_assertion_results(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private jest_duration_millis(test_file: xref:#type-TestFile[TestFile]): long
-
-
-
-=== private jest_failed_count(test_file: xref:#type-TestFile[TestFile]): int
-
-
-
-=== private jest_failed_suite_count(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): int
-
-
-
-=== private jest_failure_messages(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private jest_json_bool(value: bool): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private jest_passed_suite_count(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): int
-
-
-
 === public jest_report(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
 
 
 
-=== private jest_run_tests(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]
-
-
-
-=== private jest_status(failed: bool): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private jest_test_result(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private jest_test_results(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private junit_escape_xml_attribute(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private junit_run_test(test_file: xref:#type-TestFile[TestFile]): xref:#type-TestOutput[TestOutput]
-
-
-
-=== private junit_run_test_case(file_name: xref:../../capy/lang/String.adoc#type-String[String], test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private junit_run_test_case_message(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private junit_run_tests(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestOutput[TestOutput]]
-
-
-
-=== private list_regular_files(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
-
-
-
-=== private list_regular_files_from_entries(entries: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
-
-
-
-=== private manifest_content(paths: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private manifest_paths(content: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]
-
-
-
 === public normalize_failure_message(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private path_list_contains(paths: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]], path: xref:../../capy/io/Path.adoc#type-Path[Path]): bool
-
-
-
-=== private path_segments_to_string(segments: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private path_to_manifest_line(path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private print_failure_summary(summary: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private print_test_failed(log_type: xref:#type-LogType[LogType], test_case: xref:#type-TestCase[TestCase]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private print_test_finished(log_type: xref:#type-LogType[LogType], test_name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private print_test_started(log_type: xref:#type-LogType[LogType], test_name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private print_test_suite_finished(log_type: xref:#type-LogType[LogType], suite_name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private print_test_suite_started(log_type: xref:#type-LogType[LogType], suite_name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private prune_stale_outputs(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], expected_files: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
-
-
-
-=== private relative_to(base: xref:../../capy/io/Path.adoc#type-Path[Path], path: xref:../../capy/io/Path.adoc#type-Path[Path]): xref:../../capy/io/Path.adoc#type-Path[Path]
 
 
 
@@ -346,27 +78,11 @@ Runs tests, writes reports, and prints a failure summary.
 Runs tests with logging, writes reports, and prints a failure summary.
 
 
-=== private stale_files(files: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]], expected_files: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]
-
-
-
-=== private stale_output_files(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], manifest_file: xref:../../capy/io/Path.adoc#type-Path[Path], expected_files: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]]]
-
-
-
 === public team_city_escape(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
 
 
 
 === public team_city_messages(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private team_city_messages_case(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private team_city_messages_file(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
 
 
 
@@ -401,39 +117,7 @@ Use this overload when test cases need setup effects before they can be
 added to the suite.
 
 
-=== private test_file_timestamp(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
 === public test_log_lines(test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private test_log_lines_case(test_case: xref:#type-TestCase[TestCase]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private test_log_lines_file(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private test_suite_name(file_name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private unix_epoch_timestamp(): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private unwrap_test_cases(test_cases: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:#type-TestCase[TestCase]]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestCase[TestCase]]]
-
-
-
-=== private write_output_manifest(manifest_file: xref:../../capy/io/Path.adoc#type-Path[Path], expected_files: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/io/Path.adoc#type-Path[Path]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
-
-
-
-=== private write_test_output(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_output: xref:#type-TestOutput[TestOutput]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/Path.adoc#type-Path[Path]]]
 
 
 
@@ -444,10 +128,6 @@ Writes every test output under the given output directory and returns normalized
 Existing files that already have the same content are left untouched.
 
 
-=== private write_test_run(rtype: xref:#type-ReportType[ReportType], output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], executed_test_files: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TestFile[TestFile]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TestRun[TestRun]]]
-
-
-
 === public write_text_if_changed(path: xref:../../capy/io/Path.adoc#type-Path[Path], content: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
 
 Writes text only when the target file content is different.
@@ -455,7 +135,27 @@ Writes text only when the target file content is different.
 
 
 
-== Annotations
+== Constants
+
+=== const:public CTRF_REPORT_FILE: 
+
+
+
+=== const:public CTRF_SPEC_VERSION: 
+
+
+
+=== const:public JEST_REPORT_FILE: 
+
+
+
+=== const:public JUNIT_PREFIX: 
+
+
+
+=== const:public OUTPUT_MANIFEST_FILE: 
+
+
 
 
 

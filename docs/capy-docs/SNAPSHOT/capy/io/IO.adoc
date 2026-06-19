@@ -158,9 +158,3 @@ Use `append_text` when existing content should be preserved.
 
 
 
-== Annotations
-
-
-
-== Types
-

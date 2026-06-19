@@ -114,10 +114,6 @@ Starts a data assertion chain using data equality or containment checks.
 
 
 
-== Annotations
-
-
-
 == Types
 
 [[type-Assert]]
@@ -161,7 +157,6 @@ assert_all([
 * xref:#type-SeqAssert[SeqAssert][T]
 * xref:#type-SetAssert[SetAssert][T]
 * xref:#type-StringAssert[StringAssert]
-* xref:#type-TechnicalAssert[TechnicalAssert]
 * xref:#type-TimeAssert[TimeAssert]
 
 ==== Functions
@@ -812,15 +807,6 @@ Adds a string equality assertion to the chain.
 
 Adds an assertion that the string starts with `other`.
 
-
-[[type-TechnicalAssert]]
-=== data TechnicalAssert
-
-
-==== Fields
-
-* `assertions`: List[()=>Assertion]
-* `assertions`: List[()=>Assertion]
 
 [[type-TimeAssert]]
 === data TimeAssert

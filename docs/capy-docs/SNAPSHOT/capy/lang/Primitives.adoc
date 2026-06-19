@@ -2,42 +2,6 @@
 
 == Functions
 
-=== const:public DOUBLE_BOUND(): long
-
-Number of distinct mantissa steps used to map random long values into `double`.
-
-
-=== const:public DOUBLE_BOUND_AS_DOUBLE(): double
-
-Floating-point representation of `DOUBLE_BOUND`.
-
-
-=== const:public FLOAT_BOUND(): long
-
-Number of distinct mantissa steps used to map random long values into `float`.
-
-
-=== const:public FLOAT_BOUND_AS_FLOAT(): float
-
-Floating-point representation of `FLOAT_BOUND`.
-
-
-=== const:public MAX_INT_VALUE(): int
-
-
-
-=== const:public MAX_LONG_VALUE(): long
-
-
-
-=== const:public MIN_INT_VALUE(): int
-
-
-
-=== const:public MIN_LONG_VALUE(): long
-
-
-
 === public clamp_long_to_int(value: long): int
 
 
@@ -73,9 +37,43 @@ Parses this String as a long.
 
 
 
-== Annotations
+== Constants
+
+=== const:public DOUBLE_BOUND: long
+
+Number of distinct mantissa steps used to map random long values into `double`.
+
+
+=== const:public DOUBLE_BOUND_AS_DOUBLE: double
+
+Floating-point representation of `DOUBLE_BOUND`.
+
+
+=== const:public FLOAT_BOUND: long
+
+Number of distinct mantissa steps used to map random long values into `float`.
+
+
+=== const:public FLOAT_BOUND_AS_FLOAT: float
+
+Floating-point representation of `FLOAT_BOUND`.
+
+
+=== const:public MAX_INT_VALUE: int
 
 
 
-== Types
+=== const:public MAX_LONG_VALUE: long
+
+
+
+=== const:public MIN_INT_VALUE: int
+
+
+
+=== const:public MIN_LONG_VALUE: long
+
+
+
+
 

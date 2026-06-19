@@ -2,100 +2,6 @@
 
 == Functions
 
-=== const:public APRIL(): xref:#type-month[month]
-
-
-
-=== const:public AUGUST(): xref:#type-month[month]
-
-
-
-=== const:private DAYS_PER_100_YEARS_MINUS_1(): int
-
-
-
-=== const:private DAYS_PER_400_YEARS(): int
-
-
-
-=== const:private DAYS_PER_400_YEARS_MINUS_1(): int
-
-
-
-=== const:private DAYS_PER_4_YEARS_MINUS_1(): int
-
-
-
-=== const:private DAYS_PER_YEAR(): int
-
-
-
-=== const:public DECEMBER(): xref:#type-month[month]
-
-
-
-=== const:public FEBRUARY(): xref:#type-month[month]
-
-
-
-=== const:public JANUARY(): xref:#type-month[month]
-
-
-
-=== const:public JULY(): xref:#type-month[month]
-
-
-
-=== const:public JUNE(): xref:#type-month[month]
-
-
-
-=== const:public MARCH(): xref:#type-month[month]
-
-
-
-=== const:public MAY(): xref:#type-month[month]
-
-
-
-=== const:private MONTH_TO_DAY_BIAS(): int
-
-
-
-=== const:private MONTH_TO_DAY_NUMERATOR(): int
-
-
-
-=== const:public NOVEMBER(): xref:#type-month[month]
-
-
-
-=== const:public OCTOBER(): xref:#type-month[month]
-
-
-
-=== const:public SEPTEMBER(): xref:#type-month[month]
-
-
-
-=== const:public UNIX_DATE(): xref:#type-Date[Date]
-
-
-
-=== const:private UNIX_EPOCH_CIVIL_OFFSET_DAYS(): int
-
-
-
-=== private days_30_month(value: xref:#type-month[month]): bool
-
-Returns `true` when the month has 30 days.
-
-
-=== private days_31_month(value: xref:#type-month[month]): bool
-
-Returns `true` when the month has 31 days.
-
-
 === public from_days_since_unix_epoch(days_since_epoch: int): xref:#type-Date[Date]
 
 Converts days since Unix epoch (`1970-01-01`) to `Date`.
@@ -115,14 +21,61 @@ from_iso_8601("20260605")
 Both forms return the same `Date`.
 
 
-=== private leap_year_value(year: int): bool
-
-Checks whether a year is a leap year in the Gregorian calendar.
 
 
+== Constants
+
+=== const:public APRIL: xref:#type-month[month]
 
 
-== Annotations
+
+=== const:public AUGUST: xref:#type-month[month]
+
+
+
+=== const:public DECEMBER: xref:#type-month[month]
+
+
+
+=== const:public FEBRUARY: xref:#type-month[month]
+
+
+
+=== const:public JANUARY: xref:#type-month[month]
+
+
+
+=== const:public JULY: xref:#type-month[month]
+
+
+
+=== const:public JUNE: xref:#type-month[month]
+
+
+
+=== const:public MARCH: xref:#type-month[month]
+
+
+
+=== const:public MAY: xref:#type-month[month]
+
+
+
+=== const:public NOVEMBER: xref:#type-month[month]
+
+
+
+=== const:public OCTOBER: xref:#type-month[month]
+
+
+
+=== const:public SEPTEMBER: xref:#type-month[month]
+
+
+
+=== const:public UNIX_DATE: xref:#type-Date[Date]
+
+
 
 
 
@@ -198,15 +151,6 @@ Formats this date as an ISO 8601 calendar date.
 Example: `Date! { day: 5, month: JUNE, year: 2026 }.to_iso_8601()`
 returns `2026-06-05`.
 
-
-[[type-Parse]]
-=== data Parse[T]
-
-
-==== Fields
-
-* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: T
 
 [[type-month]]
 === public month: int

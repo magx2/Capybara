@@ -2,30 +2,6 @@
 
 == Functions
 
-=== const:public CERTAIN_PROBABILITY(): xref:#type-probability[probability]
-
-
-
-=== const:public FULL_PERCENTAGE(): xref:#type-percentage[percentage]
-
-
-
-=== const:public IMPOSSIBLE_PROBABILITY(): xref:#type-probability[probability]
-
-
-
-=== const:public WHOLE_RATIO(): xref:#type-ratio[ratio]
-
-
-
-=== const:public ZERO_PERCENTAGE(): xref:#type-percentage[percentage]
-
-
-
-=== const:public ZERO_RATIO(): xref:#type-ratio[ratio]
-
-
-
 === public percentage_to_ratio(value: xref:#type-percentage[percentage]): xref:#type-ratio[ratio]
 
 
@@ -44,7 +20,31 @@
 
 
 
-== Annotations
+== Constants
+
+=== const:public CERTAIN_PROBABILITY: xref:#type-probability[probability]
+
+
+
+=== const:public FULL_PERCENTAGE: xref:#type-percentage[percentage]
+
+
+
+=== const:public IMPOSSIBLE_PROBABILITY: xref:#type-probability[probability]
+
+
+
+=== const:public WHOLE_RATIO: xref:#type-ratio[ratio]
+
+
+
+=== const:public ZERO_PERCENTAGE: xref:#type-percentage[percentage]
+
+
+
+=== const:public ZERO_RATIO: xref:#type-ratio[ratio]
+
+
 
 
 

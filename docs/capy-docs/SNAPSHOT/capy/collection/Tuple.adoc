@@ -1,13 +1,5 @@
 = Module Tuple
 
-== Functions
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-Tuple]]

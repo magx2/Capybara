@@ -2,24 +2,10 @@
 
 == Functions
 
-=== const:private RANDOM_INCREMENT(): long
-
-Increment for the linear congruential seed transition.
-
-
-=== const:private RANDOM_MULTIPLIER(): long
-
-Multiplier for the linear congruential seed transition.
-
-
 === public seed(): xref:#type-seed[seed]
 
 Returns a native random seed.
 
-
-
-
-== Annotations
 
 
 
@@ -41,11 +27,6 @@ Random value paired with the seed to use for the next random step.
 Immutable random generator state.
 
 ==== Functions
-
-===== private seed.next_seed(): xref:#type-seed[seed]
-
-Returns the deterministic next seed for this seed.
-
 
 ===== public seed.random_bool(): xref:#type-RandomResult[RandomResult][bool]
 

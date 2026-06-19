@@ -15,10 +15,6 @@ Produces an absolute path with segments `["var", "tmp", "app.log"]`.
 
 
 
-== Annotations
-
-
-
 == Types
 
 [[type-Path]]

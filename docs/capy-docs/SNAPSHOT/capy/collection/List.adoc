@@ -1,21 +1,5 @@
 = Module List
 
-== Functions
-
-=== private merge_sorted(left: xref:#type-List[List][T], left_idx: int, right: xref:#type-List[List][T], right_idx: int, compare: (T,T)=>Ordering, acc: xref:#type-List[List][T]): xref:#type-List[List][T]
-
-
-
-=== private sort_list(list: xref:#type-List[List][T], compare: (T,T)=>Ordering): xref:#type-List[List][T]
-
-
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-List]]

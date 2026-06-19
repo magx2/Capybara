@@ -1,13 +1,5 @@
 = Module Set
 
-== Functions
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-Set]]

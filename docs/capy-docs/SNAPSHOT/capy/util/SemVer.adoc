@@ -21,20 +21,7 @@ Creates a semantic version after validating the numeric components.
 
 
 
-== Annotations
-
-
-
 == Types
-
-[[type-Parse]]
-=== data Parse[T]
-
-
-==== Fields
-
-* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: T
 
 [[type-SemVer]]
 === data SemVer

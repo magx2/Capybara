@@ -1,9 +1,5 @@
 = Module Annotations
 
-== Functions
-
-
-
 == Annotations
 
 === public @Deprecated
@@ -28,6 +24,4 @@ message and version to users.
 
 
 
-
-== Types
 

@@ -1,13 +1,5 @@
 = Module Either
 
-== Functions
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-Either]]
