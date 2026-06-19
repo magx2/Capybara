@@ -117,6 +117,21 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
         }
     }
 
+    def throw_structured_error(): Error {
+        let cause: Error = error_kind("capy.test.runtime.cause", "cause")
+        let suppressed: Error = error_kind("capy.test.runtime.suppressed", "suppressed")
+        let thrown: Error = error_kind("capy.test.runtime.structured", "structured boom")
+            .with_cause(cause)
+            .add_suppressed(suppressed)
+        try {
+            throw thrown
+        } catch "capy.test.runtime.structured" error {
+            return error
+        } catch error {
+            return error
+        }
+    }
+
     def first_positive(values: List[int]): int {
         for value in values {
             if value > 0 {

@@ -1,7 +1,7 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -141,6 +141,8 @@ private fun python_object_runtime_aliases(classIdentifier: String): String =
         + python_object_runtime_alias(classPrefix, "__capy_type_matches")
         + python_object_runtime_alias(classPrefix, "__capy_match_binding")
         + python_object_runtime_alias(classPrefix, "__capy_no_match")
+        + python_object_runtime_alias(classPrefix, "__capy_throw")
+        + python_object_runtime_alias(classPrefix, "__capy_try")
         + python_object_runtime_alias(classPrefix, "__capy_unsupported")
         + python_object_runtime_alias(classPrefix, "__capy_not_implemented")
         + python_object_runtime_alias(classPrefix, "__capy_reflection_annotations")
@@ -761,8 +763,8 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
         if python_compiled_placeholder_source(unsupported.source)
         then "__capy_not_implemented(" + python_string_literal(python_placeholder_function_name(unsupported.source)) + ")"
         else "__capy_unsupported(" + python_string_literal(unsupported.source) + ")"
-    case CompiledThrowExpression _ -> "__capy_unsupported('OO throw expression')"
-    case CompiledTryCatchExpression _ -> "__capy_unsupported('OO try/catch expression')"
+    case CompiledThrowExpression throwExpression -> python_throw_expression_code(throwExpression, env, module, allModules)
+    case CompiledTryCatchExpression tryCatch -> python_try_catch_expression_code(tryCatch, env, module, allModules)
     case CompiledIntLiteral literal -> literal.source
     case CompiledLongLiteral literal -> python_long_literal(literal.source)
     case CompiledFloatLiteral literal -> python_decimal_literal(literal.source)
@@ -792,6 +794,40 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
     case CompiledReduceExpression reduce -> python_reduce_expression_code(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_code(matchExpression, env, module, allModules)
     case CompiledBlockExpression block -> python_block_expression_code(block, env, module, allModules)
+
+/// Emits Python code for OO throw expression.
+private fun python_throw_expression_code(throwExpression: CompiledThrowExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_throw(" + python_expression_code(throwExpression.value, env, module, allModules) + ")"
+
+/// Emits Python code for OO try/catch expression.
+private fun python_try_catch_expression_code(tryCatch: CompiledTryCatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_try(lambda: "
+        + python_expression_code(tryCatch.body, env, module, allModules)
+        + ", ["
+        + python_try_catch_branch_codes(tryCatch.branches, env, module, allModules)
+        + "])"
+
+/// Emits Python branch tuples for OO try/catch expression.
+private fun python_try_catch_branch_codes(branches: List[CompiledTryCatchBranch], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match branches[0] with
+    case None -> ""
+    case Some { branch } ->
+        let catchName = python_identifier(branch.catchName)
+        let catchEnv = [PythonBinding { name: branch.catchName, pythonName: catchName, typeName: "Error" }] + env
+        "("
+            + (if branch.hasKind then python_string_literal(branch.kind) else "None")
+            + ", lambda "
+            + catchName
+            + ": "
+            + python_expression_code(branch.catchBody, catchEnv, module, allModules)
+            + ")"
+            + python_try_catch_branch_tail_codes(branches[1:], env, module, allModules)
+
+/// Emits Python branch tuple tails for OO try/catch expression.
+private fun python_try_catch_branch_tail_codes(branches: List[CompiledTryCatchBranch], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match branches[0] with
+    case None -> ""
+    case Some _ -> ", " + python_try_catch_branch_codes(branches, env, module, allModules)
 
 /// Extracts compiled metadata for placeholder source.
 private fun python_compiled_placeholder_source(source: String): bool =
@@ -5087,8 +5123,9 @@ private fun python_test_runtime_header_code(): String =
     + "import shutil" + python_newline()
     + "import sys" + python_newline()
     + "import time" + python_newline()
+    + "import traceback" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime effect.
@@ -5447,7 +5484,7 @@ private fun python_test_runtime_numeric_value_code(): String =
     + "    return __capy_data('Success', dict(value=value))" + python_newline()
     + python_newline()
     + "def __capy_error(message):" + python_newline()
-    + "    return __capy_data('Error', dict(message=message))" + python_newline()
+    + "    return __capy_error_kind('capy.error', message)" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime numeric parse.
@@ -5882,7 +5919,77 @@ private fun python_test_runtime_duration_helpers_code(): String =
 
 /// Emits Python code for test runtime error.
 private fun python_test_runtime_error_code(): String =
-    "def __capy_unsupported(source):" + python_newline()
+    "def __capy_some(value):" + python_newline()
+    + "    return __capy_data('Some', dict(value=value))" + python_newline()
+    + python_newline()
+    + "def __capy_no_details():" + python_newline()
+    + "    return __capy_data('NoDetails', dict())" + python_newline()
+    + python_newline()
+    + "def __capy_error_kind(kind, message):" + python_newline()
+    + "    return __capy_error_full(kind, message, __capy_no_details(), __capy_none(), [], __capy_none(), __capy_none(), [])" + python_newline()
+    + python_newline()
+    + "def __capy_error_full(kind, message, details, location, stack_trace, raw_stack, cause, suppressed):" + python_newline()
+    + "    return __capy_data('Error', dict(kind=str(kind), message=str(message), details=details, location=location, stack_trace=stack_trace, raw_stack=raw_stack, cause=cause, suppressed=suppressed))" + python_newline()
+    + python_newline()
+    + "def __capy_stack_frames(tb):" + python_newline()
+    + "    frames = traceback.extract_tb(tb) if tb is not None else []" + python_newline()
+    + "    raw_lines = traceback.format_list(frames)" + python_newline()
+    + "    result = []" + python_newline()
+    + "    for index, frame in enumerate(frames):" + python_newline()
+    + "        raw = raw_lines[index].strip() if index < len(raw_lines) else ''" + python_newline()
+    + "        result.append(__capy_data('StackFrame', dict(backend='python', module=__capy_none(), type_name=__capy_none(), function=__capy_some(frame.name) if frame.name else __capy_none(), file=__capy_some(frame.filename) if frame.filename else __capy_none(), line=__capy_some(int(frame.lineno)) if frame.lineno and frame.lineno > 0 else __capy_none(), column=__capy_none(), end_line=__capy_none(), end_column=__capy_none(), source_line=__capy_some(frame.line) if frame.line else __capy_none(), native=False, raw=raw)))" + python_newline()
+    + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_raw_stack(exc):" + python_newline()
+    + "    return ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))" + python_newline()
+    + python_newline()
+    + "def __capy_source_location_from_stack(stack_trace):" + python_newline()
+    + "    for frame in stack_trace:" + python_newline()
+    + "        file_value = frame.get('file')" + python_newline()
+    + "        if _capy_data_is(file_value, 'Some'):" + python_newline()
+    + "            line_value = frame.get('line')" + python_newline()
+    + "            return __capy_some(__capy_data('SourceLocation', dict(file=_capy_data_value(file_value), line=_capy_data_value(line_value) if _capy_data_is(line_value, 'Some') else 0, column=frame.get('column', __capy_none()), end_line=__capy_none(), end_column=__capy_none())))" + python_newline()
+    + "    return __capy_none()" + python_newline()
+    + python_newline()
+    + "def __capy_enrich_thrown_error(error, exc):" + python_newline()
+    + "    raw_stack = __capy_raw_stack(exc)" + python_newline()
+    + "    stack_trace = __capy_stack_frames(exc.__traceback__)" + python_newline()
+    + "    raw_stack_option = __capy_some(raw_stack) if raw_stack else __capy_none()" + python_newline()
+    + "    location = __capy_source_location_from_stack(stack_trace)" + python_newline()
+    + "    if not _capy_data_is(error, 'Error'):" + python_newline()
+    + "        return __capy_error_full('capy.runtime.invalid_thrown_error', 'OO throw expected capy/lang/Result.Error', __capy_no_details(), location, stack_trace, raw_stack_option, __capy_none(), [])" + python_newline()
+    + "    return __capy_error_full(error.get('kind', 'capy.error'), error.get('message', ''), error.get('details', __capy_no_details()), location, stack_trace, raw_stack_option, error.get('cause', __capy_none()), error.get('suppressed', []))" + python_newline()
+    + python_newline()
+    + "def __capy_host_error(exc):" + python_newline()
+    + "    raw_stack = __capy_raw_stack(exc)" + python_newline()
+    + "    stack_trace = __capy_stack_frames(exc.__traceback__)" + python_newline()
+    + "    return __capy_error_full('capy.runtime.host_exception', str(exc) if str(exc) else exc.__class__.__name__, __capy_no_details(), __capy_source_location_from_stack(stack_trace), stack_trace, __capy_some(raw_stack) if raw_stack else __capy_none(), __capy_none(), [])" + python_newline()
+    + python_newline()
+    + "class __CapyThrownError(Exception):" + python_newline()
+    + "    def __init__(self, error):" + python_newline()
+    + "        super().__init__(str(error.get('message', '')) if isinstance(error, dict) else '')" + python_newline()
+    + "        self.error = error" + python_newline()
+    + python_newline()
+    + "def __capy_throw(error):" + python_newline()
+    + "    try:" + python_newline()
+    + "        raise __CapyThrownError(error)" + python_newline()
+    + "    except __CapyThrownError as exc:" + python_newline()
+    + "        exc.error = __capy_enrich_thrown_error(error, exc)" + python_newline()
+    + "        raise" + python_newline()
+    + python_newline()
+    + "def __capy_try(body, branches):" + python_newline()
+    + "    try:" + python_newline()
+    + "        return body()" + python_newline()
+    + "    except __CapyThrownError as caught:" + python_newline()
+    + "        error = caught.error" + python_newline()
+    + "    except Exception as caught:" + python_newline()
+    + "        error = __capy_host_error(caught)" + python_newline()
+    + "    for kind, handler in branches:" + python_newline()
+    + "        if kind is None or error.get('kind') == kind:" + python_newline()
+    + "            return handler(error)" + python_newline()
+    + "    return __capy_throw(error)" + python_newline()
+    + python_newline()
+    + "def __capy_unsupported(source):" + python_newline()
     + "    raise NotImplementedError('Unsupported CFUN expression: ' + str(source))" + python_newline()
     + python_newline()
     + "def __capy_not_implemented(function_name):" + python_newline()
@@ -6846,8 +6953,10 @@ private fun python_object_receiver_type(typeName: String): bool =
 private fun python_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
     case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
-    case CompiledThrowExpression _ -> false
-    case CompiledTryCatchExpression _ -> false
+    case CompiledThrowExpression throwExpression -> python_expression_gatherable(throwExpression.value, env, module, allModules)
+    case CompiledTryCatchExpression tryCatch ->
+        python_expression_gatherable(tryCatch.body, env, module, allModules)
+            & python_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
@@ -6885,6 +6994,15 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledBlockExpression block ->
         python_bindings_gatherable(block.bindings, env, module, allModules)
             & python_expression_gatherable(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+
+/// Checks whether OO try/catch branches can be included in generated test gathering.
+private fun python_try_catch_branches_gatherable(branches: List[CompiledTryCatchBranch], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match branches[0] with
+    case None -> true
+    case Some { branch } ->
+        let catchEnv = [PythonBinding { name: branch.catchName, pythonName: python_identifier(branch.catchName), typeName: "Error" }] + env
+        python_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
+            & python_try_catch_branches_gatherable(branches[1:], env, module, allModules)
 
 /// Checks whether binary operator can be included in generated test gathering.
 private fun python_binary_operator_gatherable(operator: String): bool =

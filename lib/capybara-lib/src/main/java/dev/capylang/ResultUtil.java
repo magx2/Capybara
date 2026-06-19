@@ -42,6 +42,28 @@ public final class ResultUtil {
         );
     }
 
+    public static Object thrownError(Object error, Throwable throwable) {
+        if (!(error instanceof Map<?, ?> map)) {
+            return error(
+                    "capy.runtime.invalid_thrown_error",
+                    "OO throw expected capy/lang/Result.Error",
+                    throwable
+            );
+        }
+
+        var stackTrace = stackTrace(throwable);
+        return errorFull(
+                stringField(map, "kind", "capy.error"),
+                stringField(map, "message", ""),
+                objectField(map, "details", noDetails()),
+                sourceLocation(stackTrace),
+                stackTrace,
+                Optional.of(rawStack(throwable)),
+                optionalObjectField(map, "cause"),
+                listField(map, "suppressed")
+        );
+    }
+
     public static Object errorFull(
             String kind,
             String message,
@@ -67,6 +89,32 @@ public final class ResultUtil {
 
     private static Object noDetails() {
         return Map.of("__type", "NoDetails");
+    }
+
+    private static Object objectField(Map<?, ?> map, String name, Object fallback) {
+        var value = map.get(name);
+        return value == null ? fallback : value;
+    }
+
+    private static String stringField(Map<?, ?> map, String name, String fallback) {
+        var value = map.get(name);
+        return value == null ? fallback : String.valueOf(value);
+    }
+
+    private static Optional<Object> optionalObjectField(Map<?, ?> map, String name) {
+        var value = map.get(name);
+        if (value instanceof Optional<?> optional) {
+            return optional.map(item -> item);
+        }
+        return Optional.empty();
+    }
+
+    private static List<Object> listField(Map<?, ?> map, String name) {
+        var value = map.get(name);
+        if (value instanceof List<?> list) {
+            return List.copyOf(list);
+        }
+        return List.of();
     }
 
     private static List<Object> stackTrace(Throwable throwable) {

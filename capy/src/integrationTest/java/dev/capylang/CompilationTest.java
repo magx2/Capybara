@@ -7,6 +7,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.generator.Generator;
 import dev.capylang.generator.JavaGenerator;
+import dev.capylang.generator.JavaScriptGenerator;
+import dev.capylang.generator.PythonGenerator;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.NativeProviderManifest;
@@ -92,6 +94,25 @@ class CompilationTest {
         assertThat(alphaBranch).isGreaterThanOrEqualTo(0);
         assertThat(betaBranch).isGreaterThan(alphaBranch);
         assertThat(fallbackBranch).isGreaterThan(betaBranch);
+        assertThat(code).contains("ResultUtil.thrownError");
+
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .reduce("", String::concat);
+        assertThat(javaScriptCode)
+                .contains("__capy_throw")
+                .contains("__capy_try")
+                .contains("__capy_enrich_thrown_error")
+                .contains("backend: 'javascript'");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .reduce("", String::concat);
+        assertThat(pythonCode)
+                .contains("__capy_throw")
+                .contains("__capy_try")
+                .contains("__capy_enrich_thrown_error")
+                .contains("backend='python'");
     }
 
     private static String generatorOutputType(OutputType outputType) {

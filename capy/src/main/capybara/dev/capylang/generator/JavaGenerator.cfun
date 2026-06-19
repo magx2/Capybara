@@ -11314,7 +11314,7 @@ private fun java_option_result_helpers(): String =
         + "        private final java.lang.Object error;" + newline() + newline()
         + "        private __CapyThrownError(java.lang.Object error) {" + newline()
         + "            super(java.lang.String.valueOf(__capy_data_message_field(error)));" + newline()
-        + "            this.error = error;" + newline()
+        + "            this.error = dev.capylang.ResultUtil.thrownError(error, this);" + newline()
         + "        }" + newline() + newline()
         + "        private java.lang.Object error() {" + newline()
         + "            return error;" + newline()
