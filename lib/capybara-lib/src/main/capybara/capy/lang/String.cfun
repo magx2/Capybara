@@ -19,7 +19,7 @@ fun String.size(): size = <native>
 type char -> String with constructor {
     if value.size() == 1
     then Success { value }
-    else Error { message: "char must contain exactly one character" }
+    else Error { kind: "capy.lang.argument.invalid", message: "char must contain exactly one character" }
 }
 
 /// Returns true when both chars contain the same character.

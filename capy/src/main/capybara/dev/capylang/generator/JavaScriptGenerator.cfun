@@ -2,7 +2,7 @@ from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -1483,6 +1483,8 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
         if java_script_compiled_placeholder_source(unsupported.source)
         then java_script_placeholder_code(unsupported, module)
         else "__capy_unsupported(" + java_script_string_literal(unsupported.source) + ")"
+    case CompiledThrowExpression _ -> "__capy_unsupported('OO throw expression')"
+    case CompiledTryCatchExpression _ -> "__capy_unsupported('OO try/catch expression')"
     case CompiledIntLiteral literal -> literal.source
     case CompiledLongLiteral literal -> java_script_integer_literal(literal.source)
     case CompiledFloatLiteral literal -> java_script_decimal_literal(literal.source)
@@ -5903,7 +5905,7 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_option_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'None')) return value; if (__capy_data_is(value, 'Some')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); return (__capy_data_is(mapped, 'Some') || __capy_data_is(mapped, 'None')) ? mapped : __capy_data('Some', Object.fromEntries([['value', mapped]])); } return __capy_unsupported('option flat_map'); }" + java_script_newline()
     + "function __capy_result_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) return __capy_data('Success', Object.fromEntries([['value', __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0)))]])); return __capy_unsupported('result map'); }" + java_script_newline()
     + "function __capy_result_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(mapped, 'Error') || __capy_data_is(mapped, 'Success')) return mapped; } return __capy_unsupported('result flat_map'); }" + java_script_newline()
-    + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(__capy_match_binding(value, 'message', 0))); return __capy_unsupported('result reduce'); }" + java_script_newline()
+    + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(value)); return __capy_unsupported('result reduce'); }" + java_script_newline()
     + "function __capy_result_or_else(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return __capy_match_binding(value, 'value', 0); return __capy_unsupported('result or_else'); }" + java_script_newline()
     + "function __capy_result_or(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return value; return __capy_unsupported('result or'); }" + java_script_newline()
     + "function __capy_define_method(data, name, fn) { Object.defineProperty(data, name, { value: fn, enumerable: false, configurable: true }); }" + java_script_newline()
@@ -6245,6 +6247,8 @@ private fun java_script_native_function_body(function: CompiledFunction): bool =
 private fun java_script_expression_gatherable(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
     case CompiledUnsupportedExpression _ -> false
+    case CompiledThrowExpression _ -> false
+    case CompiledTryCatchExpression _ -> false
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true

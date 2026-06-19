@@ -41,7 +41,7 @@ private fun should_reject_byte_count_addition(left: long, right: long): Assert =
     let message: String =
         (byte_count { left }).reduce(
             left_value => (byte_count { right }).reduce(
-                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", error => error.message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -63,7 +63,7 @@ private fun should_reject_byte_count_subtraction(left: long, right: long): Asser
     let message: String =
         (byte_count { left }).reduce(
             left_value => (byte_count { right }).reduce(
-                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", error => error.message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"

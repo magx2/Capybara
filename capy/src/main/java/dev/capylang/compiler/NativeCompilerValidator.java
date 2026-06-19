@@ -32,6 +32,8 @@ import dev.capylang.compiler.parser.Expression.MethodCallExpression;
 import dev.capylang.compiler.parser.Expression.ReduceExpression;
 import dev.capylang.compiler.parser.Expression.SetLiteral;
 import dev.capylang.compiler.parser.Expression.TupleLiteral;
+import dev.capylang.compiler.parser.Expression.ThrowExpression;
+import dev.capylang.compiler.parser.Expression.TryCatchExpression;
 import dev.capylang.compiler.parser.Expression.UnaryExpression;
 import dev.capylang.compiler.parser.Expression.UnsupportedExpression;
 import dev.capylang.compiler.parser.Expression.WithExpression;
@@ -487,6 +489,11 @@ public final class NativeCompilerValidator {
                     }
                     validateObjectExpression(module, matchCase.body(), errors);
                 }
+            }
+            case ThrowExpression throwExpression -> validateObjectExpression(module, throwExpression.value(), errors);
+            case TryCatchExpression tryCatch -> {
+                validateObjectExpression(module, tryCatch.body(), errors);
+                validateObjectExpression(module, tryCatch.catchBody(), errors);
             }
             case MethodCallExpression call -> {
                 validateObjectExpression(module, call.receiver(), errors);

@@ -1,7 +1,7 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -761,6 +761,8 @@ private fun python_expression_code(expression: CompiledExpression, env: List[Pyt
         if python_compiled_placeholder_source(unsupported.source)
         then "__capy_not_implemented(" + python_string_literal(python_placeholder_function_name(unsupported.source)) + ")"
         else "__capy_unsupported(" + python_string_literal(unsupported.source) + ")"
+    case CompiledThrowExpression _ -> "__capy_unsupported('OO throw expression')"
+    case CompiledTryCatchExpression _ -> "__capy_unsupported('OO try/catch expression')"
     case CompiledIntLiteral literal -> literal.source
     case CompiledLongLiteral literal -> python_long_literal(literal.source)
     case CompiledFloatLiteral literal -> python_decimal_literal(literal.source)
@@ -1210,6 +1212,8 @@ private fun python_arguments_contain_placeholder(arguments: List[CompiledExpress
 private fun python_partial_placeholder_expression(expression: CompiledExpression): bool =
     match expression with
     case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
+    case CompiledThrowExpression _ -> false
+    case CompiledTryCatchExpression _ -> false
     case _ -> false
 
 /// Emits Python code for partial method call body.
@@ -6110,6 +6114,8 @@ private fun python_runtime_data_helpers_code(): String =
     + "def _capy_data_value(value):" + python_newline()
     + "    if not isinstance(value, dict):" + python_newline()
     + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Error') and 'message' in value:" + python_newline()
+    + "        return value['message']" + python_newline()
     + "    if 'value' in value:" + python_newline()
     + "        return value['value']" + python_newline()
     + "    if '$0' in value:" + python_newline()
@@ -6645,7 +6651,7 @@ private fun python_test_runtime_result_helpers_code(): String =
     + "    if _capy_data_is(value, 'Success'):" + python_newline()
     + "        return _unsafe_run(success_mapper(_capy_data_value(value)))" + python_newline()
     + "    if _capy_data_is(value, 'Error'):" + python_newline()
-    + "        return _unsafe_run(error_mapper(_capy_data_value(value)))" + python_newline()
+    + "        return _unsafe_run(error_mapper(value))" + python_newline()
     + "    return __capy_unsupported('result reduce')" + python_newline()
     + python_newline()
 
@@ -6840,6 +6846,8 @@ private fun python_object_receiver_type(typeName: String): bool =
 private fun python_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
     case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
+    case CompiledThrowExpression _ -> false
+    case CompiledTryCatchExpression _ -> false
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true

@@ -1,7 +1,7 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -1594,6 +1594,8 @@ private fun expression_code(
     case CompiledFieldAccessExpression access -> field_access_code(access, env, expectedType, module, allModules)
     case CompiledReduceExpression reduce -> reduce_expression_code(reduce, env, expectedType, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_code(matchExpression, env, expectedType, module, allModules)
+    case CompiledThrowExpression throwExpression -> throw_expression_code(throwExpression, env, expectedType, module, allModules)
+    case CompiledTryCatchExpression tryCatch -> try_catch_expression_code(tryCatch, env, expectedType, module, allModules)
     case CompiledBlockExpression block -> block_expression_code(block, env, expectedType, module, allModules)
 
 /// Emits generated code for variable expression.
@@ -3855,11 +3857,11 @@ private fun enum_parse_call_code(call: CompiledFunctionCallExpression, env: List
     "((java.util.function.Supplier<java.lang.Object>) () -> {" + newline()
         + "            java.lang.Object " + inputName + " = " + expression_code(argumentExpression, env, enum_parse_argument_type(argumentType), module, allModules) + ";" + newline()
         + enum_parse_cases_code(typeName, enum_values(typeName, module, allModules), 0, inputName, parseByName, module, allModules)
-        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse "
+        + "            return __capy_error(\"capy.lang.parse.invalid_enum\", \"Cannot parse "
         + escape_java_string(typeName)
         + " from \" + "
         + inputName
-        + ")));" + newline()
+        + ");" + newline()
         + "        }).get()"
 
 /// Computes the compiled type for enum parse argument.
@@ -5409,6 +5411,26 @@ private fun block_result_code(block: CompiledBlockExpression, env: List[JavaBind
     then "__capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", " + resultCode + ")))"
     else resultCode
 
+private fun throw_expression_code(throwExpression: CompiledThrowExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((java.util.function.Supplier<" + boxed_java_type(expectedType) + ">) () -> {" + newline()
+    + "            throw new __CapyThrownError(" + expression_code(throwExpression.value, env, error_type(), module, allModules) + ");" + newline()
+    + "        }).get()"
+
+private fun try_catch_expression_code(tryCatch: CompiledTryCatchExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let catchJavaName = "__capy_caught_error_" + tryCatch.location.line + "_" + tryCatch.location.column
+    let catchEnv = [java_binding_with_java_name(tryCatch.catchName, error_type(), catchJavaName)] + env
+    "((java.util.function.Supplier<" + boxed_java_type(expectedType) + ">) () -> {" + newline()
+    + "            try {" + newline()
+    + "                return " + expression_code(tryCatch.body, env, expectedType, module, allModules) + ";" + newline()
+    + "            } catch (__CapyThrownError __capy_error) {" + newline()
+    + "                java.lang.Object " + catchJavaName + " = __capy_error.error();" + newline()
+    + "                return " + expression_code(tryCatch.catchBody, catchEnv, expectedType, module, allModules) + ";" + newline()
+    + "            } catch (java.lang.RuntimeException __capy_host_exception) {" + newline()
+    + "                java.lang.Object " + catchJavaName + " = __capy_error(\"capy.runtime.host_exception\", dev.capylang.ResultUtil.safeMessage(__capy_host_exception), __capy_host_exception);" + newline()
+    + "                return " + expression_code(tryCatch.catchBody, catchEnv, expectedType, module, allModules) + ";" + newline()
+    + "            }" + newline()
+    + "        }).get()"
+
 /// Checks whether the current value satisfies the result block wraps success rule for compiler processing.
 private fun result_block_wraps_success(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, rawResultType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     result_type_name(expectedType.name)
@@ -5653,6 +5675,8 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
     then stdlib_date_time_data_literal_code(literal, env, module, allModules)
     else if option_constructor_type(literal.typeName)
     then option_data_literal_code(literal, env, expectedType, module, allModules)
+    else if result_error_constructor(literal.typeName)
+    then result_error_data_literal_code(literal, env, expectedType, module, allModules)
     else if program_success_literal(literal.typeName, module.imports)
     then "capy.lang.Program.Success.INSTANCE"
     else if program_failed_literal(literal.typeName, module.imports)
@@ -5883,6 +5907,30 @@ private fun primitive_char_constructor(literal: CompiledDataLiteral, expectedTyp
 /// Emits generated code for primitive character constructor.
 private fun primitive_char_constructor_code(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_char(" + expression_code(first_data_field_value(literal.fields), env, string_type(), module, allModules) + ")"
+
+private fun result_error_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if data_fields_have_all_structured_error_fields(literal.fields)
+    then raw_data_literal_code(literal, env, expectedType, module, allModules)
+    else if data_fields_have_name(literal.fields, "kind") & data_fields_have_name(literal.fields, "message")
+    then "__capy_error(" + expression_code(data_field_value(literal.fields, "kind"), env, string_type(), module, allModules) + ", " + expression_code(data_field_value(literal.fields, "message"), env, string_type(), module, allModules) + ")"
+    else if data_fields_have_name(literal.fields, "message")
+    then "__capy_error(" + expression_code(data_field_value(literal.fields, "message"), env, string_type(), module, allModules) + ")"
+    else "__capy_error(" + expression_code(first_data_field_value(literal.fields), env, string_type(), module, allModules) + ")"
+
+private fun data_fields_have_all_structured_error_fields(fields: List[CompiledDataField]): bool =
+    data_fields_have_name(fields, "kind")
+        & data_fields_have_name(fields, "message")
+        & data_fields_have_name(fields, "details")
+        & data_fields_have_name(fields, "location")
+        & data_fields_have_name(fields, "stack_trace")
+        & data_fields_have_name(fields, "raw_stack")
+        & data_fields_have_name(fields, "cause")
+        & data_fields_have_name(fields, "suppressed")
+
+private fun data_fields_have_name(fields: List[CompiledDataField], name: String): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } -> field.name == name | data_fields_have_name(fields[1:], name)
 
 /// Computes value metadata for first data field value.
 private fun first_data_field_value(fields: List[CompiledDataField]): CompiledExpression =
@@ -6238,6 +6286,9 @@ private fun option_type_name(name: String): bool =
 private fun result_type_name(name: String): bool =
     stdlib_type_name(name, "Result")
 
+private fun error_type_name(name: String): bool =
+    name == "Error" | name == "Result.Error" | name == "/capy/lang/Result.Error" | name == "capy/lang/Result.Error"
+
 /// Checks whether a type reference matches the seq type name rule.
 private fun seq_type_name(name: String): bool =
     stdlib_type_name(name, "Seq")
@@ -6393,8 +6444,8 @@ private fun match_binding_statements(bindings: List[String], matchCase: Compiled
     match bindings[0] with
     case None -> ""
     case Some { binding } ->
-        let bindingType = match_binding_type(matchCase, valueType, idx, module, allModules)
-        indent + java_type(bindingType) + " " + match_binding_java_name(binding, matchCase, idx) + " = ((" + boxed_java_type(bindingType) + ") " + match_binding_value_code(matchCase, valueCode, valueType, idx, module, allModules) + ");" + newline()
+        let bindingType = match_binding_type(binding, matchCase, valueType, idx, module, allModules)
+        indent + java_type(bindingType) + " " + match_binding_java_name(binding, matchCase, idx) + " = ((" + boxed_java_type(bindingType) + ") " + match_binding_value_code(binding, matchCase, valueCode, valueType, idx, module, allModules) + ");" + newline()
         + match_binding_statements(bindings[1:], matchCase, valueCode, valueType, idx + 1, module, allModules, indent)
 
 /// Collects match environmentironment for compiler processing.
@@ -6402,7 +6453,7 @@ private fun match_env(bindings: List[String], matchCase: CompiledMatchCase, valu
     match bindings[0] with
     case None -> env
     case Some { binding } ->
-        [java_binding_with_java_name(binding, match_binding_type(matchCase, valueType, idx, module, allModules), match_binding_java_name(binding, matchCase, idx))]
+        [java_binding_with_java_name(binding, match_binding_type(binding, matchCase, valueType, idx, module, allModules), match_binding_java_name(binding, matchCase, idx))]
             + match_env(bindings[1:], matchCase, valueType, idx + 1, env, module, allModules)
 
 /// Computes the name for match binding Java.
@@ -6417,20 +6468,20 @@ private fun match_binding_field_name(matchCase: CompiledMatchCase, idx: int, mod
     else declared_positional_field_name("$" + idx, fields, 0)
 
 /// Computes the compiled type for match binding.
-private fun match_binding_type(matchCase: CompiledMatchCase, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+private fun match_binding_type(binding: String, matchCase: CompiledMatchCase, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if match_binding_whole_value(matchCase)
     then match_binding_whole_value_type(matchCase, valueType)
     else if option_match_case(matchCase, valueType)
     then first_type_argument(valueType)
     else if result_match_case(matchCase, valueType)
-    then if result_success_constructor(matchCase.typeName) then first_type_argument(valueType) else object_type()
+    then if result_success_constructor(matchCase.typeName) then first_type_argument(valueType) else result_error_field_type(binding, idx)
     else
         let dataType = find_data_type(matchCase.typeName, module, allModules)
         let bindings = data_type_bindings(dataType, valueType, module, allModules)
         declared_positional_field_type("$" + idx, data_type_fields(matchCase.typeName, module, allModules), bindings, 0, object_type())
 
 /// Emits generated code for match binding value.
-private fun match_binding_value_code(matchCase: CompiledMatchCase, valueCode: String, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun match_binding_value_code(binding: String, matchCase: CompiledMatchCase, valueCode: String, valueType: CompiledTypeReference, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
     if result_match_case(matchCase, valueType) & match_binding_whole_value(matchCase)
     then result_match_whole_value_code(matchCase, valueCode)
     else if match_binding_whole_value(matchCase)
@@ -6438,20 +6489,57 @@ private fun match_binding_value_code(matchCase: CompiledMatchCase, valueCode: St
     else if option_match_case(matchCase, valueType)
     then option_value_code(valueCode) + ".orElse(null)"
     else if result_match_case(matchCase, valueType)
-    then result_match_binding_value_code(matchCase, valueCode)
+    then result_match_binding_value_code(binding, matchCase, valueCode, idx)
     else "__capy_data_field(" + valueCode + ", \"" + escape_java_string(match_binding_field_name(matchCase, idx, module, allModules)) + "\")"
 
 /// Emits generated code for result match whole value.
 private fun result_match_whole_value_code(matchCase: CompiledMatchCase, valueCode: String): String =
     if result_success_constructor(matchCase.typeName)
     then "__capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", __capy_result_success_value(" + valueCode + "))))"
-    else "__capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", __capy_result_error_value(" + valueCode + "))))"
+    else "__capy_result_error_value(" + valueCode + ")"
 
 /// Emits generated code for result match binding value.
-private fun result_match_binding_value_code(matchCase: CompiledMatchCase, valueCode: String): String =
+private fun result_match_binding_value_code(binding: String, matchCase: CompiledMatchCase, valueCode: String, idx: int): String =
     if result_success_constructor(matchCase.typeName)
     then "__capy_result_success_value(" + valueCode + ")"
-    else "__capy_result_error_value(" + valueCode + ")"
+    else "__capy_data_field(__capy_result_error_value(" + valueCode + "), \"" + escape_java_string(result_error_field_name(binding, idx)) + "\")"
+
+private fun result_error_field_name(binding: String, idx: int): String =
+    if result_error_field_exists(binding)
+    then binding
+    else result_error_field_name_at(idx)
+
+private fun result_error_field_name_at(idx: int): String =
+    if idx == 0 then "kind"
+    else if idx == 1 then "message"
+    else if idx == 2 then "details"
+    else if idx == 3 then "location"
+    else if idx == 4 then "stack_trace"
+    else if idx == 5 then "raw_stack"
+    else if idx == 6 then "cause"
+    else if idx == 7 then "suppressed"
+    else "$" + idx
+
+private fun result_error_field_exists(name: String): bool =
+    name == "kind"
+        | name == "message"
+        | name == "details"
+        | name == "location"
+        | name == "stack_trace"
+        | name == "raw_stack"
+        | name == "cause"
+        | name == "suppressed"
+
+private fun result_error_field_type(binding: String, idx: int): CompiledTypeReference =
+    let field = result_error_field_name(binding, idx)
+    if field == "kind" | field == "message" then string_type()
+    else if field == "details" then data_type_reference("data")
+    else if field == "location" then option_type(data_type_reference("/capy/lang/Result.SourceLocation"))
+    else if field == "stack_trace" then list_type(data_type_reference("/capy/lang/Result.StackFrame"))
+    else if field == "raw_stack" then option_type(string_type())
+    else if field == "cause" then option_type(data_type_reference("/capy/lang/Result.Error"))
+    else if field == "suppressed" then list_type(data_type_reference("/capy/lang/Result.Error"))
+    else object_type()
 
 /// Checks whether the current value satisfies the match binding whole value rule for compiler processing.
 private fun match_binding_whole_value(matchCase: CompiledMatchCase): bool =
@@ -6545,7 +6633,15 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledFieldAccessExpression access -> field_access_type(access, env, module, allModules)
     case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
+    case CompiledThrowExpression _ -> nothing_type()
+    case CompiledTryCatchExpression tryCatch -> try_catch_expression_type(tryCatch, env, module, allModules)
     case CompiledBlockExpression block -> expression_type(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
+
+private fun try_catch_expression_type(tryCatch: CompiledTryCatchExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let bodyType = expression_type(tryCatch.body, env, module, allModules)
+    if bodyType.name == "nothing"
+    then expression_type(tryCatch.catchBody, [java_binding_with_java_name(tryCatch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
+    else bodyType
 
 /// Infers the expression type for data literal.
 private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -8152,6 +8248,10 @@ private fun expression_references_function(expression: CompiledExpression, name:
     case CompiledMatchExpression matchExpression ->
         expression_references_function(matchExpression.value, name)
             | match_cases_reference_function(matchExpression.cases, name)
+    case CompiledThrowExpression throwExpression -> expression_references_function(throwExpression.value, name)
+    case CompiledTryCatchExpression tryCatch ->
+        expression_references_function(tryCatch.body, name)
+            | expression_references_function(tryCatch.catchBody, name)
     case CompiledBlockExpression block ->
         let_bindings_reference_function(block.bindings, name)
             | expression_references_function(block.result, name)
@@ -9218,6 +9318,8 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
     case CompiledFieldAccessExpression e -> enum_static_field_access(e, env, module, allModules) | expression_emittable(e.receiver, env, module, allModules)
     case CompiledReduceExpression e -> reduce_expression_emittable(e, env, module, allModules)
     case CompiledMatchExpression e -> expression_emittable(e.value, env, module, allModules) & match_cases_emittable(e.cases, expression_type(e.value, env, module, allModules), env, module, allModules)
+    case CompiledThrowExpression e -> throw_expression_emittable(e, env, module, allModules)
+    case CompiledTryCatchExpression e -> try_catch_expression_emittable(e, env, module, allModules)
     case CompiledBlockExpression e -> let_bindings_emittable(e.bindings, env, module, allModules) & expression_emittable(e.result, block_env(e.bindings, env, module, allModules), module, allModules)
 
 /// Checks whether expression emittable as can be emitted by the target backend.
@@ -9230,6 +9332,9 @@ private fun expression_emittable_as(expression: CompiledExpression, expectedType
     case CompiledBlockExpression block ->
         let_bindings_emittable(block.bindings, env, module, allModules)
             & expression_emittable_as(block.result, expectedType, block_env(block.bindings, env, module, allModules), module, allModules)
+    case CompiledTryCatchExpression tryCatch ->
+        expression_emittable_as(tryCatch.body, expectedType, env, module, allModules)
+            & expression_emittable_as(tryCatch.catchBody, expectedType, [java_binding_with_java_name(tryCatch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
     case _ -> expression_emittable(expression, env, module, allModules)
 
 /// Checks whether expressions can be emitted by the target backend.
@@ -9261,6 +9366,14 @@ private fun reduce_expression_emittable(reduce: CompiledReduceExpression, env: L
         & expression_emittable(reduce.receiver, env, module, allModules)
         & expression_emittable(reduce.initial, env, module, allModules)
         & expression_emittable(reduce.body, reduceEnv, module, allModules)
+
+private fun throw_expression_emittable(throwExpression: CompiledThrowExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(throwExpression.value, env, module, allModules)
+        & error_type_name(expression_type(throwExpression.value, env, module, allModules).name)
+
+private fun try_catch_expression_emittable(tryCatch: CompiledTryCatchExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    expression_emittable(tryCatch.body, env, module, allModules)
+        & expression_emittable(tryCatch.catchBody, [java_binding_with_java_name(tryCatch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
 
 /// Checks whether match cases can be emitted by the target backend.
 private fun match_cases_emittable(cases: List[CompiledMatchCase], valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -10857,6 +10970,8 @@ private fun string_type(): CompiledTypeReference = CompiledTypeReference { name:
 private fun nothing_type(): CompiledTypeReference = CompiledTypeReference { name: "nothing", arguments: [] }
 /// Computes the compiled type for object.
 private fun object_type(): CompiledTypeReference = CompiledTypeReference { name: "any", arguments: [] }
+/// Computes the compiled type for error.
+private fun error_type(): CompiledTypeReference = CompiledTypeReference { name: "/capy/lang/Result.Error", arguments: [] }
 /// Computes the compiled type for assert.
 private fun assert_type(): CompiledTypeReference = CompiledTypeReference { name: "Assert", arguments: [] }
 /// Computes the compiled type for test file.
@@ -11099,7 +11214,26 @@ private fun java_data_helpers(): String =
 
 /// Emits Java runtime helper source for option result helpers.
 private fun java_option_result_helpers(): String =
-    "    private static java.util.Optional __capy_optional_value(java.lang.Object value) {" + newline()
+    "    private static java.lang.Object __capy_error(java.lang.String message) {" + newline()
+        + "        return __capy_error(\"capy.error\", message);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message) {" + newline()
+        + "        return dev.capylang.ResultUtil.error(kind, message);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message, java.lang.Throwable throwable) {" + newline()
+        + "        return dev.capylang.ResultUtil.error(kind, message, throwable);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static final class __CapyThrownError extends RuntimeException {" + newline()
+        + "        private final java.lang.Object error;" + newline() + newline()
+        + "        private __CapyThrownError(java.lang.Object error) {" + newline()
+        + "            super(java.lang.String.valueOf(__capy_data_message_field(error)));" + newline()
+        + "            this.error = error;" + newline()
+        + "        }" + newline() + newline()
+        + "        private java.lang.Object error() {" + newline()
+        + "            return error;" + newline()
+        + "        }" + newline()
+        + "    }" + newline() + newline()
+        + "    private static java.util.Optional __capy_optional_value(java.lang.Object value) {" + newline()
         + "        if (value instanceof java.util.Optional optional) {" + newline()
         + "            return optional;" + newline()
         + "        }" + newline()
@@ -11127,7 +11261,7 @@ private fun java_option_result_helpers(): String =
         + "        if (__capy_data_is_result_error(value)) {" + newline()
         + "            return value;" + newline()
         + "        }" + newline()
-        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Expected Result value\")));" + newline()
+        + "        return __capy_error(\"capy.lang.argument.invalid\", \"Expected Result value\");" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_result_success_value(java.lang.Object value) {" + newline()
         + "        if (__capy_data_is_result_success(value)) {" + newline()
@@ -11137,14 +11271,7 @@ private fun java_option_result_helpers(): String =
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_result_error_value(java.lang.Object value) {" + newline()
         + "        if (__capy_data_is_result_error(value)) {" + newline()
-        + "            java.lang.Object nested = __capy_data_field(value, \"message\");" + newline()
-        + "            if (nested == null) {" + newline()
-        + "                nested = __capy_data_field(value, \"value\");" + newline()
-        + "            }" + newline()
-        + "            if (nested == null) {" + newline()
-        + "                nested = __capy_data_field(value, \"$0\");" + newline()
-        + "            }" + newline()
-        + "            return nested == null ? value : nested;" + newline()
+        + "            return value;" + newline()
         + "        }" + newline()
         + "        return value;" + newline()
         + "    }" + newline() + newline()
@@ -11155,7 +11282,7 @@ private fun java_regex_helpers(): String =
         + "        if (value.length() == 1) {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", value)));" + newline()
         + "        }" + newline()
-        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"char must contain exactly one character\")));" + newline()
+        + "        return __capy_error(\"capy.lang.argument.invalid\", \"char must contain exactly one character\");" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.String __capy_regex_pattern(java.lang.Object regex) {" + newline()
         + "        return (java.lang.String) __capy_data_field(regex, \"pattern\");" + newline()
@@ -11217,28 +11344,28 @@ private fun java_parse_helpers(): String =
         + "        try {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Integer.parseInt(value))));" + newline()
         + "        } catch (java.lang.NumberFormatException e) {" + newline()
-        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to int: \" + value)));" + newline()
+        + "            return __capy_error(\"capy.lang.parse.invalid_int\", \"Cannot parse string to int: \" + value, e);" + newline()
         + "        }" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_parse_long(java.lang.String value) {" + newline()
         + "        try {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Long.parseLong(value))));" + newline()
         + "        } catch (java.lang.NumberFormatException e) {" + newline()
-        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to long: \" + value)));" + newline()
+        + "            return __capy_error(\"capy.lang.parse.invalid_long\", \"Cannot parse string to long: \" + value, e);" + newline()
         + "        }" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_parse_double(java.lang.String value) {" + newline()
         + "        try {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Double.parseDouble(value))));" + newline()
         + "        } catch (java.lang.NumberFormatException e) {" + newline()
-        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to double: \" + value)));" + newline()
+        + "            return __capy_error(\"capy.lang.parse.invalid_double\", \"Cannot parse string to double: \" + value, e);" + newline()
         + "        }" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_parse_float(java.lang.String value) {" + newline()
         + "        try {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", java.lang.Float.parseFloat(value))));" + newline()
         + "        } catch (java.lang.NumberFormatException e) {" + newline()
-        + "            return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to float: \" + value)));" + newline()
+        + "            return __capy_error(\"capy.lang.parse.invalid_float\", \"Cannot parse string to float: \" + value, e);" + newline()
         + "        }" + newline()
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_parse_bool(java.lang.String value) {" + newline()
@@ -11248,7 +11375,7 @@ private fun java_parse_helpers(): String =
         + "        if (java.util.Objects.equals(value, \"false\")) {" + newline()
         + "            return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", false)));" + newline()
         + "        }" + newline()
-        + "        return __capy_data(\"Error\", java.util.Map.ofEntries(java.util.Map.entry(\"message\", \"Cannot parse string to bool: \" + value)));" + newline()
+        + "        return __capy_error(\"capy.lang.parse.invalid_bool\", \"Cannot parse string to bool: \" + value);" + newline()
         + "    }" + newline() + newline()
 
 /// Emits Java runtime helper source for constructor helpers.

@@ -490,20 +490,47 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     private static Expression objectStatementBlock(
             dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext ctx
     ) {
+        return objectStatementSequence(ctx.statement(), 0, location(ctx));
+    }
+
+    private static Expression objectStatementSequence(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext> statements,
+            int start,
+            SourceLocation location
+    ) {
         var bindings = new ArrayList<Expression.LetBinding>();
-        for (var idx = 0; idx < ctx.statement().size(); idx++) {
-            var statement = ctx.statement().get(idx);
+        var idx = start;
+        while (idx < statements.size()) {
+            var statement = statements.get(idx);
             if (statement.letStatement() != null) {
                 bindings.add(objectLetBinding(statement.letStatement()));
-            } else if (idx == ctx.statement().size() - 1) {
-                var result = objectStatement(statement);
-                if (bindings.isEmpty()) {
-                    return result;
-                }
-                return new Expression.BlockExpression(List.copyOf(bindings), result, location(ctx));
+                idx++;
             } else {
-                return unsupported(ctx);
+                break;
             }
+        }
+        var result = idx >= statements.size()
+                ? new Expression.UnsupportedExpression("", location)
+                : idx == statements.size() - 1
+                ? objectStatement(statements.get(idx))
+                : objectNonFinalStatement(statements.get(idx), objectStatementSequence(statements, idx + 1, location));
+        if (bindings.isEmpty()) {
+            return result;
+        }
+        return new Expression.BlockExpression(List.copyOf(bindings), result, location);
+    }
+
+    private static Expression objectNonFinalStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext ctx,
+            Expression rest
+    ) {
+        if (ctx.ifStatement() != null && ctx.ifStatement().ifStatement() == null && ctx.ifStatement().statementBlock().size() == 1) {
+            return new Expression.IfExpression(
+                    objectExpression(ctx.ifStatement().expression()),
+                    objectStatementBlock(ctx.ifStatement().statementBlock(0)),
+                    rest,
+                    location(ctx.ifStatement())
+            );
         }
         return unsupported(ctx);
     }
@@ -523,7 +550,28 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         if (ctx.expressionStatement() != null) {
             return objectCallExpression(ctx.expressionStatement().callExpression());
         }
+        if (ctx.throwStatement() != null) {
+            return new Expression.ThrowExpression(
+                    objectExpression(ctx.throwStatement().expression()),
+                    location(ctx.throwStatement())
+            );
+        }
+        if (ctx.tryCatchStatement() != null) {
+            return objectTryCatchStatement(ctx.tryCatchStatement());
+        }
         return unsupported(ctx);
+    }
+
+    private static Expression objectTryCatchStatement(
+            dev.capylang.parser.antlr.ObjectOrientedParser.TryCatchStatementContext ctx
+    ) {
+        var catchClause = ctx.catchClause().get(0);
+        return new Expression.TryCatchExpression(
+                objectStatementBlock(ctx.statementBlock()),
+                catchClause.identifier().getText(),
+                objectStatementBlock(catchClause.statementBlock()),
+                location(ctx)
+        );
     }
 
     private static Expression.LetBinding objectLetBinding(

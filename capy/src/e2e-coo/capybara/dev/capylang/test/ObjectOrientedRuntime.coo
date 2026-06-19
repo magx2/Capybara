@@ -1,4 +1,5 @@
 from /capy/io/Stdout import { * }
+from /capy/lang/Result import { * }
 
 open class GreeterBase {
     field prefix: String = "hello"
@@ -98,11 +99,11 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
     def recover(flag: bool): String {
         try {
             if flag {
-                throw "boom"
+                throw error_kind("capy.test.runtime.boom", "boom")
             }
             return "ok"
         } catch error {
-            return error.getMessage()
+            return error.message
         }
     }
 
@@ -110,7 +111,7 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
         try {
             return values[3]
         } catch error {
-            return error.getClass().getSimpleName()
+            return error.kind
         }
     }
 

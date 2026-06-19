@@ -8,8 +8,8 @@ data Failed { exit_code: failed_exit_code }
 
 /// Valid process failure exit code in the portable range `1..255`.
 type failed_exit_code -> int with constructor {
-    if value < MIN_FAILED_EXIT_CODE then /capy/lang/Result.Error { message: "failed_exit_code must be greater or equals to {MIN_FAILED_EXIT_CODE}, was `{value}`." }
-    else if value > MAX_FAILED_EXIT_CODE then /capy/lang/Result.Error { message: "failed_exit_code must be less than or equal to {MAX_FAILED_EXIT_CODE}, was `{value}`." }
+    if value < MIN_FAILED_EXIT_CODE then /capy/lang/Result.Error { kind: "capy.lang.number.out_of_range", message: "failed_exit_code must be greater or equals to {MIN_FAILED_EXIT_CODE}, was `{value}`." }
+    else if value > MAX_FAILED_EXIT_CODE then /capy/lang/Result.Error { kind: "capy.lang.number.out_of_range", message: "failed_exit_code must be less than or equal to {MAX_FAILED_EXIT_CODE}, was `{value}`." }
     else /capy/lang/Result.Success { value }
 }
 
