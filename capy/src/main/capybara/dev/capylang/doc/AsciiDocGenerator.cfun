@@ -195,19 +195,14 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule, objectOrie
 private fun generate_function_docs(functions: List[CompiledFunction], heading: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     functions
         .sort((a,b) => a.name.compare(b.name))
-        .map(function => "{heading} {function.visibility} {function.name}({generate_parameters(function.parameters, module, typeTargets)}): {type_name(function.returnType, module, typeTargets)}\n\n{generate_documentation(function)}\n\n")
+        .map(function => "{heading} fun {function.name}({generate_parameters(function.parameters, module, typeTargets)}): {type_name(function.returnType, module, typeTargets)}\n\n{generate_documentation(function)}\n\n")
         .reduce("", (content, functionDoc) => content + functionDoc)
 
 private fun generate_constant_docs(constants: List[CompiledFunction], heading: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     constants
         .sort((a,b) => a.name.compare(b.name))
-        .map(constant => "{heading} {asciidoc_constant_visibility(constant.visibility)} {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
+        .map(constant => "{heading} const {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
         .reduce("", (content, constantDoc) => content + constantDoc)
-
-private fun asciidoc_constant_visibility(visibility: String): String =
-    if visibility.starts_with("const:")
-    then visibility["const:".size().value, visibility.size().value]
-    else visibility
 
 private fun generate_top_level_function_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     let topLevelFunctions = asciidoc_top_level_functions(functions, typeNames)
@@ -812,7 +807,7 @@ private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType],
             then content
             else content
                 + "[[{asciidoc_type_anchor(type.name)}]]\n"
-                + "=== {type.visibility} {type.name}: {type_name(type.backingType, module, typeTargets)}\n\n{generate_documentation_for_backend_type(type)}\n"
+                + "=== type {type.name}: {type_name(type.backingType, module, typeTargets)}\n\n{generate_documentation_for_backend_type(type)}\n"
                 + generate_type_function_docs(type.name, functions, module, typeTargets)
                 + "\n"
         )
@@ -846,7 +841,7 @@ private fun generate_object_interface_docs(interfaces: List[CompiledObjectOrient
 
 private fun generate_object_interface_doc(interface: CompiledObjectOrientedInterface, unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     "[[{asciidoc_type_anchor(asciidoc_object_interface_type_name(unit, interface.name))}]]\n"
-    + "=== {interface.visibility} {interface.kind} {interface.name}\n\n"
+    + "=== {interface.kind} {interface.name}\n\n"
     + generate_text_documentation(interface.documentation)
     + "\n"
     + generate_object_parent_docs(interface.parents, module, typeTargets)
@@ -864,7 +859,7 @@ private fun generate_object_class_docs(classes: List[CompiledObjectOrientedClass
 
 private fun generate_object_class_doc(class: CompiledObjectOrientedClass, unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     "[[{asciidoc_type_anchor(asciidoc_object_class_type_name(unit, class.name))}]]\n"
-    + "=== {class.visibility} {object_class_open_label(class)}class {class.name}{object_parameters_signature(class.parameters, module, typeTargets)}\n\n"
+    + "=== {object_class_open_label(class)}class {class.name}{object_parameters_signature(class.parameters, module, typeTargets)}\n\n"
     + generate_text_documentation(class.documentation)
     + "\n"
     + generate_object_parent_docs(class.parents, module, typeTargets)
@@ -900,7 +895,7 @@ private fun generate_object_field_docs(fields: List[CompiledObjectOrientedField]
         + "\n"
 
 private fun generate_object_field_doc(field: CompiledObjectOrientedField, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
-    "* `{field.visibility} {field.name}`: {type_name(field.typeReference, module, typeTargets)}{object_field_initializer_label(field)}\n"
+    "* `field {field.name}`: {type_name(field.typeReference, module, typeTargets)}{object_field_initializer_label(field)}\n"
     + generate_object_member_documentation(field.documentation)
 
 private fun asciidoc_public_object_fields(fields: List[CompiledObjectOrientedField]): List[CompiledObjectOrientedField] =
@@ -938,7 +933,7 @@ private fun generate_object_method_docs(methods: List[CompiledObjectOrientedMeth
             .reduce("", (content, doc) => content + doc)
 
 private fun generate_object_method_doc(method: CompiledObjectOrientedMethod, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
-    "===== {method.visibility} {method.name}({generate_parameters(method.parameters, module, typeTargets)}): {type_name(method.returnType, module, typeTargets)}\n\n"
+    "===== def {method.name}({generate_parameters(method.parameters, module, typeTargets)}): {type_name(method.returnType, module, typeTargets)}\n\n"
     + generate_text_documentation(method.documentation)
     + "\n"
 
@@ -972,7 +967,7 @@ private fun generate_annotation_section_docs(annotations: Dict[CompiledAnnotatio
     else "== Annotations\n\n" + content + "\n\n"
 
 private fun generate_annotation_doc(annotation: CompiledAnnotationDeclaration): String =
-    "=== {annotation.visibility} @{annotation.name}\n\n"
+    "=== annotation @{annotation.name}\n\n"
     + generate_documentation_for_annotation(annotation)
     + "\n"
     + "* Repeatable: {annotation_repeatable_value(annotation)}\n"
