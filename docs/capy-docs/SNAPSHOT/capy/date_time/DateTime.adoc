@@ -1,0 +1,163 @@
+= Module DateTime
+
+== Functions
+
+=== const:public UNIX_EPOCH(): xref:#type-DateTime[DateTime]
+
+Unix epoch date-time (`1970-01-01T00:00:00Z`).
+
+
+=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-DateTime[DateTime]]
+
+Parses a UTC ISO 8601 date-time in basic or extended form.
+
+Example:
+```cfun
+from_iso_8601("2026-06-18T12:30:00Z")
+from_iso_8601("20260618T123000Z")
+```
+Both forms return the same UTC `DateTime`.
+
+
+=== public from_timestamp(timestamp: long): xref:#type-DateTime[DateTime]
+
+Converts a Unix timestamp (seconds since `1970-01-01T00:00:00Z`) to a `DateTime`.
+
+Example: `from_timestamp(86400L)` returns `1970-01-02T00:00:00Z`.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-DateTime]]
+=== data DateTime
+
+Combination of a UTC calendar date and time of day.
+
+Example:
+```cfun
+DateTime { date: UNIX_DATE, time: MIDNIGHT }
+```
+Use `from_iso_8601` for parsing strings and `from_timestamp` for Unix
+timestamp values.
+
+==== Fields
+
+* `date`: xref:../../capy/date_time/Date.adoc#type-Date[Date]
+* `time`: xref:../../capy/date_time/Time.adoc#type-Time[Time]
+
+==== Functions
+
+===== public DateTime.`+`(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+
+Adds a `Duration` to this `DateTime`.
+
+
+===== public DateTime.`-`(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+
+Subtracts a `Duration` from this `DateTime`.
+
+
+===== public DateTime.`<`(other: xref:#type-DateTime[DateTime]): bool
+
+Returns `true` when this date-time is before `other`.
+
+
+===== public DateTime.`>`(other: xref:#type-DateTime[DateTime]): bool
+
+Returns `true` when this date-time is after `other`.
+
+
+===== public DateTime.greater(other: xref:#type-DateTime[DateTime]): bool
+
+Comparison function used by `>`.
+
+
+===== public DateTime.greater_than(other: xref:#type-DateTime[DateTime]): bool
+
+Returns `true` when this date-time is after `other`.
+
+
+===== public DateTime.less(other: xref:#type-DateTime[DateTime]): bool
+
+Comparison function used by `<`.
+
+
+===== public DateTime.less_than(other: xref:#type-DateTime[DateTime]): bool
+
+Returns `true` when this date-time is before `other`.
+
+
+===== public DateTime.minus(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+
+Subtracts a `Duration` from this `DateTime`.
+
+
+===== public DateTime.minus(other: xref:#type-DateTime[DateTime]): xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]
+
+Returns the duration from `other` to this `DateTime`.
+
+Example:
+```cfun
+from_timestamp(90L).minus(UNIX_EPOCH)
+```
+Returns a duration of 1 minute and 30 seconds.
+
+
+===== public DateTime.plus(duration: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DateTime[DateTime]
+
+Adds a `Duration` to this `DateTime`.
+
+Example:
+```cfun
+UNIX_EPOCH + DateDuration {
+    years: 0, months: 0, days: 1,
+    hours: 2, minutes: 0, seconds: 0
+}
+```
+Returns `1970-01-02T02:00:00Z`.
+
+
+===== public DateTime.timestamp(): long
+
+Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
+
+Example: `UNIX_EPOCH.timestamp()` returns `0L`.
+
+
+===== public DateTime.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Formats this date-time as a canonical UTC ISO 8601 string.
+
+Example:
+```cfun
+from_iso_8601("2026-06-18T14:30:00+02:00")
+    .map(datetime => datetime.to_iso_8601())
+```
+Returns `2026-06-18T12:30:00Z` after applying the offset.
+
+
+[[type-Split]]
+=== data Split
+
+
+==== Fields
+
+* `left`: xref:../../capy/lang/String.adoc#type-String[String]
+* `right`: xref:../../capy/lang/String.adoc#type-String[String]
+
+[[type-SplitScan]]
+=== data SplitScan
+
+
+==== Fields
+
+* `left`: xref:../../capy/lang/String.adoc#type-String[String]
+* `right`: xref:../../capy/lang/String.adoc#type-String[String]
+* `seen_separator`: bool
+

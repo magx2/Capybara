@@ -1,0 +1,26 @@
+= Module System
+
+== Functions
+
+=== public current_millis(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
+
+Returns an effect that reads the current system time in milliseconds since the Unix epoch.
+
+The value is captured when the effect is run.
+
+
+=== public nano_time(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][long]
+
+Returns an effect that reads the current monotonic JVM time in nanoseconds.
+
+Use this for measuring elapsed durations, not for wall-clock timestamps.
+
+
+
+
+== Annotations
+
+
+
+== Types
+

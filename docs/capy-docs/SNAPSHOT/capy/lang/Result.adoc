@@ -1,0 +1,120 @@
+= Module Result
+
+== Functions
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Error]]
+=== data Error
+
+Failed Result value.
+
+==== Fields
+
+* `message`: xref:../../capy/lang/String.adoc#type-String[String]
+
+[[type-Result]]
+=== union Result[T]
+
+Fallible value that is either a Success with a value or an Error with a message.
+
+Example:
+```cfun
+"42".to_int()
+    .map(value => value * 2)
+    .or_else(0)
+```
+Successful results flow through `map` and `flat_map`; errors skip the
+transformation and preserve the message.
+
+==== Variants
+
+* xref:#type-Error[Error]
+* xref:#type-Success[Success][T]
+
+==== Functions
+
+===== public Result[T].`|*`(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
+
+Applies `flatmap` to a successful value; equivalent to `this.flat_map(flatmap)`.
+
+Use this when the mapping function already returns a `Result`.
+
+
+===== public Result[T].`|>`(reduce: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][T=>R, String=>R]): R
+
+Reduces a Result by applying the first function to Success or the second function to Error.
+
+
+===== public Result[T].`|`(map: T=>Y): xref:#type-Result[Result][Y]
+
+Transforms a successful value using `map`; equivalent to `this.map(map)`.
+
+Example: `Success { value: 2 } | value => value * 2` returns
+`Success { value: 4 }`.
+
+
+===== public Result[T].flat_map(flatmap: T=>Result[Y]): xref:#type-Result[Result][Y]
+
+Applies `flatmap` to a successful value, or propagates an Error unchanged.
+
+
+===== public Result[T].map(map: T=>Y): xref:#type-Result[Result][Y]
+
+Transforms a successful value using `map`, or propagates an Error unchanged.
+
+
+===== public Result[T].or(r: xref:#type-Result[Result][T]): xref:#type-Result[Result][T]
+
+Returns this Result when successful, or `r` when this Result is an Error.
+
+Example:
+```cfun
+primary_config().or(default_config())
+```
+Uses `default_config()` only as the replacement result when the original is
+an error.
+
+
+===== public Result[T].or_else(v: T): T
+
+Returns the successful value, or `v` when this Result is an Error.
+
+Example: `"bad".to_int().or_else(0)` returns `0`.
+
+
+===== public Result[T].reduce(on_success: T=>R, on_error: String=>R): R
+
+Reduces a Result by applying `on_success` to Success or `on_error` to Error.
+
+Example:
+```cfun
+"42".to_int().reduce(
+    value => "parsed " + value,
+    message => "failed: " + message
+)
+```
+This is useful at boundaries where a fallible value must become a single
+non-Result value.
+
+
+===== public Result[T].reduce_left(on_success: T=>R, on_error: String=>R): R
+
+Reduces a Result by applying `on_success` to Success or `on_error` to Error.
+
+
+[[type-Success]]
+=== data Success[T]
+
+Successful Result value.
+
+==== Fields
+
+* `value`: T
+

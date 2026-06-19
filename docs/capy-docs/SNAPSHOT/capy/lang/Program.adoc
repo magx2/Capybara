@@ -1,0 +1,124 @@
+= Module Program
+
+== Functions
+
+=== const:public DEFAULT_FAILED_EXIT_CODE(): 
+
+Default failure exit code for generic program errors.
+
+
+=== const:public LAST_FAILED_EXIT_CODE(): 
+
+Last valid failure exit code.
+
+
+=== const:private MAX_FAILED_EXIT_CODE(): int
+
+Largest valid failure exit code.
+
+
+=== const:private MIN_FAILED_EXIT_CODE(): int
+
+Smallest valid failure exit code.
+
+
+=== const:public SIGABRT(): 
+
+Abort signal exit code.
+
+
+=== const:public SIGALRM(): 
+
+Alarm or timeout signal exit code.
+
+
+=== const:public SIGFPE(): 
+
+Floating point exception signal exit code.
+
+
+=== const:public SIGHUP(): 
+
+Hangup signal exit code.
+
+
+=== const:public SIGINT(): 
+
+Interrupt signal exit code.
+
+
+=== const:public SIGKILL(): 
+
+Forced kill signal exit code.
+
+
+=== const:public SIGPIPE(): 
+
+Broken pipe signal exit code.
+
+
+=== const:public SIGQUIT(): 
+
+Quit signal exit code.
+
+
+=== const:public SIGSEGV(): 
+
+Segmentation fault signal exit code.
+
+
+=== const:public SIGTERM(): 
+
+Termination signal exit code.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Failed]]
+=== data Failed
+
+Failed program completion with a non-zero exit code.
+
+==== Fields
+
+* `exit_code`: xref:#type-failed_exit_code[failed_exit_code]
+
+[[type-Program]]
+=== union Program
+
+Process result returned by an executable Capybara `main` function.
+
+==== Variants
+
+* xref:#type-Failed[Failed]
+* xref:#type-Success[Success]
+
+[[type-Success]]
+=== data Success
+
+Successful program completion with exit code `0`.
+
+[[type-failed_exit_code]]
+=== public failed_exit_code: int
+
+Valid process failure exit code in the portable range `1..255`.
+
+==== Functions
+
+===== public failed_exit_code.next(): xref:#type-failed_exit_code[failed_exit_code]
+
+Returns the next failure exit code, clamped to `LAST_FAILED_EXIT_CODE`.
+
+
+===== public failed_exit_code.previous(): xref:#type-failed_exit_code[failed_exit_code]
+
+Returns the previous failure exit code, clamped to `DEFAULT_FAILED_EXIT_CODE`.
+
+
+

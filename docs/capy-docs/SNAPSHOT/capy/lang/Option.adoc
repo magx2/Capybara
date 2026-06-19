@@ -1,0 +1,76 @@
+= Module Option
+
+== Functions
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-None]]
+=== data None
+
+Absent Option value.
+
+[[type-Option]]
+=== union Option[T]
+
+Optional value that is either present as Some or absent as None.
+
+Example:
+```cfun
+let nickname: Option[String] = Some { value: "Ada" }
+nickname.map(name => name + "!")
+```
+The result is `Some { value: "Ada!" }`. Mapping `None` returns `None`.
+
+==== Variants
+
+* xref:#type-None[None]
+* xref:#type-Some[Some][T]
+
+==== Functions
+
+===== public Option[T].`|*`(flatmap: T=>Option[Y]): xref:#type-Option[Option][Y]
+
+Applies `flatmap` to a present value; equivalent to `this.flat_map(flatmap)`.
+
+Use this when the mapping function already returns an `Option`.
+
+
+===== public Option[T].`|`(map: T=>Y): xref:#type-Option[Option][Y]
+
+Transforms a present value using `map`; equivalent to `this.map(map)`.
+
+Example: `Some { value: 2 } | value => value * 2` returns
+`Some { value: 4 }`.
+
+
+===== public Option[T].flat_map(flatmap: T=>Option[Y]): xref:#type-Option[Option][Y]
+
+Applies `flatmap` to a present value, or returns None when empty.
+
+Example:
+```cfun
+Some { value: "capy" }.flat_map(text => text[0])
+```
+The outer option stays empty if the original value is `None`.
+
+
+===== public Option[T].map(map: T=>Y): xref:#type-Option[Option][Y]
+
+Transforms a present value using `map`, or returns None when empty.
+
+
+[[type-Some]]
+=== data Some[T]
+
+Present Option value.
+
+==== Fields
+
+* `value`: T
+

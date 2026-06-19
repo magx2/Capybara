@@ -1,0 +1,96 @@
+= Module Effect
+
+== Functions
+
+=== private _run(effect: xref:#type-Effect[Effect][T]): T
+
+
+
+=== public delay(thunk: ()=>T): xref:#type-Effect[Effect][T]
+
+Defers a thunk until the effect is executed.
+
+Use this for computations that should not happen while the effect is being
+constructed.
+
+
+=== public pure(value: T): xref:#type-Effect[Effect][T]
+
+Wraps a pure value in an effect.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Effect]]
+=== union Effect[T]
+
+Deferred computation that may interact with the outside world.
+
+`Effect` values are composed with `map`, `flat_map`, `|`, `|*`, or `let`
+binding. They run at the runtime boundary, or when `unsafe_run` is called
+explicitly.
+
+Example:
+```cfun
+let program =
+    delay(() => "Ada")
+        .map(name => "hello " + name)
+```
+`program` is still an `Effect[String]`; the thunk has not run yet.
+
+==== Variants
+
+* xref:#type-UnsafeEffect[UnsafeEffect][T]
+
+==== Functions
+
+===== public Effect[T].`|*`(flatmap: T=>Effect[Y]): xref:#type-Effect[Effect][Y]
+
+Operator alias for `flat_map`.
+
+
+===== public Effect[T].`|`(map: T=>Y): xref:#type-Effect[Effect][Y]
+
+Operator alias for `map`.
+
+
+===== public Effect[T].flat_map(flatmap: T=>Effect[Y]): xref:#type-Effect[Effect][Y]
+
+Sequences this effect and then returns the effect produced by `flatmap`.
+
+Example:
+```cfun
+read_text(path).flat_map(result =>
+    print(result.reduce(text => text, err => err))
+)
+```
+
+
+===== public Effect[T].map(map: T=>Y): xref:#type-Effect[Effect][Y]
+
+Transforms the produced value without executing the effect immediately.
+
+
+===== public Effect[T].unsafe_run(): T
+
+Executes the effect immediately and returns its value.
+
+Prefer normal effect composition in application code. `unsafe_run` is useful
+for tests, adapters, or runtime boundaries that intentionally leave the
+effect model.
+
+
+[[type-UnsafeEffect]]
+=== data UnsafeEffect[T]
+
+
+==== Fields
+
+* `unsafe_thunk`: ()=>T
+

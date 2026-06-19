@@ -1,0 +1,169 @@
+= Module Dict
+
+== Functions
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Dict]]
+=== data Dict[T]
+
+Native String-keyed map type backed by the runtime Dict implementation.
+Dict literals use braces with String keys: {"one": 1, "two": 2}.
+
+Example:
+```cfun
+let base = { "name": "Ada" }
+base + { "role": "admin" }
+```
+Dictionaries are immutable: adding or removing entries returns a new `Dict`.
+
+==== Functions
+
+===== public Dict[T].`+`(entry: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/String.adoc#type-String[String], T]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict with `entry` added or replaced.
+
+Example: `{"name": "Ada"} + ("name", "Grace")` returns a dictionary where
+`name` is `Grace`.
+
+
+===== public Dict[T].`+`(other: xref:#type-Dict[Dict][T]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict with all entries from `other` added or replaced.
+
+
+===== public Dict[T].`-`(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict without `key`.
+
+
+===== public Dict[T].`-`(other: xref:#type-Dict[Dict][T]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict without keys contained in `other`.
+
+
+===== public Dict[T].`?`(key: xref:../../capy/lang/String.adoc#type-String[String]): bool
+
+Returns true when this Dict contains the given key.
+
+
+===== public Dict[T].`|-`(predicate: (String,T)=>bool): xref:#type-Dict[Dict][T]
+
+Returns a new Dict containing only entries that satisfy `predicate`.
+
+
+===== public Dict[T].`|>`(initial: R, reducer: (R,String,T)=>R): R
+
+Combines all entries from left to right.
+
+
+===== public Dict[T].`|`(map: (String,T)=>Y): xref:#type-Dict[Dict][Y]
+
+Transforms each entry using `map`.
+
+
+===== public Dict[T].all(predicate: (String,T)=>bool): bool
+
+Returns true when every entry satisfies `predicate`.
+
+Empty dicts return true.
+
+
+===== public Dict[T].any(predicate: (String,T)=>bool): bool
+
+Returns true when at least one entry satisfies `predicate`.
+
+
+===== public Dict[T].contains_key(key: xref:../../capy/lang/String.adoc#type-String[String]): bool
+
+Returns true when this Dict contains the given key.
+
+
+===== public Dict[T].entries(): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/String.adoc#type-String[String], T]]
+
+Returns this Dict as a List of `(key, value)` tuples.
+
+Example: `{"one": 1}.entries()` returns `[("one", 1)]`.
+
+
+===== public Dict[T].filter(predicate: (String,T)=>bool): xref:#type-Dict[Dict][T]
+
+Returns a new Dict containing only entries that satisfy `predicate`.
+
+Example:
+```cfun
+{"debug": true, "prod": false} |- (_, enabled) => enabled
+```
+Returns only the `debug` entry.
+
+
+===== public Dict[T].get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][T]
+
+Returns the value for key; equivalent to dict[key].
+
+Example: `{"name": "Ada"}.get("name")` returns `Some { value: "Ada" }`.
+
+
+===== public Dict[T].is_empty(): bool
+
+Returns true when this Dict has no entries.
+
+
+===== public Dict[T].map(map: (String,T)=>Y): xref:#type-Dict[Dict][Y]
+
+Transforms each entry using `map`.
+
+Example:
+```cfun
+{"a": 1, "b": 2} | (_, value) => value * 10
+```
+Returns `{"a": 10, "b": 20}` while preserving keys.
+
+
+===== public Dict[T].minus(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict without `key`.
+
+
+===== public Dict[T].minus(other: xref:#type-Dict[Dict][T]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict without keys contained in `other`.
+
+
+===== public Dict[T].plus(entry: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/String.adoc#type-String[String], T]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict with `entry` added or replaced.
+
+
+===== public Dict[T].plus(other: xref:#type-Dict[Dict][T]): xref:#type-Dict[Dict][T]
+
+Returns a new Dict with all entries from `other` added or replaced.
+
+
+===== public Dict[T].reduce(initial: R, reducer: (R,String,T)=>R): R
+
+Combines all entries from left to right.
+
+Example:
+```cfun
+{"a": 1, "b": 2} |> 0, (total, _, value) => total + value
+```
+Returns `3`.
+
+
+===== public Dict[T].reject(predicate: (String,T)=>bool): xref:#type-Dict[Dict][T]
+
+Returns a new Dict without entries that satisfy `predicate`.
+
+
+===== public Dict[T].size(): xref:../../capy/collection/CollectionTypes.adoc#type-size[size]
+
+Returns the number of entries in this Dict.
+
+

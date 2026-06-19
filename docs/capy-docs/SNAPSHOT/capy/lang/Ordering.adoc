@@ -1,0 +1,39 @@
+= Module Ordering
+
+== Functions
+
+=== public from_int(value: int): xref:#type-Ordering[Ordering]
+
+Converts a negative, zero, or positive integer comparison result to
+`Ordering`.
+
+
+=== public reverse(ordering: xref:#type-Ordering[Ordering]): xref:#type-Ordering[Ordering]
+
+Reverses an ordering.
+
+
+=== public then_ordering(ordering: xref:#type-Ordering[Ordering], other: xref:#type-Ordering[Ordering]): xref:#type-Ordering[Ordering]
+
+Uses `other` only when `ordering` is `EQUAL`.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Ordering]]
+=== enum Ordering
+
+The result of comparing two values.
+
+==== Values
+
+* `EQUAL`
+* `GREATER`
+* `LESS`
+

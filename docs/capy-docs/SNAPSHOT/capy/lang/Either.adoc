@@ -1,0 +1,85 @@
+= Module Either
+
+== Functions
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Either]]
+=== union Either[L, R]
+
+Represents one of two possible values.
+
+`Left` is commonly used for the alternate or error branch, and `Right` for
+the primary success branch.
+
+==== Variants
+
+* xref:#type-Left[Left][L, R]
+* xref:#type-Right[Right][L, R]
+
+==== Functions
+
+===== public Either[L,R].`|>`(on_left: L=>Y, on_right: R=>Y): Y
+
+Reduces this value by applying the function for the current branch.
+
+
+===== public Either[L,R].flat_map_left(map: L=>Either[Y,R]): xref:#type-Either[Either][Y, R]
+
+Transforms the `Left` value into another `Either`.
+
+
+===== public Either[L,R].flat_map_right(map: R=>Either[L,Y]): xref:#type-Either[Either][L, Y]
+
+Transforms the `Right` value into another `Either`.
+
+
+===== public Either[L,R].map_left(map: L=>Y): xref:#type-Either[Either][Y, R]
+
+Transforms the `Left` value and leaves `Right` unchanged.
+
+
+===== public Either[L,R].map_right(map: R=>Y): xref:#type-Either[Either][L, Y]
+
+Transforms the `Right` value and leaves `Left` unchanged.
+
+
+===== public Either[L,R].reduce(on_left: L=>Y, on_right: R=>Y): Y
+
+Reduces this value by applying the function for the current branch.
+
+
+===== public Either[L,R].swap(): xref:#type-Either[Either][R, L]
+
+Swaps `Left` and `Right`.
+
+
+===== public Either[L,R].to_result(left_to_message: L=>String): xref:../../capy/lang/Result.adoc#type-Result[Result][R]
+
+Converts this `Either` into a string-error `Result`.
+
+
+[[type-Left]]
+=== data Left[L, R]
+
+The left branch of `Either`.
+
+==== Fields
+
+* `value`: L
+
+[[type-Right]]
+=== data Right[L, R]
+
+The right branch of `Either`.
+
+==== Fields
+
+* `value`: R
+

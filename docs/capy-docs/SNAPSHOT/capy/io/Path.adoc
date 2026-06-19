@@ -1,0 +1,234 @@
+= Module Path
+
+== Functions
+
+=== public from_string(path_string: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Path[Path]
+
+Parses a string path and normalizes empty, `.`, and `..` segments.
+
+Example:
+```cfun
+from_string("/var/log/../tmp/app.log")
+```
+Produces an absolute path with segments `["var", "tmp", "app.log"]`.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Path]]
+=== data Path
+
+Portable path value split into a root and path segments.
+
+Build paths with `from_string` or the `/` operator instead of manually
+constructing segments.
+
+Example:
+```cfun
+let path = from_string("~/projects") / "capybara" / "README.md"
+path.is_absolute()
+```
+The root remains `HOME`, and each joined segment is normalized separately.
+
+==== Fields
+
+* `prefix`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]]
+* `root`: xref:#type-PathRoot[PathRoot]
+* `segments`: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
+
+==== Functions
+
+===== public Path.`/`(segment: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Path[Path]
+
+Returns a new path with `segment` appended.
+
+Example:
+```cfun
+from_string("reports") / "junit" / "TEST-main.xml"
+```
+The original path is unchanged.
+
+
+===== public Path.`/`(other: xref:#type-Path[Path]): xref:#type-Path[Path]
+
+Returns a new path with `other` path segments appended.
+
+The root of `this` is preserved, so use this to join a base directory with a
+relative child path.
+
+
+===== public Path.append_bytes(bytes: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][byte]]]
+
+Appends bytes to this path, creating the file when needed, and returns the consumed bytes.
+
+
+===== public Path.append_lines(lines: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]]]
+
+Appends UTF-8 lines to this path, creating the file when needed, and returns the consumed lines.
+
+
+===== public Path.append_text(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+
+Appends UTF-8 text to this path, creating the file when needed, and returns the consumed text.
+
+
+===== public Path.copy(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Copies this file to the target path. Fails if the target already exists.
+
+
+===== public Path.copy_replace(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Copies this file to the target path, replacing an existing target.
+
+
+===== public Path.create_directories(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Creates a directory and any missing parent directories at this path, returning the created path.
+
+
+===== public Path.create_directory(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Creates a single directory at this path and returns the created path.
+
+
+===== public Path.create_file(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Creates a new empty file at this path and returns the created path.
+
+
+===== public Path.delete(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][bool]]
+
+Deletes the file or empty directory at this path and returns true when something was deleted.
+
+
+===== public Path.exists(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+
+Returns true when this path exists.
+
+
+===== public Path.is_absolute(): bool
+
+Returns true for absolute, home-rooted, and temp-rooted paths.
+
+
+===== public Path.is_directory(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+
+Returns true when this path exists and is a directory.
+
+
+===== public Path.is_file(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][bool]
+
+Returns true when this path exists and is a regular file.
+
+
+===== public Path.is_root(): bool
+
+Returns true when the path has a root but no child segments.
+
+
+===== public Path.list_entries(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Path[Path]]]]
+
+Lists direct child entries of this directory.
+
+
+===== public Path.move(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Moves this file or directory to the target path. Fails if the target already exists.
+
+
+===== public Path.move_replace(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Path[Path]]]
+
+Moves this file or directory to the target path, replacing an existing target.
+
+
+===== public Path.name(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Returns the final segment name, or the root name for root paths.
+
+Examples: `from_string("/tmp/app.log").name()` returns `app.log`,
+while `from_string("/").name()` returns `/`.
+
+
+===== public Path.normalize(): xref:#type-Path[Path]
+
+Returns a path with redundant segments removed.
+
+Relative leading `..` segments are preserved; rooted paths do not move above
+their root.
+
+Example:
+```cfun
+from_string("src/./main/../test").normalize()
+```
+Produces the relative path `src/test`.
+
+
+===== public Path.parent(): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Path[Path]]
+
+Returns the parent path, or `None` when this path has no parent segment.
+
+Example:
+```cfun
+from_string("docs/api/json.md").parent()
+```
+Returns `Some` containing `docs/api`.
+
+
+===== public Path.read_bytes(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][byte]]]
+
+Reads the entire file at this path as bytes.
+
+
+===== public Path.read_lines(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]]]
+
+Reads all lines from the file at this path as UTF-8 text.
+
+
+===== public Path.read_text(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+
+Reads the entire file at this path as UTF-8 text.
+
+
+===== public Path.size(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/io/ByteSize.adoc#type-byte_count[byte_count]]]
+
+Returns the size of this file in bytes.
+
+
+===== public Path.write_bytes(bytes: xref:../../capy/collection/List.adoc#type-List[List][byte]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][byte]]]
+
+Writes bytes to this path, replacing existing content, and returns the consumed bytes.
+
+
+===== public Path.write_lines(lines: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]]]
+
+Writes UTF-8 lines to this path, replacing existing content, and returns the consumed lines.
+
+
+===== public Path.write_text(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect][xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]]
+
+Writes UTF-8 text to this path, replacing existing content, and returns the consumed text.
+
+
+[[type-PathRoot]]
+=== enum PathRoot
+
+Kind of root used by a `Path`.
+
+`RELATIVE` paths are resolved from the current working directory,
+`ABSOLUTE` paths start at `/`, `HOME` paths start at `~`, and `TEMP`
+paths start at the platform temporary directory.
+
+==== Values
+
+* `ABSOLUTE`
+* `HOME`
+* `RELATIVE`
+* `TEMP`
+

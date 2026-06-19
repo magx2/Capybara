@@ -1,0 +1,269 @@
+= Module Time
+
+== Functions
+
+=== const:public HOURS_IN_DAY(): int
+
+
+
+=== const:public MAX_OFFSET_MINUTES(): int
+
+
+
+=== const:public MIDNIGHT(): xref:#type-Time[Time]
+
+
+
+=== const:public MINUTES_IN_DAY(): int
+
+
+
+=== const:public MINUTES_IN_HOUR(): int
+
+
+
+=== const:public NOON(): xref:#type-Time[Time]
+
+
+
+=== const:public NOON_HOUR(): xref:#type-hour[hour]
+
+
+
+=== const:public SECONDS_IN_DAY(): int
+
+
+
+=== const:public SECONDS_IN_HOUR(): int
+
+
+
+=== const:public SECONDS_IN_MINUTE(): int
+
+
+
+=== const:public ZERO_HOUR(): xref:#type-hour[hour]
+
+
+
+=== const:public ZERO_MINUTE(): xref:#type-minute[minute]
+
+
+
+=== const:public ZERO_SECOND(): xref:#type-second[second]
+
+
+
+=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Time[Time]]
+
+Parses an ISO 8601 time in basic or extended complete form.
+
+Example:
+```cfun
+from_iso_8601("14:05:09Z")
+from_iso_8601("140509+0200")
+```
+Offset-aware inputs preserve their offset in `offset_minutes`.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Parse]]
+=== data Parse[T]
+
+
+==== Fields
+
+* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
+* `value`: T
+
+[[type-Time]]
+=== data Time
+
+Clock time represented in 24-hour format.
+Component types validate `hour`, `minute`, `second`, and optional UTC offset.
+
+Example:
+```cfun
+Time {
+    hour: hour! { 9 },
+    minute: minute! { 30 },
+    second: ZERO_SECOND,
+    offset_minutes: None {}
+}
+```
+
+==== Fields
+
+* `hour`: xref:#type-hour[hour]
+* `minute`: xref:#type-minute[minute]
+* `offset_minutes`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-offset_minutes[offset_minutes]]
+* `second`: xref:#type-second[second]
+
+==== Functions
+
+===== public Time.add_hours(hours: int): xref:#type-Time[Time]
+
+Adds hours and wraps around a 24-hour day.
+
+
+===== public Time.add_minutes(minutes: int): xref:#type-Time[Time]
+
+Adds minutes and wraps around a 24-hour day.
+
+
+===== public Time.add_seconds(seconds: int): xref:#type-Time[Time]
+
+Adds seconds and wraps around a 24-hour day.
+
+Example: `MIDNIGHT.add_seconds(-1)` returns `23:59:59`.
+
+
+===== public Time.round_to_hours(): xref:#type-Time[Time]
+
+Returns a new time with minutes and seconds set to `0`.
+
+
+===== public Time.round_to_minutes(): xref:#type-Time[Time]
+
+Returns a new time with seconds set to `0`.
+
+
+===== public Time.to_hours(): int
+
+Returns the hour component.
+
+
+===== public Time.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Formats this time as an ISO 8601 extended time.
+
+Example:
+```cfun
+Time {
+    hour: hour! { 14 },
+    minute: minute! { 5 },
+    second: second! { 9 },
+    offset_minutes: Some { value: offset_minutes! { 120 } }
+}.to_iso_8601()
+```
+Returns `14:05:09+02:00`.
+
+
+===== public Time.to_minutes(): int
+
+Converts this time to minutes since midnight, truncating seconds.
+
+
+===== public Time.to_seconds(): int
+
+Converts this time to seconds since midnight.
+
+Example: `NOON.to_seconds()` returns `43200`.
+
+
+[[type-ZoneParse]]
+=== data ZoneParse
+
+
+==== Fields
+
+* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
+* `offset_minutes`: xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-offset_minutes[offset_minutes]]
+
+[[type-hour]]
+=== public hour: int
+
+Hour of day in 24-hour clock, in the range 0..23.
+
+==== Functions
+
+===== public hour.`<=`(other: xref:#type-hour[hour]): bool
+
+
+
+===== public hour.`<`(other: xref:#type-hour[hour]): bool
+
+
+
+===== public hour.`==`(other: xref:#type-hour[hour]): bool
+
+
+
+===== public hour.`>=`(other: xref:#type-hour[hour]): bool
+
+
+
+===== public hour.`>`(other: xref:#type-hour[hour]): bool
+
+
+
+
+[[type-minute]]
+=== public minute: int
+
+Minute of hour, in the range 0..59.
+
+==== Functions
+
+===== public minute.`<=`(other: xref:#type-minute[minute]): bool
+
+
+
+===== public minute.`<`(other: xref:#type-minute[minute]): bool
+
+
+
+===== public minute.`==`(other: xref:#type-minute[minute]): bool
+
+
+
+===== public minute.`>=`(other: xref:#type-minute[minute]): bool
+
+
+
+===== public minute.`>`(other: xref:#type-minute[minute]): bool
+
+
+
+
+[[type-offset_minutes]]
+=== public offset_minutes: int
+
+UTC offset measured in minutes, in the inclusive range -23:59..+23:59.
+
+
+[[type-second]]
+=== public second: int
+
+Second of minute, in the range 0..59.
+
+==== Functions
+
+===== public second.`<=`(other: xref:#type-second[second]): bool
+
+
+
+===== public second.`<`(other: xref:#type-second[second]): bool
+
+
+
+===== public second.`==`(other: xref:#type-second[second]): bool
+
+
+
+===== public second.`>=`(other: xref:#type-second[second]): bool
+
+
+
+===== public second.`>`(other: xref:#type-second[second]): bool
+
+
+
+
