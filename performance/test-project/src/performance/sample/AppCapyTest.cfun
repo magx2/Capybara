@@ -1,0 +1,60 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /performance/sample/App import { * }
+from /performance/sample/domain/ResultTypes import { WorkflowAccepted }
+from /performance/sample/interop/ObjectFunctionalInterop import { run_workflow, describe_with_facade }
+from /performance/sample/nativeinterop/NativeClock import { FixedClock }
+from /performance/sample/nativeinterop/NativeHasher import { StableHasher }
+from /performance/sample/nativeinterop/NativeProviders import { fixed_clock, stable_hasher }
+from /performance/sample/support/Fixtures import { fixture_order, invalid_order }
+
+fun tests(): Effect[TestFile] =
+    test_file("/performance/sample/App.cfun", [
+        happy_path_workflow().map(assertion => test("happy path workflow", () => assertion)),
+        native_providers_are_deterministic().map(assertion => test("native providers are deterministic", () => assertion)),
+        interop_facade_calls_functional_summary().map(assertion => test("interop facade calls functional summary", () => assertion)),
+        test("validation reports empty order", () => validation_reports_empty_order()),
+        test("deterministic summary is stable", () => deterministic_summary_is_stable()),
+        test("shipment report is deterministic", () => shipment_report_is_deterministic()),
+        test("metrics report summarizes fixture order", () => metrics_report_summarizes_fixture_order()),
+    ])
+
+fun happy_path_workflow(): Effect[Assert] =
+    let result <- run_workflow(fixture_order())
+    match result with
+    case WorkflowAccepted { order_id, total_cents, stamp } ->
+        assert_all([
+            assert_that(order_id).is_equal_to("stable-O-243-4242"),
+            assert_that(total_cents).is_equal_to(9394L),
+            assert_that(stamp).is_equal_to(4242L),
+        ])
+    case _ -> assert_that(false).is_true()
+
+fun native_providers_are_deterministic(): Effect[Assert] =
+    let native_clock <- fixed_clock()
+    let native_hasher <- stable_hasher()
+    let clock <- FixedClock(native_clock)
+    let hasher <- StableHasher(native_hasher)
+    let stamp <- clock.fixed_millis()
+    let hash <- hasher.stable_hash("O-243:" + stamp)
+    assert_all([
+        assert_that(stamp).is_equal_to(4242L),
+        assert_that(hash).is_equal_to("stable-O-243-4242"),
+    ])
+
+fun interop_facade_calls_functional_summary(): Effect[Assert] =
+    let summary <- describe_with_facade(fixture_order())
+    assert_that(summary).is_equal_to("O-243:Ada Buyer:9394:3")
+
+fun validation_reports_empty_order(): Assert =
+    assert_that(validation_message()).is_equal_to("order has no lines:O-BAD")
+
+fun deterministic_summary_is_stable(): Assert =
+    assert_that(deterministic_summary()).is_equal_to("O-243:Ada Buyer:9394:3")
+
+fun shipment_report_is_deterministic(): Assert =
+    assert_that(shipment_report()).is_equal_to("O-243:local:express:USD 724:bulk:capy-sticker|contact:email")
+
+fun metrics_report_summarizes_fixture_order(): Assert =
+    assert_that(metrics_report()).is_equal_to("3:6:9394:3:capy-mug|capy-hoodie")

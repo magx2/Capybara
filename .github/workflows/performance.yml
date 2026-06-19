@@ -1,0 +1,106 @@
+name: Performance
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: performance-${{ github.event.repository.default_branch }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Configure git user
+        run: |
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
+
+      - name: Restore open performance results branch data
+        shell: bash
+        run: |
+          set -euo pipefail
+          PERF_BRANCH="automation/performance-results"
+          if git ls-remote --exit-code --heads origin "${PERF_BRANCH}" >/dev/null 2>&1; then
+            git fetch origin "+refs/heads/${PERF_BRANCH}:refs/remotes/origin/${PERF_BRANCH}"
+            git checkout "origin/${PERF_BRANCH}" -- performance/results.csv performance/README.md || true
+          fi
+
+      - name: Run performance benchmark
+        shell: bash
+        run: performance/scripts/run-benchmark
+
+      - name: Create or update performance pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          PERF_BRANCH="automation/performance-results"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+
+          if git diff --quiet -- performance/results.csv performance/README.md; then
+            echo "No performance file changes to publish."
+            exit 0
+          fi
+
+          git switch -C "${PERF_BRANCH}"
+          git add performance/results.csv performance/README.md
+          git commit -m "chore(#243): update performance results for ${SHORT_SHA}"
+
+          PERF_BRANCH_SHA="$(git ls-remote --heads origin "${PERF_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${PERF_BRANCH_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${PERF_BRANCH}:${PERF_BRANCH_SHA}" origin "HEAD:${PERF_BRANCH}"
+          else
+            git push origin "HEAD:${PERF_BRANCH}"
+          fi
+
+          PR_URL="$(
+            gh pr list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${DEFAULT_BRANCH}" \
+              --head "${PERF_BRANCH}" \
+              --state open \
+              --json url \
+              --jq '.[0].url // empty'
+          )"
+          if [[ -n "${PR_URL}" ]]; then
+            echo "Performance pull request already exists: ${PR_URL}"
+          else
+            PR_URL="$(
+              gh pr create \
+                --repo "${GITHUB_REPOSITORY}" \
+                --base "${DEFAULT_BRANCH}" \
+                --head "${PERF_BRANCH}" \
+                --title "chore(#243): update performance results" \
+                --body "Updates compiler performance benchmark results generated from \`performance/results.csv\`."
+            )"
+            echo "Created performance pull request: ${PR_URL}"
+          fi

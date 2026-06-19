@@ -1,0 +1,32 @@
+from /capy/collection/List import { * }
+
+union OrderStatus = Draft | Submitted | Rejected
+data Draft {}
+data Submitted {}
+data Rejected { reason: String }
+
+union WorkflowResult = WorkflowAccepted | WorkflowRejected
+data WorkflowAccepted { order_id: String, total_cents: long, stamp: long }
+data WorkflowRejected { reason: String }
+
+union DomainResult[T] = DomainOk[T] | DomainProblem
+data DomainOk[T] { value: T }
+data DomainProblem { code: String, messages: List[String] }
+
+fun ok(value: T): DomainResult[T] = DomainOk { value }
+
+fun problem(code: String, message: String): DomainResult[String] =
+    DomainProblem { code: code, messages: [message] }
+
+fun DomainResult[T].map(mapper: T => Y): DomainResult[Y] =
+    match this with
+    case DomainOk { value } -> DomainOk { mapper(value) }
+    case DomainProblem p -> p
+
+fun DomainResult[T].message(): String =
+    match this with
+    case DomainOk _ -> "ok"
+    case DomainProblem { code, messages } ->
+        match messages[0] with
+        case Some { first } -> code + ":" + first
+        case None -> code

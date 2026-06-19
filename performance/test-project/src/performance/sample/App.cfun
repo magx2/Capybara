@@ -1,0 +1,29 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /performance/sample/domain/Analytics import { metrics_label }
+from /performance/sample/domain/Order import { describe_status, submit, summary }
+from /performance/sample/domain/ResultTypes import { WorkflowAccepted, WorkflowRejected }
+from /performance/sample/domain/Shipment import { quote_shipment, shipment_label }
+from /performance/sample/interop/ObjectFunctionalInterop import { run_workflow }
+from /performance/sample/support/Fixtures import { fixture_order, invalid_order }
+
+fun happy_path_summary(): Effect[String] =
+    let result <- run_workflow(fixture_order())
+    match result with
+    case WorkflowAccepted { order_id, total_cents, stamp } -> "accepted:{order_id}:{total_cents}:{stamp}"
+    case WorkflowRejected { reason } -> "rejected:{reason}"
+
+fun validation_message(): String =
+    submit(invalid_order()).reduce_left(
+        value => "submitted:" + describe_status(value),
+        message => message
+    )
+
+fun deterministic_summary(): String = summary(fixture_order())
+
+fun shipment_report(): String =
+    match quote_shipment(fixture_order()) with
+    case Success { quote } -> shipment_label(quote)
+    case Error { message } -> "shipment-error:" + message
+
+fun metrics_report(): String = metrics_label(fixture_order())

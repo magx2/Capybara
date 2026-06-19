@@ -1,0 +1,22 @@
+from /capy/lang/Option import { Some, None }
+from /performance/sample/domain/Order import { OrderLine }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkMethod, BenchmarkObjectField, BenchmarkType }
+
+@BenchmarkType(label: "inventory")
+class Inventory(mug_stock: int, hoodie_stock: int, sticker_stock: int) {
+    @BenchmarkObjectField(value: "sku stock")
+    field mug_stock: int = mug_stock
+
+    field hoodie_stock: int = hoodie_stock
+
+    field sticker_stock: int = sticker_stock
+
+    @BenchmarkMethod(value: "available quantity")
+    def available(sku: String): int =
+        if sku == "capy-mug" then this.mug_stock else if sku == "capy-hoodie" then this.hoodie_stock else if sku == "capy-sticker" then this.sticker_stock else 0
+
+    def can_reserve(lines: List[OrderLine]): bool = true
+
+    def reserve_line(line: OrderLine): int =
+        this.available(line.sku) - line.quantity
+}

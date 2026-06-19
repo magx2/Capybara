@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common"
+
+runner="${1:-java}"
+output_dir="${2:-${PROJECT_BUILD_DIR}/linked/${runner}/compile}"
+jar="$(capy_jar)"
+
+mkdir -p "${output_dir}"
+java -jar "${jar}" compile \
+    --input "${PROJECT_SRC_DIR}" \
+    --output "${output_dir}" \
+    --log WARN
