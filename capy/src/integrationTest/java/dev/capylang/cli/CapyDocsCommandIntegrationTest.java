@@ -77,6 +77,10 @@ class CapyDocsCommandIntegrationTest {
                     def render(prefix: String): String = prefix + this.name()
                 }
                 """);
+        writeSource(input.resolve("sample/nested/More.cfun"), """
+                /// More docs
+                data More { value: String }
+                """);
 
         var program = Capy.main(List.of("docs", "-i", input.toString(), "-o", output.toString())).unsafeRun();
 
@@ -88,7 +92,10 @@ class CapyDocsCommandIntegrationTest {
                 .contains("=== sample")
                 .contains("* xref:sample/Docs.adoc[Docs]")
                 .contains("* xref:sample/Objects.adoc[Objects]")
-                .doesNotContain("* xref:sample/Docs.adoc[sample/Docs]");
+                .contains("==== nested")
+                .contains("* xref:sample/nested/More.adoc[More]")
+                .doesNotContain("* xref:sample/Docs.adoc[sample/Docs]")
+                .doesNotContain("=== sample/nested");
 
         var docsFile = output.resolve("sample/Docs.adoc");
         assertThat(docsFile).isRegularFile();

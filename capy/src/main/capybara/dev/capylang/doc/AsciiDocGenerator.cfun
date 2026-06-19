@@ -43,27 +43,77 @@ private fun generate_asciidoc_index(program: CompiledProgram): Documentation =
     }
 
 private fun generate_module_index_entries(modules: List[CompiledModule]): String =
-    asciidoc_module_packages(modules)
+    (if asciidoc_module_package_has_modules("", modules)
+    then generate_module_package_index("", "root", modules, 3)
+    else "")
+    + generate_module_package_tree("", modules, 3)
+
+private fun generate_module_package_tree(parentPath: String, modules: List[CompiledModule], headingLevel: int): String =
+    asciidoc_module_package_segments(parentPath, modules)
         .sort((a,b) => a.compare(b))
-        .reduce("", (content, packagePath) => content + generate_module_package_index(packagePath, modules))
+        .reduce("", (content, segment) =>
+            let packagePath = asciidoc_join_package_path(parentPath, segment)
+            content
+            + generate_module_package_index(packagePath, segment, modules, headingLevel)
+            + generate_module_package_tree(packagePath, modules, headingLevel + 1)
+        )
 
-private fun asciidoc_module_packages(modules: List[CompiledModule]): List[String] =
-    modules
-        .reduce([], (packages, module) => asciidoc_add_string_if_missing(packages, module.path))
+private fun asciidoc_module_package_segments(parentPath: String, modules: List[CompiledModule]): List[String] =
+    modules.reduce([], (segments, module) =>
+        let segment = asciidoc_module_package_child_segment(parentPath, module.path)
+        if segment.is_empty()
+        then segments
+        else asciidoc_add_string_if_missing(segments, segment)
+    )
 
-private fun generate_module_package_index(packagePath: String, modules: List[CompiledModule]): String =
-    "=== {module_package_heading(packagePath)}\n\n"
-    + modules
+private fun asciidoc_module_package_child_segment(parentPath: String, packagePath: String): String =
+    if packagePath.is_empty()
+    then ""
+    else if parentPath.is_empty()
+    then asciidoc_first_path_segment(packagePath)
+    else if packagePath == parentPath
+    then ""
+    else
+        let prefix = parentPath + "/"
+        if packagePath.starts_with(prefix)
+        then asciidoc_first_path_segment(packagePath[prefix.size().value, packagePath.size().value])
+        else ""
+
+private fun asciidoc_first_path_segment(path: String): String =
+    let slash = asciidoc_first_index_of(path, "/", 0)
+    if slash < 0
+    then path
+    else path[0, slash]
+
+private fun asciidoc_join_package_path(parentPath: String, segment: String): String =
+    if parentPath.is_empty()
+    then segment
+    else parentPath + "/" + segment
+
+private fun asciidoc_module_package_has_modules(packagePath: String, modules: List[CompiledModule]): bool =
+    match modules[0] with
+    case None -> false
+    case Some { module } ->
+        if module.path == packagePath
+        then true
+        else asciidoc_module_package_has_modules(packagePath, modules[1:])
+
+private fun generate_module_package_index(packagePath: String, heading: String, modules: List[CompiledModule], headingLevel: int): String =
+    let entries = modules
         .sort((a,b) => a.name.compare(b.name))
         .reduce("", (content, module) =>
             if module.path == packagePath
             then content + "* xref:{module_doc_path(module)}[{module.name}]\n"
             else content
         )
-    + "\n"
+    if entries.is_empty()
+    then "{asciidoc_heading_marks(headingLevel)} {heading}\n\n"
+    else "{asciidoc_heading_marks(headingLevel)} {heading}\n\n" + entries + "\n"
 
-private fun module_package_heading(packagePath: String): String =
-    if packagePath.is_empty() then "root" else packagePath
+private fun asciidoc_heading_marks(headingLevel: int): String =
+    if headingLevel <= 0
+    then ""
+    else "=" + asciidoc_heading_marks(headingLevel - 1)
 
 private fun module_doc_path(module: CompiledModule): String =
     if module.path.is_empty()
