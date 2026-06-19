@@ -3,6 +3,7 @@ from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 from /capy/util/SemVer import { * }
 from /capy/lang/Option import { * }
+from /capy/lang/Ordering import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
@@ -51,6 +52,21 @@ fun tests(): Effect[TestFile] =
         test("sem_ver rejects negative minor", () => assert_that(sem_ver(0, -1, 0, None {}, None {})).fails("minor must be greater than or equal to 0")),
         test("sem_ver rejects negative patch", () => assert_that(sem_ver(0, 0, -1, None {}, None {})).fails("patch must be greater than or equal to 0")),
     ]
+    let comparison_test_cases = [
+        test("SemVer compares major components first", () => should_order_sem_ver("2.0.0", "1.999.999")),
+        test("SemVer compares minor components after equal majors", () => should_order_sem_ver("1.3.0", "1.2.999")),
+        test("SemVer compares patch components after equal major and minor components", () => should_order_sem_ver("1.2.4", "1.2.3")),
+        test("SemVer compares pre-release identifiers by SemVer precedence", () => assert_all([
+            should_order_sem_ver("1.0.0-alpha.1", "1.0.0-alpha"),
+            should_order_sem_ver("1.0.0-alpha.beta", "1.0.0-alpha.1"),
+            should_order_sem_ver("1.0.0-beta", "1.0.0-alpha.beta"),
+            should_order_sem_ver("1.0.0-beta.2", "1.0.0-beta"),
+            should_order_sem_ver("1.0.0-beta.11", "1.0.0-beta.2"),
+            should_order_sem_ver("1.0.0-rc.1", "1.0.0-beta.11"),
+            should_order_sem_ver("1.0.0", "1.0.0-rc.1"),
+        ])),
+        test("SemVer equality uses precedence and ignores build metadata", () => should_equal_sem_ver_precedence("1.2.3+build.1", "1.2.3+build.2")),
+    ]
 
     let failed_test_cases = ({
         "1" : "Unexpected end of version string!",
@@ -71,7 +87,7 @@ fun tests(): Effect[TestFile] =
         "1.2.3-asd+QĘT" : "Expected end of version string or `.` for next build identifier, but got `Ę`!", }
         .entries() | (sem_ver, expected_message) => test("should fail parsing {sem_ver}", () => should_fail_parse_with_message(sem_ver, expected_message))).as_list()
 
-    test_file("/capy/util/SemVer.cfun", component_test_cases + parse_test_cases + to_string_test_cases + failed_test_cases)
+    test_file("/capy/util/SemVer.cfun", component_test_cases + comparison_test_cases + parse_test_cases + to_string_test_cases + failed_test_cases)
 
 fun should_parse_sem_ver(str: String, expected: ExpectedSemVer) =
     assert_that(parse_semver(str)).succeeds(value => assert_all([
@@ -86,3 +102,37 @@ fun should_stringify_sem_ver(version: String) =
     assert_that(parse_semver(version)).succeeds(value => assert_that(value.to_string()).is_equal_to(version))
 
 fun should_fail_parse_with_message(sem_ver: String, expected_message: String) = assert_that(parse_semver(sem_ver)).fails(expected_message)
+
+fun should_order_sem_ver(greater: String, less: String): Assert =
+    assert_that(parse_semver(greater)).succeeds(greater_value =>
+        assert_that(parse_semver(less)).succeeds(less_value => assert_all([
+            assert_that(greater_value.compare(less_value)).is_equal_to(GREATER),
+            assert_that(less_value.compare(greater_value)).is_equal_to(LESS),
+            assert_that(greater_value > less_value).is_true(),
+            assert_that(greater_value >= less_value).is_true(),
+            assert_that(greater_value < less_value).is_false(),
+            assert_that(greater_value <= less_value).is_false(),
+            assert_that(greater_value == less_value).is_false(),
+            assert_that(less_value < greater_value).is_true(),
+            assert_that(less_value <= greater_value).is_true(),
+            assert_that(less_value > greater_value).is_false(),
+            assert_that(less_value >= greater_value).is_false(),
+            assert_that(less_value == greater_value).is_false(),
+        ])))
+
+fun should_equal_sem_ver_precedence(left: String, right: String): Assert =
+    assert_that(parse_semver(left)).succeeds(left_value =>
+        assert_that(parse_semver(right)).succeeds(right_value => assert_all([
+            assert_that(left_value.compare(right_value)).is_equal_to(EQUAL),
+            assert_that(right_value.compare(left_value)).is_equal_to(EQUAL),
+            assert_that(left_value == right_value).is_true(),
+            assert_that(right_value == left_value).is_true(),
+            assert_that(left_value >= right_value).is_true(),
+            assert_that(right_value >= left_value).is_true(),
+            assert_that(left_value <= right_value).is_true(),
+            assert_that(right_value <= left_value).is_true(),
+            assert_that(left_value > right_value).is_false(),
+            assert_that(right_value > left_value).is_false(),
+            assert_that(left_value < right_value).is_false(),
+            assert_that(right_value < left_value).is_false(),
+        ])))

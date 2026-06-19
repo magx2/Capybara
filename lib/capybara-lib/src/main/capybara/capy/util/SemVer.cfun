@@ -1,4 +1,5 @@
 from /capy/lang/Option import { Option, Some, None }
+from /capy/lang/Ordering import { Ordering, LESS, EQUAL, GREATER }
 from /capy/lang/Result import {*}
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
@@ -57,6 +58,110 @@ data SemVer {
     pre_release: Option[String],
     build_metadata: Option[String]
 }
+
+private data PreReleaseIdentifier { buffer: String, value: String }
+
+/// Returns true when this SemVer version has higher precedence than `other`.
+fun SemVer.`>`(other: SemVer): bool = this.compare(other) == GREATER
+
+/// Returns true when this SemVer version has the same or higher precedence than `other`.
+fun SemVer.`>=`(other: SemVer): bool = this.compare(other) != LESS
+
+/// Returns true when this SemVer version has lower precedence than `other`.
+fun SemVer.`<`(other: SemVer): bool = this.compare(other) == LESS
+
+/// Returns true when this SemVer version has the same or lower precedence than `other`.
+fun SemVer.`<=`(other: SemVer): bool = this.compare(other) != GREATER
+
+/// Returns true when this SemVer version has the same precedence as `other`.
+fun SemVer.`==`(other: SemVer): bool = this.compare(other) == EQUAL
+
+/// Compares this SemVer version with `other` using Semantic Versioning precedence.
+///
+/// Build metadata does not affect precedence.
+fun SemVer.compare(other: SemVer): Ordering =
+    match semver_compare_version_core(this, other) with
+    case EQUAL -> semver_compare_pre_release(this.pre_release, other.pre_release)
+    case order -> order
+
+private fun semver_compare_version_core(left: SemVer, right: SemVer): Ordering =
+    if left.major < right.major
+    then LESS
+    else if left.major > right.major
+        then GREATER
+        else if left.minor < right.minor
+            then LESS
+            else if left.minor > right.minor
+                then GREATER
+                else if left.patch < right.patch
+                    then LESS
+                    else if left.patch > right.patch
+                        then GREATER
+                        else EQUAL
+
+private fun semver_compare_pre_release(left: Option[String], right: Option[String]): Ordering =
+    match left with
+    case None ->
+        match right with
+        case None -> EQUAL
+        case Some -> GREATER
+    case Some { left_value } ->
+        match right with
+        case None -> LESS
+        case Some { right_value } -> semver_compare_pre_release_identifiers(left_value, right_value)
+
+@Recursive
+private fun semver_compare_pre_release_identifiers(left: String, right: String): Ordering =
+    let left_identifier = semver_take_pre_release_identifier(left, "")
+    let right_identifier = semver_take_pre_release_identifier(right, "")
+    match semver_compare_pre_release_identifier(left_identifier.value, right_identifier.value) with
+    case EQUAL ->
+        if left_identifier.buffer.is_empty() & right_identifier.buffer.is_empty()
+        then EQUAL
+        else if left_identifier.buffer.is_empty()
+            then LESS
+            else if right_identifier.buffer.is_empty()
+                then GREATER
+                else semver_compare_pre_release_identifiers(
+                    semver_drop_pre_release_separator(left_identifier.buffer),
+                    semver_drop_pre_release_separator(right_identifier.buffer)
+                )
+    case order -> order
+
+@Recursive
+private fun semver_take_pre_release_identifier(value: String, parsed: String): PreReleaseIdentifier =
+    match value[0] with
+    case None -> PreReleaseIdentifier { buffer: value, value: parsed }
+    case Some { char } when char == '.' -> PreReleaseIdentifier { buffer: value, value: parsed }
+    case Some { char } -> semver_take_pre_release_identifier(value[1, value.size()], parsed + char)
+
+private fun semver_drop_pre_release_separator(value: String): String =
+    match value[0] with
+    case Some { char } when char == '.' -> value[1, value.size()]
+    case _ -> value
+
+private fun semver_compare_pre_release_identifier(left: String, right: String): Ordering =
+    let left_numeric = semver_pre_release_identifier_is_numeric(left)
+    let right_numeric = semver_pre_release_identifier_is_numeric(right)
+    if left_numeric & right_numeric
+    then semver_compare_numeric_identifier(left, right)
+    else if left_numeric
+        then LESS
+        else if right_numeric
+            then GREATER
+            else left.compare(right)
+
+private fun semver_compare_numeric_identifier(left: String, right: String): Ordering =
+    if left.size() < right.size()
+    then LESS
+    else if left.size() > right.size()
+        then GREATER
+        else left.compare(right)
+
+private fun semver_pre_release_identifier_is_numeric(value: String): bool =
+    !value.is_empty() & value.all(char => match char with
+        case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
+        case _ -> false)
 
 /// Creates a semantic version after validating the numeric components.
 fun sem_ver(
