@@ -102,8 +102,10 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
                 throw error_kind("capy.test.runtime.boom", "boom")
             }
             return "ok"
+        } catch "capy.test.runtime.boom" error {
+            return "kind:" + error.message
         } catch error {
-            return error.message
+            return "fallback:" + error.kind
         }
     }
 

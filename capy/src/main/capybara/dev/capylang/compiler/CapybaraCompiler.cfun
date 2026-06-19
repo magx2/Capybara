@@ -5,7 +5,7 @@ from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
@@ -32,7 +32,7 @@ from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManife
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/compiler/parser/ConstantDeclaration import { ConstantDeclaration }
 from /dev/capylang/compiler/parser/Definition import { AnnotationApplication, AnnotationArgument, AnnotationBoolValue, AnnotationDeclaration, AnnotationDoubleValue, AnnotationFieldDeclaration, AnnotationFloatValue, AnnotationIntValue, AnnotationLongValue, AnnotationNothingValue, AnnotationStringValue, AnnotationTypeNameValue, AnnotationValue, ConstantDefinition, DataDeclaration, DataFieldDeclaration, DataParentDeclaration, DeriveApplication, DeriverDeclaration, Definition, EnumDeclaration, EnumValueDeclaration, FunctionDefinition, PrimitiveBackedTypeDeclaration, TypeDeclaration }
-from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, ThrowExpression, TryCatchExpression, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
+from /dev/capylang/compiler/parser/Expression import { BinaryExpression, BlockExpression, BoolLiteral, DataField, DataLiteral, DictEntry, DictLiteral, DoubleLiteral, Expression, FieldAccessExpression, FloatLiteral, FunctionCallExpression, FunctionReferenceExpression, IfExpression, IndexExpression, IntLiteral, LambdaExpression, LetBinding, ListLiteral, LongLiteral, MatchCase, MatchExpression, MethodCallExpression, ReduceExpression, SetLiteral, StringLiteral, ThrowExpression, TryCatchBranch, TryCatchExpression, TupleLiteral, UnaryExpression, UnsupportedExpression, VariableExpression, WithExpression }
 from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
 from /dev/capylang/compiler/parser/FunctionAnnotationArgument import { FunctionAnnotationArgument }
 from /dev/capylang/compiler/parser/FunctionAnnotationValue import { FunctionAnnotationBoolValue, FunctionAnnotationDoubleValue, FunctionAnnotationFloatValue, FunctionAnnotationIntValue, FunctionAnnotationLongValue, FunctionAnnotationNothingValue, FunctionAnnotationStringValue, FunctionAnnotationTypeNameValue, FunctionAnnotationValue }
@@ -1481,12 +1481,17 @@ private fun infer_return_type(expression: Expression, env: List[FunctionParamete
 private fun infer_try_catch_type(tryCatch: TryCatchExpression, env: List[FunctionParameter], depth: int): TypeReference =
     let bodyType = infer_return_type(tryCatch.body, env, depth + 1)
     if bodyType.name.is_empty()
-    then infer_return_type(tryCatch.catchBody, [FunctionParameter {
-        name: tryCatch.catchName,
-        typeReference: TypeReference { name: "/capy/lang/Result.Error", arguments: [] },
-        location: tryCatch.location
-    }] + env, depth + 1)
+    then infer_try_catch_branch_type(tryCatch.branches, env, depth + 1)
     else bodyType
+
+private fun infer_try_catch_branch_type(branches: List[TryCatchBranch], env: List[FunctionParameter], depth: int): TypeReference =
+    match branches[0] with
+    case None -> nothing_type()
+    case Some { branch } -> infer_return_type(branch.catchBody, [FunctionParameter {
+        name: branch.catchName,
+        typeReference: TypeReference { name: "/capy/lang/Result.Error", arguments: [] },
+        location: branch.location
+    }] + env, depth + 1)
 
 /// Collects block type environmentironment for compiler processing.
 private fun block_type_env(bindings: List[LetBinding], env: List[FunctionParameter], depth: int): List[FunctionParameter] =
@@ -2156,10 +2161,9 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         value: compile_expression_in_function(value, functionName),
         location: compile_location(location)
     }
-    case TryCatchExpression { body, catchName, catchBody, location } -> CompiledTryCatchExpression {
+    case TryCatchExpression { body, branches, location } -> CompiledTryCatchExpression {
         body: compile_expression_in_function(body, functionName),
-        catchName: catchName,
-        catchBody: compile_expression_in_function(catchBody, functionName),
+        branches: compile_try_catch_branches(branches, functionName),
         location: compile_location(location)
     }
     case BlockExpression { bindings, result, location } -> CompiledBlockExpression {
@@ -2167,6 +2171,17 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         result: compile_expression_in_function(result, functionName),
         location: compile_location(location)
     }
+
+private fun compile_try_catch_branches(branches: List[TryCatchBranch], functionName: String): List[CompiledTryCatchBranch] =
+    match branches[0] with
+    case None -> []
+    case Some { branch } -> [CompiledTryCatchBranch {
+        kind: branch.kind,
+        hasKind: branch.hasKind,
+        catchName: branch.catchName,
+        catchBody: compile_expression_in_function(branch.catchBody, functionName),
+        location: compile_location(branch.location)
+    }] + compile_try_catch_branches(branches[1:], functionName)
 
 /// Extracts compiled metadata for method call.
 private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =

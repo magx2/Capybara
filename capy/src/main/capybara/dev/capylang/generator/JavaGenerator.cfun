@@ -1,7 +1,7 @@
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
+from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
@@ -2785,6 +2785,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
         "capy.lang.Effect.pure(" + expression_code(argument(call.arguments, 0), env, valueType, module, allModules) + ")"
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_code(call.name)
+    else if result_error_function_call(call, module)
+    then result_error_function_call_code(call, env, module, allModules)
     else if stdlib_path_function_call(call, module)
     then stdlib_path_function_call_code(call, env, module, allModules)
     else if stdlib_io_function_call(call, module)
@@ -2838,6 +2840,15 @@ private fun function_value_call_code(call: CompiledFunctionCallExpression, env: 
     if parameters.is_empty()
     then target + ".get()"
     else target + ".apply(" + function_value_call_arguments(parameters, call.arguments, env, module, allModules) + ")"
+
+private fun result_error_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "error"
+    then "__capy_error(" + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules) + ")"
+    else "__capy_error("
+        + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+        + ", "
+        + expression_code(argument(call.arguments, 1), env, string_type(), module, allModules)
+        + ")"
 
 /// Formats function value call arguments for generated emission.
 private fun function_value_call_arguments(parameters: List[CompiledTypeReference], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5418,18 +5429,30 @@ private fun throw_expression_code(throwExpression: CompiledThrowExpression, env:
 
 private fun try_catch_expression_code(tryCatch: CompiledTryCatchExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let catchJavaName = "__capy_caught_error_" + tryCatch.location.line + "_" + tryCatch.location.column
-    let catchEnv = [java_binding_with_java_name(tryCatch.catchName, error_type(), catchJavaName)] + env
     "((java.util.function.Supplier<" + boxed_java_type(expectedType) + ">) () -> {" + newline()
     + "            try {" + newline()
     + "                return " + expression_code(tryCatch.body, env, expectedType, module, allModules) + ";" + newline()
     + "            } catch (__CapyThrownError __capy_error) {" + newline()
     + "                java.lang.Object " + catchJavaName + " = __capy_error.error();" + newline()
-    + "                return " + expression_code(tryCatch.catchBody, catchEnv, expectedType, module, allModules) + ";" + newline()
+    + try_catch_branch_code(tryCatch.branches, catchJavaName, env, expectedType, module, allModules)
     + "            } catch (java.lang.RuntimeException __capy_host_exception) {" + newline()
     + "                java.lang.Object " + catchJavaName + " = __capy_error(\"capy.runtime.host_exception\", dev.capylang.ResultUtil.safeMessage(__capy_host_exception), __capy_host_exception);" + newline()
-    + "                return " + expression_code(tryCatch.catchBody, catchEnv, expectedType, module, allModules) + ";" + newline()
+    + try_catch_branch_code(tryCatch.branches, catchJavaName, env, expectedType, module, allModules)
     + "            }" + newline()
     + "        }).get()"
+
+private fun try_catch_branch_code(branches: List[CompiledTryCatchBranch], catchJavaName: String, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match branches[0] with
+    case None -> "                throw new __CapyThrownError(" + catchJavaName + ");" + newline()
+    case Some { branch } ->
+        let catchEnv = [java_binding_with_java_name(branch.catchName, error_type(), catchJavaName)] + env
+        let branchBody = "                    return " + expression_code(branch.catchBody, catchEnv, expectedType, module, allModules) + ";" + newline()
+        if branch.hasKind
+        then "                if (__capy_error_kind_equals(" + catchJavaName + ", \"" + escape_java_string(branch.kind) + "\")) {" + newline()
+            + branchBody
+            + "                }" + newline()
+            + try_catch_branch_code(branches[1:], catchJavaName, env, expectedType, module, allModules)
+        else "                return " + expression_code(branch.catchBody, catchEnv, expectedType, module, allModules) + ";" + newline()
 
 /// Checks whether the current value satisfies the result block wraps success rule for compiler processing.
 private fun result_block_wraps_success(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, rawResultType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6640,8 +6663,13 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
 private fun try_catch_expression_type(tryCatch: CompiledTryCatchExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let bodyType = expression_type(tryCatch.body, env, module, allModules)
     if bodyType.name == "nothing"
-    then expression_type(tryCatch.catchBody, [java_binding_with_java_name(tryCatch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
+    then try_catch_branch_type(tryCatch.branches, env, module, allModules)
     else bodyType
+
+private fun try_catch_branch_type(branches: List[CompiledTryCatchBranch], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match branches[0] with
+    case None -> nothing_type()
+    case Some { branch } -> expression_type(branch.catchBody, [java_binding_with_java_name(branch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
 
 /// Infers the expression type for data literal.
 private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -6903,6 +6931,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_type(call.name)
+    else if result_error_function_call(call, module)
+    then error_type()
     else if stdlib_path_function_call(call, module)
     then stdlib_path_type()
     else if stdlib_io_function_call(call, module)
@@ -8251,10 +8281,17 @@ private fun expression_references_function(expression: CompiledExpression, name:
     case CompiledThrowExpression throwExpression -> expression_references_function(throwExpression.value, name)
     case CompiledTryCatchExpression tryCatch ->
         expression_references_function(tryCatch.body, name)
-            | expression_references_function(tryCatch.catchBody, name)
+            | try_catch_branches_reference_function(tryCatch.branches, name)
     case CompiledBlockExpression block ->
         let_bindings_reference_function(block.bindings, name)
             | expression_references_function(block.result, name)
+
+private fun try_catch_branches_reference_function(branches: List[CompiledTryCatchBranch], name: String): bool =
+    match branches[0] with
+    case None -> false
+    case Some { branch } ->
+        expression_references_function(branch.catchBody, name)
+            | try_catch_branches_reference_function(branches[1:], name)
 
 /// Checks whether an expression has the expressions reference function shape.
 private fun expressions_reference_function(expressions: List[CompiledExpression], name: String): bool =
@@ -9334,7 +9371,7 @@ private fun expression_emittable_as(expression: CompiledExpression, expectedType
             & expression_emittable_as(block.result, expectedType, block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledTryCatchExpression tryCatch ->
         expression_emittable_as(tryCatch.body, expectedType, env, module, allModules)
-            & expression_emittable_as(tryCatch.catchBody, expectedType, [java_binding_with_java_name(tryCatch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
+            & try_catch_branches_emittable_as(tryCatch.branches, expectedType, env, module, allModules)
     case _ -> expression_emittable(expression, env, module, allModules)
 
 /// Checks whether expressions can be emitted by the target backend.
@@ -9373,7 +9410,21 @@ private fun throw_expression_emittable(throwExpression: CompiledThrowExpression,
 
 private fun try_catch_expression_emittable(tryCatch: CompiledTryCatchExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     expression_emittable(tryCatch.body, env, module, allModules)
-        & expression_emittable(tryCatch.catchBody, [java_binding_with_java_name(tryCatch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
+        & try_catch_branches_emittable(tryCatch.branches, env, module, allModules)
+
+private fun try_catch_branches_emittable(branches: List[CompiledTryCatchBranch], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match branches[0] with
+    case None -> true
+    case Some { branch } ->
+        expression_emittable(branch.catchBody, [java_binding_with_java_name(branch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
+            & (if branch.hasKind then try_catch_branches_emittable(branches[1:], env, module, allModules) else true)
+
+private fun try_catch_branches_emittable_as(branches: List[CompiledTryCatchBranch], expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match branches[0] with
+    case None -> true
+    case Some { branch } ->
+        expression_emittable_as(branch.catchBody, expectedType, [java_binding_with_java_name(branch.catchName, error_type(), "__capy_caught_error")] + env, module, allModules)
+            & (if branch.hasKind then try_catch_branches_emittable_as(branches[1:], expectedType, env, module, allModules) else true)
 
 /// Checks whether match cases can be emitted by the target backend.
 private fun match_cases_emittable(cases: List[CompiledMatchCase], valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -9919,6 +9970,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
         case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
     else if stdlib_effect_function_call(call, module)
     then true
+    else if result_error_function_call(call, module)
+    then result_error_function_call_emittable(call, env, module, allModules)
     else if stdlib_path_function_call(call, module)
     then stdlib_path_function_call_emittable(call, env, module, allModules)
     else if stdlib_io_function_call(call, module)
@@ -10700,6 +10753,37 @@ private fun result_error_literal(typeName: String, imports: List[CompiledImportD
         | typeName == "Result.Error"
         | (typeName == "Error" & result_member_imported("Error", imports))
 
+private fun result_error_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    !function_defined(call.name, module.functions)
+        & result_member_imported(call.name, module.imports)
+        & (call.name == "error" | call.name == "error_kind")
+
+private fun result_error_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "error"
+    then one_string_argument(call.arguments, env, module, allModules)
+    else two_string_arguments(call.arguments, env, module, allModules)
+
+private fun one_string_argument(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { argument } ->
+        arguments[1:].is_empty()
+            & type_assignable(string_type(), expression_type(argument, env, module, allModules))
+            & expression_emittable(argument, env, module, allModules)
+
+private fun two_string_arguments(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match arguments[0] with
+    case None -> false
+    case Some { first } ->
+        match arguments[1] with
+        case None -> false
+        case Some { second } ->
+            arguments[2:].is_empty()
+                & type_assignable(string_type(), expression_type(first, env, module, allModules))
+                & type_assignable(string_type(), expression_type(second, env, module, allModules))
+                & expression_emittable(first, env, module, allModules)
+                & expression_emittable(second, env, module, allModules)
+
 /// Checks whether the current value satisfies the program success literal rule for compiler processing.
 private fun program_success_literal(typeName: String, imports: List[CompiledImportDeclaration]): bool =
     typeName == "/capy/lang/Program.Success"
@@ -11222,6 +11306,9 @@ private fun java_option_result_helpers(): String =
         + "    }" + newline() + newline()
         + "    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message, java.lang.Throwable throwable) {" + newline()
         + "        return dev.capylang.ResultUtil.error(kind, message, throwable);" + newline()
+        + "    }" + newline() + newline()
+        + "    private static boolean __capy_error_kind_equals(java.lang.Object error, java.lang.String kind) {" + newline()
+        + "        return java.util.Objects.equals(__capy_data_field(error, \"kind\"), kind);" + newline()
         + "    }" + newline() + newline()
         + "    private static final class __CapyThrownError extends RuntimeException {" + newline()
         + "        private final java.lang.Object error;" + newline() + newline()

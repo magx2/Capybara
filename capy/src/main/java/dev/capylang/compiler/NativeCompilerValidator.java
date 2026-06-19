@@ -493,7 +493,7 @@ public final class NativeCompilerValidator {
             case ThrowExpression throwExpression -> validateObjectExpression(module, throwExpression.value(), errors);
             case TryCatchExpression tryCatch -> {
                 validateObjectExpression(module, tryCatch.body(), errors);
-                validateObjectExpression(module, tryCatch.catchBody(), errors);
+                tryCatch.branches().forEach(branch -> validateObjectExpression(module, branch.catchBody(), errors));
             }
             case MethodCallExpression call -> {
                 validateObjectExpression(module, call.receiver(), errors);

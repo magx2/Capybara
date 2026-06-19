@@ -513,6 +513,8 @@ class Counter(seed: int) {
                 throw error_kind("app.counter.boom", "boom")
             }
             return "ok"
+        } catch "app.counter.boom" error {
+            return "handled:" + error.message
         } catch error {
             return error.message
         }

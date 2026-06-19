@@ -82,8 +82,11 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 - Capybara OO adopts the smallest common denominator shared by Java, Python, and JavaScript:
   - `throw expression`
   - `try { ... } catch error { ... }`
+  - `try { ... } catch "capy.error.kind" error { ... } catch error { ... }`
 - `try` / `catch` is statement-only in v1.
 - `catch` binds one immutable local `capy/lang/Result.Error` variable.
+- A catch branch may specify an error `kind` string before the variable name. Branches are checked in source order.
+- A catch branch without a kind is the fallback. If no branch matches and no fallback exists, the `Error` is rethrown.
 - `finally` is postponed.
 - Java-style checked exceptions and generated `throws` declarations are not used for value-level failures.
 - Java lowering is the reference implementation:

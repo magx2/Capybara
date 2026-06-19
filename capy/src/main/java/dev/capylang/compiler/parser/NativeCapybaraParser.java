@@ -565,11 +565,30 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     private static Expression objectTryCatchStatement(
             dev.capylang.parser.antlr.ObjectOrientedParser.TryCatchStatementContext ctx
     ) {
-        var catchClause = ctx.catchClause().get(0);
         return new Expression.TryCatchExpression(
                 objectStatementBlock(ctx.statementBlock()),
-                catchClause.identifier().getText(),
-                objectStatementBlock(catchClause.statementBlock()),
+                objectTryCatchBranches(ctx.catchClause()),
+                location(ctx)
+        );
+    }
+
+    private static List<Expression.TryCatchBranch> objectTryCatchBranches(
+            List<dev.capylang.parser.antlr.ObjectOrientedParser.CatchClauseContext> clauses
+    ) {
+        return clauses.stream()
+                .map(NativeCapybaraParser::objectTryCatchBranch)
+                .toList();
+    }
+
+    private static Expression.TryCatchBranch objectTryCatchBranch(
+            dev.capylang.parser.antlr.ObjectOrientedParser.CatchClauseContext ctx
+    ) {
+        var kind = ctx.STRING_LITERAL() == null ? "" : unquote(ctx.STRING_LITERAL().getText());
+        return new Expression.TryCatchBranch(
+                kind,
+                ctx.STRING_LITERAL() != null,
+                ctx.identifier().getText(),
+                objectStatementBlock(ctx.statementBlock()),
                 location(ctx)
         );
     }
