@@ -1,24 +1,9 @@
 from /capy/collection/List import { * }
-from /capy/collection/Dict import { * }
 from /capy/io/IO import { create_directories, write_text }
 from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
 from /capy/lang/Result import { * }
-from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
-from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
-from /dev/capylang/compiler/CompiledExpression import { CompiledIntLiteral, CompiledStringLiteral }
-from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
-from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
-from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
-from /dev/capylang/compiler/CompiledModule import { CompiledModule }
-from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
-from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
-from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
-from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
-from /dev/capylang/compiler/GenericDataType import { GenericDataType }
-from /dev/capylang/compiler/StaticImport import { StaticImport }
 from Documentation import { Documentation }
 from AsciiDocGenerator import { generate_asciidoc_docs }
 
@@ -30,12 +15,8 @@ enum DocType {
     ADOC,
 }
 
-fun main(args: List[String]): Effect[/capy/lang/Program] =
-    write_docs(from_string("build/capy-docs"), generate_docs(example_program(), ADOC)).map(result =>
-        match result with
-        case Success _ -> /capy/lang/Program.Success {}
-        case Error _ -> /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE }
-    )
+fun render_adoc_docs(program: CompiledProgram, outputDir: Path): Effect[Result[String]] =
+    write_docs(outputDir, generate_docs(program, ADOC))
 
 private fun write_docs(outputDir: Path, docs: List[Documentation]): Effect[Result[String]] =
     create_directories(outputDir).flat_map(directoryResult =>
@@ -66,187 +47,3 @@ private fun doc_create_parent_directories(path: Path): Effect[Result[Path]] =
     match path.parent() with
     case None -> pure(Success { path })
     case Some { parent } -> create_directories(parent)
-
-private fun example_program(): CompiledProgram =
-    CompiledProgram {
-        modules: [example_module()],
-        objectOrientedModules: [],
-        nativeProviders: empty_native_provider_manifest(),
-        nativeProviderCatalog: empty_native_provider_catalog()
-    }
-
-private fun example_module(): CompiledModule =
-    CompiledModule {
-        name: "ExampleDocs",
-        path: "dev/capylang/example",
-        types: {:}
-            + ("Shape", GenericDataType {})
-            + ("Circle", GenericDataType {})
-            + ("documented_id", GenericDataType {}),
-        visiblePrimitiveBackedTypes: {:}
-            + ("documented_id", CompiledPrimitiveBackedType {
-                name: "documented_id",
-                visibility: "public",
-                documentation: [
-                    "Primitive-backed identifier visible in generated docs."
-                ],
-                backingType: doc_string_type(),
-                location: example_location()
-            }),
-        functions: [
-            doc_schema_constant("__capy_schema_type|Shape", "Shape", [
-                "Base type for documented geometry values."
-            ]),
-            doc_schema_constant("__capy_schema_type|Circle", "Circle", [
-                "Circle data carries a radius field."
-            ]),
-            doc_schema_constant("__capy_schema_field|Circle|0", "radius|double", [
-                "Radius of the circle in layout units."
-            ]),
-            doc_schema_constant("__capy_schema_parent|Circle|0", "Shape", []),
-            doc_schema_constant("__capy_schema_type|documented_id", "documented_id", [
-                "Identifier type backed by a String value."
-            ]),
-            CompiledFunction {
-                name: "greeting",
-                visibility: "public",
-                documentation: [
-                    "Returns a tiny greeting for sleepy example readers.",
-                    "Useful when a documentation sample needs a friendly string."
-                ],
-                parameters: [],
-                returnType: doc_string_type(),
-                body: doc_string_literal("hello"),
-                location: example_location()
-            },
-            CompiledFunction {
-                name: "repeat",
-                visibility: "public",
-                documentation: [
-                    "Pretends to repeat a message a requested number of times.",
-                    "The example body stays intentionally simple for generator demos."
-                ],
-                parameters: [
-                    doc_parameter("message", doc_string_type()),
-                    doc_parameter("times", doc_int_type())
-                ],
-                returnType: doc_string_type(),
-                body: doc_string_literal("hello"),
-                location: example_location()
-            },
-            CompiledFunction {
-                name: "_default_count",
-                visibility: "private",
-                documentation: [
-                    "Keeps the sample count small enough for quick examples."
-                ],
-                parameters: [],
-                returnType: doc_int_type(),
-                body: doc_int_literal(1),
-                location: example_location()
-            },
-        ],
-        imports: [
-            CompiledImportDeclaration {
-                modulePath: "/capy/meta_prog/Reflection",
-                importedNames: ["DataValueInfo", "reflection"],
-                excludedNames: [],
-                wildcard: false,
-                qualified: false,
-                location: example_location()
-            },
-            CompiledImportDeclaration {
-                modulePath: "AnnotationReflectionDefinitions",
-                importedNames: [],
-                excludedNames: [],
-                wildcard: false,
-                qualified: true,
-                location: example_location()
-            }
-        ],
-        derivers: {:}
-            + ("DocSummary", CompiledDeriverDeclaration {
-                name: "DocSummary",
-                visibility: "public",
-                documentation: [
-                    "Deriver included so the example mirrors linked module metadata."
-                ],
-                methods: [
-                    CompiledFunction {
-                        name: "summary",
-                        visibility: "public",
-                        documentation: [
-                            "Returns a short summary for a documented value."
-                        ],
-                        parameters: [],
-                        returnType: doc_string_type(),
-                        body: doc_string_literal("summary"),
-                        location: example_location()
-                    }
-                ],
-                location: example_location()
-            }),
-        annotations: {:}
-            + ("DocLabel", CompiledAnnotationDeclaration {
-                name: "DocLabel",
-                visibility: "public",
-                documentation: [
-                    "Annotation metadata used by documentation examples."
-                ],
-                repeatable: false,
-                targets: ["data", "field", "fun"],
-                fields: [
-                    "label|String|false|nothing:",
-                    "order|int|true|int:1"
-                ],
-                location: example_location()
-            }),
-        staticImports: [
-            StaticImport {
-                className: "dev.capylang.example.ExampleDocs",
-                memberName: "greeting",
-                enumValue: false
-            }
-        ]
-    }
-
-private fun doc_schema_constant(name: String, value: String, documentation: List[String]): CompiledFunction =
-    CompiledFunction {
-        name: name,
-        visibility: "const:schema",
-        documentation: documentation,
-        parameters: [],
-        returnType: doc_string_type(),
-        body: doc_string_literal(value),
-        location: example_location()
-    }
-
-private fun doc_parameter(name: String, typeReference: CompiledTypeReference): CompiledFunctionParameter =
-    CompiledFunctionParameter {
-        name: name,
-        typeReference: typeReference,
-        location: example_location()
-    }
-
-private fun doc_string_type(): CompiledTypeReference =
-    CompiledTypeReference { name: "String", arguments: [] }
-
-private fun doc_int_type(): CompiledTypeReference =
-    CompiledTypeReference { name: "int", arguments: [] }
-
-private fun doc_string_literal(value: String): CompiledStringLiteral =
-    CompiledStringLiteral {
-        value: value,
-        source: "\"" + value + "\"",
-        location: example_location()
-    }
-
-private fun doc_int_literal(value: int): CompiledIntLiteral =
-    CompiledIntLiteral {
-        value: value,
-        source: "" + value,
-        location: example_location()
-    }
-
-private fun example_location(): CompiledSourceLocation =
-    CompiledSourceLocation { line: 1, column: 1 }

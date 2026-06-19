@@ -41,6 +41,7 @@ from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManife
 from /dev/capylang/compiler/StaticImport import { StaticImport }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }
 from /dev/capylang/compiler/parser/RawModuleFactory import { functional_raw_module, object_oriented_raw_module }
+from /dev/capylang/doc/DocGenerator import { render_adoc_docs }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/Generator import { generate }
@@ -56,6 +57,7 @@ fun main(args: List[String]): Effect[/capy/lang/Program] =
     case Some { "compile" } -> execute_compile(args[1:])
     case Some { "generate" } -> execute_generate(args[1:])
     case Some { "compile-generate" } -> execute_compile_generate(args[1:])
+    case Some { "docs" } -> execute_docs(args[1:])
     case Some { "package" } -> execute_package(args[1:])
     case Some { command } -> usage_error("Unknown command `" + command + "`.")
 
@@ -73,6 +75,11 @@ fun execute_compile_generate(args: List[String]): Effect[/capy/lang/Program] =
     match parse_compile_generate_options(args) with
     case UsageError { message } -> usage_error(message)
     case ParsedArgs { options } -> run_compile_generate(options)
+
+fun execute_docs(args: List[String]): Effect[/capy/lang/Program] =
+    match parse_docs_options(args) with
+    case UsageError { message } -> usage_error(message)
+    case ParsedArgs { options } -> run_docs(options)
 
 fun execute_package(args: List[String]): Effect[/capy/lang/Program] =
     match parse_package_options(args) with
@@ -107,6 +114,14 @@ data CompileGenerateOptions {
     native_wiring: Option[String],
     compile_tests: bool,
     include_java_lib_resources: bool,
+    log_level: LogLevel
+}
+
+data DocsOptions {
+    input: String,
+    output: String,
+    libs: Option[String],
+    native_wiring: Option[String],
     log_level: LogLevel
 }
 
@@ -257,6 +272,16 @@ private fun parse_compile_generate_options(args: List[String]): CliArgs[CompileG
                 case UsageError e -> e
                 case ParsedArgs { validated_options } -> compile_generate_options_from_named(output_type, validated_options)
 
+private fun parse_docs_options(args: List[String]): CliArgs[DocsOptions] =
+    match parse_named_options(args, 0, empty_named_options(), NamedOptionRules {
+        allow_libs: true,
+        allow_skip_java_lib: false,
+        allow_linked_output: false,
+        allow_test_outputs: false
+    }) with
+    case UsageError e -> e
+    case ParsedArgs { options } -> docs_options_from_named(options)
+
 private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
     match parse_package_options(args, 0, PartialPackageOptions {
         compiled_input: None {},
@@ -316,6 +341,22 @@ private fun compile_generate_options_from_named(output_type: String, options: Na
             include_java_lib_resources: !options.skip_java_lib,
             log_level: options.log_level
         }}
+
+private fun docs_options_from_named(options: NamedOptions): CliArgs[DocsOptions] =
+    if options.compile_tests
+    then UsageError { message: "Option `--compile-tests` is supported only for `compile` and `compile-generate`." }
+    else match required_option(options.input, "input", "docs") with
+        case UsageError e -> e
+        case ParsedArgs { input } ->
+            match required_option(options.output, "output", "docs") with
+            case UsageError e -> e
+            case ParsedArgs { output } -> ParsedArgs { DocsOptions {
+                input: input,
+                output: output,
+                libs: options.libs,
+                native_wiring: options.native_wiring,
+                log_level: options.log_level
+            }}
 
 private fun package_options_from_partial(options: PartialPackageOptions): CliArgs[PackageOptions] =
     match required_option(options.module, "module", "package") with
@@ -487,6 +528,7 @@ private fun help_text(): String =
     + "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]\n"
     + "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--linked-output <dir>] [--test-input <dir> --test-output <dir>] [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]\n"
     + "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]\n"
+    + "  capy docs [-l|--libs <dir1,dir2,...>] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]\n"
     + "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]\n"
     + "\n"
     + "Notes:\n"
@@ -497,6 +539,7 @@ private fun help_text(): String =
     + "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/List[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.\n"
     + "  generate input directory defaults to the current directory.\n"
     + "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath.\n"
+    + "  docs compiles Capybara sources and writes AsciiDoc documentation files.\n"
     + "  package writes `capy.cbin` next to the provided `capy.yml`."
 
 private fun capy_override_field(arg: String): String =
@@ -2643,6 +2686,37 @@ fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
                                 match writeResult with
                                 case Error { message } -> runtime_error(message)
                                 case Success _ -> pure(/capy/lang/Program.Success {})
+                            )
+                    )
+            )
+    )
+
+fun run_docs(options: DocsOptions): Effect[/capy/lang/Program] =
+    compiler_configuration(options.libs, options.native_wiring).flat_map(configurationResult =>
+        match configurationResult with
+        case Error { message } -> runtime_error(message)
+        case Success { configuration } ->
+            let inputPath = from_string(options.input)
+            let outputPath = from_string(options.output)
+            validate_output_directory(outputPath, options.output).flat_map(outputResult =>
+                match outputResult with
+                case Error { message } -> runtime_error(message)
+                case Success _ ->
+                    compile_source_directory(inputPath, options.input, configuration).flat_map(compilation =>
+                        match compilation with
+                        case Right { errors } ->
+                            print_compiler_errors(errors)
+                                .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                        case Left { program } ->
+                            clear_generated_output_directory(outputPath).flat_map(clearResult =>
+                                match clearResult with
+                                case Error { message } -> runtime_error(message)
+                                case Success _ ->
+                                    render_adoc_docs(program, outputPath).flat_map(writeResult =>
+                                        match writeResult with
+                                        case Error { message } -> runtime_error(message)
+                                        case Success _ -> pure(/capy/lang/Program.Success {})
+                                    )
                             )
                     )
             )
