@@ -20,10 +20,6 @@ Uses `other` only when `ordering` is `EQUAL`.
 
 
 
-== Annotations
-
-
-
 == Types
 
 [[type-Ordering]]

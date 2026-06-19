@@ -10,15 +10,7 @@
 
 
 
-=== private ceiling(value: double): long
-
-
-
 === public digits(number: int): int
-
-
-
-=== private floor(value: double): long
 
 
 
@@ -52,18 +44,6 @@ Floor modulo for long integers.
 
 Result has the same sign as divisor `b` (or is zero).
 `b` must be non-zero.
-
-
-=== private half_down(value: double): long
-
-
-
-=== private half_even(value: double): long
-
-
-
-=== private half_up(value: double): long
-
 
 
 === public max(a: int, b: int): int
@@ -161,10 +141,6 @@ let away_from_zero = round(-1.5, HALF_UP) // -2L
 let toward_zero = round(-1.5, HALF_DOWN)  // -1L
 ```
 
-
-
-
-== Annotations
 
 
 

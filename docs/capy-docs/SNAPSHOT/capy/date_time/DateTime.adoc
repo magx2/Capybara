@@ -2,11 +2,6 @@
 
 == Functions
 
-=== const:public UNIX_EPOCH(): xref:#type-DateTime[DateTime]
-
-Unix epoch date-time (`1970-01-01T00:00:00Z`).
-
-
 === public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-DateTime[DateTime]]
 
 Parses a UTC ISO 8601 date-time in basic or extended form.
@@ -28,7 +23,12 @@ Example: `from_timestamp(86400L)` returns `1970-01-02T00:00:00Z`.
 
 
 
-== Annotations
+== Constants
+
+=== const:public UNIX_EPOCH: xref:#type-DateTime[DateTime]
+
+Unix epoch date-time (`1970-01-01T00:00:00Z`).
+
 
 
 
@@ -141,23 +141,4 @@ from_iso_8601("2026-06-18T14:30:00+02:00")
 ```
 Returns `2026-06-18T12:30:00Z` after applying the offset.
 
-
-[[type-Split]]
-=== data Split
-
-
-==== Fields
-
-* `left`: xref:../../capy/lang/String.adoc#type-String[String]
-* `right`: xref:../../capy/lang/String.adoc#type-String[String]
-
-[[type-SplitScan]]
-=== data SplitScan
-
-
-==== Fields
-
-* `left`: xref:../../capy/lang/String.adoc#type-String[String]
-* `right`: xref:../../capy/lang/String.adoc#type-String[String]
-* `seen_separator`: bool
 

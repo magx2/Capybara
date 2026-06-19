@@ -1,45 +1,5 @@
 = Module String
 
-== Functions
-
-=== const:private LOWER_CASE_ASCII_LETTERS(): xref:#type-String[String]
-
-
-
-=== const:private UPPER_CASE_ASCII_LETTERS(): xref:#type-String[String]
-
-
-
-=== private string_ascii_case_pair(char: xref:#type-String[String], from: xref:#type-String[String], to: xref:#type-String[String]): xref:#type-String[String]
-
-
-
-=== private string_convert_ascii_case(value: xref:#type-String[String], from: xref:#type-String[String], to: xref:#type-String[String]): xref:#type-String[String]
-
-
-
-=== private string_index_of(value: xref:#type-String[String], part: xref:#type-String[String], idx: int): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
-
-
-
-=== private string_index_option(value: int): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
-
-
-
-=== private string_is_trim_whitespace(char: xref:#type-String[String]): bool
-
-
-
-=== private string_last_index_of(value: xref:#type-String[String], part: xref:#type-String[String], idx: int): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/collection/CollectionTypes.adoc#type-index[index]]
-
-
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-String]]

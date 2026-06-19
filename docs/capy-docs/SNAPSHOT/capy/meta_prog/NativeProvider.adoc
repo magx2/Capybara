@@ -1,9 +1,5 @@
 = Module NativeProvider
 
-== Functions
-
-
-
 == Annotations
 
 === public @NativeProvider
@@ -27,6 +23,4 @@ implementation for an interface.
 
 
 
-
-== Types
 

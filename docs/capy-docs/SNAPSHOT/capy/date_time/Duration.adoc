@@ -2,10 +2,6 @@
 
 == Functions
 
-=== const:public ZERO(): xref:#type-Duration[Duration]
-
-
-
 === public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Duration[Duration]]
 
 Parses an ISO 8601 duration string.
@@ -36,7 +32,11 @@ extended duration respectively.
 
 
 
-== Annotations
+== Constants
+
+=== const:public ZERO: xref:#type-Duration[Duration]
+
+
 
 
 
@@ -154,42 +154,6 @@ The output uses the symbolic ISO 8601 form and omits zero-valued components.
 
 Returns year component (`0` for week durations).
 
-
-[[type-DurationParse]]
-=== data DurationParse
-
-
-==== Fields
-
-* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
-* `has_component`: bool
-* `has_time_component`: bool
-* `in_time`: bool
-* `previous_order`: int
-* `value`: xref:#type-Parts[Parts]
-
-[[type-Parse]]
-=== data Parse[T]
-
-
-==== Fields
-
-* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: T
-
-[[type-Parts]]
-=== data Parts
-
-
-==== Fields
-
-* `days`: int
-* `hours`: int
-* `minutes`: int
-* `months`: int
-* `seconds`: int
-* `weeks`: int
-* `years`: int
 
 [[type-WeekDuration]]
 === data WeekDuration

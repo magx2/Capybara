@@ -2,34 +2,6 @@
 
 == Functions
 
-=== const:public BYTES_IN_GIB(): double
-
-
-
-=== const:public BYTES_IN_KIB(): double
-
-
-
-=== const:public BYTES_IN_MIB(): double
-
-
-
-=== const:public ONE_GIB(): xref:#type-byte_count[byte_count]
-
-
-
-=== const:public ONE_KIB(): xref:#type-byte_count[byte_count]
-
-
-
-=== const:public ONE_MIB(): xref:#type-byte_count[byte_count]
-
-
-
-=== const:public ZERO_BYTES(): xref:#type-byte_count[byte_count]
-
-
-
 === public add_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
 
 Function form of `left + right`.
@@ -57,7 +29,35 @@ Function form of `left - right`.
 
 
 
-== Annotations
+== Constants
+
+=== const:public BYTES_IN_GIB: double
+
+
+
+=== const:public BYTES_IN_KIB: double
+
+
+
+=== const:public BYTES_IN_MIB: double
+
+
+
+=== const:public ONE_GIB: xref:#type-byte_count[byte_count]
+
+
+
+=== const:public ONE_KIB: xref:#type-byte_count[byte_count]
+
+
+
+=== const:public ONE_MIB: xref:#type-byte_count[byte_count]
+
+
+
+=== const:public ZERO_BYTES: xref:#type-byte_count[byte_count]
+
+
 
 
 

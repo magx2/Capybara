@@ -1,13 +1,5 @@
 = Module Dict
 
-== Functions
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-Dict]]

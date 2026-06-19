@@ -2,18 +2,6 @@
 
 == Functions
 
-=== const:private TYPED_JSON_ENVELOPE_FIELD(): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private any_to_typed_json(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJson[TypedJson]]
-
-
-
-=== private any_to_typed_json_by_type(type_name: xref:../../capy/lang/String.adoc#type-String[String], value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJson[TypedJson]]
-
-
-
 === public deserialize(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
 
 Parses a JSON object string into a `JsonObject`.
@@ -45,116 +33,12 @@ need a custom data declaration. Supported values are strings, numeric
 primitives, nested dictionaries, and existing `Json` values.
 
 
-=== private deserialize_json(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-Json[Json]]]
-
-
-
-=== private deserialize_json_array(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonArray[JsonArray]]]
-
-
-
-=== private deserialize_json_bool(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonBool[JsonBool]]]
-
-
-
-=== private deserialize_json_null(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonNull[JsonNull]]]
-
-
-
-=== private deserialize_json_number(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonNumber[JsonNumber]]]
-
-
-
-=== private deserialize_json_object(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonObject[JsonObject]]]
-
-
-
-=== private deserialize_json_string(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonString[JsonString]]]
-
-
-
-=== private deserialize_key_value(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-KeyValue[KeyValue]]]
-
-
-
-=== private deserialize_key_values(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-Json[Json]]]]
-
-
-
 === public deserialize_typed(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
 
 Parses a JSON string produced by `serialize_typed` into typed JSON metadata.
 
 This does not reconstruct the original runtime Capy data value. It returns a
 typed AST that callers can inspect without Java reflection.
-
-
-=== private drop_white_space(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private escape_string(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private is_white_space(s: xref:../../capy/lang/String.adoc#type-String[String]): bool
-
-
-
-=== private json_bool_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][bool]
-
-
-
-=== private json_double_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][double]
-
-
-
-=== private json_field(object: xref:#type-JsonObject[JsonObject], name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Json[Json]]
-
-
-
-=== private json_long_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][long]
-
-
-
-=== private json_string_field(object: xref:#type-JsonObject[JsonObject], name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private json_string_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-=== private json_to_typed_json(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJson[TypedJson]]
-
-
-
-=== private parse_string(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:../../capy/lang/String.adoc#type-String[String]]]
-
-
-
-=== private parse_typed_array(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonArray[TypedJsonArray]]
-
-
-
-=== private parse_typed_data(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
-
-
-
-=== private parse_typed_fields(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-TypedJson[TypedJson]]]
-
-
-
-=== private parse_typed_object(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonObject[TypedJsonObject]]
-
-
-
-=== private parse_typed_package(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonPackage[TypedJsonPackage]]
-
-
-
-=== private parse_typed_value(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonValue[TypedJsonValue]]
-
 
 
 === public serialize(obj: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/String.adoc#type-String[String]
@@ -234,66 +118,6 @@ concrete variants (`Some`, `None`, `Success`, `Error`) instead of collapsing
 to their plain JSON payload representation.
 
 
-=== private typed_byte_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonByte[TypedJsonByte]]
-
-
-
-=== private typed_data_to_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
-
-
-
-=== private typed_double_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonDouble[TypedJsonDouble]]
-
-
-
-=== private typed_fields_to_json(fields: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-TypedJson[TypedJson]]): xref:#type-JsonObject[JsonObject]
-
-
-
-=== private typed_float_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonFloat[TypedJsonFloat]]
-
-
-
-=== private typed_int_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonInt[TypedJsonInt]]
-
-
-
-=== private typed_json_double_to_float(value: double): xref:../../capy/lang/Result.adoc#type-Result[Result][float]
-
-
-
-=== private typed_json_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
-
-
-
-=== private typed_json_to_json(json: xref:#type-TypedJson[TypedJson]): xref:#type-JsonObject[JsonObject]
-
-
-
-=== private typed_long_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonLong[TypedJsonLong]]
-
-
-
-=== private typed_option_to_json(option: xref:../../capy/lang/Option.adoc#type-Option[Option][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
-
-
-
-=== private typed_package_to_json(pkg: xref:#type-TypedJsonPackage[TypedJsonPackage]): xref:#type-JsonObject[JsonObject]
-
-
-
-=== private typed_result_to_json(result: xref:../../capy/lang/Result.adoc#type-Result[Result][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
-
-
-
-=== private typed_value_to_json(kind: xref:../../capy/lang/String.adoc#type-String[String], value: xref:#type-Json[Json]): xref:#type-JsonObject[JsonObject]
-
-
-
-
-
-== Annotations
-
 
 
 == Types
@@ -361,15 +185,6 @@ JSON boolean value.
 ==== Fields
 
 * `value`: bool
-
-[[type-JsonEntry]]
-=== data JsonEntry
-
-
-==== Fields
-
-* `key`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Json[Json]]
 
 [[type-JsonNull]]
 === data JsonNull
@@ -491,30 +306,6 @@ JSON object value wrapper.
 ==== Functions
 
 ===== public JsonValueObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
-
-
-
-[[type-KeyValue]]
-=== data KeyValue
-
-
-==== Fields
-
-* `key`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: xref:#type-Json[Json]
-
-[[type-Parse]]
-=== data Parse[T]
-
-
-==== Fields
-
-* `parsing_string`: xref:../../capy/lang/String.adoc#type-String[String]
-* `value`: T
-
-==== Functions
-
-===== private Parse[T].pop(): xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]], xref:#type-Parse[Parse][T]]
 
 
 

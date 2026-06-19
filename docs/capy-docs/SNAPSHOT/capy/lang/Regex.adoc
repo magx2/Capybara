@@ -2,14 +2,6 @@
 
 == Functions
 
-=== private drop_prefix(value: xref:../../capy/lang/String.adoc#type-String[String], size: int): xref:../../capy/lang/String.adoc#type-String[String]
-
-
-
-=== private find_all(pattern: xref:../../capy/lang/String.adoc#type-String[String], input: xref:../../capy/lang/String.adoc#type-String[String], acc: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Match[Match]]): xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Match[Match]]
-
-
-
 === public from_literal(pattern: xref:../../capy/lang/String.adoc#type-String[String], flags: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Regex[Regex]
 
 Builds a regex value from a pattern and flags.
@@ -19,14 +11,6 @@ Prefer regex literals when the pattern is known at compile time:
 let digits = regex/\d+/
 ```
 
-
-=== private split(pattern: xref:../../capy/lang/String.adoc#type-String[String], input: xref:../../capy/lang/String.adoc#type-String[String], current: xref:../../capy/lang/String.adoc#type-String[String], acc: xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]): xref:../../capy/collection/List.adoc#type-List[List][xref:../../capy/lang/String.adoc#type-String[String]]
-
-
-
-
-
-== Annotations
 
 
 

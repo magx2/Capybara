@@ -1,80 +1,66 @@
 = Module Program
 
-== Functions
+== Constants
 
-=== const:public DEFAULT_FAILED_EXIT_CODE(): 
+=== const:public DEFAULT_FAILED_EXIT_CODE: 
 
 Default failure exit code for generic program errors.
 
 
-=== const:public LAST_FAILED_EXIT_CODE(): 
+=== const:public LAST_FAILED_EXIT_CODE: 
 
 Last valid failure exit code.
 
 
-=== const:private MAX_FAILED_EXIT_CODE(): int
-
-Largest valid failure exit code.
-
-
-=== const:private MIN_FAILED_EXIT_CODE(): int
-
-Smallest valid failure exit code.
-
-
-=== const:public SIGABRT(): 
+=== const:public SIGABRT: 
 
 Abort signal exit code.
 
 
-=== const:public SIGALRM(): 
+=== const:public SIGALRM: 
 
 Alarm or timeout signal exit code.
 
 
-=== const:public SIGFPE(): 
+=== const:public SIGFPE: 
 
 Floating point exception signal exit code.
 
 
-=== const:public SIGHUP(): 
+=== const:public SIGHUP: 
 
 Hangup signal exit code.
 
 
-=== const:public SIGINT(): 
+=== const:public SIGINT: 
 
 Interrupt signal exit code.
 
 
-=== const:public SIGKILL(): 
+=== const:public SIGKILL: 
 
 Forced kill signal exit code.
 
 
-=== const:public SIGPIPE(): 
+=== const:public SIGPIPE: 
 
 Broken pipe signal exit code.
 
 
-=== const:public SIGQUIT(): 
+=== const:public SIGQUIT: 
 
 Quit signal exit code.
 
 
-=== const:public SIGSEGV(): 
+=== const:public SIGSEGV: 
 
 Segmentation fault signal exit code.
 
 
-=== const:public SIGTERM(): 
+=== const:public SIGTERM: 
 
 Termination signal exit code.
 
-
-
-
-== Annotations
 
 
 

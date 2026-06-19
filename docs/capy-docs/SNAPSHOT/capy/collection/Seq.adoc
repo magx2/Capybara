@@ -61,10 +61,6 @@ Returns an infinite sequence of zeros.
 
 
 
-== Annotations
-
-
-
 == Types
 
 [[type-Cons]]

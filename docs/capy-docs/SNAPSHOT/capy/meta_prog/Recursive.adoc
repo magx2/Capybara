@@ -1,9 +1,5 @@
 = Module Recursive
 
-== Functions
-
-
-
 == Annotations
 
 === public @Recursive
@@ -25,6 +21,4 @@ position.
 * Targets: fun
 
 
-
-== Types
 

@@ -21,10 +21,6 @@ Both describe a one-day interval.
 
 
 
-== Annotations
-
-
-
 == Types
 
 [[type-DateTimeDurationEnd]]
@@ -117,23 +113,4 @@ DateTimeStartEnd {
 ```
 Returns `1970-01-01T00:00:00Z/1970-01-01T01:00:00Z`.
 
-
-[[type-Split]]
-=== data Split
-
-
-==== Fields
-
-* `left`: xref:../../capy/lang/String.adoc#type-String[String]
-* `right`: xref:../../capy/lang/String.adoc#type-String[String]
-
-[[type-SplitScan]]
-=== data SplitScan
-
-
-==== Fields
-
-* `left`: xref:../../capy/lang/String.adoc#type-String[String]
-* `right`: xref:../../capy/lang/String.adoc#type-String[String]
-* `seen_separator`: bool
 

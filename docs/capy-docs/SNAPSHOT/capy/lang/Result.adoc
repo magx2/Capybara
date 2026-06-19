@@ -1,13 +1,5 @@
 = Module Result
 
-== Functions
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-Error]]

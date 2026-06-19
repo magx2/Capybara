@@ -1,13 +1,5 @@
 = Module Option
 
-== Functions
-
-
-
-== Annotations
-
-
-
 == Types
 
 [[type-None]]

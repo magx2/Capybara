@@ -20,10 +20,6 @@ documentation tools.
 
 
 
-== Annotations
-
-
-
 == Types
 
 [[type-AnnotationArgumentInfo]]
