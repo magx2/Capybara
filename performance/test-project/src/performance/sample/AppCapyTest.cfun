@@ -16,6 +16,8 @@ fun tests(): Effect[TestFile] =
         interop_facade_calls_functional_summary().map(assertion => test("interop facade calls functional summary", () => assertion)),
         test("validation reports empty order", () => validation_reports_empty_order()),
         test("deterministic summary is stable", () => deterministic_summary_is_stable()),
+        test("shipment report is deterministic", () => shipment_report_is_deterministic()),
+        test("metrics report summarizes fixture order", () => metrics_report_summarizes_fixture_order()),
     ])
 
 fun happy_path_workflow(): Effect[Assert] =
@@ -50,3 +52,9 @@ fun validation_reports_empty_order(): Assert =
 
 fun deterministic_summary_is_stable(): Assert =
     assert_that(deterministic_summary()).is_equal_to("O-243:Ada Buyer:9394:3")
+
+fun shipment_report_is_deterministic(): Assert =
+    assert_that(shipment_report()).is_equal_to("O-243:local:express:USD 724:bulk:capy-sticker|contact:email")
+
+fun metrics_report_summarizes_fixture_order(): Assert =
+    assert_that(metrics_report()).is_equal_to("3:6:9394:3:capy-mug|capy-hoodie")

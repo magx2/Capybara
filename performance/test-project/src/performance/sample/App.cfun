@@ -1,7 +1,9 @@
 from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
+from /performance/sample/domain/Analytics import { metrics_label }
 from /performance/sample/domain/Order import { describe_status, submit, summary }
 from /performance/sample/domain/ResultTypes import { WorkflowAccepted, WorkflowRejected }
+from /performance/sample/domain/Shipment import { quote_shipment, shipment_label }
 from /performance/sample/interop/ObjectFunctionalInterop import { run_workflow }
 from /performance/sample/support/Fixtures import { fixture_order, invalid_order }
 
@@ -18,3 +20,10 @@ fun validation_message(): String =
     )
 
 fun deterministic_summary(): String = summary(fixture_order())
+
+fun shipment_report(): String =
+    match quote_shipment(fixture_order()) with
+    case Success { quote } -> shipment_label(quote)
+    case Error { message } -> "shipment-error:" + message
+
+fun metrics_report(): String = metrics_label(fixture_order())
