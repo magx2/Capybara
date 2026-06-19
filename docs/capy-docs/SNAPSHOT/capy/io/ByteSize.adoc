@@ -1,0 +1,136 @@
+= Module ByteSize
+
+== Functions
+
+=== const:public BYTES_IN_GIB(): double
+
+
+
+=== const:public BYTES_IN_KIB(): double
+
+
+
+=== const:public BYTES_IN_MIB(): double
+
+
+
+=== const:public ONE_GIB(): xref:#type-byte_count[byte_count]
+
+
+
+=== const:public ONE_KIB(): xref:#type-byte_count[byte_count]
+
+
+
+=== const:public ONE_MIB(): xref:#type-byte_count[byte_count]
+
+
+
+=== const:public ZERO_BYTES(): xref:#type-byte_count[byte_count]
+
+
+
+=== public add_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+
+Function form of `left + right`.
+
+
+=== public byte_count_to_gib(value: xref:#type-byte_count[byte_count]): double
+
+Function form of `value.to_gib()`.
+
+
+=== public byte_count_to_kib(value: xref:#type-byte_count[byte_count]): double
+
+Function form of `value.to_kib()`.
+
+
+=== public byte_count_to_mib(value: xref:#type-byte_count[byte_count]): double
+
+Function form of `value.to_mib()`.
+
+
+=== public subtract_byte_count(left: xref:#type-byte_count[byte_count], right: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+
+Function form of `left - right`.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-byte_count]]
+=== public byte_count: long
+
+Non-negative number of bytes.
+
+==== Functions
+
+===== public byte_count.`+`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+
+
+
+===== public byte_count.`-`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+
+
+
+===== public byte_count.`<=`(other: xref:#type-byte_count[byte_count]): bool
+
+
+
+===== public byte_count.`<`(other: xref:#type-byte_count[byte_count]): bool
+
+
+
+===== public byte_count.`==`(other: xref:#type-byte_count[byte_count]): bool
+
+
+
+===== public byte_count.`>=`(other: xref:#type-byte_count[byte_count]): bool
+
+
+
+===== public byte_count.`>`(other: xref:#type-byte_count[byte_count]): bool
+
+
+
+===== public byte_count.minus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+
+Subtracts `other` from this byte count.
+
+The result is an error when subtraction would produce a negative byte count.
+
+
+===== public byte_count.plus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-byte_count[byte_count]]
+
+Adds two byte counts, returning `Error` on long overflow.
+
+Example:
+```cfun
+ONE_KIB + ONE_MIB
+```
+Returns `Success` containing `1049600` bytes.
+
+
+===== public byte_count.to_gib(): double
+
+Converts this byte count to gibibytes.
+
+
+===== public byte_count.to_kib(): double
+
+Converts this byte count to kibibytes.
+
+Example: `ONE_MIB.to_kib()` returns `1024.0`.
+
+
+===== public byte_count.to_mib(): double
+
+Converts this byte count to mebibytes.
+
+
+

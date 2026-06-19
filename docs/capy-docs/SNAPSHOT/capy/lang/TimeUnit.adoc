@@ -1,0 +1,396 @@
+= Module TimeUnit
+
+== Functions
+
+=== const:private DAYS_PER_WEEK(): long
+
+
+
+=== const:private HOURS_PER_DAY(): long
+
+
+
+=== const:private HOURS_PER_WEEK(): long
+
+
+
+=== const:private MICRO_SECONDS_PER_MILLI_SECOND(): long
+
+
+
+=== const:private MICRO_SECONDS_PER_SECOND(): long
+
+
+
+=== const:private MILLI_SECONDS_PER_SECOND(): long
+
+
+
+=== const:private MINUTES_PER_DAY(): long
+
+
+
+=== const:private MINUTES_PER_HOUR(): long
+
+
+
+=== const:private MINUTES_PER_WEEK(): long
+
+
+
+=== const:private NANO_SECONDS_PER_MICRO_SECOND(): long
+
+
+
+=== const:private NANO_SECONDS_PER_MILLI_SECOND(): long
+
+
+
+=== const:private NANO_SECONDS_PER_SECOND(): long
+
+
+
+=== const:private SECONDS_PER_DAY(): long
+
+
+
+=== const:private SECONDS_PER_HOUR(): long
+
+
+
+=== const:private SECONDS_PER_MINUTE(): long
+
+
+
+=== const:private SECONDS_PER_WEEK(): long
+
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-day]]
+=== public day: long
+
+Time duration measured in days.
+
+==== Functions
+
+===== public day.to_days(): xref:#type-day[day]
+
+
+
+===== public day.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public day.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public day.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public day.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public day.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public day.to_seconds(): xref:#type-second[second]
+
+
+
+===== public day.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-hour]]
+=== public hour: long
+
+Time duration measured in hours.
+
+==== Functions
+
+===== public hour.to_days(): xref:#type-day[day]
+
+
+
+===== public hour.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public hour.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public hour.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public hour.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public hour.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public hour.to_seconds(): xref:#type-second[second]
+
+
+
+===== public hour.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-micro_second]]
+=== public micro_second: long
+
+Time duration measured in microseconds.
+
+==== Functions
+
+===== public micro_second.to_days(): xref:#type-day[day]
+
+
+
+===== public micro_second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public micro_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public micro_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public micro_second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public micro_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public micro_second.to_seconds(): xref:#type-second[second]
+
+
+
+===== public micro_second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-milli_second]]
+=== public milli_second: long
+
+Time duration measured in milliseconds.
+
+==== Functions
+
+===== public milli_second.to_days(): xref:#type-day[day]
+
+
+
+===== public milli_second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public milli_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public milli_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public milli_second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public milli_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public milli_second.to_seconds(): xref:#type-second[second]
+
+
+
+===== public milli_second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-minute]]
+=== public minute: long
+
+Time duration measured in minutes.
+
+==== Functions
+
+===== public minute.to_days(): xref:#type-day[day]
+
+
+
+===== public minute.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public minute.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public minute.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public minute.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public minute.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public minute.to_seconds(): xref:#type-second[second]
+
+
+
+===== public minute.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-nano_second]]
+=== public nano_second: long
+
+Time duration measured in nanoseconds.
+
+==== Functions
+
+===== public nano_second.to_days(): xref:#type-day[day]
+
+
+
+===== public nano_second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public nano_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public nano_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public nano_second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public nano_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public nano_second.to_seconds(): xref:#type-second[second]
+
+
+
+===== public nano_second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-second]]
+=== public second: long
+
+Time duration measured in seconds.
+
+==== Functions
+
+===== public second.to_days(): xref:#type-day[day]
+
+
+
+===== public second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public second.to_seconds(): xref:#type-second[second]
+
+
+
+===== public second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-week]]
+=== public week: long
+
+Time duration measured in weeks.
+
+==== Functions
+
+===== public week.to_days(): xref:#type-day[day]
+
+
+
+===== public week.to_hours(): xref:#type-hour[hour]
+
+
+
+===== public week.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== public week.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== public week.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== public week.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== public week.to_seconds(): xref:#type-second[second]
+
+
+
+===== public week.to_weeks(): xref:#type-week[week]
+
+
+
+

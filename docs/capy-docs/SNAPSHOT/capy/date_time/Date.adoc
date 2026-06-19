@@ -1,0 +1,246 @@
+= Module Date
+
+== Functions
+
+=== const:public APRIL(): xref:#type-month[month]
+
+
+
+=== const:public AUGUST(): xref:#type-month[month]
+
+
+
+=== const:private DAYS_PER_100_YEARS_MINUS_1(): int
+
+
+
+=== const:private DAYS_PER_400_YEARS(): int
+
+
+
+=== const:private DAYS_PER_400_YEARS_MINUS_1(): int
+
+
+
+=== const:private DAYS_PER_4_YEARS_MINUS_1(): int
+
+
+
+=== const:private DAYS_PER_YEAR(): int
+
+
+
+=== const:public DECEMBER(): xref:#type-month[month]
+
+
+
+=== const:public FEBRUARY(): xref:#type-month[month]
+
+
+
+=== const:public JANUARY(): xref:#type-month[month]
+
+
+
+=== const:public JULY(): xref:#type-month[month]
+
+
+
+=== const:public JUNE(): xref:#type-month[month]
+
+
+
+=== const:public MARCH(): xref:#type-month[month]
+
+
+
+=== const:public MAY(): xref:#type-month[month]
+
+
+
+=== const:private MONTH_TO_DAY_BIAS(): int
+
+
+
+=== const:private MONTH_TO_DAY_NUMERATOR(): int
+
+
+
+=== const:public NOVEMBER(): xref:#type-month[month]
+
+
+
+=== const:public OCTOBER(): xref:#type-month[month]
+
+
+
+=== const:public SEPTEMBER(): xref:#type-month[month]
+
+
+
+=== const:public UNIX_DATE(): xref:#type-Date[Date]
+
+
+
+=== const:private UNIX_EPOCH_CIVIL_OFFSET_DAYS(): int
+
+
+
+=== private days_30_month(value: xref:#type-month[month]): bool
+
+Returns `true` when the month has 30 days.
+
+
+=== private days_31_month(value: xref:#type-month[month]): bool
+
+Returns `true` when the month has 31 days.
+
+
+=== public from_days_since_unix_epoch(days_since_epoch: int): xref:#type-Date[Date]
+
+Converts days since Unix epoch (`1970-01-01`) to `Date`.
+
+Example: `from_days_since_unix_epoch(1)` returns `1970-01-02`.
+
+
+=== public from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Date[Date]]
+
+Parses an ISO 8601 calendar date in basic or extended complete form.
+
+Example:
+```cfun
+from_iso_8601("2026-06-05")
+from_iso_8601("20260605")
+```
+Both forms return the same `Date`.
+
+
+=== private leap_year_value(year: int): bool
+
+Checks whether a year is a leap year in the Gregorian calendar.
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Date]]
+=== data Date
+
+Calendar date represented by day, month and year.
+
+The constructor validates the provided values and returns an error for
+impossible dates.
+
+Example:
+```cfun
+Date { day: 29, month: FEBRUARY, year: 2024 }
+Date { day: 29, month: FEBRUARY, year: 2025 }
+```
+The leap-year date succeeds; the invalid 2025 date returns `Error`.
+
+==== Fields
+
+* `day`: int
+* `month`: xref:#type-month[month]
+* `year`: int
+
+==== Functions
+
+===== public Date.add_days(days: int): xref:#type-Date[Date]
+
+Adds days to this date.
+
+Example: `UNIX_DATE.add_days(31)` returns `1970-02-01`.
+
+
+===== public Date.add_years_months(years: int, months: int): xref:#type-Date[Date]
+
+Adds years and months to this date, clamping the day to target month length.
+
+Example:
+```cfun
+Date! { day: 31, month: JANUARY, year: 2024 }.add_years_months(0, 1)
+```
+Returns `2024-02-29`, because February 2024 has no day 31.
+
+
+===== public Date.first_day_of_month(): xref:#type-Date[Date]
+
+Returns the first day of this date's month.
+
+
+===== public Date.last_day_of_month(): xref:#type-Date[Date]
+
+Returns the last valid day of this date's month.
+
+
+===== public Date.leap_year(): bool
+
+Returns `true` when this date is in a leap year.
+
+
+===== public Date.to_days_since_unix_epoch(): int
+
+Converts this date to days since Unix epoch (`1970-01-01`).
+
+Example: `UNIX_DATE.to_days_since_unix_epoch()` returns `0`.
+
+
+===== public Date.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Formats this date as an ISO 8601 calendar date.
+
+Example: `Date! { day: 5, month: JUNE, year: 2026 }.to_iso_8601()`
+returns `2026-06-05`.
+
+
+[[type-Parse]]
+=== data Parse[T]
+
+
+==== Fields
+
+* `buffer`: xref:../../capy/lang/String.adoc#type-String[String]
+* `value`: T
+
+[[type-month]]
+=== public month: int
+
+Calendar month number in the range 1..12.
+
+==== Functions
+
+===== public month.`<=`(other: xref:#type-month[month]): bool
+
+
+
+===== public month.`<`(other: xref:#type-month[month]): bool
+
+
+
+===== public month.`==`(other: xref:#type-month[month]): bool
+
+
+
+===== public month.`>=`(other: xref:#type-month[month]): bool
+
+
+
+===== public month.`>`(other: xref:#type-month[month]): bool
+
+
+
+===== public month.next(): xref:#type-month[month]
+
+
+
+===== public month.previous(): xref:#type-month[month]
+
+
+
+

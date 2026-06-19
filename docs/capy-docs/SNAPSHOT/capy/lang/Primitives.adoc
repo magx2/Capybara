@@ -1,0 +1,81 @@
+= Module Primitives
+
+== Functions
+
+=== const:public DOUBLE_BOUND(): long
+
+Number of distinct mantissa steps used to map random long values into `double`.
+
+
+=== const:public DOUBLE_BOUND_AS_DOUBLE(): double
+
+Floating-point representation of `DOUBLE_BOUND`.
+
+
+=== const:public FLOAT_BOUND(): long
+
+Number of distinct mantissa steps used to map random long values into `float`.
+
+
+=== const:public FLOAT_BOUND_AS_FLOAT(): float
+
+Floating-point representation of `FLOAT_BOUND`.
+
+
+=== const:public MAX_INT_VALUE(): int
+
+
+
+=== const:public MAX_LONG_VALUE(): long
+
+
+
+=== const:public MIN_INT_VALUE(): int
+
+
+
+=== const:public MIN_LONG_VALUE(): long
+
+
+
+=== public clamp_long_to_int(value: long): int
+
+
+
+=== public safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+
+
+
+=== public to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][bool]
+
+Parses this String as a bool.
+
+
+=== public to_double(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][double]
+
+Parses this String as a double.
+
+
+=== public to_float(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][float]
+
+Parses this String as a float.
+
+
+=== public to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+
+Parses this String as an int.
+
+
+=== public to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][long]
+
+Parses this String as a long.
+
+
+
+
+== Annotations
+
+
+
+== Types
+

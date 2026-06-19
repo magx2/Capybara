@@ -1,0 +1,670 @@
+= Module Json
+
+== Functions
+
+=== const:private TYPED_JSON_ENVELOPE_FIELD(): xref:../../capy/lang/String.adoc#type-String[String]
+
+
+
+=== private any_to_typed_json(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJson[TypedJson]]
+
+
+
+=== private any_to_typed_json_by_type(type_name: xref:../../capy/lang/String.adoc#type-String[String], value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJson[TypedJson]]
+
+
+
+=== public deserialize(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
+
+Parses a JSON object string into a `JsonObject`.
+
+Example:
+```cfun
+deserialize('{"name":"Ada","active":true}')
+```
+Returns `Success` with `JsonString` and `JsonBool` field values. Invalid JSON
+returns `Error` with a parser message.
+
+
+=== public deserialize(dict: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
+
+Converts a Capy dictionary of supported values into a JSON object.
+
+Example:
+```cfun
+deserialize({
+    "name": "Ada",
+    "score": 42,
+    "profile": {
+        "city": "London"
+    }
+})
+```
+This is useful when callers already have dictionary-shaped data and do not
+need a custom data declaration. Supported values are strings, numeric
+primitives, nested dictionaries, and existing `Json` values.
+
+
+=== private deserialize_json(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-Json[Json]]]
+
+
+
+=== private deserialize_json_array(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonArray[JsonArray]]]
+
+
+
+=== private deserialize_json_bool(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonBool[JsonBool]]]
+
+
+
+=== private deserialize_json_null(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonNull[JsonNull]]]
+
+
+
+=== private deserialize_json_number(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonNumber[JsonNumber]]]
+
+
+
+=== private deserialize_json_object(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonObject[JsonObject]]]
+
+
+
+=== private deserialize_json_string(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-JsonString[JsonString]]]
+
+
+
+=== private deserialize_key_value(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:#type-KeyValue[KeyValue]]]
+
+
+
+=== private deserialize_key_values(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-Json[Json]]]]
+
+
+
+=== public deserialize_typed(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+
+Parses a JSON string produced by `serialize_typed` into typed JSON metadata.
+
+This does not reconstruct the original runtime Capy data value. It returns a
+typed AST that callers can inspect without Java reflection.
+
+
+=== private drop_white_space(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
+
+
+
+=== private escape_string(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
+
+
+
+=== private is_white_space(s: xref:../../capy/lang/String.adoc#type-String[String]): bool
+
+
+
+=== private json_bool_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][bool]
+
+
+
+=== private json_double_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][double]
+
+
+
+=== private json_field(object: xref:#type-JsonObject[JsonObject], name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Json[Json]]
+
+
+
+=== private json_long_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][long]
+
+
+
+=== private json_string_field(object: xref:#type-JsonObject[JsonObject], name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]
+
+
+
+=== private json_string_value(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/lang/String.adoc#type-String[String]]
+
+
+
+=== private json_to_typed_json(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJson[TypedJson]]
+
+
+
+=== private parse_string(json: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Parse[Parse][xref:../../capy/lang/String.adoc#type-String[String]]]
+
+
+
+=== private parse_typed_array(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonArray[TypedJsonArray]]
+
+
+
+=== private parse_typed_data(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+
+
+
+=== private parse_typed_fields(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-TypedJson[TypedJson]]]
+
+
+
+=== private parse_typed_object(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonObject[TypedJsonObject]]
+
+
+
+=== private parse_typed_package(json: xref:#type-Json[Json]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonPackage[TypedJsonPackage]]
+
+
+
+=== private parse_typed_value(object: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonValue[TypedJsonValue]]
+
+
+
+=== public serialize(obj: xref:#type-JsonObject[JsonObject]): xref:../../capy/lang/String.adoc#type-String[String]
+
+Converts a JSON object to a compact JSON string.
+
+This is a convenience wrapper around `stringify` for object roots.
+
+
+=== public serialize_typed(obj: xref:#type-TypedJsonData[TypedJsonData]): xref:../../capy/lang/String.adoc#type-String[String]
+
+Serializes a typed data value to a JSON string.
+
+
+=== public stringify(json: xref:#type-Json[Json]): xref:../../capy/lang/String.adoc#type-String[String]
+
+Converts any JSON node to a compact JSON string.
+
+Example:
+```cfun
+stringify(JsonArray {
+    value: [JsonString { value: "Ada" }, JsonNumberLong { value: 42 }]
+})
+```
+Returns `["Ada",42]`. Strings and object keys are escaped according to JSON
+string rules.
+
+
+=== public stringify_typed(json: xref:#type-TypedJson[TypedJson]): xref:../../capy/lang/String.adoc#type-String[String]
+
+Converts typed JSON to a JSON string using the reserved typed envelope.
+
+The envelope field is `$capybaraTypedJson`, which separates typed data,
+object, array, and primitive value nodes from ordinary user JSON objects.
+
+
+=== public to_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-JsonObject[JsonObject]]
+
+Converts a Capy data value into a plain JSON object.
+
+Supported field values include strings, numbers, booleans, lists, sets,
+dictionaries, `Option`, `Result`, enums, nested data values, and values that
+are already JSON. `None` becomes `JsonNull`; `Some` is encoded as its value;
+`Success` is encoded as its value; `Error` is encoded as its message.
+
+Example:
+```cfun
+enum Status { ACTIVE, DISABLED }
+data Profile {
+    name: String,
+    tags: List[String],
+    status: Status,
+    nickname: Option[String]
+}
+
+to_json(Profile {
+    name: "Ada",
+    tags: ["compiler", "math"],
+    status: Status.ACTIVE,
+    nickname: None {}
+})
+```
+The result is a `JsonObject` where `tags` is a JSON array, `status` is the
+string `"ACTIVE"`, and `nickname` is `null`.
+
+If any field cannot be represented as JSON, the result is `Error` with the
+failing field name in the message.
+
+
+=== public to_typed_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+
+Converts a Capy data value into typed JSON metadata.
+
+The result keeps the concrete constructor name from reflection, package
+metadata, and typed field values. `Option` and `Result` fields keep their
+concrete variants (`Some`, `None`, `Success`, `Error`) instead of collapsing
+to their plain JSON payload representation.
+
+
+=== private typed_byte_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonByte[TypedJsonByte]]
+
+
+
+=== private typed_data_to_json(obj: data): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+
+
+
+=== private typed_double_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonDouble[TypedJsonDouble]]
+
+
+
+=== private typed_fields_to_json(fields: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-TypedJson[TypedJson]]): xref:#type-JsonObject[JsonObject]
+
+
+
+=== private typed_float_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonFloat[TypedJsonFloat]]
+
+
+
+=== private typed_int_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonInt[TypedJsonInt]]
+
+
+
+=== private typed_json_double_to_float(value: double): xref:../../capy/lang/Result.adoc#type-Result[Result][float]
+
+
+
+=== private typed_json_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result][int]
+
+
+
+=== private typed_json_to_json(json: xref:#type-TypedJson[TypedJson]): xref:#type-JsonObject[JsonObject]
+
+
+
+=== private typed_long_value(value: any): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonLong[TypedJsonLong]]
+
+
+
+=== private typed_option_to_json(option: xref:../../capy/lang/Option.adoc#type-Option[Option][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+
+
+
+=== private typed_package_to_json(pkg: xref:#type-TypedJsonPackage[TypedJsonPackage]): xref:#type-JsonObject[JsonObject]
+
+
+
+=== private typed_result_to_json(result: xref:../../capy/lang/Result.adoc#type-Result[Result][any]): xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-TypedJsonData[TypedJsonData]]
+
+
+
+=== private typed_value_to_json(kind: xref:../../capy/lang/String.adoc#type-String[String], value: xref:#type-Json[Json]): xref:#type-JsonObject[JsonObject]
+
+
+
+
+
+== Annotations
+
+
+
+== Types
+
+[[type-Json]]
+=== union Json
+
+JSON abstract syntax tree used by Capybara's parser and serializer.
+
+Use `JsonObject` and `JsonArray` when you want to build JSON explicitly,
+or use `to_json` / `Jsonable` when converting Capy data values by
+reflection.
+
+Example:
+```cfun
+let user = JsonObject {
+    value: {
+        "name": JsonString { value: "Ada" },
+        "tags": JsonArray { value: [JsonString { value: "admin" }] }
+    }
+}
+
+serialize(user)
+```
+Produces an object string with escaped keys and values, such as
+`{"name":"Ada","tags":["admin"]}`.
+
+==== Variants
+
+* xref:#type-JsonArray[JsonArray]
+* xref:#type-JsonObject[JsonObject]
+* xref:#type-JsonValue[JsonValue]
+
+[[type-JsonArray]]
+=== data JsonArray
+
+JSON array represented as an ordered list of JSON values.
+
+==== Fields
+
+* `value`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-Json[Json]]
+
+==== Functions
+
+===== public JsonArray.`+`(other: xref:#type-JsonArray[JsonArray]): xref:#type-JsonArray[JsonArray]
+
+Returns an array with values from both arrays.
+
+
+===== public JsonArray.`+`(other: xref:#type-Json[Json]): xref:#type-JsonArray[JsonArray]
+
+Returns an array with one value appended.
+
+
+===== public JsonArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+
+Returns the value at `idx`, or `None` when the index is outside the array.
+
+
+[[type-JsonBool]]
+=== data JsonBool
+
+JSON boolean value.
+
+==== Fields
+
+* `value`: bool
+
+[[type-JsonEntry]]
+=== data JsonEntry
+
+
+==== Fields
+
+* `key`: xref:../../capy/lang/String.adoc#type-String[String]
+* `value`: xref:../../capy/lang/Result.adoc#type-Result[Result][xref:#type-Json[Json]]
+
+[[type-JsonNull]]
+=== data JsonNull
+
+JSON null value.
+
+[[type-JsonNumber]]
+=== union JsonNumber
+
+JSON number value.
+
+Integers and longs use `JsonNumberLong`; fractional values use
+`JsonNumberDouble`.
+
+==== Variants
+
+* xref:#type-JsonNumberDouble[JsonNumberDouble]
+* xref:#type-JsonNumberLong[JsonNumberLong]
+
+[[type-JsonNumberDouble]]
+=== data JsonNumberDouble
+
+
+==== Fields
+
+* `value`: double
+
+[[type-JsonNumberLong]]
+=== data JsonNumberLong
+
+
+==== Fields
+
+* `value`: long
+
+[[type-JsonObject]]
+=== data JsonObject
+
+JSON object represented as a dictionary of JSON values keyed by strings.
+
+==== Fields
+
+* `value`: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-Json[Json]]
+
+==== Functions
+
+===== public JsonObject.`+`(other: xref:#type-JsonObject[JsonObject]): xref:#type-JsonObject[JsonObject]
+
+Returns an object containing entries from both objects.
+
+When both objects contain the same key, the value from `other` replaces the
+value from `this`.
+
+
+===== public JsonObject.`+`(other: xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/String.adoc#type-String[String], xref:#type-Json[Json]]): xref:#type-JsonObject[JsonObject]
+
+Returns an object with one entry added or replaced.
+
+Example:
+```cfun
+JsonObject { value: { "name": JsonString { value: "Ada" } } }
+    + ("active", JsonBool { value: true })
+```
+The resulting object has both `name` and `active` fields.
+
+
+===== public JsonObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+
+Returns the JSON value for `key`, or `None` when the field is missing.
+
+
+[[type-JsonString]]
+=== data JsonString
+
+JSON string value.
+
+==== Fields
+
+* `value`: xref:../../capy/lang/String.adoc#type-String[String]
+
+[[type-JsonValue]]
+=== union JsonValue
+
+Scalar JSON values and wrappers for object and array values.
+
+==== Variants
+
+* xref:#type-JsonBool[JsonBool]
+* xref:#type-JsonNull[JsonNull]
+* xref:#type-JsonNumber[JsonNumber]
+* xref:#type-JsonString[JsonString]
+* xref:#type-JsonValueArray[JsonValueArray]
+* xref:#type-JsonValueObject[JsonValueObject]
+
+[[type-JsonValueArray]]
+=== data JsonValueArray
+
+JSON array value wrapper.
+
+==== Fields
+
+* `value`: xref:#type-JsonArray[JsonArray]
+
+==== Functions
+
+===== public JsonValueArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+
+
+
+[[type-JsonValueObject]]
+=== data JsonValueObject
+
+JSON object value wrapper.
+
+==== Fields
+
+* `value`: xref:#type-JsonObject[JsonObject]
+
+==== Functions
+
+===== public JsonValueObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option][xref:#type-Json[Json]]
+
+
+
+[[type-KeyValue]]
+=== data KeyValue
+
+
+==== Fields
+
+* `key`: xref:../../capy/lang/String.adoc#type-String[String]
+* `value`: xref:#type-Json[Json]
+
+[[type-Parse]]
+=== data Parse[T]
+
+
+==== Fields
+
+* `parsing_string`: xref:../../capy/lang/String.adoc#type-String[String]
+* `value`: T
+
+==== Functions
+
+===== private Parse[T].pop(): xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple][xref:../../capy/lang/Option.adoc#type-Option[Option][xref:../../capy/lang/String.adoc#type-String[String]], xref:#type-Parse[Parse][T]]
+
+
+
+[[type-TypedJson]]
+=== union TypedJson
+
+Typed JSON representation that preserves Capy metadata.
+
+Unlike plain `Json`, this representation is opt-in and records data
+constructor names, package metadata, collection kind, and primitive numeric
+kind. Use it when structurally identical union variants must remain
+distinguishable after serialization.
+
+==== Variants
+
+* xref:#type-TypedJsonArray[TypedJsonArray]
+* xref:#type-TypedJsonData[TypedJsonData]
+* xref:#type-TypedJsonObject[TypedJsonObject]
+* xref:#type-TypedJsonValue[TypedJsonValue]
+
+[[type-TypedJsonArray]]
+=== data TypedJsonArray
+
+Typed array node used for collection values.
+
+The `kind` field records the source collection family, such as `List` or
+`Set`, because both are represented as JSON arrays.
+
+==== Fields
+
+* `kind`: xref:../../capy/lang/String.adoc#type-String[String]
+* `value`: xref:../../capy/collection/List.adoc#type-List[List][xref:#type-TypedJson[TypedJson]]
+
+[[type-TypedJsonBool]]
+=== data TypedJsonBool
+
+Typed bool value.
+
+==== Fields
+
+* `value`: bool
+
+[[type-TypedJsonByte]]
+=== data TypedJsonByte
+
+Typed byte value.
+
+The byte payload is stored as `int` while the `TypedJsonByte` constructor
+preserves the original numeric kind.
+
+==== Fields
+
+* `value`: int
+
+[[type-TypedJsonData]]
+=== data TypedJsonData
+
+Typed Capy data value with constructor name, package metadata, and typed fields.
+
+==== Fields
+
+* `fields`: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-TypedJson[TypedJson]]
+* `name`: xref:../../capy/lang/String.adoc#type-String[String]
+* `pkg`: xref:#type-TypedJsonPackage[TypedJsonPackage]
+
+[[type-TypedJsonDouble]]
+=== data TypedJsonDouble
+
+Typed double value.
+
+==== Fields
+
+* `value`: double
+
+[[type-TypedJsonFloat]]
+=== data TypedJsonFloat
+
+Typed float value.
+
+==== Fields
+
+* `value`: float
+
+[[type-TypedJsonInt]]
+=== data TypedJsonInt
+
+Typed int value.
+
+==== Fields
+
+* `value`: int
+
+[[type-TypedJsonLong]]
+=== data TypedJsonLong
+
+Typed long value.
+
+==== Fields
+
+* `value`: long
+
+[[type-TypedJsonNull]]
+=== data TypedJsonNull
+
+Typed null value.
+
+[[type-TypedJsonObject]]
+=== data TypedJsonObject
+
+Typed object node used for dictionary-like values.
+
+==== Fields
+
+* `value`: xref:../../capy/collection/Dict.adoc#type-Dict[Dict][xref:#type-TypedJson[TypedJson]]
+
+[[type-TypedJsonPackage]]
+=== data TypedJsonPackage
+
+Package metadata for a typed Capy data constructor.
+
+==== Fields
+
+* `name`: xref:../../capy/lang/String.adoc#type-String[String]
+* `path`: xref:../../capy/lang/String.adoc#type-String[String]
+
+[[type-TypedJsonString]]
+=== data TypedJsonString
+
+Typed string value.
+
+==== Fields
+
+* `value`: xref:../../capy/lang/String.adoc#type-String[String]
+
+[[type-TypedJsonValue]]
+=== union TypedJsonValue
+
+Typed primitive value.
+
+Numeric variants are separate so `int`, `long`, `float`, `double`, and
+`byte` values can be distinguished after a typed JSON round trip.
+
+==== Variants
+
+* xref:#type-TypedJsonBool[TypedJsonBool]
+* xref:#type-TypedJsonByte[TypedJsonByte]
+* xref:#type-TypedJsonDouble[TypedJsonDouble]
+* xref:#type-TypedJsonFloat[TypedJsonFloat]
+* xref:#type-TypedJsonInt[TypedJsonInt]
+* xref:#type-TypedJsonLong[TypedJsonLong]
+* xref:#type-TypedJsonNull[TypedJsonNull]
+* xref:#type-TypedJsonString[TypedJsonString]
+
