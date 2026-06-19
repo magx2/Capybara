@@ -687,6 +687,34 @@ Adds an assertion that the result is `Error`.
 Adds an assertion that the result is `Error` with the expected message.
 
 
+===== public ResultAssert[T].fails(assert: Error=>Assert): xref:#type-ResultAssert[ResultAssert][T]
+
+Adds an assertion that the result is `Error`, then runs nested assertions
+against the structured error value.
+
+Example:
+```cfun
+assert_that(load_user()).fails(error =>
+    assert_that(error.kind).is_equal_to("capy.user.not_found")
+)
+```
+
+
+===== public ResultAssert[T].fails_with_kind(kind: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert][T]
+
+Adds an assertion that the result is `Error` with the expected stable kind.
+
+
+===== public ResultAssert[T].fails_with_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert][T]
+
+Adds an assertion that the result is `Error` with the expected stable kind and message.
+
+
+===== public ResultAssert[T].fails_with_message_containing(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert][T]
+
+Adds an assertion that the result is `Error` with a message containing `message`.
+
+
 ===== public ResultAssert[T].is_equal_to(other: xref:../../capy/lang/Result.adoc#type-Result[Result][T]): xref:#type-ResultAssert[ResultAssert][T]
 
 
