@@ -206,8 +206,8 @@ private fun method_return_type_name(methods: List[MethodInfo], name: String): St
 
 private fun error_has_no_details(error: Error): bool =
     match error.details with
-    case NoDetails -> true
-    case _ -> false
+    case None -> true
+    case Some { value } -> false
 
 private fun error_location_is_present(location: Option[SourceLocation]): bool =
     match location with

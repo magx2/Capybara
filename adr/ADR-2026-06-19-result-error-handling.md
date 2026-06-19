@@ -40,7 +40,7 @@ functional and OO code:
 
 - `kind`: stable machine-readable classifier.
 - `message`: human-readable diagnostic text.
-- `details`: structured domain payload, or `NoDetails {}`.
+- `details`: optional structured domain payload.
 - `location`: optional source location.
 - `stack_trace`: structured backend-neutral frames when available.
 - `raw_stack`: optional backend-rendered stack text.

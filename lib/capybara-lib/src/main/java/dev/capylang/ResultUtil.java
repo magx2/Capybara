@@ -19,7 +19,7 @@ public final class ResultUtil {
         return errorFull(
                 kind,
                 message,
-                noDetails(),
+                Optional.empty(),
                 Optional.empty(),
                 List.of(),
                 Optional.empty(),
@@ -33,7 +33,7 @@ public final class ResultUtil {
         return errorFull(
                 kind,
                 message,
-                noDetails(),
+                Optional.empty(),
                 sourceLocation(stackTrace),
                 stackTrace,
                 Optional.of(rawStack(throwable)),
@@ -55,7 +55,7 @@ public final class ResultUtil {
         return errorFull(
                 stringField(map, "kind", "capy.error"),
                 stringField(map, "message", ""),
-                objectField(map, "details", noDetails()),
+                optionalObjectField(map, "details"),
                 sourceLocation(stackTrace),
                 stackTrace,
                 Optional.of(rawStack(throwable)),
@@ -67,7 +67,7 @@ public final class ResultUtil {
     public static Object errorFull(
             String kind,
             String message,
-            Object details,
+            Optional<Object> details,
             Optional<Object> location,
             List<Object> stackTrace,
             Optional<String> rawStack,
@@ -85,15 +85,6 @@ public final class ResultUtil {
                 Map.entry("cause", cause),
                 Map.entry("suppressed", suppressed)
         );
-    }
-
-    private static Object noDetails() {
-        return Map.of("__type", "NoDetails");
-    }
-
-    private static Object objectField(Map<?, ?> map, String name, Object fallback) {
-        var value = map.get(name);
-        return value == null ? fallback : value;
     }
 
     private static String stringField(Map<?, ?> map, String name, String fallback) {

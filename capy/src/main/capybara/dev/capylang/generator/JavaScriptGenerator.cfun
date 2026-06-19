@@ -5901,9 +5901,8 @@ private fun java_script_numeric_runtime_code(): String =
 
 /// Emits the JavaScript runtime support source for structured errors.
 private fun java_script_error_runtime_code(): String =
-    "function __capy_error_kind(kind, message) { return __capy_error_full(kind, message, __capy_no_details(), __capy_none(), [], __capy_none(), __capy_none(), []); }" + java_script_newline()
+    "function __capy_error_kind(kind, message) { return __capy_error_full(kind, message, __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), []); }" + java_script_newline()
     + "function __capy_error_full(kind, message, details, location, stackTrace, rawStack, cause, suppressed) { return __capy_data('Error', { kind: String(kind), message: String(message), details, location, stack_trace: stackTrace, raw_stack: rawStack, cause, suppressed }); }" + java_script_newline()
-    + "function __capy_no_details() { return __capy_data('NoDetails', Object.fromEntries([])); }" + java_script_newline()
     + "function __capy_some(value) { return __capy_data('Some', Object.fromEntries([['value', value]])); }" + java_script_newline()
     + "function __capy_stack_frames(rawStack) {" + java_script_newline()
     + "    return String(rawStack || '').split('\\n').slice(1).filter(line => line.trim().length > 0).map(raw => {" + java_script_newline()
@@ -5925,14 +5924,14 @@ private fun java_script_error_runtime_code(): String =
     + "function __capy_enrich_thrown_error(error, hostError) {" + java_script_newline()
     + "    const rawStack = hostError && hostError.stack ? String(hostError.stack) : '';" + java_script_newline()
     + "    const stackTrace = __capy_stack_frames(rawStack);" + java_script_newline()
-    + "    if (!__capy_data_is(error, 'Error')) return __capy_error_full('capy.runtime.invalid_thrown_error', 'OO throw expected capy/lang/Result.Error', __capy_no_details(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []);" + java_script_newline()
-    + "    return __capy_error_full(error.kind || 'capy.error', error.message || '', error.details || __capy_no_details(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), error.cause || __capy_none(), Array.isArray(error.suppressed) ? error.suppressed : []);" + java_script_newline()
+    + "    if (!__capy_data_is(error, 'Error')) return __capy_error_full('capy.runtime.invalid_thrown_error', 'OO throw expected capy/lang/Result.Error', __capy_none(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []);" + java_script_newline()
+    + "    return __capy_error_full(error.kind || 'capy.error', error.message || '', error.details || __capy_none(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), error.cause || __capy_none(), Array.isArray(error.suppressed) ? error.suppressed : []);" + java_script_newline()
     + "}" + java_script_newline()
     + "function __capy_host_error(error) {" + java_script_newline()
     + "    const host = error instanceof Error ? error : new Error(String(error));" + java_script_newline()
     + "    const rawStack = host.stack ? String(host.stack) : '';" + java_script_newline()
     + "    const stackTrace = __capy_stack_frames(rawStack);" + java_script_newline()
-    + "    return __capy_error_full('capy.runtime.host_exception', host.message || String(error), __capy_no_details(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []);" + java_script_newline()
+    + "    return __capy_error_full('capy.runtime.host_exception', host.message || String(error), __capy_none(), __capy_source_location_from_stack(stackTrace), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []);" + java_script_newline()
     + "}" + java_script_newline()
     + "class __CapyThrownError extends Error {" + java_script_newline()
     + "    constructor(error) { super(String(error && error.message ? error.message : '')); this.error = __capy_enrich_thrown_error(error, this); }" + java_script_newline()

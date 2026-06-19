@@ -36,14 +36,11 @@ data StackFrame {
     raw: String,
 }
 
-/// Empty structured details value for errors without a domain payload.
-data NoDetails {}
-
 /// Structured recoverable failure value.
 data Error {
     kind: String,
     message: String,
-    details: data,
+    details: Option[data],
     location: Option[SourceLocation],
     stack_trace: List[StackFrame],
     raw_stack: Option[String],
@@ -61,21 +58,21 @@ fun error(message: String): Error =
 
 /// Creates an Error with a stable kind and no structured details.
 fun error_kind(kind: String, message: String): Error =
-    error_full(kind, message, NoDetails {}, None {}, empty_stack_trace(), None {}, None {}, empty_suppressed())
+    error_full(kind, message, None {}, None {}, empty_stack_trace(), None {}, None {}, empty_suppressed())
 
 /// Creates an Error with a stable kind and structured details.
 fun error_with(kind: String, message: String, details: data): Error =
-    error_full(kind, message, details, None {}, empty_stack_trace(), None {}, None {}, empty_suppressed())
+    error_full(kind, message, Some { value: details }, None {}, empty_stack_trace(), None {}, None {}, empty_suppressed())
 
 /// Creates an Error with an explicit source location.
 fun error_at(kind: String, message: String, location: SourceLocation): Error =
-    error_full(kind, message, NoDetails {}, Some { value: location }, empty_stack_trace(), None {}, None {}, empty_suppressed())
+    error_full(kind, message, None {}, Some { value: location }, empty_stack_trace(), None {}, None {}, empty_suppressed())
 
 /// Creates an Error with all structured fields supplied by the caller.
 fun error_full(
     kind: String,
     message: String,
-    details: data,
+    details: Option[data],
     location: Option[SourceLocation],
     stack_trace: List[StackFrame],
     raw_stack: Option[String],
@@ -115,7 +112,7 @@ fun Error.with_message(message: String): Error =
 
 /// Returns a copy of this Error with another details payload.
 fun Error.with_details(details: data): Error =
-    error_full(this.kind, this.message, details, this.location, this.stack_trace, this.raw_stack, this.cause, this.suppressed)
+    error_full(this.kind, this.message, Some { value: details }, this.location, this.stack_trace, this.raw_stack, this.cause, this.suppressed)
 
 /// Returns a copy of this Error with another source location.
 fun Error.with_location(location: SourceLocation): Error =
