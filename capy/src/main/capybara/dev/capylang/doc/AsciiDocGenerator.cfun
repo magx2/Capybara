@@ -7,6 +7,12 @@ from /dev/capylang/compiler/CompiledExpression import { CompiledExpression, Comp
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
@@ -15,7 +21,7 @@ from Documentation import { Documentation }
 fun generate_asciidoc_docs(program: CompiledProgram): List[Documentation] =
     [generate_asciidoc_index(program)]
     + program.modules
-        .map(module => generate_asciidoc_docs_for_module(module))
+        .map(module => generate_asciidoc_docs_for_module(module, program.objectOrientedModules))
         .reduce([], (docs, doc) => docs + doc)
 
 private fun generate_asciidoc_index(program: CompiledProgram): Documentation =
@@ -42,7 +48,7 @@ private fun module_display_name(module: CompiledModule): String =
     then module.name
     else "{module.path}/{module.name}"
 
-private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documentation =
+private fun generate_asciidoc_docs_for_module(module: CompiledModule, objectOrientedUnits: List[CompiledObjectOrientedUnit]): Documentation =
     let typeNames = asciidoc_schema_type_names(module.functions)
     Documentation {
         path: "/" + module_doc_path(module),
@@ -54,6 +60,7 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule): Documenta
         + "== Types\n\n"
         + generate_schema_type_docs(module.functions)
         + generate_backend_type_docs(module.visiblePrimitiveBackedTypes, module.functions)
+        + generate_object_oriented_docs(module, objectOrientedUnits)
     }
 
 private fun generate_function_docs(functions: List[CompiledFunction], heading: String): String =
@@ -71,6 +78,7 @@ private fun asciidoc_top_level_functions(functions: List[CompiledFunction], type
 
 private fun asciidoc_top_level_function(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
     !asciidoc_schema_function(function)
+    & !asciidoc_object_helper_function(function)
     & !asciidoc_generated_local_function(function)
     & !function.name.starts_with("__capy_constructor|")
     & !asciidoc_function_belongs_to_type(function, typeNames)
@@ -93,6 +101,9 @@ private fun asciidoc_enum_value_function(function: CompiledFunction, functions: 
 private fun asciidoc_generated_local_function(function: CompiledFunction): bool =
     function.name.contains("__local__")
 
+private fun asciidoc_object_helper_function(function: CompiledFunction): bool =
+    function.visibility.starts_with("oo")
+
 private fun generate_parameters(parameters: List[CompiledFunctionParameter]): String =
     parameters
         .map(parameter => generate_parameter(parameter))
@@ -103,7 +114,10 @@ private fun generate_parameters(parameters: List[CompiledFunctionParameter]): St
         )
 
 private fun generate_documentation(function: CompiledFunction): String =
-    function.documentation.reduce("", (content, docLine) => content + docLine + "\n")
+    generate_text_documentation(function.documentation)
+
+private fun generate_text_documentation(documentation: List[String]): String =
+    documentation.reduce("", (content, docLine) => content + docLine + "\n")
 
 private fun generate_documentation_for_annotation(annotation: CompiledAnnotationDeclaration): String =
     annotation.documentation.reduce("", (content, docLine) => content + docLine + "\n")
@@ -112,7 +126,18 @@ private fun generate_parameter(parameter: CompiledFunctionParameter): String =
     "{parameter.name}: {type_name(parameter.typeReference)}"
 
 private fun type_name(type: CompiledTypeReference): String =
-    type.name + type_arguments(type.arguments)
+    asciidoc_type_reference_name(type.name) + type_arguments(type.arguments)
+
+private fun asciidoc_type_reference_name(name: String): String =
+    if name.starts_with("__capy_oo|")
+    then asciidoc_simple_qualified_name(name["__capy_oo|".size().value, name.size().value])
+    else name
+
+private fun asciidoc_simple_qualified_name(name: String): String =
+    let dot = asciidoc_last_index_of(name, ".", 0, -1)
+    if dot < 0
+    then name
+    else name[dot + 1, name.size().value]
 
 private fun type_arguments(arguments: List[CompiledTypeReference]): String =
     if arguments.is_empty()
@@ -206,6 +231,7 @@ private fun generate_type_function_docs(typeName: String, functions: List[Compil
 private fun asciidoc_type_functions(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
     functions.reduce([], (acc, function) =>
         if !asciidoc_schema_function(function)
+            & !asciidoc_object_helper_function(function)
             & !asciidoc_generated_local_function(function)
             & !function.name.starts_with("__capy_constructor|")
             & asciidoc_function_owner(function) == typeName
@@ -326,6 +352,110 @@ private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType],
 private fun generate_documentation_for_backend_type(type: CompiledPrimitiveBackedType): String =
     type.documentation.reduce("", (content, docLine) => content + docLine + "\n")
 
+private fun generate_object_oriented_docs(module: CompiledModule, units: List[CompiledObjectOrientedUnit]): String =
+    match units[0] with
+    case None -> ""
+    case Some { unit } ->
+        if unit.name == module.name & unit.path == module.path
+        then generate_object_oriented_unit_docs(unit)
+        else generate_object_oriented_docs(module, units[1:])
+
+private fun generate_object_oriented_unit_docs(unit: CompiledObjectOrientedUnit): String =
+    let content = generate_object_interface_docs(unit.interfaces) + generate_object_class_docs(unit.classes)
+    if content.is_empty()
+    then ""
+    else "\n\n== Object-Oriented\n\n" + content
+
+private fun generate_object_interface_docs(interfaces: List[CompiledObjectOrientedInterface]): String =
+    interfaces
+        .sort((a,b) => a.name.compare(b.name))
+        .map(interface => generate_object_interface_doc(interface))
+        .reduce("", (content, doc) => content + doc)
+
+private fun generate_object_interface_doc(interface: CompiledObjectOrientedInterface): String =
+    "=== {interface.visibility} {interface.kind} {interface.name}\n\n"
+    + generate_text_documentation(interface.documentation)
+    + "\n"
+    + generate_object_parent_docs(interface.parents)
+    + generate_object_method_docs(interface.methods)
+
+private fun generate_object_class_docs(classes: List[CompiledObjectOrientedClass]): String =
+    classes
+        .sort((a,b) => a.name.compare(b.name))
+        .map(class => generate_object_class_doc(class))
+        .reduce("", (content, doc) => content + doc)
+
+private fun generate_object_class_doc(class: CompiledObjectOrientedClass): String =
+    "=== {class.visibility} {object_class_open_label(class)}class {class.name}{object_parameters_signature(class.parameters)}\n\n"
+    + generate_text_documentation(class.documentation)
+    + "\n"
+    + generate_object_parent_docs(class.parents)
+    + generate_object_field_docs(class.fields)
+    + generate_object_init_docs(class.initBlocks)
+    + generate_object_method_docs(class.methods)
+
+private fun object_class_open_label(class: CompiledObjectOrientedClass): String =
+    if class.open then "open " else ""
+
+private fun object_parameters_signature(parameters: List[CompiledFunctionParameter]): String =
+    if parameters.is_empty()
+    then ""
+    else "({generate_parameters(parameters)})"
+
+private fun generate_object_parent_docs(parents: List[CompiledTypeReference]): String =
+    if parents.is_empty()
+    then ""
+    else "==== Parents\n\n"
+        + parents.reduce("", (content, parent) => content + "* `{type_name(parent)}`\n")
+        + "\n"
+
+private fun generate_object_field_docs(fields: List[CompiledObjectOrientedField]): String =
+    if fields.is_empty()
+    then ""
+    else "==== Fields\n\n"
+        + fields.reduce("", (content, field) => content + generate_object_field_doc(field))
+        + "\n"
+
+private fun generate_object_field_doc(field: CompiledObjectOrientedField): String =
+    "* `{field.visibility} {field.name}`: `{type_name(field.typeReference)}`{object_field_initializer_label(field)}\n"
+    + generate_object_member_documentation(field.documentation)
+
+private fun object_field_initializer_label(field: CompiledObjectOrientedField): String =
+    if field.hasValue then " (default)" else ""
+
+private fun generate_object_init_docs(initBlocks: List[CompiledObjectOrientedInitBlock]): String =
+    if initBlocks.is_empty()
+    then ""
+    else "==== Initializers\n\n" + generate_object_init_items(initBlocks, 1) + "\n"
+
+private fun generate_object_init_items(initBlocks: List[CompiledObjectOrientedInitBlock], idx: int): String =
+    match initBlocks[0] with
+    case None -> ""
+    case Some { initBlock } ->
+        "===== init {idx}\n\n"
+        + generate_text_documentation(initBlock.documentation)
+        + "\n"
+        + generate_object_init_items(initBlocks[1:], idx + 1)
+
+private fun generate_object_method_docs(methods: List[CompiledObjectOrientedMethod]): String =
+    if methods.is_empty()
+    then ""
+    else "==== Methods\n\n"
+        + methods
+            .sort((a,b) => a.name.compare(b.name))
+            .map(method => generate_object_method_doc(method))
+            .reduce("", (content, doc) => content + doc)
+
+private fun generate_object_method_doc(method: CompiledObjectOrientedMethod): String =
+    "===== {method.visibility} {method.name}({generate_parameters(method.parameters)}): {type_name(method.returnType)}\n\n"
+    + generate_text_documentation(method.documentation)
+    + "\n"
+
+private fun generate_object_member_documentation(documentation: List[String]): String =
+    if documentation.is_empty()
+    then ""
+    else "+\n" + generate_text_documentation(documentation) + "\n"
+
 private fun generate_annotation_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
     annotations
         .reduce("", (content, name, annotation) => content + generate_annotation_doc(annotation))
@@ -415,3 +545,11 @@ private fun asciidoc_first_index_of(value: String, needle: String, idx: int): in
         if char == needle
         then idx
         else asciidoc_first_index_of(value, needle, idx + 1)
+
+private fun asciidoc_last_index_of(value: String, needle: String, idx: int, found: int): int =
+    match value[idx] with
+    case None -> found
+    case Some { char } ->
+        if char == needle
+        then asciidoc_last_index_of(value, needle, idx + 1, idx)
+        else asciidoc_last_index_of(value, needle, idx + 1, found)

@@ -47,6 +47,36 @@ class CapyDocsCommandIntegrationTest {
                 /// Function docs
                 fun documented_function(message: String): String = message
                 """);
+        writeSource(input.resolve("sample/Objects.coo"), """
+                /// Named docs
+                interface Named {
+                    /// Name docs
+                    def name(): String
+                }
+
+                /// Greeting docs
+                trait Greeting {
+                    /// Greeting method docs
+                    def greeting(): String = "hello"
+                }
+
+                /// Widget docs
+                open class Widget(label: String): Named, Greeting {
+                    /// Label field docs
+                    field label: String = label
+
+                    /// Init docs
+                    init {
+                        return "ready"
+                    }
+
+                    /// Name method docs
+                    override def name(): String = this.label
+
+                    /// Render docs
+                    def render(prefix: String): String = prefix + this.name()
+                }
+                """);
 
         var program = Capy.main(List.of("docs", "-i", input.toString(), "-o", output.toString())).unsafeRun();
 
@@ -55,7 +85,8 @@ class CapyDocsCommandIntegrationTest {
         assertThat(indexFile).isRegularFile();
         assertThat(Files.readString(indexFile))
                 .contains("= Capybara Documentation")
-                .contains("* xref:sample/Docs.adoc[sample/Docs]");
+                .contains("* xref:sample/Docs.adoc[sample/Docs]")
+                .contains("* xref:sample/Objects.adoc[sample/Objects]");
 
         var docsFile = output.resolve("sample/Docs.adoc");
         assertThat(docsFile).isRegularFile();
@@ -86,6 +117,34 @@ class CapyDocsCommandIntegrationTest {
                 .doesNotContain("* `name`: `String`")
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
+
+        var objectsFile = output.resolve("sample/Objects.adoc");
+        assertThat(objectsFile).isRegularFile();
+        assertThat(Files.readString(objectsFile))
+                .contains("= Module Objects")
+                .contains("== Object-Oriented")
+                .contains("=== public interface Named")
+                .contains("Named docs")
+                .contains("===== public name(): String")
+                .contains("Name docs")
+                .contains("=== public trait Greeting")
+                .contains("Greeting docs")
+                .contains("===== public greeting(): String")
+                .contains("Greeting method docs")
+                .contains("=== public open class Widget(label: String)")
+                .contains("Widget docs")
+                .contains("==== Parents")
+                .contains("* `Named`")
+                .contains("* `Greeting`")
+                .contains("==== Fields")
+                .contains("* `public label`: `String` (default)")
+                .contains("Label field docs")
+                .contains("===== init 1")
+                .contains("Init docs")
+                .contains("===== public render(prefix: String): String")
+                .contains("Render docs")
+                .doesNotContain("__capy_oo_method|Widget|render")
+                .doesNotContain("\n=== oo:");
     }
 
     private static void writeSource(Path file, String source) throws IOException {
