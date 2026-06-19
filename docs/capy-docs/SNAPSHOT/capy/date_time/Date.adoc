@@ -25,55 +25,55 @@ Both forms return the same `Date`.
 
 == Constants
 
-=== const:public APRIL: xref:#type-month[month]
+=== public APRIL: xref:#type-month[month]
 
 
 
-=== const:public AUGUST: xref:#type-month[month]
+=== public AUGUST: xref:#type-month[month]
 
 
 
-=== const:public DECEMBER: xref:#type-month[month]
+=== public DECEMBER: xref:#type-month[month]
 
 
 
-=== const:public FEBRUARY: xref:#type-month[month]
+=== public FEBRUARY: xref:#type-month[month]
 
 
 
-=== const:public JANUARY: xref:#type-month[month]
+=== public JANUARY: xref:#type-month[month]
 
 
 
-=== const:public JULY: xref:#type-month[month]
+=== public JULY: xref:#type-month[month]
 
 
 
-=== const:public JUNE: xref:#type-month[month]
+=== public JUNE: xref:#type-month[month]
 
 
 
-=== const:public MARCH: xref:#type-month[month]
+=== public MARCH: xref:#type-month[month]
 
 
 
-=== const:public MAY: xref:#type-month[month]
+=== public MAY: xref:#type-month[month]
 
 
 
-=== const:public NOVEMBER: xref:#type-month[month]
+=== public NOVEMBER: xref:#type-month[month]
 
 
 
-=== const:public OCTOBER: xref:#type-month[month]
+=== public OCTOBER: xref:#type-month[month]
 
 
 
-=== const:public SEPTEMBER: xref:#type-month[month]
+=== public SEPTEMBER: xref:#type-month[month]
 
 
 
-=== const:public UNIX_DATE: xref:#type-Date[Date]
+=== public UNIX_DATE: xref:#type-Date[Date]
 
 
 

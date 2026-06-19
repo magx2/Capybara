@@ -2,62 +2,62 @@
 
 == Constants
 
-=== const:public DEFAULT_FAILED_EXIT_CODE: 
+=== public DEFAULT_FAILED_EXIT_CODE: 
 
 Default failure exit code for generic program errors.
 
 
-=== const:public LAST_FAILED_EXIT_CODE: 
+=== public LAST_FAILED_EXIT_CODE: 
 
 Last valid failure exit code.
 
 
-=== const:public SIGABRT: 
+=== public SIGABRT: 
 
 Abort signal exit code.
 
 
-=== const:public SIGALRM: 
+=== public SIGALRM: 
 
 Alarm or timeout signal exit code.
 
 
-=== const:public SIGFPE: 
+=== public SIGFPE: 
 
 Floating point exception signal exit code.
 
 
-=== const:public SIGHUP: 
+=== public SIGHUP: 
 
 Hangup signal exit code.
 
 
-=== const:public SIGINT: 
+=== public SIGINT: 
 
 Interrupt signal exit code.
 
 
-=== const:public SIGKILL: 
+=== public SIGKILL: 
 
 Forced kill signal exit code.
 
 
-=== const:public SIGPIPE: 
+=== public SIGPIPE: 
 
 Broken pipe signal exit code.
 
 
-=== const:public SIGQUIT: 
+=== public SIGQUIT: 
 
 Quit signal exit code.
 
 
-=== const:public SIGSEGV: 
+=== public SIGSEGV: 
 
 Segmentation fault signal exit code.
 
 
-=== const:public SIGTERM: 
+=== public SIGTERM: 
 
 Termination signal exit code.
 

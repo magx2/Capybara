@@ -18,55 +18,55 @@ Offset-aware inputs preserve their offset in `offset_minutes`.
 
 == Constants
 
-=== const:public HOURS_IN_DAY: int
+=== public HOURS_IN_DAY: int
 
 
 
-=== const:public MAX_OFFSET_MINUTES: int
+=== public MAX_OFFSET_MINUTES: int
 
 
 
-=== const:public MIDNIGHT: xref:#type-Time[Time]
+=== public MIDNIGHT: xref:#type-Time[Time]
 
 
 
-=== const:public MINUTES_IN_DAY: int
+=== public MINUTES_IN_DAY: int
 
 
 
-=== const:public MINUTES_IN_HOUR: int
+=== public MINUTES_IN_HOUR: int
 
 
 
-=== const:public NOON: xref:#type-Time[Time]
+=== public NOON: xref:#type-Time[Time]
 
 
 
-=== const:public NOON_HOUR: xref:#type-hour[hour]
+=== public NOON_HOUR: xref:#type-hour[hour]
 
 
 
-=== const:public SECONDS_IN_DAY: int
+=== public SECONDS_IN_DAY: int
 
 
 
-=== const:public SECONDS_IN_HOUR: int
+=== public SECONDS_IN_HOUR: int
 
 
 
-=== const:public SECONDS_IN_MINUTE: int
+=== public SECONDS_IN_MINUTE: int
 
 
 
-=== const:public ZERO_HOUR: xref:#type-hour[hour]
+=== public ZERO_HOUR: xref:#type-hour[hour]
 
 
 
-=== const:public ZERO_MINUTE: xref:#type-minute[minute]
+=== public ZERO_MINUTE: xref:#type-minute[minute]
 
 
 
-=== const:public ZERO_SECOND: xref:#type-second[second]
+=== public ZERO_SECOND: xref:#type-second[second]
 
 
 

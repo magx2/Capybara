@@ -137,23 +137,23 @@ Writes text only when the target file content is different.
 
 == Constants
 
-=== const:public CTRF_REPORT_FILE: 
+=== public CTRF_REPORT_FILE: 
 
 
 
-=== const:public CTRF_SPEC_VERSION: 
+=== public CTRF_SPEC_VERSION: 
 
 
 
-=== const:public JEST_REPORT_FILE: 
+=== public JEST_REPORT_FILE: 
 
 
 
-=== const:public JUNIT_PREFIX: 
+=== public JUNIT_PREFIX: 
 
 
 
-=== const:public OUTPUT_MANIFEST_FILE: 
+=== public OUTPUT_MANIFEST_FILE: 
 
 
 

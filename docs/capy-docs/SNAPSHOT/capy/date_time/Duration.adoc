@@ -34,7 +34,7 @@ extended duration respectively.
 
 == Constants
 
-=== const:public ZERO: xref:#type-Duration[Duration]
+=== public ZERO: xref:#type-Duration[Duration]
 
 
 

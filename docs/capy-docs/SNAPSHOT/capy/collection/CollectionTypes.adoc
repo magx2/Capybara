@@ -2,11 +2,11 @@
 
 == Constants
 
-=== const:public EMPTY: xref:#type-size[size]
+=== public EMPTY: xref:#type-size[size]
 
 
 
-=== const:public FIRST_ELEMENT: xref:#type-index[index]
+=== public FIRST_ELEMENT: xref:#type-index[index]
 
 
 
