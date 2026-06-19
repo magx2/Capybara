@@ -50,8 +50,7 @@ def human_duration(value):
     parts.append(f"{seconds}s")
     return " ".join(parts)
 
-def commit_url(short_sha):
-    full = short_sha
+def resolve_commit(short_sha):
     try:
         resolved = subprocess.run(
             ["git", "rev-parse", f"{short_sha}^{{commit}}"],
@@ -61,10 +60,16 @@ def commit_url(short_sha):
             stderr=subprocess.DEVNULL,
         ).stdout.strip()
         if resolved:
-            full = resolved
+            return resolved
     except Exception:
         pass
-    return f"{server_url}/{repository}/commit/{full}"
+    return short_sha
+
+def commit_url(short_sha):
+    return f"{server_url}/{repository}/commit/{resolve_commit(short_sha)}"
+
+def compare_url(previous_sha, current_sha):
+    return f"{server_url}/{repository}/compare/{resolve_commit(previous_sha)}...{resolve_commit(current_sha)}"
 
 def delta_text(current, previous):
     if current is None or previous is None or previous == 0:
@@ -118,6 +123,10 @@ else:
     for index, row in reversed(list(enumerate(rows))):
         short_sha = row["commit_sha"]
         lines.append(f"## {row['date']} [{short_sha}]({commit_url(short_sha)})")
+        if index > 0:
+            previous_sha = rows[index - 1]["commit_sha"]
+            lines.append("")
+            lines.append(f"[Changes since previous run]({compare_url(previous_sha, short_sha)})")
         lines.append("")
         for backend, backend_title in backends:
             lines.append(f"### {backend_title}")
