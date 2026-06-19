@@ -48,25 +48,21 @@ data Error {
     suppressed: List[Error]
 }
 
-private fun empty_stack_trace(): List[StackFrame] = []
-
-private fun empty_suppressed(): List[Error] = []
-
 /// Creates a generic Error with kind `capy.error`.
 fun error(message: String): Error =
     error_kind("capy.error", message)
 
 /// Creates an Error with a stable kind and no structured details.
 fun error_kind(kind: String, message: String): Error =
-    error_full(kind, message, None {}, None {}, empty_stack_trace(), None {}, None {}, empty_suppressed())
+    error_full(kind, message, None {}, None {}, [], None {}, None {}, [])
 
 /// Creates an Error with a stable kind and structured details.
 fun error_with(kind: String, message: String, details: data): Error =
-    error_full(kind, message, Some { value: details }, None {}, empty_stack_trace(), None {}, None {}, empty_suppressed())
+    error_full(kind, message, Some { value: details }, None {}, [], None {}, None {}, [])
 
 /// Creates an Error with an explicit source location.
 fun error_at(kind: String, message: String, location: SourceLocation): Error =
-    error_full(kind, message, None {}, Some { value: location }, empty_stack_trace(), None {}, None {}, empty_suppressed())
+    error_full(kind, message, None {}, Some { value: location }, [], None {}, None {}, [])
 
 /// Creates an Error with all structured fields supplied by the caller.
 fun error_full(
