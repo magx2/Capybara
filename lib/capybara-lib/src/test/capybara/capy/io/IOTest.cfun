@@ -45,6 +45,7 @@ private fun resolve(path: Path, segments: List[String]): Path =
     }
 
 private fun assert_failed_message_contains(result: Result[T], expected: String): Assert =
-    match result with
-    case Error e -> assert_that(e.message).contains(expected)
-    case Success _ -> assert_that(false).is_true()
+    assert_all([
+        assert_that(result).fails(),
+        assert_that(result.error_message()).contains(expected),
+    ])
