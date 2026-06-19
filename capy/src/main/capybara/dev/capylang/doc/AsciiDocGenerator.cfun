@@ -33,10 +33,27 @@ private fun generate_asciidoc_index(program: CompiledProgram): Documentation =
     }
 
 private fun generate_module_index_entries(modules: List[CompiledModule]): String =
+    asciidoc_module_packages(modules)
+        .sort((a,b) => a.compare(b))
+        .reduce("", (content, packagePath) => content + generate_module_package_index(packagePath, modules))
+
+private fun asciidoc_module_packages(modules: List[CompiledModule]): List[String] =
     modules
-        .sort((a,b) => module_display_name(a).compare(module_display_name(b)))
-        .map(module => "* xref:{module_doc_path(module)}[{module_display_name(module)}]\n")
-        .reduce("", (content, entry) => content + entry)
+        .reduce([], (packages, module) => asciidoc_add_string_if_missing(packages, module.path))
+
+private fun generate_module_package_index(packagePath: String, modules: List[CompiledModule]): String =
+    "=== {module_package_heading(packagePath)}\n\n"
+    + modules
+        .sort((a,b) => a.name.compare(b.name))
+        .reduce("", (content, module) =>
+            if module.path == packagePath
+            then content + "* xref:{module_doc_path(module)}[{module.name}]\n"
+            else content
+        )
+    + "\n"
+
+private fun module_package_heading(packagePath: String): String =
+    if packagePath.is_empty() then "root" else packagePath
 
 private fun module_doc_path(module: CompiledModule): String =
     if module.path.is_empty()

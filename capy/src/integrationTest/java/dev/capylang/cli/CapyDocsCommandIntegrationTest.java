@@ -85,8 +85,10 @@ class CapyDocsCommandIntegrationTest {
         assertThat(indexFile).isRegularFile();
         assertThat(Files.readString(indexFile))
                 .contains("= Capybara Documentation")
-                .contains("* xref:sample/Docs.adoc[sample/Docs]")
-                .contains("* xref:sample/Objects.adoc[sample/Objects]");
+                .contains("=== sample")
+                .contains("* xref:sample/Docs.adoc[Docs]")
+                .contains("* xref:sample/Objects.adoc[Objects]")
+                .doesNotContain("* xref:sample/Docs.adoc[sample/Docs]");
 
         var docsFile = output.resolve("sample/Docs.adoc");
         assertThat(docsFile).isRegularFile();
