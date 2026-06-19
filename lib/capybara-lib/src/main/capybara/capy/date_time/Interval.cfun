@@ -6,16 +6,41 @@ from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
 /// ISO 8601 interval represented using UTC date-time endpoints.
+///
+/// An interval can be stored as start/end, start/duration, or duration/end.
+///
+/// Example:
+/// ```cfun
+/// DateTimeStartDuration {
+///     start: UNIX_EPOCH,
+///     duration: DateDuration {
+///         years: 0, months: 0, days: 1,
+///         hours: 0, minutes: 0, seconds: 0
+///     }
+/// }
+/// ```
 union Interval =
     DateTimeStartEnd
     | DateTimeStartDuration
     | DateTimeDurationEnd
 
+/// Interval stored with explicit start and end date-times.
 data DateTimeStartEnd { start: DateTime, end: DateTime }
+/// Interval stored with a start date-time and duration.
 data DateTimeStartDuration { start: DateTime, duration: Duration }
+/// Interval stored with a duration and end date-time.
 data DateTimeDurationEnd { duration: Duration, end: DateTime }
 
 /// Formats this interval as canonical ISO 8601 using `/` as the separator.
+///
+/// Example:
+/// ```cfun
+/// DateTimeStartEnd {
+///     start: UNIX_EPOCH,
+///     end: from_timestamp(3600L)
+/// }.to_iso_8601()
+/// ```
+/// Returns `1970-01-01T00:00:00Z/1970-01-01T01:00:00Z`.
 fun Interval.to_iso_8601(): String =
     match this with
     case DateTimeStartEnd { start, end } -> start.to_iso_8601() + "/" + end.to_iso_8601()
@@ -23,6 +48,9 @@ fun Interval.to_iso_8601(): String =
     case DateTimeDurationEnd { duration, end } -> duration.to_iso_8601() + "/" + end.to_iso_8601()
 
 /// Returns the interval start date-time.
+///
+/// For `DateTimeDurationEnd`, the start is calculated by subtracting the
+/// duration from the end.
 fun Interval.start(): DateTime =
     match this with
     case DateTimeStartEnd { start, _ } -> start
@@ -30,6 +58,9 @@ fun Interval.start(): DateTime =
     case DateTimeDurationEnd { duration, end } -> end.minus(duration)
 
 /// Returns the interval end date-time.
+///
+/// For `DateTimeStartDuration`, the end is calculated by adding the duration to
+/// the start.
 fun Interval.end(): DateTime =
     match this with
     case DateTimeStartEnd { _, end } -> end
@@ -49,6 +80,13 @@ fun Interval.duration(): Duration =
 /// - `<duration>/<end>`
 ///
 /// Also accepts `--` as an alternate input separator and canonicalizes back to `/`.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("1970-01-01T00:00:00Z/P1D")
+/// from_iso_8601("P1D/1970-01-02T00:00:00Z")
+/// ```
+/// Both describe a one-day interval.
 fun from_iso_8601(iso: String): Result[Interval] =
     data Split { left: String, right: String }
     data SplitScan { left: String, right: String, seen_separator: bool }

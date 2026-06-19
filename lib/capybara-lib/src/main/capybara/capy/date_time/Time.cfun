@@ -64,6 +64,16 @@ fun second.`==`(other: second): bool = this.value == other.value
 
 /// Clock time represented in 24-hour format.
 /// Component types validate `hour`, `minute`, `second`, and optional UTC offset.
+///
+/// Example:
+/// ```cfun
+/// Time {
+///     hour: hour! { 9 },
+///     minute: minute! { 30 },
+///     second: ZERO_SECOND,
+///     offset_minutes: None {}
+/// }
+/// ```
 data Time {
     hour: hour,
     minute: minute,
@@ -75,6 +85,8 @@ const MIDNIGHT: Time = Time { hour: ZERO_HOUR, minute: ZERO_MINUTE, second: ZERO
 const NOON: Time = Time { hour: NOON_HOUR, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: None {} }
 
 /// Converts this time to seconds since midnight.
+///
+/// Example: `NOON.to_seconds()` returns `43200`.
 fun Time.to_seconds(): int = this.hour.value * SECONDS_IN_HOUR + this.minute.value * SECONDS_IN_MINUTE + this.second.value
 /// Converts this time to minutes since midnight, truncating seconds.
 fun Time.to_minutes(): int = this.hour.value * MINUTES_IN_HOUR + this.minute.value
@@ -85,6 +97,8 @@ fun Time.round_to_minutes(): Time = Time { hour: this.hour, minute: this.minute,
 /// Returns a new time with minutes and seconds set to `0`.
 fun Time.round_to_hours(): Time = Time { hour: this.hour, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: this.offset_minutes }
 /// Adds seconds and wraps around a 24-hour day.
+///
+/// Example: `MIDNIGHT.add_seconds(-1)` returns `23:59:59`.
 fun Time.add_seconds(seconds: int): Time =
     fun normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, SECONDS_IN_DAY)
     ---
@@ -99,6 +113,17 @@ fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * SECONDS_IN
 fun Time.add_hours(hours: int): Time = this.add_seconds(hours * SECONDS_IN_HOUR)
 
 /// Formats this time as an ISO 8601 extended time.
+///
+/// Example:
+/// ```cfun
+/// Time {
+///     hour: hour! { 14 },
+///     minute: minute! { 5 },
+///     second: second! { 9 },
+///     offset_minutes: Some { value: offset_minutes! { 120 } }
+/// }.to_iso_8601()
+/// ```
+/// Returns `14:05:09+02:00`.
 fun Time.to_iso_8601(): String =
     @Recursive
     fun pad_left(value: String, size: int): String =
@@ -127,6 +152,13 @@ fun Time.to_iso_8601(): String =
       case Some { value } -> format_offset(value)
 
 /// Parses an ISO 8601 time in basic or extended complete form.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("14:05:09Z")
+/// from_iso_8601("140509+0200")
+/// ```
+/// Offset-aware inputs preserve their offset in `offset_minutes`.
 fun from_iso_8601(iso: String): Result[Time] =
     data Parse[T] { buffer: String, value: T }
     data ZoneParse { buffer: String, offset_minutes: Option[offset_minutes] }

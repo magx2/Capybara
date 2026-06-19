@@ -1,7 +1,8 @@
 from /capy/collection/List import { * }
+from /capy/collection/Dict import { * }
 from /capy/collection/Set import { * }
 from /capy/io/Console import { println, println_error }
-from /capy/io/IO import { create_directories, exists, is_directory, is_file, list_entries, read_text, write_text }
+from /capy/io/IO import { create_directories, delete, exists, is_directory, is_file, list_entries, read_text, write_text }
 from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { * }
@@ -11,18 +12,26 @@ from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 from /capy/serialization/Json import { * }
-from /dev/capylang/compiler/CapybaraCompiler import { compile }
 from /dev/capylang/compiler/CompileConfiguration import { CompileConfiguration }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
+from /dev/capylang/compiler/CompiledExpression import { * }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
 from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
 from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
@@ -36,9 +45,10 @@ from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 from /dev/capylang/generator/Generator import { generate }
 
-const COMPILER_VERSION = "0.4.0-SNAPSHOT"
+// This is set during build
+const COMPILER_VERSION = "x.y.z"
 
-fun run(args: List[String]): Effect[/capy/lang/Program] =
+fun main(args: List[String]): Effect[/capy/lang/Program] =
     match args[0] with
     case None -> usage_error("No command passed!")
     case Some { "-h" } | Some { "--help" } -> print_help()
@@ -99,6 +109,40 @@ data CompileGenerateOptions {
     include_java_lib_resources: bool,
     log_level: LogLevel
 }
+
+fun compile_options(input: String, output: String, compile_tests: bool): CompileOptions =
+    CompileOptions {
+        input: input,
+        output: output,
+        libs: None {},
+        native_wiring: None {},
+        compile_tests: compile_tests,
+        log_level: WARN
+    }
+
+fun compile_generate_options(
+    output_type: String,
+    input: String,
+    output: String,
+    linked_output: Option[String],
+    test_input: Option[String],
+    test_output: Option[String],
+    compile_tests: bool,
+    include_java_lib_resources: bool
+): CompileGenerateOptions =
+    CompileGenerateOptions {
+        output_type: output_type,
+        input: input,
+        output: output,
+        linked_output: linked_output,
+        test_input: test_input,
+        test_output: test_output,
+        libs: None {},
+        native_wiring: None {},
+        compile_tests: compile_tests,
+        include_java_lib_resources: include_java_lib_resources,
+        log_level: WARN
+    }
 
 data PackageOptions {
     compiled_input: Option[String],
@@ -219,7 +263,7 @@ private fun parse_package_options(args: List[String]): CliArgs[PackageOptions] =
         input: None {},
         module: None {},
         capy_overrides: [],
-        log_level: INFO {}
+        log_level: INFO
     }) with
     case UsageError e -> e
     case ParsedArgs { options } ->
@@ -367,7 +411,7 @@ private fun empty_named_options(): NamedOptions =
         native_wiring: None {},
         compile_tests: false,
         skip_java_lib: false,
-        log_level: INFO {}
+        log_level: INFO
     }
 
 private fun next_value(args: List[String], idx: int, option: String): CliArgs[String] =
@@ -411,10 +455,10 @@ private fun parse_output_type(value: String): CliArgs[String] =
 
 private fun parse_log_level(value: String): CliArgs[LogLevel] =
     match value with
-    case "DEBUG" | "debug" -> ParsedArgs { DEBUG {} }
-    case "INFO" | "info" -> ParsedArgs { INFO {} }
-    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN {} }
-    case "ERROR" | "error" -> ParsedArgs { ERROR {} }
+    case "DEBUG" | "debug" -> ParsedArgs { DEBUG }
+    case "INFO" | "info" -> ParsedArgs { INFO }
+    case "WARN" | "warn" | "WARNING" | "warning" -> ParsedArgs { WARN }
+    case "ERROR" | "error" -> ParsedArgs { ERROR }
     case _ -> UsageError { message: "Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR." }
 
 private fun print_version(): Effect[/capy/lang/Program] =
@@ -467,75 +511,183 @@ private fun capy_override_field(arg: String): String =
     copy_suffix(arg, 7, "")
 
 fun run_compile(options: CompileOptions): Effect[/capy/lang/Program] =
-    match compile_configuration(options) with
-    case Error { message } -> runtime_error(message)
-    case Success { configuration } ->
-        let input_path = from_string(options.input)
-        let output_path = from_string(options.output)
-        validate_input_directory(input_path, options.input).flat_map(input_result =>
-            match input_result with
-            case Error { message } -> runtime_error(message)
+    compile_configuration(options).flat_map(configuration_result =>
+        match configuration_result with
+        case Error { message } -> runtime_error(message)
+        case Success { configuration } ->
+            let input_path = from_string(options.input)
+            let output_path = from_string(options.output)
+            validate_input_directory(input_path, options.input).flat_map(input_result =>
+                match input_result with
+                case Error { message } -> runtime_error(message)
+                case Success _ ->
+                    validate_output_directory(output_path, options.output).flat_map(output_result =>
+                        match output_result with
+                        case Error { message } -> runtime_error(message)
+                        case Success _ ->
+                            read_source_modules(input_path, options.input).flat_map(modules_result =>
+                                match modules_result with
+                                case Error { message } -> runtime_error(message)
+                                case Success { raw_modules } ->
+                                    /dev/capylang/compiler/CapybaraCompiler.compile(
+                                        raw_modules,
+                                        configuration.libraries,
+                                        configuration.native_providers,
+                                        empty_native_provider_manifest()
+                                    ).flat_map(compilation =>
+                                        match compilation with
+                                        case Left { program } ->
+                                            write_compilation_output(output_path, program).flat_map(write_result =>
+                                                match write_result with
+                                                case Error { message } -> runtime_error(message)
+                                                case Success _ -> pure(/capy/lang/Program.Success {})
+                                            )
+                                        case Right { errors } ->
+                                            print_compiler_errors(errors)
+                                                .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                                    )
+                            )
+                    )
+            )
+    )
+
+private fun compile_configuration(options: CompileOptions): Effect[Result[CompileConfiguration]] =
+    compiler_configuration(options.libs, options.native_wiring)
+
+private fun compile_generate_configuration(options: CompileGenerateOptions): Effect[Result[CompileConfiguration]] =
+    compiler_configuration(options.libs, options.native_wiring)
+
+private fun compiler_configuration(libs: Option[String], nativeWiring: Option[String]): Effect[Result[CompileConfiguration]] =
+    read_library_modules(libs).flat_map(libraries_result =>
+        match libraries_result with
+        case Error e -> pure(e)
+        case Success { libraries } ->
+            read_native_provider_manifest_option(nativeWiring).map(native_result =>
+                match native_result with
+                case Error e -> e
+                case Success { native_providers } -> Success { CompileConfiguration {
+                    libraries: libraries,
+                    native_providers: native_providers
+                }}
+            )
+    )
+
+private fun read_library_modules(libs: Option[String]): Effect[Result[Set[CompiledModule]]] =
+    match libs with
+    case None -> pure(Success { {} })
+    case Some { value } ->
+        if value.trim().is_empty()
+        then pure(Success { {} })
+        else read_linked_libraries(value)
+
+private fun read_native_provider_manifest_option(nativeWiring: Option[String]): Effect[Result[NativeProviderManifest]] =
+    match nativeWiring with
+    case None -> pure(Success { empty_native_provider_manifest() })
+    case Some { rawPath } ->
+        let manifestPath = from_string(rawPath)
+        validate_module_file(manifestPath, rawPath).flat_map(fileResult =>
+            match fileResult with
+            case Error { message } -> pure(Error { message: "Native wiring manifest is not a file: " + rawPath + ": " + message })
             case Success _ ->
-                validate_output_directory(output_path, options.output).flat_map(output_result =>
-                    match output_result with
-                    case Error { message } -> runtime_error(message)
-                    case Success _ ->
-                        read_source_modules(input_path, options.input).flat_map(modules_result =>
-                            match modules_result with
-                            case Error { message } -> runtime_error(message)
-                            case Success { raw_modules } ->
-                                compile(
-                                    raw_modules,
-                                    configuration.libraries,
-                                    configuration.native_providers,
-                                    empty_native_provider_manifest()
-                                ).flat_map(compilation =>
-                                    match compilation with
-                                    case Left { program } ->
-                                        write_compilation_output(output_path, program).flat_map(write_result =>
-                                            match write_result with
-                                            case Error { message } -> runtime_error(message)
-                                            case Success _ -> pure(/capy/lang/Program.Success {})
-                                        )
-                                    case Right { errors } ->
-                                        print_compiler_errors(errors)
-                                            .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                                )
-                        )
+                read_text(manifestPath).map(readResult =>
+                    match readResult with
+                    case Error { message } -> Error { message: "Unable to read native wiring manifest `" + rawPath + "`: " + message }
+                    case Success { source } -> parse_native_provider_manifest(rawPath, source)
                 )
         )
 
-private fun compile_configuration(options: CompileOptions): Result[CompileConfiguration] =
-    if options.compile_tests
-    then Error { message: "`compile --compile-tests` is not available until test augmentation is translated to CFUN." }
-    else compiler_configuration(options.libs, options.native_wiring)
+private fun parse_native_provider_manifest(rawPath: String, source: String): Result[NativeProviderManifest] =
+    match deserialize(source) with
+    case Error { message } -> Error { message: "Unable to parse native wiring manifest `" + rawPath + "`: " + message }
+    case Success { value } ->
+        match value.get("providers") with
+        case None -> Success { empty_native_provider_manifest() }
+        case Some { providersJson } ->
+            match native_provider_bindings_from_json(providersJson) with
+            case Error e -> e
+            case Success { providers } -> Success { NativeProviderManifest { providers } }
 
-private fun compile_generate_configuration(options: CompileGenerateOptions): Result[CompileConfiguration] =
-    compiler_configuration(options.libs, options.native_wiring)
+private fun native_provider_bindings_from_json(json: Json): Result[List[NativeProviderBinding]] =
+    match json with
+    case JsonArray { value } -> native_provider_bindings_from_json_values(value)
+    case JsonValueArray { value } -> native_provider_bindings_from_json(value)
+    case _ -> Error { message: "Native wiring field `providers` must be an array." }
 
-private fun compiler_configuration(libs: Option[String], nativeWiring: Option[String]): Result[CompileConfiguration] =
-    match read_library_modules(libs) with
-    case Error e -> e
-    case Success { libraries } ->
-        match read_native_provider_manifest(nativeWiring) with
-        case Error e -> e
-        case Success { native_providers } -> Success { CompileConfiguration {
-            libraries: libraries,
-            native_providers: native_providers
-        }}
-
-private fun read_library_modules(libs: Option[String]): Result[Set[CompiledModule]] =
-    match libs with
-    case None -> Success { {} }
+private fun native_provider_bindings_from_json_values(values: List[Json]): Result[List[NativeProviderBinding]] =
+    match values[0] with
+    case None -> Success { [] }
     case Some { value } ->
-        if value.trim().is_empty()
-        then Success { {} }
-        else Error { message: "`--libs` is not available until linked program deserialization is translated to CFUN." }
+        let binding <- native_provider_binding_from_json(value)
+        let rest <- native_provider_bindings_from_json_values(values[1:])
+        [binding] + rest
 
-private fun read_native_provider_manifest(nativeWiring: Option[String]): Result[NativeProviderManifest] =
-    match nativeWiring with
-    case None -> Success { empty_native_provider_manifest() }
-    case Some { _ } -> Error { message: "`--native-wiring` is not available until native provider manifest deserialization is translated to CFUN." }
+private fun native_provider_binding_from_json(json: Json): Result[NativeProviderBinding] =
+    let object <- json_object(json, "Native provider binding")
+    let interfaceId <- json_required_string(object, "interfaceId")
+    let qualifier <- json_optional_string(object, "qualifier", "")
+    let javaBinding <- json_optional_backend_binding(object, "javaBinding")
+    let javascriptBinding <- json_optional_backend_binding(object, "javascriptBinding")
+    let pythonBinding <- json_optional_backend_binding(object, "pythonBinding")
+    NativeProviderBinding {
+        interfaceId: interfaceId,
+        qualifier: qualifier,
+        javaBinding: javaBinding,
+        javascriptBinding: javascriptBinding,
+        pythonBinding: pythonBinding
+    }
+
+private fun json_optional_backend_binding(object: JsonObject, field: String): Result[Option[NativeProviderBackendBinding]] =
+    match object.get(field) with
+    case None -> Success { None {} }
+    case Some { value } ->
+        match value with
+        case JsonNull -> Success { None {} }
+        case _ ->
+            let backendObject <- json_object(value, "Native provider backend binding `" + field + "`")
+            let className <- json_optional_string_option(backendObject, "className")
+            let moduleName <- json_optional_string_option(backendObject, "moduleName")
+            let exportName <- json_optional_string_option(backendObject, "exportName")
+            let factory <- json_optional_string_option(backendObject, "factory")
+            Some { NativeProviderBackendBinding {
+                className: className,
+                moduleName: moduleName,
+                exportName: exportName,
+                factory: factory
+            }}
+
+private fun json_object(json: Json, description: String): Result[JsonObject] =
+    match json with
+    case JsonObject object -> Success { object }
+    case JsonValueObject { value } -> Success { value }
+    case _ -> Error { message: description + " must be a JSON object." }
+
+private fun json_required_string(object: JsonObject, field: String): Result[String] =
+    match object.get(field) with
+    case None -> Error { message: "Missing native wiring field `" + field + "`." }
+    case Some { value } -> json_string(value, "Native wiring field `" + field + "`")
+
+private fun json_optional_string(object: JsonObject, field: String, defaultValue: String): Result[String] =
+    match object.get(field) with
+    case None -> Success { defaultValue }
+    case Some { value } ->
+        match value with
+        case JsonNull -> Success { defaultValue }
+        case _ -> json_string(value, "Native wiring field `" + field + "`")
+
+private fun json_optional_string_option(object: JsonObject, field: String): Result[Option[String]] =
+    match object.get(field) with
+    case None -> Success { None {} }
+    case Some { value } ->
+        match value with
+        case JsonNull -> Success { None {} }
+        case _ ->
+            let text <- json_string(value, "Native wiring field `" + field + "`")
+            Some { text }
+
+private fun json_string(json: Json, description: String): Result[String] =
+    match json with
+    case JsonString { value } -> Success { value }
+    case _ -> Error { message: description + " must be a string." }
 
 private fun validate_input_directory(path: Path, raw_path: String): Effect[Result[Path]] =
     exists(path).flat_map(present =>
@@ -579,7 +731,7 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
                 }] })
                 case Success { raw_modules } ->
                     read_native_implementation_manifest(inputPath).flat_map(nativeImplementationProviders =>
-                        compile(
+                        /dev/capylang/compiler/CapybaraCompiler.compile(
                             raw_modules,
                             configuration.libraries,
                             configuration.native_providers,
@@ -874,29 +1026,43 @@ private fun native_python_module_name(relativePath: Path): String =
     withoutExtension.replace("/", ".")
 
 private fun native_python_class_name(source: String): String =
-    native_java_token_after(source, "class ")
+    let annotationIndex = native_java_index_of(source, "@NativeImplementation", 0)
+    if annotationIndex < 0
+    then ""
+    else native_java_token_after(source[annotationIndex, source.size().value], "class ")
 
 private fun native_python_interface_id(source: String): String =
     let className = native_python_class_name(source)
+    if source ? "interface_id = \""
+    then native_java_between(source, "interface_id = \"", "\"")
+    else if source ? "interface_id=\""
+    then native_java_between(source, "interface_id=\"", "\"")
+    else native_python_base_interface_id(source, className)
+
+private fun native_python_base_interface_id(source: String, className: String): String =
     if className.is_empty()
     then ""
     else
-        let classStart = native_java_index_of(source, "class " + className, 0)
-        if classStart < 0
+        let bases = native_java_between(source, "class " + className + "(", ")")
+        let baseName = native_python_first_base(bases)
+        if baseName.is_empty()
         then ""
-        else
-            let openParen = native_java_index_of(source, "(", classStart)
-            if openParen < 0
-            then ""
-            else
-                let closeParen = native_java_index_of(source, ")", openParen)
-                if closeParen < 0
-                then ""
-                else
-                    let baseName = native_java_token_from(source, openParen + 1, "")
-                    if baseName.is_empty()
-                    then ""
-                    else native_python_imported_name(source, baseName)
+        else if baseName ? "."
+        then baseName
+        else native_python_imported_name(source, baseName)
+
+private fun native_python_first_base(bases: String): String =
+    native_python_base_token(bases.trim(), 0, "")
+
+private fun native_python_base_token(source: String, idx: int, acc: String): String =
+    if idx >= source.size().value
+    then acc
+    else match source[idx] with
+        case None -> acc
+        case Some { char } ->
+            if native_java_token_char(char)
+            then native_python_base_token(source, idx + 1, acc + char)
+            else acc
 
 private fun native_python_qualifier(source: String): String =
     if source ? "qualifier = \""
@@ -1138,6 +1304,27 @@ private fun write_compile_generate_test_output(options: CompileGenerateOptions, 
         case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
         case Some { rawTestOutput } -> write_generated_program(from_string(rawTestOutput), generate(program, options.output_type))
 
+private fun write_compile_generate_outputs(options: CompileGenerateOptions, mainProgram: CompiledProgram, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
+    match testProgram with
+    case Some { test } -> {
+        match options.test_output with
+        case Some { rawTestOutput } when rawTestOutput == options.output ->
+            write_generated_program(
+                from_string(options.output),
+                merge_generated_programs(generate(mainProgram, options.output_type), generate(test, options.output_type))
+            )
+        case _ ->
+            write_generated_program(from_string(options.output), generate(mainProgram, options.output_type)).flat_map(writeResult =>
+                match writeResult with
+                case Error e -> pure(e)
+                case Success _ -> write_compile_generate_test_output(options, testProgram)
+            )
+    }
+    case None -> write_generated_program(from_string(options.output), generate(mainProgram, options.output_type))
+
+private fun merge_generated_programs(first: GeneratedProgram, second: GeneratedProgram): GeneratedProgram =
+    GeneratedProgram { modules: first.modules + second.modules }
+
 private fun merge_libraries(libraries: Set[CompiledModule], program: CompiledProgram): Set[CompiledModule] =
     add_modules_to_libraries(libraries, program.modules)
 
@@ -1284,17 +1471,26 @@ private fun cli_relative_to(base: Path, path: Path): Path =
     from_string(cli_path_segments_to_string(cli_drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
 
 private fun cli_drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
-    @Recursive
-    fun drop(prefix: List[String], segments: List[String]): List[String] =
-        if prefix.is_empty()
-        then segments
-        else if segments.is_empty()
-        then []
-        else if prefix[0] == segments[0]
-        then drop(prefix[1:], segments[1:])
-        else segments
-    ---
-    drop(prefix, segments)
+    if cli_segments_have_prefix(prefix, segments)
+    then cli_drop_exact_prefix_segments(prefix, segments)
+    else
+        match prefix[1] with
+        case None -> segments
+        case Some _ -> cli_drop_prefix_segments(prefix[1:], segments)
+
+private fun cli_segments_have_prefix(prefix: List[String], segments: List[String]): bool =
+    if prefix.is_empty()
+    then true
+    else if segments.is_empty()
+    then false
+    else prefix[0] == segments[0] & cli_segments_have_prefix(prefix[1:], segments[1:])
+
+private fun cli_drop_exact_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
+    if prefix.is_empty()
+    then segments
+    else if segments.is_empty()
+    then []
+    else cli_drop_exact_prefix_segments(prefix[1:], segments[1:])
 
 private fun cli_path_segments_to_string(segments: List[String]): String =
     @Recursive
@@ -1321,7 +1517,7 @@ private fun write_compilation_output(output_dir: Path, program: CompiledProgram)
         case Error e -> pure(e)
         case Success _ ->
             let program_data: data = program
-            write_json_file(output_dir / "program.json", program_data).flat_map(program_result =>
+            write_linked_json_file(output_dir / "program.json", program_data).flat_map(program_result =>
                 match program_result with
                 case Error e -> pure(e)
                 case Success _ -> write_linked_modules(output_dir, program.modules)
@@ -1344,7 +1540,7 @@ private fun write_linked_module(output_dir: Path, module: CompiledModule): Effec
     create_parent_directories(module_file).flat_map(parent_result =>
         match parent_result with
         case Error e -> pure(e)
-        case Success _ -> write_json_file(module_file, module_data)
+        case Success _ -> write_linked_json_file(module_file, module_data)
     )
 
 private fun linked_module_file(output_dir: Path, module: CompiledModule): Path =
@@ -1363,6 +1559,1037 @@ private fun write_json_file(path: Path, value: data): Effect[Result[String]] =
     match to_json(value) with
     case Error { message } -> pure(Error { message: "Unable to serialize linked JSON for `" + cli_path_to_string(path) + "`: " + message })
     case Success { json } -> write_text(path, serialize(json))
+
+private fun write_linked_json_file(path: Path, value: data): Effect[Result[String]] =
+    match to_typed_json(value) with
+    case Error { message } -> pure(Error { message: "Unable to serialize linked JSON for `" + cli_path_to_string(path) + "`: " + message })
+    case Success { json } -> write_text(path, linked_serialize_typed_json(json))
+
+private fun linked_serialize_typed_json(json: TypedJson): String =
+    match json with
+    case TypedJsonData { name, pkg, fields } ->
+        "{"
+        + linked_json_entry("$capybaraTypedJson", linked_json_string("data")) + ","
+        + linked_json_entry("name", linked_json_string(name)) + ","
+        + linked_json_entry("pkg", linked_serialize_typed_package(pkg)) + ","
+        + linked_json_entry("fields", linked_serialize_typed_fields(fields))
+        + "}"
+    case TypedJsonObject { value } ->
+        "{"
+        + linked_json_entry("$capybaraTypedJson", linked_json_string("object")) + ","
+        + linked_json_entry("value", linked_serialize_typed_fields(value))
+        + "}"
+    case TypedJsonArray { kind, value } ->
+        "{"
+        + linked_json_entry("$capybaraTypedJson", linked_json_string("array")) + ","
+        + linked_json_entry("kind", linked_json_string(kind)) + ","
+        + linked_json_entry("value", linked_serialize_typed_list(value))
+        + "}"
+    case TypedJsonString { value } -> linked_serialize_typed_value("String", linked_json_string(value))
+    case TypedJsonByte { value } -> linked_serialize_typed_value("byte", linked_json_long(value))
+    case TypedJsonInt { value } -> linked_serialize_typed_value("int", linked_json_long(value))
+    case TypedJsonLong { value } -> linked_serialize_typed_value("long", linked_json_long(value))
+    case TypedJsonFloat { value } -> linked_serialize_typed_value("float", linked_json_double(value))
+    case TypedJsonDouble { value } -> linked_serialize_typed_value("double", linked_json_double(value))
+    case TypedJsonBool { value } -> linked_serialize_typed_value("bool", if value then "true" else "false")
+    case TypedJsonNull -> linked_serialize_typed_value("null", "null")
+
+private fun linked_serialize_typed_package(pkg: TypedJsonPackage): String =
+    "{"
+    + linked_json_entry("name", linked_json_string(pkg.name)) + ","
+    + linked_json_entry("path", linked_json_string(pkg.path))
+    + "}"
+
+private fun linked_serialize_typed_fields(fields: Dict[TypedJson]): String =
+    "{"
+    + (fields |> "", (acc, key, value) =>
+        linked_join_json(acc, linked_json_entry(key, linked_serialize_typed_json(value))))
+    + "}"
+
+private fun linked_serialize_typed_list(values: List[TypedJson]): String =
+    "["
+    + (values |> "", (acc, value) => linked_join_json(acc, linked_serialize_typed_json(value)))
+    + "]"
+
+private fun linked_serialize_typed_value(kind: String, value: String): String =
+    "{"
+    + linked_json_entry("$capybaraTypedJson", linked_json_string("value")) + ","
+    + linked_json_entry("kind", linked_json_string(kind)) + ","
+    + linked_json_entry("value", value)
+    + "}"
+
+private fun linked_json_entry(key: String, value: String): String =
+    linked_json_string(key) + ":" + value
+
+private fun linked_json_string(value: String): String =
+    stringify(JsonString { value })
+
+private fun linked_json_long(value: long): String =
+    stringify(JsonNumberLong { value })
+
+private fun linked_json_double(value: double): String =
+    stringify(JsonNumberDouble { value })
+
+private fun linked_join_json(acc: String, value: String): String =
+    if acc.is_empty() then value else acc + "," + value
+
+private fun read_linked_libraries(libs: String): Effect[Result[Set[CompiledModule]]] =
+    read_linked_libraries(linked_library_paths(libs))
+
+private fun linked_library_paths(libs: String): List[String] =
+    @Recursive
+    fun split(value: String, idx: int, current: String, acc: List[String]): List[String] =
+        if idx >= value.size().value
+        then
+            let item = current.trim()
+            if item.is_empty() then acc else acc + item
+        else match value[idx] with
+            case Some { "," } ->
+                let item = current.trim()
+                split(value, idx + 1, "", if item.is_empty() then acc else acc + item)
+            case Some { char } -> split(value, idx + 1, current + char, acc)
+            case None ->
+                let item = current.trim()
+                if item.is_empty() then acc else acc + item
+    ---
+    split(libs, 0, "", [])
+
+private fun read_linked_libraries(libraries: List[String]): Effect[Result[Set[CompiledModule]]] =
+    match libraries[0] with
+    case None -> pure(Success { {} })
+    case Some { library } ->
+        read_linked_program(from_string(library), false).flat_map(program_result =>
+            match program_result with
+            case Error e -> pure(e)
+            case Success { program } ->
+                read_linked_libraries(libraries[1:]).map(rest_result =>
+                    match rest_result with
+                    case Error e -> e
+                    case Success { rest } -> Success { add_modules_to_libraries(rest, program.modules) }
+                )
+        )
+
+private fun read_linked_program(inputDir: Path, requireModules: bool): Effect[Result[CompiledProgram]] =
+    let program_file = inputDir / "program.json"
+    is_file(program_file).flat_map(has_program =>
+        if has_program
+        then read_linked_program_file(program_file).map(program_result =>
+            match program_result with
+            case Error e -> e
+            case Success { program } ->
+                if requireModules & program.modules.is_empty()
+                then Error { message: "Missing linked module files in directory: " + cli_path_to_string(inputDir) }
+                else Success { program }
+        )
+        else read_linked_program_from_module_files(inputDir, requireModules)
+    )
+
+private fun read_linked_program_file(file: Path): Effect[Result[CompiledProgram]] =
+    read_text(file).map(read_result =>
+        match read_result with
+        case Error e -> e
+        case Success { content } ->
+            match deserialize_typed(content) with
+            case Error { message } -> Error { message: "Unable to deserialize linked JSON `" + cli_path_to_string(file) + "`: " + message }
+            case Success { json } -> linked_decode_program(json)
+    )
+
+private fun read_linked_module_file(file: Path): Effect[Result[CompiledModule]] =
+    read_text(file).map(read_result =>
+        match read_result with
+        case Error e -> e
+        case Success { content } ->
+            match deserialize_typed(content) with
+            case Error { message } -> Error { message: "Unable to deserialize linked JSON `" + cli_path_to_string(file) + "`: " + message }
+            case Success { json } -> linked_decode_module(json)
+    )
+
+private fun read_linked_program_from_module_files(inputDir: Path, requireModules: bool): Effect[Result[CompiledProgram]] =
+    cli_list_regular_files(inputDir).flat_map(files_result =>
+        match files_result with
+        case Error e -> pure(e)
+        case Success { files } ->
+            read_linked_module_files(linked_module_json_files(files)).map(modules_result =>
+                match modules_result with
+                case Error e -> e
+                case Success { modules } ->
+                    if requireModules & modules.is_empty()
+                    then Error { message: "Missing linked module files in directory: " + cli_path_to_string(inputDir) }
+                    else Success { CompiledProgram {
+                        modules: modules,
+                        objectOrientedModules: [],
+                        nativeProviders: empty_native_provider_manifest(),
+                        nativeProviderCatalog: empty_native_provider_catalog()
+                    }}
+            )
+    )
+
+private fun linked_module_json_files(files: List[Path]): List[Path] =
+    match files[0] with
+    case None -> []
+    case Some { file } ->
+        match last_segment(file.normalize().segments) with
+        case Some { name } ->
+            if name.end_with(".json") & name != "build-info.json" & name != "program.json"
+            then [file] + linked_module_json_files(files[1:])
+            else linked_module_json_files(files[1:])
+        case None -> linked_module_json_files(files[1:])
+
+private fun read_linked_module_files(files: List[Path]): Effect[Result[List[CompiledModule]]] =
+    match files[0] with
+    case None -> pure(Success { [] })
+    case Some { file } ->
+        read_linked_module_file(file).flat_map(module_result =>
+            match module_result with
+            case Error e -> pure(e)
+            case Success { module } ->
+                read_linked_module_files(files[1:]).map(rest_result =>
+                    match rest_result with
+                    case Error e -> e
+                    case Success { rest } -> Success { [module] + rest }
+                )
+        )
+
+private fun linked_expect_data(node: any, expected: String): Result[any] =
+    match node with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData typed_node ->
+            if typed_node.name == expected
+            then Success { typed_node }
+            else Error { message: "Expected typed JSON node `" + expected + "`, got `" + typed_node.name + "`" }
+        case _ -> Error { message: "Expected typed JSON node `" + expected + "`" }
+    }
+    case _ -> Error { message: "Expected typed JSON node `" + expected + "`" }
+
+private fun linked_field(node: any, name: String): Result[any] =
+    match node with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData typed_node -> {
+            match typed_node.fields.get(name) with
+            case Some { value } -> Success { value }
+            case None -> Error { message: "Expected typed JSON field `" + typed_node.name + "." + name + "`" }
+        }
+        case _ -> Error { message: "Expected typed JSON field `" + name + "`" }
+    }
+    case _ -> Error { message: "Expected typed JSON field `" + name + "`" }
+
+private fun linked_string_value(value: any): Result[String] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonString { text } -> Success { text }
+        case _ -> Error { message: "Expected typed JSON string" }
+    }
+    case _ -> Error { message: "Expected typed JSON string" }
+
+private fun linked_bool_value(value: any): Result[bool] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonBool { bool_value } -> Success { bool_value }
+        case _ -> Error { message: "Expected typed JSON bool" }
+    }
+    case _ -> Error { message: "Expected typed JSON bool" }
+
+private fun linked_int_value(value: any): Result[int] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonInt { int_value } -> Success { int_value }
+        case TypedJsonByte { byte_value } -> Success { byte_value }
+        case _ -> Error { message: "Expected typed JSON int" }
+    }
+    case _ -> Error { message: "Expected typed JSON int" }
+
+private fun linked_long_value(value: any): Result[long] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonLong { long_value } -> Success { long_value }
+        case TypedJsonInt { int_value } -> Success { int_value }
+        case TypedJsonByte { byte_value } -> Success { byte_value + 0L }
+        case _ -> Error { message: "Expected typed JSON long" }
+    }
+    case _ -> Error { message: "Expected typed JSON long" }
+
+private fun linked_float_value(value: any): Result[float] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonFloat { float_value } -> Success { float_value }
+        case _ -> Error { message: "Expected typed JSON float" }
+    }
+    case _ -> Error { message: "Expected typed JSON float" }
+
+private fun linked_double_value(value: any): Result[double] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonDouble { double_value } -> Success { double_value }
+        case TypedJsonFloat { float_value } -> Success { float_value }
+        case TypedJsonLong { long_value } -> Success { long_value }
+        case TypedJsonInt { int_value } -> Success { int_value }
+        case TypedJsonByte { byte_value } -> Success { byte_value + 0L }
+        case _ -> Error { message: "Expected typed JSON double" }
+    }
+    case _ -> Error { message: "Expected typed JSON double" }
+
+private fun linked_string_field(node: any, name: String): Result[String] =
+    let value <- linked_field(node, name)
+    linked_string_value(value)
+
+private fun linked_bool_field(node: any, name: String): Result[bool] =
+    let value <- linked_field(node, name)
+    linked_bool_value(value)
+
+private fun linked_int_field(node: any, name: String): Result[int] =
+    let value <- linked_field(node, name)
+    linked_int_value(value)
+
+private fun linked_long_field(node: any, name: String): Result[long] =
+    let value <- linked_field(node, name)
+    linked_long_value(value)
+
+private fun linked_float_field(node: any, name: String): Result[float] =
+    let value <- linked_field(node, name)
+    linked_float_value(value)
+
+private fun linked_double_field(node: any, name: String): Result[double] =
+    let value <- linked_field(node, name)
+    linked_double_value(value)
+
+private fun linked_data_field(node: any, name: String): Result[any] =
+    let value <- linked_field(node, name)
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData data_value -> Success { data_value }
+        case _ -> Error { message: "Expected typed JSON node field `" + name + "`" }
+    }
+    case _ -> Error { message: "Expected typed JSON node field `" + name + "`" }
+
+private fun linked_list_value(value: any, decode: any => Result[T]): Result[any] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonArray { _, items } -> {
+            let initial: List[any] = []
+            linked_list_items(items, 0, initial, decode)
+        }
+        case _ -> Error { message: "Expected typed JSON array" }
+    }
+    case _ -> Error { message: "Expected typed JSON array" }
+
+private fun linked_list_items(items: List[TypedJson], idx: int, acc: List[any], decode: any => Result[T]): Result[any] =
+    match items[idx] with
+    case None -> Success { acc }
+    case Some { item } ->
+        let decoded <- decode(item)
+        let next: List[any] = acc + decoded
+        linked_list_items(items, idx + 1, next, decode) | (result => result)
+
+private fun linked_list_field(node: any, name: String, decode: any => Result[T]): Result[List[T]] =
+    let value <- linked_field(node, name)
+    let items <- linked_list_value(value, decode)
+    Success { items }
+
+private fun linked_dict_value(value: any, decode: any => Result[T]): Result[any] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonObject { entries } -> {
+            let initial: Result[Dict[any]] = Success { {:} }
+            let decoded_entries <- entries |> initial, (acc_result, key, item) => {
+                let acc <- acc_result
+                let decoded <- decode(item)
+                Success { acc + { key : decoded } }
+            }
+            Success { decoded_entries }
+        }
+        case _ -> Error { message: "Expected typed JSON object" }
+    }
+    case _ -> Error { message: "Expected typed JSON object" }
+
+private fun linked_dict_field(node: any, name: String, decode: any => Result[T]): Result[Dict[T]] =
+    let value <- linked_field(node, name)
+    let entries <- linked_dict_value(value, decode)
+    Success { entries }
+
+private fun linked_option_field(node: any, name: String, decode: any => Result[T]): Result[Option[T]] =
+    let value <- linked_field(node, name)
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData option_data -> {
+            match option_data.name with
+            case "None" -> Success { None {} }
+            case "Some" ->
+                let item <- linked_field(option_data, "value")
+                let decoded <- decode(item)
+                Some { decoded }
+            case _ -> Error { message: "Expected Option typed JSON, got `" + option_data.name + "`" }
+        }
+        case _ -> Error { message: "Expected Option typed JSON" }
+    }
+    case _ -> Error { message: "Expected Option typed JSON" }
+
+private fun linked_decode_data_value(value: any, expected: String, decode: any => Result[T]): Result[T] =
+    match value with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData node -> decode(node)
+        case _ -> Error { message: "Expected " + expected + " typed JSON" }
+    }
+    case _ -> Error { message: "Expected " + expected + " typed JSON" }
+
+private fun linked_decode_program(node: any): Result[CompiledProgram] =
+    let checked <- linked_expect_data(node, "CompiledProgram")
+    let modules <- linked_list_field(node, "modules", value => linked_decode_module_value(value))
+    let objectOrientedModules <- linked_list_field(node, "objectOrientedModules", value => linked_decode_object_oriented_unit_value(value))
+    let nativeProvidersData <- linked_data_field(node, "nativeProviders")
+    let nativeProviders <- linked_decode_native_provider_manifest(nativeProvidersData)
+    let nativeProviderCatalogData <- linked_data_field(node, "nativeProviderCatalog")
+    let nativeProviderCatalog <- linked_decode_native_provider_catalog(nativeProviderCatalogData)
+    CompiledProgram {
+        modules: modules,
+        objectOrientedModules: objectOrientedModules,
+        nativeProviders: nativeProviders,
+        nativeProviderCatalog: nativeProviderCatalog
+    }
+
+private fun linked_decode_module_value(value: any): Result[CompiledModule] =
+    linked_decode_data_value(value, "CompiledModule", node => linked_decode_module(node))
+
+private fun linked_decode_module(node: any): Result[CompiledModule] =
+    let checked <- linked_expect_data(node, "CompiledModule")
+    let name <- linked_string_field(node, "name")
+    let path <- linked_string_field(node, "path")
+    let types <- linked_dict_field(node, "types", value => linked_decode_generic_data_type_value(value))
+    let visiblePrimitiveBackedTypes <- linked_dict_field(node, "visiblePrimitiveBackedTypes", value => linked_decode_primitive_backed_type_value(value))
+    let functions <- linked_list_field(node, "functions", value => linked_decode_function_value(value))
+    let imports <- linked_list_field(node, "imports", value => linked_decode_import_value(value))
+    let derivers <- linked_dict_field(node, "derivers", value => linked_decode_deriver_value(value))
+    let annotations <- linked_dict_field(node, "annotations", value => linked_decode_annotation_value(value))
+    let staticImports <- linked_list_field(node, "staticImports", value => linked_decode_static_import_value(value))
+    CompiledModule {
+        name: name,
+        path: path,
+        types: types,
+        visiblePrimitiveBackedTypes: visiblePrimitiveBackedTypes,
+        functions: functions,
+        imports: imports,
+        derivers: derivers,
+        annotations: annotations,
+        staticImports: staticImports
+    }
+
+private fun linked_decode_generic_data_type_value(value: any): Result[GenericDataType] =
+    linked_decode_data_value(value, "GenericDataType", node => linked_decode_generic_data_type(node))
+
+private fun linked_decode_generic_data_type(node: any): Result[GenericDataType] =
+    let checked <- linked_expect_data(node, "GenericDataType")
+    GenericDataType {}
+
+private fun linked_decode_primitive_backed_type_value(value: any): Result[CompiledPrimitiveBackedType] =
+    linked_decode_data_value(value, "CompiledPrimitiveBackedType", node => linked_decode_primitive_backed_type(node))
+
+private fun linked_decode_primitive_backed_type(node: any): Result[CompiledPrimitiveBackedType] =
+    let checked <- linked_expect_data(node, "CompiledPrimitiveBackedType")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let backingTypeData <- linked_data_field(node, "backingType")
+    let backingType <- linked_decode_type_reference(backingTypeData)
+    let locationData <- linked_data_field(node, "location")
+    let location <- linked_decode_source_location(locationData)
+    CompiledPrimitiveBackedType {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        backingType: backingType,
+        location: location
+    }
+
+private fun linked_decode_function_value(value: any): Result[CompiledFunction] =
+    linked_decode_data_value(value, "CompiledFunction", node => linked_decode_function(node))
+
+private fun linked_decode_function(node: any): Result[CompiledFunction] =
+    let checked <- linked_expect_data(node, "CompiledFunction")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
+    let returnTypeData <- linked_data_field(node, "returnType")
+    let returnType <- linked_decode_type_reference(returnTypeData)
+    let bodyData <- linked_data_field(node, "body")
+    let body <- linked_decode_expression(bodyData)
+    let locationData <- linked_data_field(node, "location")
+    let location <- linked_decode_source_location(locationData)
+    CompiledFunction {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        parameters: parameters,
+        returnType: returnType,
+        body: body,
+        location: location
+    }
+
+private fun linked_decode_function_parameter_value(value: any): Result[CompiledFunctionParameter] =
+    linked_decode_data_value(value, "CompiledFunctionParameter", node => linked_decode_function_parameter(node))
+
+private fun linked_decode_function_parameter(node: any): Result[CompiledFunctionParameter] =
+    let checked <- linked_expect_data(node, "CompiledFunctionParameter")
+    let name <- linked_string_field(node, "name")
+    let typeReferenceData <- linked_data_field(node, "typeReference")
+    let typeReference <- linked_decode_type_reference(typeReferenceData)
+    let locationData <- linked_data_field(node, "location")
+    let location <- linked_decode_source_location(locationData)
+    CompiledFunctionParameter {
+        name: name,
+        typeReference: typeReference,
+        location: location
+    }
+
+private fun linked_decode_import_value(value: any): Result[CompiledImportDeclaration] =
+    linked_decode_data_value(value, "CompiledImportDeclaration", node => linked_decode_import(node))
+
+private fun linked_decode_import(node: any): Result[CompiledImportDeclaration] =
+    let checked <- linked_expect_data(node, "CompiledImportDeclaration")
+    let modulePath <- linked_string_field(node, "modulePath")
+    let importedNames <- linked_list_field(node, "importedNames", value => linked_string_value(value))
+    let excludedNames <- linked_list_field(node, "excludedNames", value => linked_string_value(value))
+    let wildcard <- linked_bool_field(node, "wildcard")
+    let qualified <- linked_bool_field(node, "qualified")
+    let locationData <- linked_data_field(node, "location")
+    let location <- linked_decode_source_location(locationData)
+    CompiledImportDeclaration {
+        modulePath: modulePath,
+        importedNames: importedNames,
+        excludedNames: excludedNames,
+        wildcard: wildcard,
+        qualified: qualified,
+        location: location
+    }
+
+private fun linked_decode_deriver_value(value: any): Result[CompiledDeriverDeclaration] =
+    linked_decode_data_value(value, "CompiledDeriverDeclaration", node => linked_decode_deriver(node))
+
+private fun linked_decode_deriver(node: any): Result[CompiledDeriverDeclaration] =
+    let checked <- linked_expect_data(node, "CompiledDeriverDeclaration")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let methods <- linked_list_field(node, "methods", value => linked_decode_function_value(value))
+    let locationData <- linked_data_field(node, "location")
+    let location <- linked_decode_source_location(locationData)
+    CompiledDeriverDeclaration {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        methods: methods,
+        location: location
+    }
+
+private fun linked_decode_annotation_value(value: any): Result[CompiledAnnotationDeclaration] =
+    linked_decode_data_value(value, "CompiledAnnotationDeclaration", node => linked_decode_annotation(node))
+
+private fun linked_decode_annotation(node: any): Result[CompiledAnnotationDeclaration] =
+    let checked <- linked_expect_data(node, "CompiledAnnotationDeclaration")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let repeatable <- linked_bool_field(node, "repeatable")
+    let targets <- linked_list_field(node, "targets", value => linked_string_value(value))
+    let fields <- linked_list_field(node, "fields", value => linked_string_value(value))
+    let locationData <- linked_data_field(node, "location")
+    let location <- linked_decode_source_location(locationData)
+    CompiledAnnotationDeclaration {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        repeatable: repeatable,
+        targets: targets,
+        fields: fields,
+        location: location
+    }
+
+private fun linked_decode_static_import_value(value: any): Result[StaticImport] =
+    linked_decode_data_value(value, "StaticImport", node => linked_decode_static_import(node))
+
+private fun linked_decode_static_import(node: any): Result[StaticImport] =
+    let checked <- linked_expect_data(node, "StaticImport")
+    let className <- linked_string_field(node, "className")
+    let memberName <- linked_string_field(node, "memberName")
+    let enumValue <- linked_bool_field(node, "enumValue")
+    StaticImport {
+        className: className,
+        memberName: memberName,
+        enumValue: enumValue
+    }
+
+private fun linked_decode_type_reference_value(value: any): Result[CompiledTypeReference] =
+    linked_decode_data_value(value, "CompiledTypeReference", node => linked_decode_type_reference(node))
+
+private fun linked_decode_type_reference(node: any): Result[CompiledTypeReference] =
+    let checked <- linked_expect_data(node, "CompiledTypeReference")
+    let name <- linked_string_field(node, "name")
+    let arguments <- linked_list_field(node, "arguments", value => linked_decode_type_reference_value(value))
+    CompiledTypeReference {
+        name: name,
+        arguments: arguments
+    }
+
+private fun linked_decode_source_location(node: any): Result[CompiledSourceLocation] =
+    let checked <- linked_expect_data(node, "CompiledSourceLocation")
+    let line <- linked_int_field(node, "line")
+    let column <- linked_int_field(node, "column")
+    CompiledSourceLocation {
+        line: line,
+        column: column
+    }
+
+private fun linked_decode_source_location_value(value: any): Result[CompiledSourceLocation] =
+    linked_decode_data_value(value, "CompiledSourceLocation", node => linked_decode_source_location(node))
+
+private fun linked_decode_expression(node: any): Result[CompiledExpression] =
+    match node with
+    case TypedJson typed -> {
+        match typed with
+        case TypedJsonData expression_node -> {
+        match expression_node.name with
+    case "CompiledUnsupportedExpression" ->
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledUnsupportedExpression { source: source, location: location }
+    case "CompiledIntLiteral" ->
+        let value <- linked_int_field(node, "value")
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledIntLiteral { value: value, source: source, location: location }
+    case "CompiledLongLiteral" ->
+        let value <- linked_long_field(node, "value")
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledLongLiteral { value: value, source: source, location: location }
+    case "CompiledFloatLiteral" ->
+        let value <- linked_float_field(node, "value")
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledFloatLiteral { value: value, source: source, location: location }
+    case "CompiledDoubleLiteral" ->
+        let value <- linked_double_field(node, "value")
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledDoubleLiteral { value: value, source: source, location: location }
+    case "CompiledBoolLiteral" ->
+        let value <- linked_bool_field(node, "value")
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledBoolLiteral { value: value, source: source, location: location }
+    case "CompiledStringLiteral" ->
+        let value <- linked_string_field(node, "value")
+        let source <- linked_string_field(node, "source")
+        let location <- linked_decode_source_location_field(node)
+        CompiledStringLiteral { value: value, source: source, location: location }
+    case "CompiledVariableExpression" ->
+        let name <- linked_string_field(node, "name")
+        let location <- linked_decode_source_location_field(node)
+        CompiledVariableExpression { name: name, location: location }
+    case "CompiledIfExpression" ->
+        let condition <- linked_decode_expression_field(node, "condition")
+        let thenBranch <- linked_decode_expression_field(node, "thenBranch")
+        let elseBranch <- linked_decode_expression_field(node, "elseBranch")
+        let location <- linked_decode_source_location_field(node)
+        CompiledIfExpression { condition: condition, thenBranch: thenBranch, elseBranch: elseBranch, location: location }
+    case "CompiledBinaryExpression" ->
+        let operator <- linked_string_field(node, "operator")
+        let left <- linked_decode_expression_field(node, "left")
+        let right <- linked_decode_expression_field(node, "right")
+        let location <- linked_decode_source_location_field(node)
+        CompiledBinaryExpression { operator: operator, left: left, right: right, location: location }
+    case "CompiledUnaryExpression" ->
+        let operator <- linked_string_field(node, "operator")
+        let expression <- linked_decode_expression_field(node, "expression")
+        let location <- linked_decode_source_location_field(node)
+        CompiledUnaryExpression { operator: operator, expression: expression, location: location }
+    case "CompiledFunctionCallExpression" ->
+        let name <- linked_string_field(node, "name")
+        let arguments <- linked_list_field(node, "arguments", value => linked_decode_expression_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledFunctionCallExpression { name: name, arguments: arguments, location: location }
+    case "CompiledFunctionReferenceExpression" ->
+        let name <- linked_string_field(node, "name")
+        let location <- linked_decode_source_location_field(node)
+        CompiledFunctionReferenceExpression { name: name, location: location }
+    case "CompiledMethodCallExpression" ->
+        let receiver <- linked_decode_expression_field(node, "receiver")
+        let name <- linked_string_field(node, "name")
+        let arguments <- linked_list_field(node, "arguments", value => linked_decode_expression_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledMethodCallExpression { receiver: receiver, name: name, arguments: arguments, location: location }
+    case "CompiledWithExpression" ->
+        let receiver <- linked_decode_expression_field(node, "receiver")
+        let fields <- linked_list_field(node, "fields", value => linked_decode_data_field_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledWithExpression { receiver: receiver, fields: fields, location: location }
+    case "CompiledLambdaExpression" ->
+        let parameters <- linked_list_field(node, "parameters", value => linked_string_value(value))
+        let body <- linked_decode_expression_field(node, "body")
+        let location <- linked_decode_source_location_field(node)
+        CompiledLambdaExpression { parameters: parameters, body: body, location: location }
+    case "CompiledListLiteral" ->
+        let values <- linked_list_field(node, "values", value => linked_decode_expression_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledListLiteral { values: values, location: location }
+    case "CompiledSetLiteral" ->
+        let values <- linked_list_field(node, "values", value => linked_decode_expression_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledSetLiteral { values: values, location: location }
+    case "CompiledDictLiteral" ->
+        let entries <- linked_list_field(node, "entries", value => linked_decode_dict_entry_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledDictLiteral { entries: entries, location: location }
+    case "CompiledTupleLiteral" ->
+        let values <- linked_list_field(node, "values", value => linked_decode_expression_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledTupleLiteral { values: values, location: location }
+    case "CompiledIndexExpression" ->
+        let receiver <- linked_decode_expression_field(node, "receiver")
+        let index <- linked_decode_expression_field(node, "index")
+        let endIndex <- linked_decode_expression_field(node, "endIndex")
+        let hasEndIndex <- linked_bool_field(node, "hasEndIndex")
+        let location <- linked_decode_source_location_field(node)
+        CompiledIndexExpression { receiver: receiver, index: index, endIndex: endIndex, hasEndIndex: hasEndIndex, location: location }
+    case "CompiledDataLiteral" ->
+        let typeName <- linked_string_field(node, "typeName")
+        let fields <- linked_list_field(node, "fields", value => linked_decode_data_field_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledDataLiteral { typeName: typeName, fields: fields, location: location }
+    case "CompiledFieldAccessExpression" ->
+        let receiver <- linked_decode_expression_field(node, "receiver")
+        let name <- linked_string_field(node, "name")
+        let location <- linked_decode_source_location_field(node)
+        CompiledFieldAccessExpression { receiver: receiver, name: name, location: location }
+    case "CompiledReduceExpression" ->
+        let receiver <- linked_decode_expression_field(node, "receiver")
+        let initial <- linked_decode_expression_field(node, "initial")
+        let accumulatorName <- linked_string_field(node, "accumulatorName")
+        let keyName <- linked_string_field(node, "keyName")
+        let valueName <- linked_string_field(node, "valueName")
+        let body <- linked_decode_expression_field(node, "body")
+        let location <- linked_decode_source_location_field(node)
+        CompiledReduceExpression { receiver: receiver, initial: initial, accumulatorName: accumulatorName, keyName: keyName, valueName: valueName, body: body, location: location }
+    case "CompiledMatchExpression" ->
+        let value <- linked_decode_expression_field(node, "value")
+        let cases <- linked_list_field(node, "cases", value => linked_decode_match_case_value(value))
+        let location <- linked_decode_source_location_field(node)
+        CompiledMatchExpression { value: value, cases: cases, location: location }
+    case "CompiledBlockExpression" ->
+        let bindings <- linked_list_field(node, "bindings", value => linked_decode_let_binding_value(value))
+        let result <- linked_decode_expression_field(node, "result")
+        let location <- linked_decode_source_location_field(node)
+        CompiledBlockExpression { bindings: bindings, result: result, location: location }
+        case _ -> Error { message: "Unknown linked expression type `" + expression_node.name + "`" }
+        }
+        case _ -> Error { message: "Expected CompiledExpression typed JSON" }
+    }
+    case _ -> Error { message: "Expected CompiledExpression typed JSON" }
+
+private fun linked_decode_expression_value(value: any): Result[CompiledExpression] =
+    linked_decode_data_value(value, "CompiledExpression", node => linked_decode_expression(node))
+
+private fun linked_decode_expression_field(node: any, name: String): Result[CompiledExpression] =
+    let expressionData <- linked_data_field(node, name)
+    linked_decode_expression(expressionData)
+
+private fun linked_decode_source_location_field(node: any): Result[CompiledSourceLocation] =
+    let locationData <- linked_data_field(node, "location")
+    linked_decode_source_location(locationData)
+
+private fun linked_decode_dict_entry_value(value: any): Result[CompiledDictEntry] =
+    linked_decode_data_value(value, "CompiledDictEntry", node => linked_decode_dict_entry(node))
+
+private fun linked_decode_dict_entry(node: any): Result[CompiledDictEntry] =
+    let checked <- linked_expect_data(node, "CompiledDictEntry")
+    let key <- linked_decode_expression_field(node, "key")
+    let value <- linked_decode_expression_field(node, "value")
+    let location <- linked_decode_source_location_field(node)
+    CompiledDictEntry { key: key, value: value, location: location }
+
+private fun linked_decode_data_field_value(value: any): Result[CompiledDataField] =
+    linked_decode_data_value(value, "CompiledDataField", node => linked_decode_data_field(node))
+
+private fun linked_decode_data_field(node: any): Result[CompiledDataField] =
+    let checked <- linked_expect_data(node, "CompiledDataField")
+    let name <- linked_string_field(node, "name")
+    let value <- linked_decode_expression_field(node, "value")
+    let spread <- linked_bool_field(node, "spread")
+    let location <- linked_decode_source_location_field(node)
+    CompiledDataField { name: name, value: value, spread: spread, location: location }
+
+private fun linked_decode_match_case_value(value: any): Result[CompiledMatchCase] =
+    linked_decode_data_value(value, "CompiledMatchCase", node => linked_decode_match_case(node))
+
+private fun linked_decode_match_case(node: any): Result[CompiledMatchCase] =
+    let checked <- linked_expect_data(node, "CompiledMatchCase")
+    let typeName <- linked_string_field(node, "typeName")
+    let bindings <- linked_list_field(node, "bindings", value => linked_string_value(value))
+    let bindsWholeValue <- linked_bool_field(node, "bindsWholeValue")
+    let literal <- linked_decode_expression_field(node, "literal")
+    let hasLiteral <- linked_bool_field(node, "hasLiteral")
+    let wildcard <- linked_bool_field(node, "wildcard")
+    let guard <- linked_decode_expression_field(node, "guard")
+    let hasGuard <- linked_bool_field(node, "hasGuard")
+    let body <- linked_decode_expression_field(node, "body")
+    let location <- linked_decode_source_location_field(node)
+    CompiledMatchCase {
+        typeName: typeName,
+        bindings: bindings,
+        bindsWholeValue: bindsWholeValue,
+        literal: literal,
+        hasLiteral: hasLiteral,
+        wildcard: wildcard,
+        guard: guard,
+        hasGuard: hasGuard,
+        body: body,
+        location: location
+    }
+
+private fun linked_decode_let_binding_value(value: any): Result[CompiledLetBinding] =
+    linked_decode_data_value(value, "CompiledLetBinding", node => linked_decode_let_binding(node))
+
+private fun linked_decode_let_binding(node: any): Result[CompiledLetBinding] =
+    let checked <- linked_expect_data(node, "CompiledLetBinding")
+    let name <- linked_string_field(node, "name")
+    let typeReferenceData <- linked_data_field(node, "typeReference")
+    let typeReference <- linked_decode_type_reference(typeReferenceData)
+    let operator <- linked_string_field(node, "operator")
+    let value <- linked_decode_expression_field(node, "value")
+    let location <- linked_decode_source_location_field(node)
+    CompiledLetBinding {
+        name: name,
+        typeReference: typeReference,
+        operator: operator,
+        value: value,
+        location: location
+    }
+
+private fun linked_decode_native_provider_manifest(node: any): Result[NativeProviderManifest] =
+    let checked <- linked_expect_data(node, "NativeProviderManifest")
+    let providers <- linked_list_field(node, "providers", value => linked_decode_native_provider_binding_value(value))
+    NativeProviderManifest { providers: providers }
+
+private fun linked_decode_native_provider_binding_value(value: any): Result[NativeProviderBinding] =
+    linked_decode_data_value(value, "NativeProviderBinding", node => linked_decode_native_provider_binding(node))
+
+private fun linked_decode_native_provider_binding(node: any): Result[NativeProviderBinding] =
+    let checked <- linked_expect_data(node, "NativeProviderBinding")
+    let interfaceId <- linked_string_field(node, "interfaceId")
+    let qualifier <- linked_string_field(node, "qualifier")
+    let javaBinding <- linked_option_field(node, "javaBinding", value => linked_decode_native_backend_binding_value(value))
+    let javascriptBinding <- linked_option_field(node, "javascriptBinding", value => linked_decode_native_backend_binding_value(value))
+    let pythonBinding <- linked_option_field(node, "pythonBinding", value => linked_decode_native_backend_binding_value(value))
+    NativeProviderBinding {
+        interfaceId: interfaceId,
+        qualifier: qualifier,
+        javaBinding: javaBinding,
+        javascriptBinding: javascriptBinding,
+        pythonBinding: pythonBinding
+    }
+
+private fun linked_decode_native_backend_binding_value(value: any): Result[NativeProviderBackendBinding] =
+    linked_decode_data_value(value, "NativeProviderBackendBinding", node => linked_decode_native_backend_binding(node))
+
+private fun linked_decode_native_backend_binding(node: any): Result[NativeProviderBackendBinding] =
+    let checked <- linked_expect_data(node, "NativeProviderBackendBinding")
+    let className <- linked_option_field(node, "className", value => linked_string_value(value))
+    let moduleName <- linked_option_field(node, "moduleName", value => linked_string_value(value))
+    let exportName <- linked_option_field(node, "exportName", value => linked_string_value(value))
+    let factory <- linked_option_field(node, "factory", value => linked_string_value(value))
+    NativeProviderBackendBinding {
+        className: className,
+        moduleName: moduleName,
+        exportName: exportName,
+        factory: factory
+    }
+
+private fun linked_decode_native_provider_catalog(node: any): Result[NativeProviderCatalog] =
+    let checked <- linked_expect_data(node, "NativeProviderCatalog")
+    let declarations <- linked_list_field(node, "declarations", value => linked_decode_compiled_native_provider_declaration_value(value))
+    let bindings <- linked_list_field(node, "bindings", value => linked_decode_compiled_native_provider_binding_value(value))
+    NativeProviderCatalog {
+        declarations: declarations,
+        bindings: bindings
+    }
+
+private fun linked_decode_compiled_native_provider_declaration_value(value: any): Result[CompiledNativeProviderDeclaration] =
+    linked_decode_data_value(value, "CompiledNativeProviderDeclaration", node => linked_decode_compiled_native_provider_declaration(node))
+
+private fun linked_decode_compiled_native_provider_declaration(node: any): Result[CompiledNativeProviderDeclaration] =
+    let checked <- linked_expect_data(node, "CompiledNativeProviderDeclaration")
+    let providerName <- linked_string_field(node, "providerName")
+    let sourceModulePath <- linked_string_field(node, "sourceModulePath")
+    let sourceModuleName <- linked_string_field(node, "sourceModuleName")
+    let targetTypeName <- linked_string_field(node, "targetTypeName")
+    let interfaceId <- linked_string_field(node, "interfaceId")
+    let qualifier <- linked_string_field(node, "qualifier")
+    let sourceFile <- linked_string_field(node, "sourceFile")
+    CompiledNativeProviderDeclaration {
+        providerName: providerName,
+        sourceModulePath: sourceModulePath,
+        sourceModuleName: sourceModuleName,
+        targetTypeName: targetTypeName,
+        interfaceId: interfaceId,
+        qualifier: qualifier,
+        sourceFile: sourceFile
+    }
+
+private fun linked_decode_compiled_native_provider_binding_value(value: any): Result[CompiledNativeProviderBinding] =
+    linked_decode_data_value(value, "CompiledNativeProviderBinding", node => linked_decode_compiled_native_provider_binding(node))
+
+private fun linked_decode_compiled_native_provider_binding(node: any): Result[CompiledNativeProviderBinding] =
+    let checked <- linked_expect_data(node, "CompiledNativeProviderBinding")
+    let interfaceId <- linked_string_field(node, "interfaceId")
+    let qualifier <- linked_string_field(node, "qualifier")
+    let javaBinding <- linked_option_field(node, "javaBinding", value => linked_decode_native_backend_binding_value(value))
+    let javascriptBinding <- linked_option_field(node, "javascriptBinding", value => linked_decode_native_backend_binding_value(value))
+    let pythonBinding <- linked_option_field(node, "pythonBinding", value => linked_decode_native_backend_binding_value(value))
+    CompiledNativeProviderBinding {
+        interfaceId: interfaceId,
+        qualifier: qualifier,
+        javaBinding: javaBinding,
+        javascriptBinding: javascriptBinding,
+        pythonBinding: pythonBinding
+    }
+
+private fun linked_decode_object_oriented_unit_value(value: any): Result[CompiledObjectOrientedUnit] =
+    linked_decode_data_value(value, "CompiledObjectOrientedUnit", node => linked_decode_object_oriented_unit(node))
+
+private fun linked_decode_object_oriented_unit(node: any): Result[CompiledObjectOrientedUnit] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedUnit")
+    let name <- linked_string_field(node, "name")
+    let path <- linked_string_field(node, "path")
+    let interfaces <- linked_list_field(node, "interfaces", value => linked_decode_object_oriented_interface_value(value))
+    let classes <- linked_list_field(node, "classes", value => linked_decode_object_oriented_class_value(value))
+    CompiledObjectOrientedUnit {
+        name: name,
+        path: path,
+        interfaces: interfaces,
+        classes: classes
+    }
+
+private fun linked_decode_object_oriented_interface_value(value: any): Result[CompiledObjectOrientedInterface] =
+    linked_decode_data_value(value, "CompiledObjectOrientedInterface", node => linked_decode_object_oriented_interface(node))
+
+private fun linked_decode_object_oriented_interface(node: any): Result[CompiledObjectOrientedInterface] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedInterface")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let kind <- linked_string_field(node, "kind")
+    let parents <- linked_list_field(node, "parents", value => linked_decode_type_reference_value(value))
+    let methods <- linked_list_field(node, "methods", value => linked_decode_object_oriented_method_value(value))
+    let location <- linked_decode_source_location_field(node)
+    CompiledObjectOrientedInterface {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        kind: kind,
+        parents: parents,
+        methods: methods,
+        location: location
+    }
+
+private fun linked_decode_object_oriented_class_value(value: any): Result[CompiledObjectOrientedClass] =
+    linked_decode_data_value(value, "CompiledObjectOrientedClass", node => linked_decode_object_oriented_class(node))
+
+private fun linked_decode_object_oriented_class(node: any): Result[CompiledObjectOrientedClass] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedClass")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let open <- linked_bool_field(node, "open")
+    let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
+    let parents <- linked_list_field(node, "parents", value => linked_decode_type_reference_value(value))
+    let fields <- linked_list_field(node, "fields", value => linked_decode_object_oriented_field_value(value))
+    let initBlocks <- linked_list_field(node, "initBlocks", value => linked_decode_object_oriented_init_block_value(value))
+    let methods <- linked_list_field(node, "methods", value => linked_decode_object_oriented_method_value(value))
+    let location <- linked_decode_source_location_field(node)
+    CompiledObjectOrientedClass {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        open: open,
+        parameters: parameters,
+        parents: parents,
+        fields: fields,
+        initBlocks: initBlocks,
+        methods: methods,
+        location: location
+    }
+
+private fun linked_decode_object_oriented_field_value(value: any): Result[CompiledObjectOrientedField] =
+    linked_decode_data_value(value, "CompiledObjectOrientedField", node => linked_decode_object_oriented_field(node))
+
+private fun linked_decode_object_oriented_field(node: any): Result[CompiledObjectOrientedField] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedField")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let typeReferenceData <- linked_data_field(node, "typeReference")
+    let typeReference <- linked_decode_type_reference(typeReferenceData)
+    let value <- linked_decode_expression_field(node, "value")
+    let hasValue <- linked_bool_field(node, "hasValue")
+    let location <- linked_decode_source_location_field(node)
+    CompiledObjectOrientedField {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        typeReference: typeReference,
+        value: value,
+        hasValue: hasValue,
+        location: location
+    }
+
+private fun linked_decode_object_oriented_init_block_value(value: any): Result[CompiledObjectOrientedInitBlock] =
+    linked_decode_data_value(value, "CompiledObjectOrientedInitBlock", node => linked_decode_object_oriented_init_block(node))
+
+private fun linked_decode_object_oriented_init_block(node: any): Result[CompiledObjectOrientedInitBlock] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedInitBlock")
+    let body <- linked_decode_expression_field(node, "body")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let location <- linked_decode_source_location_field(node)
+    CompiledObjectOrientedInitBlock {
+        body: body,
+        documentation: documentation,
+        location: location
+    }
+
+private fun linked_decode_object_oriented_method_value(value: any): Result[CompiledObjectOrientedMethod] =
+    linked_decode_data_value(value, "CompiledObjectOrientedMethod", node => linked_decode_object_oriented_method(node))
+
+private fun linked_decode_object_oriented_method(node: any): Result[CompiledObjectOrientedMethod] =
+    let checked <- linked_expect_data(node, "CompiledObjectOrientedMethod")
+    let name <- linked_string_field(node, "name")
+    let visibility <- linked_string_field(node, "visibility")
+    let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
+    let parameters <- linked_list_field(node, "parameters", value => linked_decode_function_parameter_value(value))
+    let returnTypeData <- linked_data_field(node, "returnType")
+    let returnType <- linked_decode_type_reference(returnTypeData)
+    let body <- linked_decode_expression_field(node, "body")
+    let location <- linked_decode_source_location_field(node)
+    CompiledObjectOrientedMethod {
+        name: name,
+        visibility: visibility,
+        documentation: documentation,
+        parameters: parameters,
+        returnType: returnType,
+        body: body,
+        location: location
+    }
 
 private fun print_compiler_errors(errors: List[CompilerError]): Effect[String] =
     println_error(compiler_errors_text(errors))
@@ -1407,15 +2634,51 @@ fun run_generate(options: GenerateOptions): Effect[/capy/lang/Program] =
     )
 
 private fun read_linked_program(inputDir: Path): Effect[Result[CompiledProgram]] =
-    let programFile = inputDir / "program.json"
-    read_text(programFile).map(readResult =>
-        match readResult with
-        case Error { message } -> Error { message: "Unable to read linked program `" + cli_path_to_string(programFile) + "`: " + message }
-        case Success _ -> Error { message: "`capy generate` uses the Java facade for linked program deserialization." }
-    )
+    read_linked_program(inputDir, true)
 
 private fun write_generated_program(outputDir: Path, program: GeneratedProgram): Effect[Result[String]] =
-    write_generated_modules(outputDir, program.modules)
+    clear_generated_output_directory(outputDir).flat_map(clearResult =>
+        match clearResult with
+        case Error e -> pure(e)
+        case Success _ -> write_generated_modules(outputDir, program.modules)
+    )
+
+private fun clear_generated_output_directory(outputDir: Path): Effect[Result[String]] =
+    list_entries(outputDir).flat_map(entriesResult =>
+        match entriesResult with
+        case Error e -> pure(e)
+        case Success { entries } -> delete_entries(entries)
+    )
+
+private fun delete_entries(entries: List[Path]): Effect[Result[String]] =
+    match entries[0] with
+    case None -> pure(Success { "generated output pruned" })
+    case Some { entry } ->
+        delete_entry(entry).flat_map(deleteResult =>
+            match deleteResult with
+            case Error e -> pure(e)
+            case Success _ -> delete_entries(entries[1:])
+        )
+
+private fun delete_entry(path: Path): Effect[Result[String]] =
+    is_directory(path).flat_map(directory =>
+        if directory
+        then clear_generated_output_directory(path).flat_map(clearResult =>
+            match clearResult with
+            case Error e -> pure(e)
+            case Success _ ->
+                delete(path).map(deleteResult =>
+                    match deleteResult with
+                    case Error e -> e
+                    case Success _ -> Success { "deleted" }
+                )
+        )
+        else delete(path).map(deleteResult =>
+            match deleteResult with
+            case Error e -> e
+            case Success _ -> Success { "deleted" }
+        )
+    )
 
 private fun write_generated_modules(outputDir: Path, modules: List[GeneratedModule]): Effect[Result[String]] =
     match modules[0] with
@@ -1599,11 +2862,11 @@ private fun package_files_from_modules(modules: List[CompiledModule]): Result[Li
             case Success { rest } -> Success { [moduleFile] + rest }
 
 private fun json_package_file(path: String, value: data): Result[PackageFile] =
-    match to_json(value) with
+    match to_typed_json(value) with
     case Error { message } -> Error { message: "Unable to serialize package file `" + path + "`: " + message }
     case Success { json } -> Success { PackageFile {
         path: path,
-        content: serialize(json)
+        content: serialize_typed(json)
     }}
 
 private fun write_package_archive(outputFile: Path, archive: PackageArchive): Effect[Result[String]] =
@@ -1614,43 +2877,40 @@ private fun write_package_archive(outputFile: Path, archive: PackageArchive): Ef
     )
 
 fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Program] =
-    match compile_generate_configuration(options) with
-    case Error { message } -> runtime_error(message)
-    case Success { configuration } ->
-        let inputPath = from_string(options.input)
-        let outputPath = from_string(options.output)
-        validate_output_directory(outputPath, options.output).flat_map(outputResult =>
-            match outputResult with
-            case Error { message } -> runtime_error(message)
-            case Success _ ->
-                compile_source_directory(inputPath, options.input, configuration).flat_map(compilation =>
-                    match compilation with
-                    case Right { errors } ->
-                        print_compiler_errors(errors)
-                            .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
-                    case Left { program } ->
-                        write_compile_generate_linked_output(options.linked_output, program).flat_map(linkedResult =>
-                            match linkedResult with
-                            case Error { message } -> runtime_error(message)
-                            case Success _ ->
-                                compile_generate_tests(options, configuration, program).flat_map(testResult =>
-                                    match testResult with
-                                    case Error { message } -> runtime_error(message)
-                                    case Success { testProgram } ->
-                                        write_generated_program(outputPath, generate(program, options.output_type)).flat_map(writeResult =>
-                                            match writeResult with
-                                            case Error { message } -> runtime_error(message)
-                                            case Success _ ->
-                                                write_compile_generate_test_output(options, testProgram).flat_map(testWriteResult =>
-                                                    match testWriteResult with
-                                                    case Error { message } -> runtime_error(message)
-                                                    case Success _ -> pure(/capy/lang/Program.Success {})
-                                                )
-                                        )
-                                )
-                        )
-                )
-        )
+    compile_generate_configuration(options).flat_map(configuration_result =>
+        match configuration_result with
+        case Error { message } -> runtime_error(message)
+        case Success { configuration } ->
+            let inputPath = from_string(options.input)
+            let outputPath = from_string(options.output)
+            validate_output_directory(outputPath, options.output).flat_map(outputResult =>
+                match outputResult with
+                case Error { message } -> runtime_error(message)
+                case Success _ ->
+                    compile_source_directory(inputPath, options.input, configuration).flat_map(compilation =>
+                        match compilation with
+                        case Right { errors } ->
+                            print_compiler_errors(errors)
+                                .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                        case Left { program } ->
+                            write_compile_generate_linked_output(options.linked_output, program).flat_map(linkedResult =>
+                                match linkedResult with
+                                case Error { message } -> runtime_error(message)
+                                case Success _ ->
+                                    compile_generate_tests(options, configuration, program).flat_map(testResult =>
+                                        match testResult with
+                                        case Error { message } -> runtime_error(message)
+                                        case Success { testProgram } ->
+                                            write_compile_generate_outputs(options, program, testProgram).flat_map(writeResult =>
+                                                match writeResult with
+                                                case Error { message } -> runtime_error(message)
+                                                case Success _ -> pure(/capy/lang/Program.Success {})
+                                            )
+                                    )
+                            )
+                    )
+            )
+    )
 
 fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
     let moduleFile = from_string(options.module)

@@ -31,7 +31,7 @@ enum DocType {
 }
 
 fun main(args: List[String]): Effect[/capy/lang/Program] =
-    write_docs(from_string("build/capy-docs"), generate_docs(example_program(), ADOC {})).map(result =>
+    write_docs(from_string("build/capy-docs"), generate_docs(example_program(), ADOC)).map(result =>
         match result with
         case Success _ -> /capy/lang/Program.Success {}
         case Error _ -> /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE }

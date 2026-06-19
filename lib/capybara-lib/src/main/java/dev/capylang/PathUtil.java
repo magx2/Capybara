@@ -21,6 +21,7 @@ public final class PathUtil {
                     .map(Paths::get)
                     .orElseGet(() -> Paths.get(java.nio.file.Path.of("/").toString()));
             case "HOME" -> Paths.get(System.getProperty("user.home"));
+            case "TEMP" -> tempPath();
             default -> Paths.get("");
         };
         return appendSegments(javaRoot, segments).normalize();
@@ -29,14 +30,19 @@ public final class PathUtil {
     public static Object fromJavaPath(java.nio.file.Path path) {
         var normalizedPath = path.normalize();
         var homePath = Paths.get(System.getProperty("user.home")).normalize();
+        var tempPath = tempPath();
         var nativeRoot = normalizedPath.getRoot();
-        var root = normalizedPath.startsWith(homePath)
+        var root = normalizedPath.startsWith(tempPath)
+                ? root("TEMP")
+                : normalizedPath.startsWith(homePath)
                 ? root("HOME")
                 : normalizedPath.isAbsolute() ? root("ABSOLUTE") : root("RELATIVE");
         var prefix = dataType(root).equals("ABSOLUTE") && nativeRoot != null
                 ? Optional.of(nativeRoot.toString())
                 : Optional.<String>empty();
-        var segments = normalizedPath.startsWith(homePath)
+        var segments = normalizedPath.startsWith(tempPath)
+                ? segments(tempPath.relativize(normalizedPath))
+                : normalizedPath.startsWith(homePath)
                 ? segments(homePath.relativize(normalizedPath))
                 : segments(normalizedPath);
         return Map.of(
@@ -48,26 +54,21 @@ public final class PathUtil {
     }
 
     public static Object fromString(String pathString) {
-        var root = pathString.startsWith("/")
-                ? root("ABSOLUTE")
-                : pathString.startsWith("~") ? root("HOME") : root("RELATIVE");
-        var value = pathString.startsWith("/")
-                ? pathString.substring(1)
-                : pathString.startsWith("~/") ? pathString.substring(2)
-                : pathString.startsWith("~") ? pathString.substring(1)
-                : pathString;
-        return Map.of(
-                "__type", "Path",
-                "root", root,
-                "prefix", Optional.empty(),
-                "segments", normalizeSegments(root, splitSegments(value))
-        );
+        if (pathString.startsWith("~")) {
+            var homePath = Paths.get(System.getProperty("user.home")).normalize();
+            var value = pathString.startsWith("~/") || pathString.startsWith("~\\")
+                    ? pathString.substring(2)
+                    : pathString.substring(1);
+            return fromJavaPath(value.isEmpty() ? homePath : homePath.resolve(value));
+        }
+        return fromJavaPath(Paths.get(pathString));
     }
 
     private static Object root(String name) {
         return Map.of("__type", name, "name", name, "order", switch (name) {
             case "ABSOLUTE" -> 1;
             case "HOME" -> 2;
+            case "TEMP" -> 3;
             default -> 0;
         });
     }
@@ -116,6 +117,10 @@ public final class PathUtil {
             return Optional.ofNullable((String) ((Map<String, Object>) value).get("value"));
         }
         return Optional.empty();
+    }
+
+    private static java.nio.file.Path tempPath() {
+        return Paths.get(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
     }
 
     private static java.nio.file.Path appendSegments(java.nio.file.Path root, List<String> segments) {

@@ -46,6 +46,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         var capybaraTestResultsDir = layout.getBuildDirectory().dir("test-results/capybara");
         var generatedMainJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java");
         var generatedTestJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/java");
+        var generatedTestMainJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/main-java");
         var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java/check");
         var hasCapybaraTestSources = hasMatchingFile(project.file("src/test/capybara").toPath(), relativePath -> true);
         var hasJvmMainSources = hasJvmSources(project.file("src/main").toPath());
@@ -125,14 +126,15 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("verification");
                     task.setDescription("Compiles Capybara files from src/test/capybara.");
-                    task.dependsOn(linkCapybaraLinked);
-                    task.getInputDir().set(project.file("src/test/capybara"));
-                    task.getGeneratedOutputDir().set(generatedTestJavaDir);
-                    task.getLibraryProgramFiles().from(layout.getBuildDirectory().file("classes/capybara/program.json"));
+                    task.getInputDir().set(project.file("src/main/capybara"));
+                    task.getGeneratedOutputDir().set(generatedTestMainJavaDir);
+                    task.getTestInputDir().set(project.file("src/test/capybara"));
+                    task.getGeneratedTestOutputDir().set(generatedTestJavaDir);
+                    task.getLibraryProgramFiles().from();
                     task.getCompilerVersion().set(compilerVersion);
-                    task.getCompileTests().set(true);
+                    task.getCompileTests().set(false);
                     task.getIncludeJavaLibResources().set(false);
-                    task.getCompileTestSourcesWithMainCompilation().set(false);
+                    task.getCompileTestSourcesWithMainCompilation().set(true);
                     task.getWriteLinkedOutput().set(false);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                     task.getLogLevel().set(capybaraCompileLogLevel);

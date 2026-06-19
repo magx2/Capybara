@@ -40,7 +40,7 @@ public abstract class GenerateCapybaraTask extends DefaultTask {
             var outputDir = outputRoot.resolve(outputType.name().toLowerCase(Locale.ROOT));
             Files.createDirectories(outputDir);
             var errors = new ByteArrayOutputStream();
-            var exitCode = Capy.generate(outputType, input, outputDir, new PrintStream(errors));
+            var exitCode = GeneratedCapyCompiler.generate(outputType, input, outputDir, new PrintStream(errors));
             if (exitCode != 0) {
                 var message = errors.toString().trim();
                 throw new GradleException(message.isEmpty() ? "Capybara generate failed with exit code " + exitCode : message);

@@ -19,7 +19,7 @@ fun parse_local_option(value: int): Result[int] =
         case None -> Error { "missing value" }
     ---
     unwrap(Parse { buffer: "", value: Some { value } })
-    | parsed => Success { parsed.value }
+    | parsed => parsed.value
 
 fun parse_local_option_none(): Result[int] =
     data Parse[T] { buffer: String, value: T }
@@ -30,7 +30,7 @@ fun parse_local_option_none(): Result[int] =
     ---
     let none_value: Option[int] = None {}
     unwrap(Parse { buffer: "", value: none_value })
-    | parsed => Success { parsed.value }
+    | parsed => parsed.value
 
 fun parse_local_semver_build(version: String): Result[String] =
     data Parse[T] { buffer: String, value: T }
@@ -42,11 +42,11 @@ fun parse_local_semver_build(version: String): Result[String] =
         value: SemVer { major: 1, build_metadata: None {} }
     }
     parse_build(parse.buffer)
-    | parse_build => Success { Parse {
+    | parse_build => Parse {
         buffer: parse_build.buffer,
         value: parse.value.with(build_metadata: Some { parse_build.value })
-    }}
-    | parse_semver =>
+    }
+    |* parse_semver =>
         match parse_semver.value.build_metadata with
         case Some { value } -> Success { value }
         case None -> Error { "missing metadata" }
@@ -61,11 +61,11 @@ fun parse_local_semver_build_and_increment(version: String): Result[int] =
         value: SemVer { major: 1, build_metadata: None {} }
     }
     parse_build(parse.buffer)
-    | parse_build => Success { Parse {
+    | parse_build => Parse {
         buffer: parse_build.buffer,
         value:
             parse.value
                 .with(build_metadata: Some { parse_build.value })
                 .with(major: parse.value.major + 1)
-    }}
-    | parse_semver => Success { parse_semver.value.major }
+    }
+    | parse_semver => parse_semver.value.major

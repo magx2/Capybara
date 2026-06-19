@@ -16,7 +16,7 @@ tree.
 
 ## CLI
 
-The CLI main class is `dev.capylang.Capy`. Its core commands are:
+The CLI main class is `dev.capylang.cli.Capy`. Its core commands are:
 
 ```bash
 capy compile -i <source-dir> -o <linked-output-dir>

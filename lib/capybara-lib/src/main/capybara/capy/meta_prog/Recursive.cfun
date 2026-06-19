@@ -1,2 +1,13 @@
 /// Marks a function as a compiler-verified direct tail-recursion contract.
+///
+/// Example:
+/// ```cfun
+/// @Recursive
+/// fun sum(values: List[int], acc: int): int =
+///     match values[0] with
+///     case None -> acc
+///     case Some { value } -> sum(values[1:], acc + value)
+/// ```
+/// Use this on helper functions where recursive calls must stay in tail
+/// position.
 annotation Recursive on fun {}

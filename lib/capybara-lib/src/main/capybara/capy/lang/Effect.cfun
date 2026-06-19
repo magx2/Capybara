@@ -1,10 +1,28 @@
+/// Deferred computation that may interact with the outside world.
+///
+/// `Effect` values are composed with `map`, `flat_map`, `|`, `|*`, or `let`
+/// binding. They run at the runtime boundary, or when `unsafe_run` is called
+/// explicitly.
+///
+/// Example:
+/// ```cfun
+/// let program =
+///     delay(() => "Ada")
+///         .map(name => "hello " + name)
+/// ```
+/// `program` is still an `Effect[String]`; the thunk has not run yet.
 union Effect[T] = UnsafeEffect[T]
 
 private data UnsafeEffect[T] { unsafe_thunk: () => T }
 
+/// Wraps a pure value in an effect.
 fun pure(value: T): Effect[T] =
     UnsafeEffect { unsafe_thunk: () => value }
 
+/// Defers a thunk until the effect is executed.
+///
+/// Use this for computations that should not happen while the effect is being
+/// constructed.
 fun delay(thunk: () => T): Effect[T] =
     UnsafeEffect { unsafe_thunk: thunk }
 
@@ -12,17 +30,33 @@ private fun _run(effect: Effect[T]): T =
     match effect with
     case UnsafeEffect { unsafe_thunk } -> unsafe_thunk()
 
+/// Executes the effect immediately and returns its value.
+///
+/// Prefer normal effect composition in application code. `unsafe_run` is useful
+/// for tests, adapters, or runtime boundaries that intentionally leave the
+/// effect model.
 fun Effect[T].unsafe_run(): T =
     _run(this)
 
+/// Transforms the produced value without executing the effect immediately.
 fun Effect[T].map(map: T => Y): Effect[Y] =
     delay(() => map(_run(this)))
 
+/// Sequences this effect and then returns the effect produced by `flatmap`.
+///
+/// Example:
+/// ```cfun
+/// read_text(path).flat_map(result =>
+///     print(result.reduce(text => text, err => err))
+/// )
+/// ```
 fun Effect[T].flat_map(flatmap: T => Effect[Y]): Effect[Y] =
     delay(() => _run(flatmap(_run(this))))
 
+/// Operator alias for `map`.
 fun Effect[T].`|`(map: T => Y): Effect[Y] =
     this.map(map)
 
+/// Operator alias for `flat_map`.
 fun Effect[T].`|*`(flatmap: T => Effect[Y]): Effect[Y] =
     this.flat_map(flatmap)

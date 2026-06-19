@@ -5,8 +5,23 @@ from /capy/collection/Dict import { * }
 from /capy/lang/Option import { Option, None, Some }
 from /capy/meta_prog/Recursive import { Recursive }
 
+/// Lazy sequence that can be finite or infinite.
+///
+/// A `Seq` is either a `Cons` value with a current element and delayed rest, or
+/// `End` for an empty sequence. Use `take` before materializing an infinite
+/// sequence.
+///
+/// Example:
+/// ```cfun
+/// natural_seq()
+///     .filter(value => value % 2 == 0)
+///     .take(3)
+/// ```
+/// Returns `[0, 2, 4]`.
 union Seq[T] = Cons[T] | End
+/// Non-empty sequence node.
 data Cons[T] { value: T, rest: () => Seq[T] }
+/// Empty sequence node.
 data End {}
 /// Returns an infinite sequence of natural numbers starting at `0`.
 ///
@@ -47,6 +62,8 @@ fun powers_of_2_seq() = powers_seq(2)
 /// Collects the first `n` elements into a `List`.
 ///
 /// This method is safe to use with infinite sequences.
+///
+/// Example: `powers_of_2_seq().take(4)` returns `[1, 2, 4, 8]`.
 fun Seq[T].take(n: size): List[T] =
     @Recursive
     fun take(seq: Seq[T], n: int, list: List[T]): List[T] =
@@ -72,6 +89,12 @@ fun Seq[T].as_list(): List[T] =
     as_list(this, [])
 
 /// Converts a `List` into a finite `Seq`.
+///
+/// Example:
+/// ```cfun
+/// to_seq([1, 2, 3]).map(value => value + 1).as_list()
+/// ```
+/// Returns `[2, 3, 4]`.
 fun to_seq(list: List[T]): Seq[T] =
     let initial: Seq[T] = End {}
     list |> initial, (acc, value) => acc + Cons { value, () => End {} }
@@ -118,6 +141,7 @@ fun Seq[T].filter(pred: T => bool): Seq[T] =
     ---
     filter(this, pred)
 
+/// Operator alias for `filter`.
 fun Seq[T].`|-`(pred: T => bool): Seq[T] = this.filter(pred)
 
 /// Returns a sequence without elements that satisfy `pred`.
@@ -190,11 +214,18 @@ fun Seq[T].`+`(other: Seq[T]): Seq[T] =
     add(this, other)
 
 /// Transforms each element using `map`.
+///
+/// Example:
+/// ```cfun
+/// (to_seq([1, 2, 3]) | value => value * 2).as_list()
+/// ```
+/// Returns `[2, 4, 6]`.
 fun Seq[T].`|`(map: T => Y): Seq[Y] =
     match this with
     case End -> End {}
     case Cons { value, rest } -> Cons { map(value), () => (rest() | map) }
 
+/// Transforms each element using `map`.
 fun Seq[T].map(map: T => Y): Seq[Y] =
     match this with
     case End -> End {}
@@ -203,7 +234,7 @@ fun Seq[T].map(map: T => Y): Seq[Y] =
 /// Applies `map` and flattens the resulting sequences.
 ///
 /// Example:
-/// `[1, 2, 3, 4, ...] |* x => [x, 2*x, 3*x]`
+/// `natural_seq() |* x => to_seq([x, 2*x, 3*x])`
 /// produces:
 /// `[1, 2, 3, 2, 4, 6, 4, 8, 12, ...]`
 fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
@@ -215,6 +246,7 @@ fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
     ---
     flat_map(this, map)
 
+/// Applies `map` and flattens the resulting sequences.
 fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
     fun flat_map(seq: Seq[T], map: T => Seq[Y]) =
         match seq with
@@ -225,6 +257,14 @@ fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
     flat_map(this, map)
 
 /// Combines all elements from left to right.
+///
+/// Important: reducing an infinite sequence does not terminate.
+///
+/// Example:
+/// ```cfun
+/// to_seq([1, 2, 3]) |> 0, (total, value) => total + value
+/// ```
+/// Returns `6`.
 fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
     @Recursive
     fun reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
@@ -234,6 +274,7 @@ fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
     ---
     reduce(this, initial, reducer)
 
+/// Operator alias for `reduce`.
 fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
 /// Combines elements from left to right using the first element as the accumulator.

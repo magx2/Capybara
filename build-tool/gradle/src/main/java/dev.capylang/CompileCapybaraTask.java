@@ -13,8 +13,6 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
-import dev.capylang.compiler.OutputType;
-import dev.capylang.compiler.CompiledModule;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,9 +20,7 @@ import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -89,11 +85,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         var generatedTestOutput = compileTestSourcesWithMainCompilation && getGeneratedTestOutputDir().isPresent()
                 ? getGeneratedTestOutputDir().get().getAsFile().toPath()
                 : null;
-        var libraries = readLibraryModules(getLibraryProgramFiles().getFiles().stream()
+        var libraryProgramFiles = getLibraryProgramFiles().getFiles().stream()
                 .map(java.io.File::toPath)
-                .map(java.nio.file.Path::getParent)
-                .filter(java.util.Objects::nonNull)
-                .toList());
+                .toList();
 
         if (output != null) {
             clearDirectory(output);
@@ -113,7 +107,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                         generatedOutput,
                         testInput,
                         generatedTestOutput,
-                        libraries,
+                        libraryProgramFiles,
                         new PrintStream(errors)
                 )
         );
@@ -149,66 +143,22 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             Path generatedOutput,
             Path testInput,
             Path generatedTestOutput,
-            TreeSet<CompiledModule> libraries,
+            java.util.Collection<Path> libraryProgramFiles,
             PrintStream errors
-    ) throws IOException {
-        var compilation = Capy.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
-        if (compilation == null) {
-            return 100;
-        }
-
-        if (output != null) {
-            Capy.writeCompilationOutput(output, compilation, getCompilerVersion().get());
-        }
-        if (generatedOutput != null) {
-            Capy.generateCompiledProgram(
-                    OutputType.JAVA,
-                    generatedOutput,
-                    compilation,
-                    getIncludeJavaLibResources().getOrElse(true)
-            );
-        }
-        if (testInput != null && generatedTestOutput != null) {
-            var testCompilation = Capy.compileSources(testInput, mergeLibraries(libraries, compilation), true, errors);
-            if (testCompilation == null) {
-                return 100;
-            }
-            Capy.generateCompiledProgram(
-                    OutputType.JAVA,
-                    generatedTestOutput,
-                    testCompilation,
-                    getIncludeJavaLibResourcesInTestOutput().getOrElse(false)
-            );
-        }
-        return 0;
-    }
-
-    private TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, Capy.CompilationArtifacts compilation) {
-        var mergedLibraries = new TreeSet<>(compiledModuleComparator());
-        mergedLibraries.addAll(libraries);
-        mergedLibraries.addAll(compilation.program().modules());
-        return mergedLibraries;
-    }
-
-    private TreeSet<CompiledModule> readLibraryModules(Collection<Path> directories) throws IOException {
-        var modules = new TreeSet<CompiledModule>(compiledModuleComparator());
-        for (var directory : directories) {
-            if (Files.notExists(directory) || !Files.isDirectory(directory)) {
-                continue;
-            }
-            modules.addAll(Capy.readLinkedProgram(directory, false).modules());
-        }
-        return modules;
-    }
-
-    private static Comparator<CompiledModule> compiledModuleComparator() {
-        return Comparator
-                .comparing(CompileCapybaraTask::compiledModulePath)
-                .thenComparing(CompiledModule::name);
-    }
-
-    private static String compiledModulePath(CompiledModule module) {
-        return module.path().isBlank() ? module.name() : module.path() + "/" + module.name();
+    ) {
+        return GeneratedCapyCompiler.compile(
+                input,
+                output,
+                generatedOutput,
+                testInput,
+                generatedTestOutput,
+                libraryProgramFiles,
+                getCompileTests().getOrElse(false),
+                getIncludeJavaLibResources().getOrElse(true),
+                "JAVA",
+                getLogLevel().getOrElse("WARNING"),
+                errors
+        );
     }
 
     private static void clearDirectory(Path directory) throws IOException {
