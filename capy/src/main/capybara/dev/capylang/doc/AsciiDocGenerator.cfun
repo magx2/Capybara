@@ -201,8 +201,13 @@ private fun generate_function_docs(functions: List[CompiledFunction], heading: S
 private fun generate_constant_docs(constants: List[CompiledFunction], heading: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     constants
         .sort((a,b) => a.name.compare(b.name))
-        .map(constant => "{heading} {constant.visibility} {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
+        .map(constant => "{heading} {asciidoc_constant_visibility(constant.visibility)} {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
         .reduce("", (content, constantDoc) => content + constantDoc)
+
+private fun asciidoc_constant_visibility(visibility: String): String =
+    if visibility.starts_with("const:")
+    then visibility["const:".size().value, visibility.size().value]
+    else visibility
 
 private fun generate_top_level_function_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
     let topLevelFunctions = asciidoc_top_level_functions(functions, typeNames)
