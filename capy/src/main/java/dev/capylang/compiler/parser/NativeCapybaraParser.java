@@ -524,7 +524,10 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext ctx,
             Expression rest
     ) {
-        if (ctx.ifStatement() != null && ctx.ifStatement().ifStatement() == null && ctx.ifStatement().statementBlock().size() == 1) {
+        if (ctx.ifStatement() != null
+                && ctx.ifStatement().ifStatement() == null
+                && ctx.ifStatement().statementBlock().size() == 1
+                && objectStatementBlockTerminates(ctx.ifStatement().statementBlock(0))) {
             return new Expression.IfExpression(
                     objectExpression(ctx.ifStatement().expression()),
                     objectStatementBlock(ctx.ifStatement().statementBlock(0)),
@@ -533,6 +536,43 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             );
         }
         return unsupported(ctx);
+    }
+
+    private static boolean objectStatementBlockTerminates(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext ctx
+    ) {
+        var statements = ctx.statement();
+        if (statements.isEmpty()) {
+            return false;
+        }
+        return objectStatementTerminates(statements.get(statements.size() - 1));
+    }
+
+    private static boolean objectStatementTerminates(
+            dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext ctx
+    ) {
+        if (ctx.returnStatement() != null || ctx.throwStatement() != null) {
+            return true;
+        }
+        if (ctx.ifStatement() != null) {
+            return objectIfStatementTerminates(ctx.ifStatement());
+        }
+        if (ctx.statementBlock() != null) {
+            return objectStatementBlockTerminates(ctx.statementBlock());
+        }
+        return false;
+    }
+
+    private static boolean objectIfStatementTerminates(
+            dev.capylang.parser.antlr.ObjectOrientedParser.IfStatementContext ctx
+    ) {
+        if (!objectStatementBlockTerminates(ctx.statementBlock(0))) {
+            return false;
+        }
+        if (ctx.ifStatement() != null) {
+            return objectIfStatementTerminates(ctx.ifStatement());
+        }
+        return ctx.statementBlock().size() > 1 && objectStatementBlockTerminates(ctx.statementBlock(1));
     }
 
     private static Expression objectStatement(

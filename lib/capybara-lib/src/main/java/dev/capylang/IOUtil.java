@@ -19,35 +19,39 @@ public final class IOUtil {
     }
 
     public static Object readText(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(Files.readString(javaPath, StandardCharsets.UTF_8));
-        } catch (IOException | SecurityException e) {
-            return error("read_text", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("read_text", pathText(javaPath, path), e);
         }
     }
 
     public static Object readLines(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(Files.readAllLines(javaPath, StandardCharsets.UTF_8));
-        } catch (IOException | SecurityException e) {
-            return error("read_lines", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("read_lines", pathText(javaPath, path), e);
         }
     }
 
     public static Object readBytes(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(toByteList(Files.readAllBytes(javaPath)));
-        } catch (IOException | SecurityException e) {
-            return error("read_bytes", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("read_bytes", pathText(javaPath, path), e);
         }
     }
 
     public static Object writeText(Object path, String text) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             Files.writeString(
                     javaPath,
                     text,
@@ -57,14 +61,15 @@ public final class IOUtil {
                     StandardOpenOption.WRITE
             );
             return ResultUtil.success(text);
-        } catch (IOException | SecurityException e) {
-            return error("write_text", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("write_text", pathText(javaPath, path), e);
         }
     }
 
     public static Object writeLines(Object path, List<String> lines) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             Files.write(
                     javaPath,
                     lines,
@@ -74,14 +79,15 @@ public final class IOUtil {
                     StandardOpenOption.WRITE
             );
             return ResultUtil.success(lines);
-        } catch (IOException | SecurityException e) {
-            return error("write_lines", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("write_lines", pathText(javaPath, path), e);
         }
     }
 
     public static Object writeBytes(Object path, List<Byte> bytes) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             Files.write(
                     javaPath,
                     toByteArray(bytes),
@@ -90,14 +96,15 @@ public final class IOUtil {
                     StandardOpenOption.WRITE
             );
             return ResultUtil.success(bytes);
-        } catch (IOException | SecurityException e) {
-            return error("write_bytes", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("write_bytes", pathText(javaPath, path), e);
         }
     }
 
     public static Object appendText(Object path, String text) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             Files.writeString(
                     javaPath,
                     text,
@@ -107,14 +114,15 @@ public final class IOUtil {
                     StandardOpenOption.WRITE
             );
             return ResultUtil.success(text);
-        } catch (IOException | SecurityException e) {
-            return error("append_text", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("append_text", pathText(javaPath, path), e);
         }
     }
 
     public static Object appendLines(Object path, List<String> lines) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             Files.write(
                     javaPath,
                     lines,
@@ -124,14 +132,15 @@ public final class IOUtil {
                     StandardOpenOption.WRITE
             );
             return ResultUtil.success(lines);
-        } catch (IOException | SecurityException e) {
-            return error("append_lines", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("append_lines", pathText(javaPath, path), e);
         }
     }
 
     public static Object appendBytes(Object path, List<Byte> bytes) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             Files.write(
                     javaPath,
                     toByteArray(bytes),
@@ -140,8 +149,8 @@ public final class IOUtil {
                     StandardOpenOption.WRITE
             );
             return ResultUtil.success(bytes);
-        } catch (IOException | SecurityException e) {
-            return error("append_bytes", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("append_bytes", pathText(javaPath, path), e);
         }
     }
 
@@ -158,58 +167,66 @@ public final class IOUtil {
     }
 
     public static Object size(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(Files.size(javaPath));
-        } catch (IOException | SecurityException e) {
-            return error("size", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("size", pathText(javaPath, path), e);
         }
     }
 
     public static Object createFile(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(PathUtil.fromJavaPath(Files.createFile(javaPath)));
-        } catch (IOException | SecurityException e) {
-            return error("create_file", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("create_file", pathText(javaPath, path), e);
         }
     }
 
     public static Object createDirectory(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(PathUtil.fromJavaPath(Files.createDirectory(javaPath)));
-        } catch (IOException | SecurityException e) {
-            return error("create_directory", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("create_directory", pathText(javaPath, path), e);
         }
     }
 
     public static Object createDirectories(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(PathUtil.fromJavaPath(Files.createDirectories(javaPath)));
-        } catch (IOException | SecurityException e) {
-            return error("create_directories", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("create_directories", pathText(javaPath, path), e);
         }
     }
 
     public static Object listEntries(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
-        try (var entries = Files.list(javaPath)) {
-            return ResultUtil.success(entries
-                    .map(PathUtil::fromJavaPath)
-                    .toList());
-        } catch (IOException | SecurityException e) {
-            return error("list_entries", javaPath, e);
+        java.nio.file.Path javaPath = null;
+        try {
+            javaPath = PathUtil.toJavaPath(path);
+            try (var entries = Files.list(javaPath)) {
+                return ResultUtil.success(entries
+                        .map(PathUtil::fromJavaPath)
+                        .toList());
+            }
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("list_entries", pathText(javaPath, path), e);
         }
     }
 
     public static Object delete(Object path) {
-        var javaPath = PathUtil.toJavaPath(path);
+        java.nio.file.Path javaPath = null;
         try {
+            javaPath = PathUtil.toJavaPath(path);
             return ResultUtil.success(Files.deleteIfExists(javaPath));
-        } catch (IOException | SecurityException e) {
-            return error("delete", javaPath, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error("delete", pathText(javaPath, path), e);
         }
     }
 
@@ -230,27 +247,31 @@ public final class IOUtil {
     }
 
     private static Object copyWithOptions(Object source, Object target, String operation, CopyOption... options) {
-        var javaSource = PathUtil.toJavaPath(source);
-        var javaTarget = PathUtil.toJavaPath(target);
+        java.nio.file.Path javaSource = null;
+        java.nio.file.Path javaTarget = null;
         try {
+            javaSource = PathUtil.toJavaPath(source);
+            javaTarget = PathUtil.toJavaPath(target);
             return ResultUtil.success(PathUtil.fromJavaPath(Files.copy(javaSource, javaTarget, options)));
-        } catch (IOException | SecurityException e) {
-            return error(operation, javaSource + " -> " + javaTarget, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error(operation, pathText(javaSource, source) + " -> " + pathText(javaTarget, target), e);
         }
     }
 
     private static Object moveWithOptions(Object source, Object target, String operation, CopyOption... options) {
-        var javaSource = PathUtil.toJavaPath(source);
-        var javaTarget = PathUtil.toJavaPath(target);
+        java.nio.file.Path javaSource = null;
+        java.nio.file.Path javaTarget = null;
         try {
+            javaSource = PathUtil.toJavaPath(source);
+            javaTarget = PathUtil.toJavaPath(target);
             return ResultUtil.success(PathUtil.fromJavaPath(Files.move(javaSource, javaTarget, options)));
-        } catch (IOException | SecurityException e) {
-            return error(operation, javaSource + " -> " + javaTarget, e);
+        } catch (IOException | SecurityException | InvalidPathException e) {
+            return error(operation, pathText(javaSource, source) + " -> " + pathText(javaTarget, target), e);
         }
     }
 
-    private static Object error(String operation, java.nio.file.Path path, Exception e) {
-        return error(operation, path.toString(), e);
+    private static String pathText(java.nio.file.Path path, Object fallback) {
+        return path == null ? String.valueOf(fallback) : path.toString();
     }
 
     private static Object error(String operation, String path, Exception e) {

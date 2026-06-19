@@ -103,6 +103,7 @@ class CompilationTest {
                 .contains("__capy_throw")
                 .contains("__capy_try")
                 .contains("__capy_enrich_thrown_error")
+                .contains("function __capy_error(message) { return __capy_error_kind('capy.error', message); }")
                 .contains("backend: 'javascript'");
 
         var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
@@ -112,7 +113,87 @@ class CompilationTest {
                 .contains("__capy_throw")
                 .contains("__capy_try")
                 .contains("__capy_enrich_thrown_error")
+                .contains("def __capy_error(message):\n    return __capy_error_kind('capy.error', message)")
                 .contains("backend='python'");
+    }
+
+    @Test
+    void shouldGenerateResultReducerErrorCallbacksWithStructuredError() {
+        var resultSource = """
+                data Error { kind: String, message: String }
+                data Success[T] { value: T }
+                union Result[T] = Success[T] | Error
+                fun fail_kind(kind: String, message: String): Result[String] = Error { kind: kind, message: message }
+                """;
+        var consumerSource = """
+                from /capy/lang/Result import { * }
+
+                fun reducer_error_kind(): String =
+                    fail_kind("capy.test.result.boom", "boom").reduce(_ => "success", error => error.kind)
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
+                rawModule("UseResult", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/UseResult.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("__capy_result_error_value");
+        assertThat(code).contains("__capy_data_field(error, \"kind\")");
+        assertThat(code).doesNotContain("java.lang.String error = java.lang.String.valueOf(__capy_result_error_value");
+    }
+
+    @Test
+    void shouldRejectObjectOrientedThrowingNonError() {
+        var objectSource = """
+                class BadThrow {
+                    def fail(): String {
+                        throw "boom"
+                    }
+                }
+                """;
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("BadThrow", "/sample/app", objectSource, SourceKind.OBJECT_ORIENTED)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString()).contains("OO throw expression must have type `/capy/lang/Result.Error`.");
+    }
+
+    @Test
+    void shouldRejectObjectOrientedNonFinalIfThatFallsThrough() {
+        var objectSource = """
+                class BadIf {
+                    def label(): String {
+                        return "side"
+                    }
+
+                    def run(flag: bool): String {
+                        if flag {
+                            this.label()
+                        }
+                        return "ok"
+                    }
+                }
+                """;
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("BadIf", "/sample/app", objectSource, SourceKind.OBJECT_ORIENTED)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString()).contains("Unsupported object-oriented construct");
     }
 
     private static String generatorOutputType(OutputType outputType) {

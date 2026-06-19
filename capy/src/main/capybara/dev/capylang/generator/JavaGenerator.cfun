@@ -4119,7 +4119,7 @@ private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: L
     + "                return " + expression_code(successLambda.body, lambda_value_env(successLambda.parameters, valueType, env), resultType, module, allModules) + ";" + newline()
     + "            }" + newline()
     + result_reduce_error_binding_statement(errorLambda.parameters, resultName, "            ")
-    + "            return " + expression_code(errorLambda.body, lambda_value_env(errorLambda.parameters, string_type(), env), resultType, module, allModules) + ";" + newline()
+    + "            return " + expression_code(errorLambda.body, lambda_value_env(errorLambda.parameters, error_type(), env), resultType, module, allModules) + ";" + newline()
     + "        }).get()"
 
 /// Emits generated code for result or else method.
@@ -4174,7 +4174,7 @@ private fun result_reduce_error_binding_statement(parameters: List[String], resu
     case Some { parameter } ->
         if parameter == "_"
         then ""
-        else indent + "java.lang.String " + java_identifier(parameter) + " = java.lang.String.valueOf(__capy_result_error_value(" + resultName + "));" + newline()
+        else indent + java_type(error_type()) + " " + java_identifier(parameter) + " = ((" + boxed_java_type(error_type()) + ") __capy_result_error_value(" + resultName + "));" + newline()
 
 /// Resolves expression metadata for result map method binary.
 private fun result_map_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
@@ -9742,7 +9742,7 @@ private fun result_reduce_method_emittable(call: CompiledMethodCallExpression, e
     let valueType = first_type_argument(receiverType)
     expression_emittable(call.receiver, env, module, allModules)
         & result_reduce_argument_emittable(argument(call.arguments, 0), valueType, env, module, allModules)
-        & result_reduce_argument_emittable(argument(call.arguments, 1), string_type(), env, module, allModules)
+        & result_reduce_argument_emittable(argument(call.arguments, 1), error_type(), env, module, allModules)
 
 /// Checks whether result or else method can be emitted by the target backend.
 private fun result_or_else_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
