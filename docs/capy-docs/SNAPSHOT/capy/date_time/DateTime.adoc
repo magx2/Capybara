@@ -25,7 +25,7 @@ Example: `from_timestamp(86400L)` returns `1970-01-02T00:00:00Z`.
 
 == Constants
 
-=== const:public UNIX_EPOCH: xref:#type-DateTime[DateTime]
+=== public UNIX_EPOCH: xref:#type-DateTime[DateTime]
 
 Unix epoch date-time (`1970-01-01T00:00:00Z`).
 
