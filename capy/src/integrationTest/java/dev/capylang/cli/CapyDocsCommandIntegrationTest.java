@@ -41,6 +41,9 @@ class CapyDocsCommandIntegrationTest {
                 /// Tone docs
                 enum Tone { LOW, HIGH }
 
+                /// Answer docs
+                const ANSWER: int = 42
+
                 /// Describes a tone
                 fun Tone.describe(): String = "tone"
 
@@ -121,13 +124,18 @@ class CapyDocsCommandIntegrationTest {
                 .contains("Tone docs")
                 .contains("* `LOW`")
                 .contains("* `HIGH`")
+                .contains("== Constants")
+                .contains("=== const:public ANSWER: int")
+                .contains("Answer docs")
                 .contains("===== public Tone.describe(): String")
+                .doesNotContain("=== const:public ANSWER(): int")
                 .doesNotContain("\n=== public Box.describe")
                 .doesNotContain("\n=== public GenericBox[T].describe")
                 .doesNotContain("* `name`: `String`")
                 .doesNotContain("__capy_schema_type|Box")
                 .doesNotContain("ExampleDocs");
         assertThat(docsContent).containsSubsequence("* `HIGH`", "* `LOW`");
+        assertThat(docsContent).containsSubsequence("== Functions", "=== public documented_function", "== Constants", "=== const:public ANSWER: int", "== Annotations");
 
         var objectsFile = output.resolve("sample/Objects.adoc");
         assertThat(objectsFile).isRegularFile();

@@ -181,6 +181,7 @@ private fun generate_asciidoc_docs_for_module(module: CompiledModule, objectOrie
         content: "= Module {module.name}\n\n"
         + "== Functions\n\n"
         + generate_function_docs(asciidoc_top_level_functions(module.functions, typeNames), "===", module, typeTargets) + "\n\n"
+        + generate_top_level_constant_docs(module.functions, typeNames, module, typeTargets)
         + "== Annotations\n\n"
         + generate_annotation_docs(module.annotations) + "\n\n"
         + "== Types\n\n"
@@ -195,6 +196,18 @@ private fun generate_function_docs(functions: List[CompiledFunction], heading: S
         .map(function => "{heading} {function.visibility} {function.name}({generate_parameters(function.parameters, module, typeTargets)}): {type_name(function.returnType, module, typeTargets)}\n\n{generate_documentation(function)}\n\n")
         .reduce("", (content, functionDoc) => content + functionDoc)
 
+private fun generate_constant_docs(constants: List[CompiledFunction], heading: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    constants
+        .sort((a,b) => a.name.compare(b.name))
+        .map(constant => "{heading} {constant.visibility} {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
+        .reduce("", (content, constantDoc) => content + constantDoc)
+
+private fun generate_top_level_constant_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let constants = asciidoc_top_level_constants(functions, typeNames)
+    if constants.is_empty()
+    then ""
+    else "== Constants\n\n" + generate_constant_docs(constants, "===", module, typeTargets) + "\n\n"
+
 private fun asciidoc_top_level_functions(functions: List[CompiledFunction], typeNames: List[String]): List[CompiledFunction] =
     functions.reduce([], (acc, function) =>
         if asciidoc_top_level_function(function, functions, typeNames)
@@ -204,9 +217,25 @@ private fun asciidoc_top_level_functions(functions: List[CompiledFunction], type
 
 private fun asciidoc_top_level_function(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
     !asciidoc_schema_function(function)
+    & !asciidoc_constant_function(function)
     & !asciidoc_object_helper_function(function)
     & !asciidoc_generated_local_function(function)
     & !function.name.starts_with("__capy_constructor|")
+    & !asciidoc_function_belongs_to_type(function, typeNames)
+    & !asciidoc_enum_value_function(function, functions)
+
+private fun asciidoc_top_level_constants(functions: List[CompiledFunction], typeNames: List[String]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_top_level_constant(function, functions, typeNames)
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_top_level_constant(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
+    asciidoc_constant_function(function)
+    & !asciidoc_schema_function(function)
+    & !asciidoc_object_helper_function(function)
+    & !asciidoc_generated_local_function(function)
     & !asciidoc_function_belongs_to_type(function, typeNames)
     & !asciidoc_enum_value_function(function, functions)
 
@@ -226,6 +255,9 @@ private fun asciidoc_enum_value_function(function: CompiledFunction, functions: 
 
 private fun asciidoc_generated_local_function(function: CompiledFunction): bool =
     function.name.contains("__local__")
+
+private fun asciidoc_constant_function(function: CompiledFunction): bool =
+    function.visibility.starts_with("const:")
 
 private fun asciidoc_object_helper_function(function: CompiledFunction): bool =
     function.visibility.starts_with("oo")
@@ -530,6 +562,7 @@ private fun generate_schema_type_doc(typeName: String, functions: List[CompiledF
     + generate_type_field_docs(typeName, functions, module, typeTargets)
     + generate_union_variant_docs(typeName, functions, module, typeTargets)
     + generate_enum_value_docs(typeName, functions)
+    + generate_type_constant_docs(typeName, functions, module, typeTargets)
     + generate_type_function_docs(typeName, functions, module, typeTargets)
 
 private fun asciidoc_type_kind(typeName: String, functions: List[CompiledFunction]): String =
@@ -594,12 +627,31 @@ private fun generate_type_function_docs(typeName: String, functions: List[Compil
     else "==== Functions\n\n"
         + generate_function_docs(ownedFunctions, "=====", module, typeTargets)
 
+private fun generate_type_constant_docs(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let ownedConstants = asciidoc_type_constants(typeName, functions)
+    if ownedConstants.is_empty()
+    then ""
+    else "==== Constants\n\n"
+        + generate_constant_docs(ownedConstants, "=====", module, typeTargets)
+
 private fun asciidoc_type_functions(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
     functions.reduce([], (acc, function) =>
         if !asciidoc_schema_function(function)
+            & !asciidoc_constant_function(function)
             & !asciidoc_object_helper_function(function)
             & !asciidoc_generated_local_function(function)
             & !function.name.starts_with("__capy_constructor|")
+            & asciidoc_function_owner(function) == typeName
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_type_constants(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_constant_function(function)
+            & !asciidoc_schema_function(function)
+            & !asciidoc_object_helper_function(function)
+            & !asciidoc_generated_local_function(function)
             & asciidoc_function_owner(function) == typeName
         then acc + function
         else acc
