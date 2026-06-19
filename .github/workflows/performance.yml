@@ -1,9 +1,8 @@
 name: Performance
 
 on:
-  push:
-    branches:
-      - master
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -52,11 +51,73 @@ jobs:
             git checkout "origin/${PERF_BRANCH}" -- performance/results.csv performance/README.md || true
           fi
 
+      - name: Decide whether benchmark should run
+        id: benchmark-gate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_sha="$(git rev-parse --short=7 HEAD)"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Manual run requested; benchmarking ${current_sha}."
+            echo "should_run=true" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [[ ! -s performance/results.csv ]] || [[ "$(wc -l < performance/results.csv)" -lt 2 ]]; then
+            echo "No previous performance results found; benchmarking ${current_sha}."
+            echo "should_run=true" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          previous_sha="$(tail -n 1 performance/results.csv | cut -d, -f2)"
+          if [[ "${previous_sha}" == "${current_sha}" ]]; then
+            echo "No new commits since the latest benchmarked commit ${current_sha}."
+            echo "should_run=false" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify --quiet "${previous_sha}^{commit}" >/dev/null; then
+            echo "Previous benchmarked commit ${previous_sha} is unavailable locally; benchmarking ${current_sha}."
+            echo "should_run=true" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          significant_changes="$(
+            git diff --name-only "${previous_sha}..HEAD" -- \
+              .github/workflows/performance.yml \
+              build-tool \
+              buildSrc \
+              capy \
+              gradle \
+              lib \
+              performance \
+              settings.gradle \
+              gradle.properties \
+              gradlew \
+              gradlew.bat \
+              ':(exclude)performance/README.md' \
+              ':(exclude)performance/results.csv'
+          )"
+
+          if [[ -z "${significant_changes}" ]]; then
+            echo "New commits exist, but none changed benchmark-relevant files since ${previous_sha}."
+            echo "should_run=false" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Benchmark-relevant changes since ${previous_sha}:"
+          printf '%s\n' "${significant_changes}"
+          echo "should_run=true" >>"${GITHUB_OUTPUT}"
+
       - name: Run performance benchmark
+        if: steps.benchmark-gate.outputs.should_run == 'true'
         shell: bash
         run: performance/scripts/run-benchmark
 
       - name: Create or update performance pull request
+        if: steps.benchmark-gate.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
