@@ -1,4 +1,5 @@
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 
+/// compiled function parameter with resolved type reference and source position.
 data CompiledFunctionParameter { name: String, typeReference: CompiledTypeReference, location: CompiledSourceLocation }

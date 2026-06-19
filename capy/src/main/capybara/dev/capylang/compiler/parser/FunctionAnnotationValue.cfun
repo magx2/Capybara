@@ -1,5 +1,6 @@
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 
+/// Union of literal value forms accepted in function annotation arguments.
 union FunctionAnnotationValue = FunctionAnnotationBoolValue
                               | FunctionAnnotationDoubleValue
                               | FunctionAnnotationFloatValue
@@ -9,11 +10,19 @@ union FunctionAnnotationValue = FunctionAnnotationBoolValue
                               | FunctionAnnotationStringValue
                               | FunctionAnnotationTypeNameValue
 
+/// Parsed function annotation string literal, preserving source text and location.
 data FunctionAnnotationStringValue { value: String, source: String, location: SourceLocation }
+/// Parsed function annotation int literal, preserving source text and location.
 data FunctionAnnotationIntValue { value: int, source: String, location: SourceLocation }
+/// Parsed function annotation long literal, preserving source text and location.
 data FunctionAnnotationLongValue { value: long, source: String, location: SourceLocation }
+/// Parsed function annotation double literal, preserving source text and location.
 data FunctionAnnotationDoubleValue { value: double, source: String, location: SourceLocation }
+/// Parsed function annotation float literal, preserving source text and location.
 data FunctionAnnotationFloatValue { value: float, source: String, location: SourceLocation }
+/// Parsed function annotation boolean literal, preserving source text and location.
 data FunctionAnnotationBoolValue { value: bool, source: String, location: SourceLocation }
+/// Parsed function annotation type-name literal, preserving source text and location.
 data FunctionAnnotationTypeNameValue { value: String, source: String, location: SourceLocation }
+/// Parsed function annotation nothing literal with source text and location.
 data FunctionAnnotationNothingValue { source: String, location: SourceLocation }

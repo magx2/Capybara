@@ -3,9 +3,11 @@ from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObject
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 
+/// compiled object interface or trait metadata with parents, methods, annotations, and visibility.
 data CompiledObjectOrientedInterface {
     name: String,
     visibility: String,
+    documentation: List[String],
     kind: String,
     parents: List[CompiledTypeReference],
     methods: List[CompiledObjectOrientedMethod],

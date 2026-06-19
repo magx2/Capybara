@@ -4,6 +4,7 @@ from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { Functi
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
+/// Parsed object field with declared type, optional initializer, annotations, visibility, and location.
 data ObjectOrientedField {
     name: String,
     visibility: String,

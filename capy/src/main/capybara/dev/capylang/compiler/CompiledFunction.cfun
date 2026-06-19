@@ -4,9 +4,11 @@ from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionP
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 
+/// Function metadata consumed by generators: names, visibility, parameters, return type, body, docs, annotations, and source location.
 data CompiledFunction {
     name: String,
     visibility: String,
+    documentation: List[String],
     parameters: List[CompiledFunctionParameter],
     returnType: CompiledTypeReference,
     body: CompiledExpression,

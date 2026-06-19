@@ -1,19 +1,21 @@
 from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
-from /dev/capylang/compiler/CompiledExpression import { CompiledExpression }
 from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 
+/// compiled object class metadata with parents, constructor parameters, fields, init blocks, methods, and annotations.
 data CompiledObjectOrientedClass {
     name: String,
     visibility: String,
+    documentation: List[String],
     open: bool,
     parameters: List[CompiledFunctionParameter],
     parents: List[CompiledTypeReference],
     fields: List[CompiledObjectOrientedField],
-    initBlocks: List[CompiledExpression],
+    initBlocks: List[CompiledObjectOrientedInitBlock],
     methods: List[CompiledObjectOrientedMethod],
     location: CompiledSourceLocation
 }

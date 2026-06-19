@@ -1,0 +1,140 @@
+name: Generate Capy Docs
+
+on:
+  push:
+    branches:
+      - "master"
+      - "release/**"
+    paths:
+      - ".github/workflows/generate_capy_docs.yml"
+      - "buildSrc/**"
+      - "capy/**"
+      - "gradle/**"
+      - "lib/capybara-lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: generate-capy-docs-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  generate-capy-docs:
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'release/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Resolve docs target
+        id: docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_BRANCH="${GITHUB_REF_NAME}"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          if [[ "${SOURCE_BRANCH}" == "${DEFAULT_BRANCH}" ]]; then
+            DOC_VERSION="SNAPSHOT"
+          elif [[ "${SOURCE_BRANCH}" =~ ^release/([0-9]+)\.([0-9]+)\.x$ ]]; then
+            DOC_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.x"
+          else
+            echo "::error::Generate Capy Docs must run on '${DEFAULT_BRANCH}' or release/{major}.{minor}.x, got '${SOURCE_BRANCH}'."
+            exit 1
+          fi
+
+          DOC_BRANCH="automation/capy-docs-${DOC_VERSION}"
+          DOC_DIR="docs/capy-docs/${DOC_VERSION}"
+
+          {
+            echo "source_branch=${SOURCE_BRANCH}"
+            echo "doc_version=${DOC_VERSION}"
+            echo "doc_branch=${DOC_BRANCH}"
+            echo "doc_dir=${DOC_DIR}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Assemble Capy project
+        run: ./gradlew :capy:assemble --no-daemon
+
+      - name: Generate Capybara library docs
+        run: |
+          ./gradlew :capy:run --no-daemon --args="docs -i ../lib/capybara-lib/src/main/capybara -o ../${{ steps.docs.outputs.doc_dir }}"
+
+      - name: Configure git user
+        run: |
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
+
+      - name: Create docs pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_BRANCH="${{ steps.docs.outputs.source_branch }}"
+          DOC_VERSION="${{ steps.docs.outputs.doc_version }}"
+          DOC_BRANCH="${{ steps.docs.outputs.doc_branch }}"
+          DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
+
+          if [[ -z "$(git status --short -- "${DOC_DIR}")" ]]; then
+            echo "Capy docs are already up to date for ${DOC_VERSION}."
+            exit 0
+          fi
+
+          git switch -C "${DOC_BRANCH}"
+          git add -A "${DOC_DIR}"
+          git commit -m "docs: update Capy docs ${DOC_VERSION}"
+
+          REMOTE_DOC_SHA="$(git ls-remote --heads origin "${DOC_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${REMOTE_DOC_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${DOC_BRANCH}:${REMOTE_DOC_SHA}" origin "HEAD:${DOC_BRANCH}"
+          else
+            git push origin "HEAD:${DOC_BRANCH}"
+          fi
+
+          PR_NUMBER="$(
+            gh pr list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${SOURCE_BRANCH}" \
+              --head "${DOC_BRANCH}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -n "${PR_NUMBER}" ]]; then
+            echo "Capy docs pull request already exists: ${PR_NUMBER}"
+          else
+            PR_URL="$(
+              gh pr create \
+                --repo "${GITHUB_REPOSITORY}" \
+                --base "${SOURCE_BRANCH}" \
+                --head "${DOC_BRANCH}" \
+                --title "docs: update Capy docs ${DOC_VERSION}" \
+                --body "Regenerates Capybara library documentation into \`${DOC_DIR}\` from \`${SOURCE_BRANCH}\`."
+            )"
+            echo "Created Capy docs pull request: ${PR_URL}"
+          fi

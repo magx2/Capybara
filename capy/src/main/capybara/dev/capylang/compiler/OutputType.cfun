@@ -1,3 +1,4 @@
+/// Supported code-generation targets selected by the compile/generate pipeline.
 enum OutputType {
     JAVA,
     JAVASCRIPT,

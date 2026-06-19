@@ -5,6 +5,7 @@ from /dev/capylang/generator/JavaScriptGenerator import { java_script_generator 
 from /dev/capylang/generator/PythonGenerator import { python_generator }
 from /capy/lang/Option import { * }
 
+/// Dispatches a compiled program to the generator selected by the requested output target.
 fun generate(program: CompiledProgram, output_type: String): GeneratedProgram =
     match find_generator(output_type) with
     case Some { "java" } -> java_generator(program)
@@ -12,6 +13,7 @@ fun generate(program: CompiledProgram, output_type: String): GeneratedProgram =
     case Some { "python" } -> python_generator(program)
     case None -> GeneratedProgram { modules: [] }
 
+/// Selects the backend generator name for an output target.
 private fun find_generator(output_type: String): Option[String] =
     match output_type with
     case "javascript" | "JAVASCRIPT" | "js" | "JS" -> Some { "javascript" }

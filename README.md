@@ -22,6 +22,7 @@ The CLI main class is `dev.capylang.cli.Capy`. Its core commands are:
 capy compile -i <source-dir> -o <linked-output-dir>
 capy compile-generate <java|python|javascript|js> -i <source-dir> -o <generated-output-dir>
 capy generate <java|python|javascript|js> [-i <linked-input-dir>] -o <generated-output-dir>
+capy docs -i <source-dir> -o <docs-output-dir>
 capy package (-ci <linked-input-dir> | -i <source-dir>) -m <capy.yml>
 ```
 
@@ -37,6 +38,7 @@ Useful options:
   provided together.
 - `--skip-java-lib` omits bundled Java runtime sources when the caller already
   has them on the compile classpath.
+- `docs` compiles Capybara sources and writes AsciiDoc module documentation.
 - `--log <DEBUG|INFO|WARN|ERROR>` controls CLI logging.
 
 Generated output directories are reusable. The CLI records generated files in

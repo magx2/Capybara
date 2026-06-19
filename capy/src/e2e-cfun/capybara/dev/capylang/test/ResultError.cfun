@@ -19,6 +19,9 @@ fun parse_and_add_rest_size(input: String): Result[long] =
 fun qualified_success_pipe(): Result[int] =
     /capy/lang/Result.Success { value: 3 } | value => Success { value: value + 4 }
 
+fun qualified_success_pipe(): Result[int] =
+    /capy/lang/Result.Success { value: 3 } | value => Success { value: value + 4 }
+
 fun map_untyped_result(): Result[String] =
     let result: Result = Success { "success_value" }
     result | value => "mapped_" + value

@@ -1,1 +1,2 @@
+/// Source position retained after compilation for diagnostics and generated metadata.
 data CompiledSourceLocation { line: int, column: int }

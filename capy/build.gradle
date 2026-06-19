@@ -437,6 +437,13 @@ def capyRuntimeClasspath = files(
         capyResourcesDir,
         capyRuntimeDependencies
 )
+def capyCompilerRuntimeDependenciesDir = layout.buildDirectory.dir('capy-compiler-runtime/dependencies')
+
+tasks.register('prepareCompilerRuntimeDependencies', Sync) {
+    from(capyRuntimeDependencies)
+    into(capyCompilerRuntimeDependenciesDir)
+}
+
 def capybaraMainJavaScriptSources = objects.sourceDirectorySet('js', 'main JavaScript sources')
 capybaraMainJavaScriptSources.srcDir(capybaraMainJavaScriptSourceDir)
 capybaraMainJavaScriptSources.include('**/*.js')

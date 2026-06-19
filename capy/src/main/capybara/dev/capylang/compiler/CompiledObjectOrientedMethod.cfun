@@ -4,9 +4,11 @@ from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionP
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 
+/// compiled object method metadata with owner class or interface, parameters, return type, body, and annotations.
 data CompiledObjectOrientedMethod {
     name: String,
     visibility: String,
+    documentation: List[String],
     parameters: List[CompiledFunctionParameter],
     returnType: CompiledTypeReference,
     body: CompiledExpression,
