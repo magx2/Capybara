@@ -68,7 +68,7 @@ private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], ini
 /// Raw deriver data needed for derived method expansion.
 private data CompiledRawDeriverDeclaration { name: String, methods: List[FunctionDeclaration] }
 /// Raw deriver declarations indexed once per module for derive expansion.
-private data CompiledDefinitionIndexes { derivers: Dict[CompiledRawDeriverDeclaration] }
+private data CompiledDefinitionIndexes { derivers: Dict[CompiledRawDeriverDeclaration], compiledDerivers: Dict[CompiledDeriverDeclaration] }
 
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
@@ -188,7 +188,6 @@ private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule
 
 /// Converts a parsed module into compiled metadata.
 private fun compile_module(module: ParsedModule, allModules: List[ParsedModule]): CompiledModule =
-    let derivers = compile_derivers(module.definitions)
     let definitionIndexes = compile_definition_indexes(module.definitions)
     CompiledModule {
         name: module.name,
@@ -199,7 +198,7 @@ private fun compile_module(module: ParsedModule, allModules: List[ParsedModule])
             + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
             + compile_object_class_functions(module.objectOriented.classes, module, allModules),
         imports: compile_imports(module.imports),
-        derivers: derivers,
+        derivers: definitionIndexes.compiledDerivers,
         annotations: compile_annotations(module.definitions),
         staticImports: []
     }
@@ -815,16 +814,6 @@ private fun object_field_init_schema_prefix(): String =
 private fun object_init_schema_prefix(): String =
     "__capy_oo_init|"
 
-/// Converts parsed derivers into compiled metadata.
-private fun compile_derivers(definitions: List[Definition]): Dict[CompiledDeriverDeclaration] =
-    match definitions[0] with
-    case None -> {:}
-    case Some { definition } ->
-        match definition with
-        case DeriverDeclaration declaration ->
-            compile_derivers(definitions[1:]) + (declaration.name, compile_deriver_declaration(declaration))
-        case _ -> compile_derivers(definitions[1:])
-
 /// Converts a parsed deriver declaration into compiled metadata.
 private fun compile_deriver_declaration(declaration: DeriverDeclaration): CompiledDeriverDeclaration =
     CompiledDeriverDeclaration {
@@ -843,20 +832,20 @@ private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[Co
 
 /// Builds raw definition lookup structures used during module compilation.
 private fun compile_definition_indexes(definitions: List[Definition]): CompiledDefinitionIndexes =
-    CompiledDefinitionIndexes { derivers: compile_raw_derivers(definitions) }
-
-/// Converts parsed derivers into raw metadata keyed by deriver name.
-private fun compile_raw_derivers(definitions: List[Definition]): Dict[CompiledRawDeriverDeclaration] =
     match definitions[0] with
-    case None -> {:}
+    case None -> CompiledDefinitionIndexes { derivers: {:}, compiledDerivers: {:} }
     case Some { definition } ->
+        let rest = compile_definition_indexes(definitions[1:])
         match definition with
         case DeriverDeclaration declaration ->
-            compile_raw_derivers(definitions[1:]) + (declaration.name, CompiledRawDeriverDeclaration {
-                name: declaration.name,
-                methods: declaration.methods
-            })
-        case _ -> compile_raw_derivers(definitions[1:])
+            CompiledDefinitionIndexes {
+                derivers: rest.derivers + (declaration.name, CompiledRawDeriverDeclaration {
+                    name: declaration.name,
+                    methods: declaration.methods
+                }),
+                compiledDerivers: rest.compiledDerivers + (declaration.name, compile_deriver_declaration(declaration))
+            }
+        case _ -> rest
 
 /// Converts parsed derived functions for a type into compiled metadata.
 private fun compile_derived_functions_for_type(typeName: String, derives: List[DeriveApplication], definitionIndexes: CompiledDefinitionIndexes): List[CompiledFunction] =
@@ -1251,7 +1240,9 @@ private fun compile_native_provider_declarations(modules: List[ParsedModule], al
     case None -> []
     case Some { module } ->
         let standardNativeProviderImported = standard_native_provider_imported(module)
-        compile_native_provider_declarations_in_module(module.definitions, module, allModules, standardNativeProviderImported) + compile_native_provider_declarations(modules[1:], allModules)
+        if standardNativeProviderImported
+        then compile_native_provider_declarations_in_module(module.definitions, module, allModules, standardNativeProviderImported) + compile_native_provider_declarations(modules[1:], allModules)
+        else compile_native_provider_declarations(modules[1:], allModules)
 
 /// Converts parsed native provider declarations in a module into compiled metadata.
 private fun compile_native_provider_declarations_in_module(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule], standardNativeProviderImported: bool): List[CompiledNativeProviderDeclaration] =

@@ -4466,7 +4466,7 @@ private fun result_map_method_code(call: CompiledMethodCallExpression, env: List
 private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let valueType = first_type_argument(receiverType)
-    let resultType = if expectedType.name.is_empty() | expectedType.name == "any" then result_reduce_method_type(call, env, module, allModules) else expectedType
+    let resultType = if expectedType.name.is_empty() | expectedType.name == "any" then result_reduce_method_type_with_receiver(call, receiverType, env, module, allModules) else expectedType
     let resultName = "__capy_result_reduce_" + call.location.line + "_" + call.location.column
     let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     let successLambda = result_reduce_lambda_argument(argument(call.arguments, 0))
@@ -4483,8 +4483,8 @@ private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: L
 
 /// Emits generated code for result or else method.
 private fun result_or_else_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let resultType = result_or_else_method_type(call, env, module, allModules)
     let receiverType = expression_type(call.receiver, env, module, allModules)
+    let resultType = result_or_else_method_type_with_receiver(call, receiverType, env, module, allModules)
     let resultName = "__capy_result_or_else_" + call.location.line + "_" + call.location.column
     "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
     + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
@@ -4496,8 +4496,8 @@ private fun result_or_else_method_code(call: CompiledMethodCallExpression, env: 
 
 /// Emits generated code for result or method.
 private fun result_or_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let resultType = result_or_method_type(call, env, module, allModules)
     let receiverType = expression_type(call.receiver, env, module, allModules)
+    let resultType = result_or_method_type_with_receiver(call, receiverType, env, module, allModules)
     let resultName = "__capy_result_or_" + call.location.line + "_" + call.location.column
     "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
     + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()

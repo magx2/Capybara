@@ -2325,7 +2325,7 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
         then java_script_async_pipe_code(java_script_async_map_method_binary(call), env, module, allModules)
         else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
         then java_script_collection_method_call_code(call, env, module, allModules)
-        else if java_script_collection_reduce_method_call(call, env, module, allModules)
+        else if java_script_collection_reduce_method_call_with_receiver_type(call, receiverType)
         then java_script_collection_reduce_method_code_with_receiver_type(call, receiverBaseType, env, module, allModules)
         else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
         then java_script_collection_predicate_call_code(call, env, module, allModules)
@@ -2684,10 +2684,17 @@ private fun java_script_missing_argument(): CompiledExpression =
 private fun java_script_collection_reduce_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "reduce" | call.name == "reduce_left"
     then if java_script_two_method_arguments(call.arguments)
+        then java_script_collection_reduce_method_call_with_receiver_type(call, java_script_expression_type(call.receiver, env, module, allModules))
+        else false
+    else false
+
+private fun java_script_collection_reduce_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String): bool =
+    if call.name == "reduce" | call.name == "reduce_left"
+    then if java_script_two_method_arguments(call.arguments)
         then match call.arguments[1] with
             case Some { reducer } ->
                 if java_script_callable_expression(reducer)
-                then java_script_collection_pipe_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+                then java_script_collection_pipe_receiver_type(receiverType)
                 else false
             case None -> false
         else false
@@ -4503,7 +4510,7 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then "Option"
     else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
     then java_script_collection_pipe_result_type(java_script_collection_method_operator(call.name), receiverType)
-    else if java_script_collection_reduce_method_call(call, env, module, allModules)
+    else if java_script_collection_reduce_method_call_with_receiver_type(call, receiverType)
     then java_script_collection_reduce_method_type(call, env, module, allModules)
     else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
     then "bool"
@@ -6906,7 +6913,7 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
         else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
         then java_script_collection_method_gatherable(call, env, module, allModules)
-        else if java_script_collection_reduce_method_call(call, env, module, allModules)
+        else if java_script_collection_reduce_method_call_with_receiver_type(call, receiverType)
         then java_script_collection_reduce_method_gatherable(call, env, module, allModules)
         else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
         then java_script_collection_predicate_gatherable(call, env, module, allModules)

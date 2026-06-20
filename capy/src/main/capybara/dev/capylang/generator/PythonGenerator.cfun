@@ -3702,8 +3702,10 @@ private fun python_result_payload_type_from_function_call(name: String, module: 
 
 /// Emits Python expression text for result payload type from method call.
 private fun python_result_payload_type_from_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_string_parse_method_call(call, python_expression_type(call.receiver, env, module, allModules))
-    then python_string_parse_payload_type(call.name)
+    if python_string_parse_method_name(call.name)
+    then if python_string_parse_method_call(call, python_expression_type(call.receiver, env, module, allModules))
+        then python_string_parse_payload_type(call.name)
+        else python_unknown_type()
     else python_unknown_type()
 
 /// Emits Python expression text for result payload type from with expression.
