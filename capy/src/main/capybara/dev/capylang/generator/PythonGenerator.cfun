@@ -1111,7 +1111,7 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_enum_parse_call_code(call, env, module, allModules)
     else
         let resolvedName =
-            if python_local_function_count(call.name, module.functions) > 1 & python_one_method_argument(call.arguments)
+            if python_local_function_overloaded(call.name, module.functions) & python_one_method_argument(call.arguments)
             then
                 let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
                 if argumentType == python_unknown_type()
@@ -3308,15 +3308,18 @@ private fun python_object_info_type_for_name(name: String, module: CompiledModul
 
 /// Checks whether a function matches the standard-library effect function call metadata.
 private fun python_stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.arguments.is_empty()
-        & python_local_function_count(call.name, module.functions) == 0
-        & if call.name == "current_millis"
-            then python_system_member_imported("current_millis", module.imports)
-            else if call.name == "nano_time"
-            then python_system_member_imported("nano_time", module.imports)
-            else if call.name == "now"
-            then python_clock_member_imported("now", module.imports)
-            else false
+    if call.arguments.is_empty()
+    then python_stdlib_effect_function_call_by_name(call.name, module)
+    else false
+
+private fun python_stdlib_effect_function_call_by_name(name: String, module: CompiledModule): bool =
+    if name == "current_millis"
+    then !python_local_function_exists(name, module.functions) & python_system_member_imported("current_millis", module.imports)
+    else if name == "nano_time"
+    then !python_local_function_exists(name, module.functions) & python_system_member_imported("nano_time", module.imports)
+    else if name == "now"
+    then !python_local_function_exists(name, module.functions) & python_clock_member_imported("now", module.imports)
+    else false
 
 /// Emits Python code for standard-library effect function call.
 private fun python_stdlib_effect_function_call_code(name: String): String =
@@ -3331,10 +3334,9 @@ private fun python_stdlib_effect_function_call_type(name: String): String =
     python_effect_type()
 
 private fun python_stdlib_parse_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    python_one_method_argument(call.arguments)
-        & python_local_function_count(call.name, module.functions) == 0
-        & python_string_parse_method_name(call.name)
-        & python_primitives_member_imported(call.name, module.imports)
+    if python_one_method_argument(call.arguments) & python_string_parse_method_name(call.name)
+    then !python_local_function_exists(call.name, module.functions) & python_primitives_member_imported(call.name, module.imports)
+    else false
 
 private fun python_stdlib_parse_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     python_string_parse_helper(call.name)
@@ -3343,10 +3345,9 @@ private fun python_stdlib_parse_function_call_code(call: CompiledFunctionCallExp
         + ")"
 
 private fun python_stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    python_one_method_argument(call.arguments)
-        & python_local_function_count(call.name, module.functions) == 0
-        & call.name == "from_string"
-        & python_path_member_imported("from_string", module.imports)
+    if python_one_method_argument(call.arguments) & call.name == "from_string"
+    then !python_local_function_exists(call.name, module.functions) & python_path_member_imported("from_string", module.imports)
+    else false
 
 private fun python_stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "from_string("
@@ -3358,9 +3359,9 @@ private fun python_stdlib_io_function_call(call: CompiledFunctionCallExpression,
         & python_stdlib_io_function_argument_count(call.name, call.arguments)
 
 private fun python_stdlib_io_function_call_by_name(name: String, module: CompiledModule): bool =
-    python_local_function_count(name, module.functions) == 0
-        & python_io_function_name(name)
-        & python_io_member_imported(name, module.imports)
+    if python_io_function_name(name)
+    then !python_local_function_exists(name, module.functions) & python_io_member_imported(name, module.imports)
+    else false
 
 private fun python_stdlib_io_function_argument_count(name: String, arguments: List[CompiledExpression]): bool =
     if python_io_unary_function_name(name)
@@ -5366,13 +5367,21 @@ private fun python_method_owner_base_name(name: String): String =
 /// Computes the Python name for type unqualified.
 private fun python_type_unqualified_name(name: String): String =
     let withoutArguments = python_method_owner_base_name(name)
-    let afterSlash = python_after_last_separator(withoutArguments, "/")
-    python_after_last_separator(afterSlash, ".")
+    let idx = python_last_type_separator(withoutArguments)
+    if idx < 0 then withoutArguments else withoutArguments[idx + 1, withoutArguments.size().value]
 
-/// Formats Python source text for after last separator.
-private fun python_after_last_separator(value: String, separator: String): String =
-    let idx = python_last_index_of(value, separator)
-    if idx < 0 then value else value[idx + 1, value.size().value]
+/// Computes the last separator for a qualified or path-qualified type name.
+private fun python_last_type_separator(name: String): int =
+    python_last_type_separator_from(name, 0, -1)
+
+/// Computes the last separator for a qualified or path-qualified type name from an offset.
+private fun python_last_type_separator_from(name: String, idx: int, found: int): int =
+    if idx >= name.size().value
+    then found
+    else match name[idx] with
+        case None -> found
+        case Some { char } ->
+            python_last_type_separator_from(name, idx + 1, if char == "." | char == "/" then idx else found)
 
 /// Computes the Python name for method member.
 private fun python_method_member_name(name: String): String =
@@ -7742,15 +7751,26 @@ private fun python_result_callable_expression_gatherable(receiver: CompiledExpre
 
 /// Checks whether a function matches the local function unambiguous metadata.
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
-    python_local_function_count(name, functions) == 1
+    python_local_function_count_at_most(name, functions, 2) == 1
 
-/// Counts local function count for overload or test discovery logic.
-private fun python_local_function_count(name: String, functions: List[CompiledFunction]): int =
-    match functions[0] with
+/// Checks whether a non-skipped local function exists.
+private fun python_local_function_exists(name: String, functions: List[CompiledFunction]): bool =
+    python_local_function_count_at_most(name, functions, 1) > 0
+
+/// Checks whether a non-skipped local function name has overloads.
+private fun python_local_function_overloaded(name: String, functions: List[CompiledFunction]): bool =
+    python_local_function_count_at_most(name, functions, 2) > 1
+
+/// Counts local functions up to the requested cap.
+private fun python_local_function_count_at_most(name: String, functions: List[CompiledFunction], limit: int): int =
+    if limit <= 0
+    then 0
+    else match functions[0] with
     case None -> 0
     case Some { function } ->
-        let current = if !python_skip_function(function) & function.name == name then 1 else 0
-        current + python_local_function_count(name, functions[1:])
+        if !python_skip_function(function) & function.name == name
+        then 1 + python_local_function_count_at_most(name, functions[1:], limit - 1)
+        else python_local_function_count_at_most(name, functions[1:], limit)
 
 /// Collects imported function exists visible to the current module.
 private fun python_imported_function_exists(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =

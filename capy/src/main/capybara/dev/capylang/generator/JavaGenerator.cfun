@@ -7426,9 +7426,9 @@ private fun stdlib_to_seq_type(call: CompiledFunctionCallExpression, env: List[J
 
 /// Checks whether a function matches the reflection function call metadata.
 private fun reflection_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.name == "reflection"
-        & !function_defined("reflection", module.functions)
-        & reflection_member_imported("reflection", module.imports)
+    if call.name == "reflection"
+    then !function_defined("reflection", module.functions) & reflection_member_imported("reflection", module.imports)
+    else false
 
 /// Checks whether reflection call can be emitted by the target backend.
 private fun reflection_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -8091,15 +8091,19 @@ private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaB
 
 /// Checks whether a function matches the standard-library effect function call metadata.
 private fun stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.arguments.is_empty()
-        & !function_defined(call.name, module.functions)
-        & if call.name == "current_millis"
-            then system_member_imported("current_millis", module.imports)
-            else if call.name == "nano_time"
-            then system_member_imported("nano_time", module.imports)
-            else if call.name == "now"
-            then clock_member_imported("now", module.imports)
-            else false
+    if call.arguments.is_empty()
+    then stdlib_effect_function_call_by_name(call.name, module)
+    else false
+
+/// Checks whether a function name matches the standard-library effect function call metadata.
+private fun stdlib_effect_function_call_by_name(name: String, module: CompiledModule): bool =
+    if name == "current_millis"
+    then !function_defined(name, module.functions) & system_member_imported("current_millis", module.imports)
+    else if name == "nano_time"
+    then !function_defined(name, module.functions) & system_member_imported("nano_time", module.imports)
+    else if name == "now"
+    then !function_defined(name, module.functions) & clock_member_imported("now", module.imports)
+    else false
 
 /// Emits generated code for standard-library effect function call.
 private fun stdlib_effect_function_call_code(name: String): String =
@@ -8148,10 +8152,11 @@ private fun stdlib_effect_function_call_type(name: String): CompiledTypeReferenc
 
 /// Checks whether a function matches the standard-library path function call metadata.
 private fun stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.name == "from_string"
-        & one_method_argument(call.arguments)
+    if call.name == "from_string"
+    then one_method_argument(call.arguments)
         & !function_defined(call.name, module.functions)
         & stdlib_path_member_imported("from_string", module.imports)
+    else false
 
 /// Emits generated code for standard-library path function call.
 private fun stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -8169,9 +8174,9 @@ private fun stdlib_path_function_call_emittable(call: CompiledFunctionCallExpres
 
 /// Checks whether a function matches the standard-library I/O function call metadata.
 private fun stdlib_io_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    !function_defined(call.name, module.functions)
-        & stdlib_io_function_name(call.name)
-        & stdlib_io_member_imported(call.name, module.imports)
+    if stdlib_io_function_name(call.name)
+    then !function_defined(call.name, module.functions) & stdlib_io_member_imported(call.name, module.imports)
+    else false
 
 /// Checks whether a function matches the standard-library I/O function name metadata.
 private fun stdlib_io_function_name(name: String): bool =
@@ -10679,7 +10684,9 @@ private fun function_reference_emittable(reference: CompiledFunctionReferenceExp
 
 /// Checks whether a call has the standard-library math sqrt call shape.
 private fun stdlib_math_sqrt_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.name == "sqrt" & !function_defined(call.name, module.functions)
+    if call.name == "sqrt"
+    then !function_defined(call.name, module.functions)
+    else false
 
 /// Computes the compiled type for sqrt call.
 private fun sqrt_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -10703,7 +10710,9 @@ private fun stdlib_math_sqrt_call_emittable(arguments: List[CompiledExpression],
 
 /// Checks whether a call has the standard-library math digits call shape.
 private fun stdlib_math_digits_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.name == "digits" & !function_defined(call.name, module.functions) & stdlib_math_wildcard_import(module.imports)
+    if call.name == "digits"
+    then !function_defined(call.name, module.functions) & stdlib_math_wildcard_import(module.imports)
+    else false
 
 /// Checks whether a function matches the function defined metadata.
 private fun function_defined(name: String, functions: List[CompiledFunction]): bool =
@@ -11120,10 +11129,21 @@ private fun generated_data_object_type(type: CompiledTypeReference): bool =
 
 /// Computes the name for type unqualified.
 private fun type_unqualified_name(name: String): String =
-    let dot = last_index_of(name, ".", 0, -1)
-    let slash = last_index_of(name, "/", 0, -1)
-    let idx = if dot > slash then dot else slash
+    let idx = last_type_separator_index(name)
     if idx < 0 then name else name[idx + 1, name.size().value]
+
+/// Computes the last separator for a qualified or path-qualified type name.
+private fun last_type_separator_index(name: String): int =
+    last_type_separator_index_from(name, 0, -1)
+
+/// Computes the last separator for a qualified or path-qualified type name from an offset.
+private fun last_type_separator_index_from(name: String, idx: int, found: int): int =
+    if idx >= name.size().value
+    then found
+    else match name[idx] with
+        case None -> found
+        case Some { char } ->
+            last_type_separator_index_from(name, idx + 1, if char == "." | char == "/" then idx else found)
 
 /// Computes the index used to split or rank last index of.
 private fun last_index_of(value: String, needle: String, idx: int, found: int): int =
@@ -11400,9 +11420,9 @@ private fun result_error_literal(typeName: String, imports: List[CompiledImportD
         | (typeName == "Error" & result_member_imported("Error", imports))
 
 private fun result_error_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    !function_defined(call.name, module.functions)
-        & result_member_imported(call.name, module.imports)
-        & (call.name == "error" | call.name == "error_kind")
+    if call.name == "error" | call.name == "error_kind"
+    then !function_defined(call.name, module.functions) & result_member_imported(call.name, module.imports)
+    else false
 
 private fun result_error_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "error"

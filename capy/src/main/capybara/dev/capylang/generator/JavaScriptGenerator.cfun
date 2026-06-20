@@ -1451,7 +1451,7 @@ private fun java_script_native_provider_not_wired_body(declaration: CompiledNati
 private fun java_script_tail_recursive_function(function: CompiledFunction, module: CompiledModule): bool =
     if java_script_extension_method_function(function)
     then false
-    else if java_script_local_function_count(function.name, module.functions) == 1
+    else if java_script_local_function_unambiguous(function.name, module.functions)
     then java_script_tail_position_has_self_call(function.body, function.name)
     else false
 
@@ -2314,12 +2314,13 @@ private fun java_script_object_type_call_code(name: String, module: CompiledModu
 
 /// Checks whether a function matches the reflection function call metadata.
 private fun java_script_reflection_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.name == "reflection"
-        & java_script_local_function_count("reflection", module.functions) == 0
+    if call.name == "reflection"
+    then !java_script_local_function_exists("reflection", module.functions)
         & java_script_reflection_member_imported("reflection", module.imports)
         & match call.arguments[0] with
             case None -> false
             case Some _ -> call.arguments[1:].is_empty()
+    else false
 
 /// Emits JavaScript code for reflection call.
 private fun java_script_reflection_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4954,7 +4955,7 @@ private fun java_script_stdlib_parse_function_call(call: CompiledFunctionCallExp
 
 private fun java_script_stdlib_parse_function_call_by_name(name: String, module: CompiledModule): bool =
     if java_script_parse_function_name(name)
-    then if java_script_local_function_count(name, module.functions) == 0
+    then if !java_script_local_function_exists(name, module.functions)
         then java_script_primitives_member_imported(name, module.imports)
         else false
     else false
@@ -4985,19 +4986,19 @@ private fun java_script_parse_function_call_name(name: String): String =
 
 /// Checks whether a function matches the standard-library effect function call metadata.
 private fun java_script_stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.arguments.is_empty()
-        & java_script_stdlib_effect_function_call_by_name(call.name, module)
+    if call.arguments.is_empty()
+    then java_script_stdlib_effect_function_call_by_name(call.name, module)
+    else false
 
 /// Checks whether a function matches the standard-library effect function call by name metadata.
 private fun java_script_stdlib_effect_function_call_by_name(name: String, module: CompiledModule): bool =
-    java_script_local_function_count(name, module.functions) == 0
-        & if name == "current_millis"
-            then java_script_system_member_imported("current_millis", module.imports)
-            else if name == "nano_time"
-            then java_script_system_member_imported("nano_time", module.imports)
-            else if name == "now"
-            then java_script_clock_member_imported("now", module.imports)
-            else false
+    if name == "current_millis"
+    then !java_script_local_function_exists(name, module.functions) & java_script_system_member_imported("current_millis", module.imports)
+    else if name == "nano_time"
+    then !java_script_local_function_exists(name, module.functions) & java_script_system_member_imported("nano_time", module.imports)
+    else if name == "now"
+    then !java_script_local_function_exists(name, module.functions) & java_script_clock_member_imported("now", module.imports)
+    else false
 
 /// Emits JavaScript code for standard-library effect function call.
 private fun java_script_stdlib_effect_function_call_code(name: String): String =
@@ -5013,14 +5014,15 @@ private fun java_script_stdlib_effect_function_call_type(name: String): String =
 
 /// Checks whether a function matches the standard-library path function call metadata.
 private fun java_script_stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    java_script_one_method_argument(call.arguments)
-        & java_script_stdlib_path_function_call_by_name(call.name, module)
+    if java_script_one_method_argument(call.arguments)
+    then java_script_stdlib_path_function_call_by_name(call.name, module)
+    else false
 
 /// Checks whether a function matches the standard-library path function call by name metadata.
 private fun java_script_stdlib_path_function_call_by_name(name: String, module: CompiledModule): bool =
-    java_script_local_function_count(name, module.functions) == 0
-        & name == "from_string"
-        & java_script_path_member_imported("from_string", module.imports)
+    if name == "from_string"
+    then !java_script_local_function_exists(name, module.functions) & java_script_path_member_imported("from_string", module.imports)
+    else false
 
 /// Emits JavaScript code for standard-library path function call.
 private fun java_script_stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5035,9 +5037,9 @@ private fun java_script_stdlib_io_function_call(call: CompiledFunctionCallExpres
 
 /// Checks whether a function matches the standard-library I/O function call by name metadata.
 private fun java_script_stdlib_io_function_call_by_name(name: String, module: CompiledModule): bool =
-    java_script_local_function_count(name, module.functions) == 0
-        & java_script_io_function_name(name)
-        & java_script_io_member_imported(name, module.imports)
+    if java_script_io_function_name(name)
+    then !java_script_local_function_exists(name, module.functions) & java_script_io_member_imported(name, module.imports)
+    else false
 
 /// Checks whether a function matches the standard-library I/O function argument count metadata.
 private fun java_script_stdlib_io_function_argument_count(name: String, arguments: List[CompiledExpression]): bool =
@@ -5090,7 +5092,7 @@ private fun java_script_stdlib_io_function_call_code(call: CompiledFunctionCallE
 private fun java_script_stdlib_math_sqrt_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     if call.name == "sqrt"
     then if java_script_one_method_argument(call.arguments)
-        then java_script_local_function_count(call.name, module.functions) == 0
+        then !java_script_local_function_exists(call.name, module.functions)
         else false
     else false
 
@@ -5979,7 +5981,7 @@ private fun java_script_exported_constant(function: CompiledFunction): bool =
 
 /// Checks whether a function matches the overloaded function name metadata.
 private fun java_script_overloaded_function_name(name: String, functions: List[CompiledFunction]): bool =
-    java_script_local_function_count(name, functions) > 1
+    java_script_local_function_overloaded(name, functions)
 
 /// Counts exported function count for overload or test discovery logic.
 private fun java_script_exported_function_count(name: String, functions: List[CompiledFunction]): int =
@@ -6899,7 +6901,7 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
                 case None -> false
         else if java_script_callable_binding_type(java_script_variable_type(call.name, env, module, allModules))
         then true
-        else if java_script_local_function_count(call.name, module.functions) > 0
+        else if java_script_local_function_exists(call.name, module.functions)
         then true
         else java_script_imported_function_exists(call.name, module.imports, module, allModules)
     else false
@@ -7078,15 +7080,26 @@ private fun java_script_result_callable_expression_gatherable(receiver: Compiled
 
 /// Checks whether a function matches the local function unambiguous metadata.
 private fun java_script_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
-    java_script_local_function_count(name, functions) == 1
+    java_script_local_function_count_at_most(name, functions, 2) == 1
 
-/// Counts local function count for overload or test discovery logic.
-private fun java_script_local_function_count(name: String, functions: List[CompiledFunction]): int =
-    match functions[0] with
+/// Checks whether a non-skipped local function exists.
+private fun java_script_local_function_exists(name: String, functions: List[CompiledFunction]): bool =
+    java_script_local_function_count_at_most(name, functions, 1) > 0
+
+/// Checks whether a non-skipped local function name has overloads.
+private fun java_script_local_function_overloaded(name: String, functions: List[CompiledFunction]): bool =
+    java_script_local_function_count_at_most(name, functions, 2) > 1
+
+/// Counts local functions up to the requested cap.
+private fun java_script_local_function_count_at_most(name: String, functions: List[CompiledFunction], limit: int): int =
+    if limit <= 0
+    then 0
+    else match functions[0] with
     case None -> 0
     case Some { function } ->
-        let current = if !java_script_skip_function(function) & function.name == name then 1 else 0
-        current + java_script_local_function_count(name, functions[1:])
+        if !java_script_skip_function(function) & function.name == name
+        then 1 + java_script_local_function_count_at_most(name, functions[1:], limit - 1)
+        else java_script_local_function_count_at_most(name, functions[1:], limit)
 
 /// Collects imported function exists visible to the current module.
 private fun java_script_imported_function_exists(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -8213,10 +8226,21 @@ private fun java_script_module_path(module: CompiledModule): String =
 /// Computes the JavaScript name for type unqualified.
 private fun java_script_type_unqualified_name(typeName: String): String =
     let rawName = java_script_schema_type_name(typeName)
-    let slash = java_script_last_index_of(rawName, "/", 0, -1)
-    let pathless = if slash < 0 then rawName else rawName[slash + 1, rawName.size().value]
-    let dot = java_script_last_dot_index(pathless)
-    if dot < 0 then pathless else pathless[dot + 1, pathless.size().value]
+    let idx = java_script_last_type_separator(rawName)
+    if idx < 0 then rawName else rawName[idx + 1, rawName.size().value]
+
+/// Computes the last separator for a qualified or path-qualified type name.
+private fun java_script_last_type_separator(name: String): int =
+    java_script_last_type_separator_from(name, 0, -1)
+
+/// Computes the last separator for a qualified or path-qualified type name from an offset.
+private fun java_script_last_type_separator_from(name: String, idx: int, found: int): int =
+    if idx >= name.size().value
+    then found
+    else match name[idx] with
+        case None -> found
+        case Some { char } ->
+            java_script_last_type_separator_from(name, idx + 1, if char == "." | char == "/" then idx else found)
 
 /// Checks whether a call has the qualified call name shape.
 private fun java_script_qualified_call_name(name: String): bool =

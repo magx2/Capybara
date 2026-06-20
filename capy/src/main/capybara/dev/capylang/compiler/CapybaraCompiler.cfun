@@ -1607,17 +1607,31 @@ private fun compiler_data_object_type(type: TypeReference): bool =
 
 /// Checks whether a type reference matches the uppercase type name rule.
 private fun compiler_uppercase_type_name(name: String): bool =
-    let member = compiler_unqualified_type_name(name)
-    match member[0] with
+    compiler_uppercase_type_name_at(name, compiler_last_type_separator(name) + 1)
+
+/// Checks whether a type reference segment starts with an uppercase character.
+private fun compiler_uppercase_type_name_at(name: String, idx: int): bool =
+    match name[idx] with
     case None -> false
     case Some { char } -> "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
 
 /// Computes the type name for unqualified.
 private fun compiler_unqualified_type_name(name: String): String =
-    let dot = compiler_last_index_of(name, ".", 0, -1)
-    let slash = compiler_last_index_of(name, "/", 0, -1)
-    let idx = if dot > slash then dot else slash
+    let idx = compiler_last_type_separator(name)
     if idx < 0 then name else name[idx + 1, name.size().value]
+
+/// Computes the last separator for a qualified or path-qualified type name.
+private fun compiler_last_type_separator(name: String): int =
+    compiler_last_type_separator_from(name, 0, -1)
+
+/// Computes the last separator for a qualified or path-qualified type name from an offset.
+private fun compiler_last_type_separator_from(name: String, idx: int, found: int): int =
+    if idx >= name.size().value
+    then found
+    else match name[idx] with
+        case None -> found
+        case Some { char } ->
+            compiler_last_type_separator_from(name, idx + 1, if char == "." | char == "/" then idx else found)
 
 /// Computes the index used to split or rank last index of.
 private fun compiler_last_index_of(value: String, needle: String, idx: int, found: int): int =
@@ -1919,14 +1933,7 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
 
 /// Checks whether a parsed type name can refer to an object class or interface.
 private fun compiler_object_type_reference_candidate(name: String): bool =
-    match name[0] with
-    case None -> false
-    case Some { char } ->
-        if name ? "/"
-        then compiler_uppercase_type_name(name)
-        else if name ? "."
-        then compiler_uppercase_type_name(name)
-        else "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
+    compiler_uppercase_type_name_at(name, compiler_last_type_separator(name) + 1)
 
 /// Converts parsed types into compiled metadata.
 private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =
