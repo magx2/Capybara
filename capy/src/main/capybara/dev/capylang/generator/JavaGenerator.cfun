@@ -4390,15 +4390,19 @@ private fun function_value_method_code(call: CompiledMethodCallExpression, env: 
 /// Checks whether method metadata matches the result map method call rule.
 private fun result_map_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "map" | call.name == "flat_map"
-    then result_map_method_argument(call.arguments)
-        & result_type_name(expression_type(call.receiver, env, module, allModules).name)
+    then
+        if result_map_method_argument(call.arguments)
+        then result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        else false
     else false
 
 /// Checks whether method metadata matches the result reduce method call rule.
 private fun result_reduce_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "reduce" | call.name == "reduce_left"
-    then result_reduce_method_arguments(call.arguments)
-        & result_type_name(expression_type(call.receiver, env, module, allModules).name)
+    then
+        if result_reduce_method_arguments(call.arguments)
+        then result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        else false
     else false
 
 /// Checks whether method metadata matches the result or else method call rule.

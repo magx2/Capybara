@@ -2534,7 +2534,10 @@ private fun java_script_seq_as_list_call(call: CompiledMethodCallExpression): bo
 /// Checks whether a call has the collection first call shape.
 private fun java_script_collection_first_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "first"
-    then call.arguments.is_empty() & java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+    then
+        if call.arguments.is_empty()
+        then java_script_collection_receiver_type(java_script_expression_type(call.receiver, env, module, allModules))
+        else false
     else false
 
 /// Emits JavaScript code for collection first call.
@@ -4135,8 +4138,11 @@ private fun java_script_block_has_result_binding(bindings: List[CompiledLetBindi
     case None -> false
     case Some { binding } ->
         let jsBinding = java_script_let_binding(binding, env, module, allModules)
-        if binding.operator == "<-" & java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
-        then true
+        if binding.operator == "<-"
+        then
+            if java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
+            then true
+            else java_script_block_has_result_binding(bindings[1:], [jsBinding] + env, module, allModules)
         else java_script_block_has_result_binding(bindings[1:], [jsBinding] + env, module, allModules)
 
 /// Emits JavaScript code for result block expression.
@@ -4159,9 +4165,16 @@ private fun java_script_result_block_binding_statements(bindings: List[CompiledL
 
 /// Emits one JavaScript statement for result block binding.
 private fun java_script_result_block_binding_statement(binding: CompiledLetBinding, jsBinding: JavaScriptBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if binding.operator == "<-" & java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
-    then java_script_result_bind_statement(binding, jsBinding, env, module, allModules)
-    else "const "
+    if binding.operator == "<-"
+    then
+        if java_script_result_pipe_receiver_type(java_script_expression_type(binding.value, env, module, allModules))
+        then java_script_result_bind_statement(binding, jsBinding, env, module, allModules)
+        else java_script_plain_result_block_binding_statement(binding, jsBinding, env, module, allModules)
+    else java_script_plain_result_block_binding_statement(binding, jsBinding, env, module, allModules)
+
+/// Emits a regular JavaScript const statement inside a result-aware block.
+private fun java_script_plain_result_block_binding_statement(binding: CompiledLetBinding, jsBinding: JavaScriptBinding, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "const "
         + jsBinding.jsName
         + " = "
         + java_script_expression_code(binding.value, env, module, allModules)

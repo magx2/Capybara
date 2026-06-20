@@ -65,6 +65,10 @@ private data CompiledLibraryImportSelection { functions: List[CompiledFunction],
 private data CompiledImportLibraryLookup { modulePath: String, normalizedPath: String, normalizedImportPath: String }
 /// Field schema and initializer functions built together after compiling the field type once.
 private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
+/// Raw deriver data needed for derived method expansion.
+private data CompiledRawDeriverDeclaration { name: String, methods: List[FunctionDeclaration] }
+/// Raw deriver declarations indexed once per module for derive expansion.
+private data CompiledDefinitionIndexes { derivers: Dict[CompiledRawDeriverDeclaration] }
 
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
@@ -185,12 +189,13 @@ private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule
 /// Converts a parsed module into compiled metadata.
 private fun compile_module(module: ParsedModule, allModules: List[ParsedModule]): CompiledModule =
     let derivers = compile_derivers(module.definitions)
+    let definitionIndexes = compile_definition_indexes(module.definitions)
     CompiledModule {
         name: module.name,
         path: normalize_module_path(module.path),
         types: {:},
         visiblePrimitiveBackedTypes: compile_primitive_backed_types(module.definitions, module, allModules),
-        functions: compile_functions(module.definitions, module.definitions, module, allModules)
+        functions: compile_functions(module.definitions, definitionIndexes, module, allModules)
             + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
             + compile_object_class_functions(module.objectOriented.classes, module, allModules),
         imports: compile_imports(module.imports),
@@ -836,28 +841,33 @@ private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[Co
     case None -> []
     case Some { method } -> [compile_function(method)] + compile_deriver_methods(methods[1:])
 
-/// Converts parsed derived functions for a type into compiled metadata.
-private fun compile_derived_functions_for_type(typeName: String, derives: List[DeriveApplication], definitions: List[Definition]): List[CompiledFunction] =
-    match derives[0] with
-    case None -> []
-    case Some { derive } ->
-        match find_deriver(derive.name, definitions) with
-        case Some { deriver } ->
-            compile_derived_methods(typeName, deriver.methods)
-                + compile_derived_functions_for_type(typeName, derives[1:], definitions)
-        case None -> compile_derived_functions_for_type(typeName, derives[1:], definitions)
+/// Builds raw definition lookup structures used during module compilation.
+private fun compile_definition_indexes(definitions: List[Definition]): CompiledDefinitionIndexes =
+    CompiledDefinitionIndexes { derivers: compile_raw_derivers(definitions) }
 
-/// Finds a deriver in available declarations, imports, or modules.
-private fun find_deriver(name: String, definitions: List[Definition]): /capy/lang/Option[DeriverDeclaration] =
+/// Converts parsed derivers into raw metadata keyed by deriver name.
+private fun compile_raw_derivers(definitions: List[Definition]): Dict[CompiledRawDeriverDeclaration] =
     match definitions[0] with
-    case None -> /capy/lang/Option.None {}
+    case None -> {:}
     case Some { definition } ->
         match definition with
         case DeriverDeclaration declaration ->
-            if declaration.name == name
-            then /capy/lang/Option.Some { declaration }
-            else find_deriver(name, definitions[1:])
-        case _ -> find_deriver(name, definitions[1:])
+            compile_raw_derivers(definitions[1:]) + (declaration.name, CompiledRawDeriverDeclaration {
+                name: declaration.name,
+                methods: declaration.methods
+            })
+        case _ -> compile_raw_derivers(definitions[1:])
+
+/// Converts parsed derived functions for a type into compiled metadata.
+private fun compile_derived_functions_for_type(typeName: String, derives: List[DeriveApplication], definitionIndexes: CompiledDefinitionIndexes): List[CompiledFunction] =
+    match derives[0] with
+    case None -> []
+    case Some { derive } ->
+        match definitionIndexes.derivers.get(derive.name) with
+        case Some { deriver } ->
+            compile_derived_methods(typeName, deriver.methods)
+                + compile_derived_functions_for_type(typeName, derives[1:], definitionIndexes)
+        case None -> compile_derived_functions_for_type(typeName, derives[1:], definitionIndexes)
 
 /// Converts parsed derived methods into compiled metadata.
 private fun compile_derived_methods(typeName: String, methods: List[FunctionDeclaration]): List[CompiledFunction] =
@@ -979,22 +989,22 @@ private fun compile_constant_in_module(constant: ConstantDeclaration, module: Pa
     }
 
 /// Converts parsed functions into compiled metadata.
-private fun compile_functions(definitions: List[Definition], allDefinitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+private fun compile_functions(definitions: List[Definition], definitionIndexes: CompiledDefinitionIndexes, module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match definitions[0] with
     case None -> []
     case Some { definition } ->
         match definition with
-        case ConstantDefinition { constant } -> [compile_constant_in_module(constant, module, allModules)] + compile_functions(definitions[1:], allDefinitions, module, allModules)
+        case ConstantDefinition { constant } -> [compile_constant_in_module(constant, module, allModules)] + compile_functions(definitions[1:], definitionIndexes, module, allModules)
         case DataDeclaration declaration ->
             compile_data_declaration(declaration)
-                + compile_derived_functions_for_type(declaration.name, declaration.derives, allDefinitions)
-                + compile_functions(definitions[1:], allDefinitions, module, allModules)
+                + compile_derived_functions_for_type(declaration.name, declaration.derives, definitionIndexes)
+                + compile_functions(definitions[1:], definitionIndexes, module, allModules)
         case TypeDeclaration declaration ->
-            compile_derived_functions_for_type(declaration.name, declaration.derives, allDefinitions)
-                + compile_functions(definitions[1:], allDefinitions, module, allModules)
-        case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:], allDefinitions, module, allModules)
-        case FunctionDefinition { function } -> [compile_function_in_module(function, module, allModules)] + compile_functions(definitions[1:], allDefinitions, module, allModules)
-        case _ -> compile_functions(definitions[1:], allDefinitions, module, allModules)
+            compile_derived_functions_for_type(declaration.name, declaration.derives, definitionIndexes)
+                + compile_functions(definitions[1:], definitionIndexes, module, allModules)
+        case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:], definitionIndexes, module, allModules)
+        case FunctionDefinition { function } -> [compile_function_in_module(function, module, allModules)] + compile_functions(definitions[1:], definitionIndexes, module, allModules)
+        case _ -> compile_functions(definitions[1:], definitionIndexes, module, allModules)
 
 /// Converts parsed data declaration into compiled metadata.
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =

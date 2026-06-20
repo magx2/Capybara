@@ -2746,8 +2746,9 @@ private fun python_reduce_expression_code(reduce: CompiledReduceExpression, env:
 
 /// Checks whether an expression has the option reduce expression shape.
 private fun python_option_reduce_expression(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    reduce.keyName.is_empty()
-        & python_option_pipe_receiver_type(python_expression_type(reduce.receiver, env, module, allModules))
+    if reduce.keyName.is_empty()
+    then python_option_pipe_receiver_type(python_expression_type(reduce.receiver, env, module, allModules))
+    else false
 
 /// Emits Python code for option reduce expression.
 private fun python_option_reduce_expression_code(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
