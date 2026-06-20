@@ -515,10 +515,12 @@ private fun python_import(declaration: CompiledImportDeclaration, module: Compil
 
 /// Emits Python import source for import extension method aliases.
 private fun python_import_extension_method_aliases(declaration: CompiledImportDeclaration, modulePath: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if declaration.wildcard & !declaration.qualified
-    then match python_find_imported_module(declaration, module, allModules) with
-        case Some { importedModule } -> python_import_extension_method_aliases_for_functions(declaration, modulePath, importedModule.functions)
-        case None -> ""
+    if declaration.wildcard
+    then if !declaration.qualified
+        then match python_find_imported_module(declaration, module, allModules) with
+            case Some { importedModule } -> python_import_extension_method_aliases_for_functions(declaration, modulePath, importedModule.functions)
+            case None -> ""
+        else ""
     else ""
 
 /// Emits Python import source for import extension method aliases for functions.
@@ -606,7 +608,9 @@ private fun python_constants(functions: List[CompiledFunction], module: Compiled
 
 /// Checks whether the current value satisfies the emitted constant rule for Python processing.
 private fun python_emitted_constant(function: CompiledFunction): bool =
-    python_compiled_constant(function) & !python_compiled_schema(function)
+    if python_compiled_constant(function)
+    then !python_compiled_schema(function)
+    else false
 
 /// Formats Python source text for constant.
 private fun python_constant(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -656,7 +660,9 @@ private fun python_native_provider_declarations_for_module(module: CompiledModul
         else python_native_provider_declarations_for_module(module, declarations[1:])
 
 private fun python_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
-    declaration.sourceModuleName == module.name & declaration.sourceModulePath == module.path
+    if declaration.sourceModuleName == module.name
+    then declaration.sourceModulePath == module.path
+    else false
 
 /// Finds a native provider declaration in scope, imports, or compiled modules.
 private fun python_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
@@ -664,8 +670,9 @@ private fun python_find_native_provider_declaration(function: CompiledFunction, 
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-            & python_native_provider_declaration_in_module(declaration, module)
-        then /capy/lang/Option.Some { declaration }
+        then if python_native_provider_declaration_in_module(declaration, module)
+            then /capy/lang/Option.Some { declaration }
+            else python_find_native_provider_declaration(function, module, declarations[1:])
         else python_find_native_provider_declaration(function, module, declarations[1:])
 
 /// Emits Python expression text for native provider function body.
@@ -685,8 +692,12 @@ private fun python_find_native_provider_binding(declaration: CompiledNativeProvi
     match bindings[0] with
     case None -> /capy/lang/Option.None {}
     case Some { binding } ->
-        if binding.interfaceId == declaration.interfaceId & binding.qualifier == declaration.qualifier & python_native_provider_binding_has_python(binding)
-        then /capy/lang/Option.Some { binding }
+        if binding.interfaceId == declaration.interfaceId
+        then if binding.qualifier == declaration.qualifier
+            then if python_native_provider_binding_has_python(binding)
+                then /capy/lang/Option.Some { binding }
+                else python_find_native_provider_binding(declaration, bindings[1:])
+            else python_find_native_provider_binding(declaration, bindings[1:])
         else python_find_native_provider_binding(declaration, bindings[1:])
 
 /// Checks whether the current value satisfies the native provider binding has Python rule for Python processing.
@@ -970,9 +981,11 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
 
 /// Checks whether an expression has the string concat expression shape.
 private fun python_string_concat_expression(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    binary.operator == "+"
-        & leftType == python_string_type()
-        & python_expression_type(binary.right, env, module, allModules) == python_string_type()
+    if binary.operator == "+"
+    then if leftType == python_string_type()
+        then python_expression_type(binary.right, env, module, allModules) == python_string_type()
+        else false
+    else false
 
 /// Checks whether an operator belongs to the binary extension operator expression with left type category.
 private fun python_binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3761,7 +3774,6 @@ private fun python_string_method_return_type(name: String): String =
 /// Infers the expression type for binary.
 private fun python_binary_expression_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
-    let rightType = python_expression_type(binary.right, env, module, allModules)
     if python_result_reduce_operator_expression_with_left_type(binary, leftType)
     then python_result_reduce_operator_type(binary, env, module, allModules)
     else if python_async_pipe_expression_with_left_type(binary, leftType)
@@ -3781,13 +3793,19 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     else match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> function.returnType.name
     case None ->
-    if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
-    then python_bool_type()
-    else if binary.operator == "+" & (leftType == "String" | rightType == "String")
-    then python_string_type()
-    else if python_numeric_binary_operator(binary.operator) & python_numeric_type(leftType) & python_numeric_type(rightType)
-    then python_promoted_numeric_type(leftType, rightType)
-    else python_unknown_type()
+        if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
+        then python_bool_type()
+        else if binary.operator == "+" & leftType == "String"
+        then python_string_type()
+        else
+            let rightType = python_expression_type(binary.right, env, module, allModules)
+            if binary.operator == "+" & rightType == "String"
+            then python_string_type()
+            else if python_numeric_binary_operator(binary.operator)
+            then if python_numeric_type(leftType)
+                then if python_numeric_type(rightType) then python_promoted_numeric_type(leftType, rightType) else python_unknown_type()
+                else python_unknown_type()
+            else python_unknown_type()
 
 /// Checks whether an operator belongs to the binary operator category.
 private fun python_bool_binary_operator(operator: String): bool =

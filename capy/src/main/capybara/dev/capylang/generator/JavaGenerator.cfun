@@ -1415,7 +1415,9 @@ private fun java_native_provider_declarations_for_module(module: CompiledModule,
         else java_native_provider_declarations_for_module(module, declarations[1:])
 
 private fun java_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
-    declaration.sourceModuleName == module.name & declaration.sourceModulePath == module.path
+    if declaration.sourceModuleName == module.name
+    then declaration.sourceModulePath == module.path
+    else false
 
 /// Finds a native provider declaration in available declarations, imports, or modules.
 private fun find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
@@ -1423,8 +1425,9 @@ private fun find_native_provider_declaration(function: CompiledFunction, module:
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-            & java_native_provider_declaration_in_module(declaration, module)
-        then /capy/lang/Option.Some { declaration }
+        then if java_native_provider_declaration_in_module(declaration, module)
+            then /capy/lang/Option.Some { declaration }
+            else find_native_provider_declaration(function, module, declarations[1:])
         else find_native_provider_declaration(function, module, declarations[1:])
 
 /// Emits Java expression text for native provider function body.
@@ -1442,8 +1445,10 @@ private fun find_native_provider_binding(declaration: CompiledNativeProviderDecl
     match bindings[0] with
     case None -> /capy/lang/Option.None {}
     case Some { binding } ->
-        if binding.interfaceId == declaration.interfaceId & binding.qualifier == declaration.qualifier
-        then /capy/lang/Option.Some { binding }
+        if binding.interfaceId == declaration.interfaceId
+        then if binding.qualifier == declaration.qualifier
+            then /capy/lang/Option.Some { binding }
+            else find_native_provider_binding(declaration, bindings[1:])
         else find_native_provider_binding(declaration, bindings[1:])
 
 /// Emits Java expression text for native provider bound body.
@@ -1841,9 +1846,6 @@ private fun placeholder_function_name(source: String): String =
 /// Emits generated code for binary expression.
 private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = expression_type(binary.left, env, module, allModules)
-    let rightType = expression_type(binary.right, env, module, allModules)
-    let naturalResultType = binary_result_type(binary.operator, leftType, rightType)
-    let resultType = contextual_binary_result_type(naturalResultType, expectedType)
     if result_reduce_operator_expression(binary, leftType)
     then result_reduce_method_code(result_reduce_operator_call(binary), env, expectedType, module, allModules)
     else if async_pipe_expression(binary, leftType)
@@ -1856,104 +1858,111 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     then expression_code(collection_pipe_chained_method_call(binary), env, expectedType, module, allModules)
     else if collection_pipe_expression(binary, leftType)
     then collection_pipe_code(binary, leftType, env, module, allModules)
-    else if collection_plus_expression(binary.operator, leftType, rightType)
-    then collection_plus_code(binary, leftType, rightType, env, module, allModules)
-    else if collection_minus_expression(binary.operator, leftType, rightType)
-    then collection_minus_code(binary, leftType, rightType, env, module, allModules)
-    else if binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
-    then binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
-    else if stdlib_path_slash_expression(binary, leftType, module)
-    then stdlib_path_slash_code(binary, env, module, allModules)
-    else if set_binary_expression(binary.operator, leftType, rightType)
-    then set_binary_code(binary, leftType, rightType, env, module, allModules)
-    else if regex_binary_expression(binary.operator, leftType)
-    then regex_binary_code(binary, env, module, allModules)
-    else if boolean_binary_operator(binary.operator)
-    then "(" + truthy_expression_code(binary.left, env, module, allModules)
-        + " " + java_boolean_operator(binary.operator) + " "
-        + truthy_expression_code(binary.right, env, module, allModules)
-        + ")"
-    else if string_concat_expression(binary.operator, leftType, rightType)
-    then "(" + expression_code(binary.left, env, string_concat_operand_type(leftType), module, allModules)
-        + " + "
-        + expression_code(binary.right, env, string_concat_operand_type(rightType), module, allModules)
-        + ")"
-    else if string_left_numeric_operator(binary.operator, leftType, rightType)
-    then "(" + expression_code(binary.left, env, leftType, module, allModules)
-        + " + "
-        + expression_code(binary.right, env, rightType, module, allModules)
-        + ")"
-    else if binary.operator == "^"
-    then power_expression_code(binary, resultType, env, module, allModules)
-    else if binary.operator == ".nand."
-    then byte_result_code("(~(" + expression_code(binary.left, env, leftType, module, allModules)
-        + " & "
-        + expression_code(binary.right, env, rightType, module, allModules)
-        + "))", expectedType)
-    else if bitwise_binary_operator(binary.operator)
-    then byte_result_code("(" + expression_code(binary.left, env, leftType, module, allModules)
-        + " " + java_bitwise_operator(binary.operator) + " "
-        + expression_code(binary.right, env, rightType, module, allModules)
-        + ")", expectedType)
-    else if binary.operator == "?"
-    then
-        if leftType.name == "Dict"
-        then expression_code(binary.left, env, leftType, module, allModules)
-            + ".containsKey(" + expression_code(binary.right, env, string_type(), module, allModules) + ")"
-        else expression_code(binary.left, env, leftType, module, allModules)
-            + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
-    else if string_equality_operator(binary.operator, leftType, rightType)
-    then string_equality_code(binary, leftType, rightType, env, module, allModules)
-    else if object_equality_operator(binary.operator, leftType, rightType)
-    then object_equality_code(binary, leftType, rightType, env, module, allModules)
-    else if binary.operator == "%" & resultType.name == "byte"
-    then "((byte) (" + expression_code(binary.left, env, leftType, module, allModules)
-        + " % "
-        + expression_code(binary.right, env, rightType, module, allModules)
-        + "))"
-    else byte_result_code("(" + expression_code(binary.left, env, resultType, module, allModules)
-        + " " + binary.operator + " "
-        + expression_code(binary.right, env, resultType, module, allModules)
-        + ")", resultType)
+    else
+        let rightType = expression_type(binary.right, env, module, allModules)
+        let naturalResultType = binary_result_type(binary.operator, leftType, rightType)
+        let resultType = contextual_binary_result_type(naturalResultType, expectedType)
+        if collection_plus_expression(binary.operator, leftType, rightType)
+        then collection_plus_code(binary, leftType, rightType, env, module, allModules)
+        else if collection_minus_expression(binary.operator, leftType, rightType)
+        then collection_minus_code(binary, leftType, rightType, env, module, allModules)
+        else if binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
+        then binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
+        else if stdlib_path_slash_expression(binary, leftType, module)
+        then stdlib_path_slash_code(binary, env, module, allModules)
+        else if set_binary_expression(binary.operator, leftType, rightType)
+        then set_binary_code(binary, leftType, rightType, env, module, allModules)
+        else if regex_binary_expression(binary.operator, leftType)
+        then regex_binary_code(binary, env, module, allModules)
+        else if boolean_binary_operator(binary.operator)
+        then "(" + truthy_expression_code(binary.left, env, module, allModules)
+            + " " + java_boolean_operator(binary.operator) + " "
+            + truthy_expression_code(binary.right, env, module, allModules)
+            + ")"
+        else if string_concat_expression(binary.operator, leftType, rightType)
+        then "(" + expression_code(binary.left, env, string_concat_operand_type(leftType), module, allModules)
+            + " + "
+            + expression_code(binary.right, env, string_concat_operand_type(rightType), module, allModules)
+            + ")"
+        else if string_left_numeric_operator(binary.operator, leftType, rightType)
+        then "(" + expression_code(binary.left, env, leftType, module, allModules)
+            + " + "
+            + expression_code(binary.right, env, rightType, module, allModules)
+            + ")"
+        else if binary.operator == "^"
+        then power_expression_code(binary, resultType, env, module, allModules)
+        else if binary.operator == ".nand."
+        then byte_result_code("(~(" + expression_code(binary.left, env, leftType, module, allModules)
+            + " & "
+            + expression_code(binary.right, env, rightType, module, allModules)
+            + "))", expectedType)
+        else if bitwise_binary_operator(binary.operator)
+        then byte_result_code("(" + expression_code(binary.left, env, leftType, module, allModules)
+            + " " + java_bitwise_operator(binary.operator) + " "
+            + expression_code(binary.right, env, rightType, module, allModules)
+            + ")", expectedType)
+        else if binary.operator == "?"
+        then
+            if leftType.name == "Dict"
+            then expression_code(binary.left, env, leftType, module, allModules)
+                + ".containsKey(" + expression_code(binary.right, env, string_type(), module, allModules) + ")"
+            else expression_code(binary.left, env, leftType, module, allModules)
+                + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
+        else if string_equality_operator(binary.operator, leftType, rightType)
+        then string_equality_code(binary, leftType, rightType, env, module, allModules)
+        else if object_equality_operator(binary.operator, leftType, rightType)
+        then object_equality_code(binary, leftType, rightType, env, module, allModules)
+        else if binary.operator == "%" & resultType.name == "byte"
+        then "((byte) (" + expression_code(binary.left, env, leftType, module, allModules)
+            + " % "
+            + expression_code(binary.right, env, rightType, module, allModules)
+            + "))"
+        else byte_result_code("(" + expression_code(binary.left, env, resultType, module, allModules)
+            + " " + binary.operator + " "
+            + expression_code(binary.right, env, resultType, module, allModules)
+            + ")", resultType)
 
 /// Computes the compiled type for contextual binary result.
 private fun contextual_binary_result_type(naturalResultType: CompiledTypeReference, expectedType: CompiledTypeReference): CompiledTypeReference =
-    if numeric_type(naturalResultType) & type_assignable(expectedType, naturalResultType)
-    then expectedType
+    if numeric_type(naturalResultType)
+    then if type_assignable(expectedType, naturalResultType) then expectedType else naturalResultType
     else naturalResultType
 
 /// Checks whether an expression has the collection plus expression shape.
 private fun collection_plus_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    operator == "+"
-        & (list_plus_expression(leftType, rightType) | set_plus_expression(leftType, rightType) | dict_plus_expression(leftType, rightType))
+    if operator == "+"
+    then list_plus_expression(leftType, rightType) | set_plus_expression(leftType, rightType) | dict_plus_expression(leftType, rightType)
+    else false
 
 /// Checks whether an expression has the collection minus expression shape.
 private fun collection_minus_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    operator == "-" & (list_minus_expression(leftType, rightType) | set_minus_expression(leftType, rightType) | dict_minus_expression(leftType, rightType))
+    if operator == "-"
+    then list_minus_expression(leftType, rightType) | set_minus_expression(leftType, rightType) | dict_minus_expression(leftType, rightType)
+    else false
 
 /// Checks whether an expression has the list plus expression shape.
 private fun list_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    leftType.name == "List" & !rightType.name.is_empty()
+    if leftType.name == "List" then !rightType.name.is_empty() else false
 
 /// Checks whether an expression has the list minus expression shape.
 private fun list_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    leftType.name == "List" & !rightType.name.is_empty()
+    if leftType.name == "List" then !rightType.name.is_empty() else false
 
 /// Checks whether an expression has the set plus expression shape.
 private fun set_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    leftType.name == "Set" & !rightType.name.is_empty()
+    if leftType.name == "Set" then !rightType.name.is_empty() else false
 
 /// Checks whether an expression has the set minus expression shape.
 private fun set_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    leftType.name == "Set" & !rightType.name.is_empty()
+    if leftType.name == "Set" then !rightType.name.is_empty() else false
 
 /// Checks whether an expression has the dict plus expression shape.
 private fun dict_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    leftType.name == "Dict" & (rightType.name == "Dict" | rightType.name == "Tuple")
+    if leftType.name == "Dict" then rightType.name == "Dict" | rightType.name == "Tuple" else false
 
 /// Checks whether an expression has the dict minus expression shape.
 private fun dict_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
-    leftType.name == "Dict" & (rightType.name == "Dict" | rightType.name == "String")
+    if leftType.name == "Dict" then rightType.name == "Dict" | rightType.name == "String" else false
 
 /// Emits generated code for collection plus.
 private fun collection_plus_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =

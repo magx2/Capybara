@@ -293,11 +293,15 @@ private fun java_script_import(declaration: CompiledImportDeclaration, module: C
 
 /// Checks whether a function matches the object helper function metadata.
 private fun java_script_object_helper_function(function: CompiledFunction): bool =
-    java_script_object_class_schema_function(function)
-        | java_script_object_interface_schema_function(function)
-        | java_script_object_method_function(function)
-        | java_script_object_field_init_function(function)
-        | java_script_object_init_function(function)
+    if java_script_object_class_schema_function(function)
+    then true
+    else if java_script_object_interface_schema_function(function)
+    then true
+    else if java_script_object_method_function(function)
+    then true
+    else if java_script_object_field_init_function(function)
+    then true
+    else java_script_object_init_function(function)
 
 /// Emits JavaScript code for object helper.
 private fun java_script_object_helper_code(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1032,8 +1036,11 @@ private fun java_script_has_overloaded_functions(functions: List[CompiledFunctio
     match functions[0] with
     case None -> false
     case Some { function } ->
-        (!java_script_skip_function(function) & java_script_overloaded_function_name(function.name, functions))
-            | java_script_has_overloaded_functions(functions[1:])
+        if java_script_skip_function(function)
+        then java_script_has_overloaded_functions(functions[1:])
+        else if java_script_overloaded_function_name(function.name, functions)
+        then true
+        else java_script_has_overloaded_functions(functions[1:])
 
 /// Formats JavaScript source text for dispatch parent metadata.
 private fun java_script_dispatch_parent_metadata(functions: List[CompiledFunction]): String =
@@ -1086,12 +1093,14 @@ private fun java_script_overload_dispatcher_functions(functions: List[CompiledFu
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if !java_script_skip_function(function)
-            & java_script_overloaded_function_name(function.name, functions)
-            & !java_script_string_list_contains(function.name, emittedNames)
-        then java_script_overload_dispatcher_function(function.name, functions)
-            + java_script_newline()
-            + java_script_overload_dispatcher_functions(functions[1:], emittedNames + [function.name])
+        if java_script_skip_function(function)
+        then java_script_overload_dispatcher_functions(functions[1:], emittedNames)
+        else if java_script_overloaded_function_name(function.name, functions)
+        then if !java_script_string_list_contains(function.name, emittedNames)
+            then java_script_overload_dispatcher_function(function.name, functions)
+                + java_script_newline()
+                + java_script_overload_dispatcher_functions(functions[1:], emittedNames + [function.name])
+            else java_script_overload_dispatcher_functions(functions[1:], emittedNames)
         else java_script_overload_dispatcher_functions(functions[1:], emittedNames)
 
 /// Formats JavaScript source text for overload dispatcher function.
@@ -1114,7 +1123,9 @@ private fun java_script_dispatch_candidates(name: String, functions: List[Compil
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if !java_script_skip_function(function) & function.name == name
+        if java_script_skip_function(function)
+        then java_script_dispatch_candidates(name, functions[1:])
+        else if function.name == name
         then java_script_dispatch_candidate(function) + java_script_dispatch_candidate_tail(name, functions[1:])
         else java_script_dispatch_candidates(name, functions[1:])
 
@@ -1206,7 +1217,9 @@ private fun java_script_constants(functions: List[CompiledFunction], module: Com
 
 /// Checks whether the current value satisfies the emitted constant rule for JavaScript processing.
 private fun java_script_emitted_constant(function: CompiledFunction): bool =
-    java_script_compiled_constant(function) & !java_script_compiled_schema(function)
+    if java_script_compiled_constant(function)
+    then !java_script_compiled_schema(function)
+    else false
 
 /// Formats JavaScript source text for constant.
 private fun java_script_constant(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1276,7 +1289,9 @@ private fun java_script_native_provider_declarations_for_module(module: Compiled
         else java_script_native_provider_declarations_for_module(module, declarations[1:])
 
 private fun java_script_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
-    declaration.sourceModuleName == module.name & declaration.sourceModulePath == module.path
+    if declaration.sourceModuleName == module.name
+    then declaration.sourceModulePath == module.path
+    else false
 
 /// Finds a native provider declaration in scope, imports, or compiled modules.
 private fun java_script_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
@@ -1284,8 +1299,9 @@ private fun java_script_find_native_provider_declaration(function: CompiledFunct
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-            & java_script_native_provider_declaration_in_module(declaration, module)
-        then /capy/lang/Option.Some { declaration }
+        then if java_script_native_provider_declaration_in_module(declaration, module)
+            then /capy/lang/Option.Some { declaration }
+            else java_script_find_native_provider_declaration(function, module, declarations[1:])
         else java_script_find_native_provider_declaration(function, module, declarations[1:])
 
 /// Emits JavaScript expression text for native provider function body.
@@ -1305,8 +1321,12 @@ private fun java_script_find_native_provider_binding(declaration: CompiledNative
     match bindings[0] with
     case None -> /capy/lang/Option.None {}
     case Some { binding } ->
-        if binding.interfaceId == declaration.interfaceId & binding.qualifier == declaration.qualifier & java_script_native_provider_binding_has_javascript(binding)
-        then /capy/lang/Option.Some { binding }
+        if binding.interfaceId == declaration.interfaceId
+        then if binding.qualifier == declaration.qualifier
+            then if java_script_native_provider_binding_has_javascript(binding)
+                then /capy/lang/Option.Some { binding }
+                else java_script_find_native_provider_binding(declaration, bindings[1:])
+            else java_script_find_native_provider_binding(declaration, bindings[1:])
         else java_script_find_native_provider_binding(declaration, bindings[1:])
 
 /// Checks whether the current value satisfies the native provider binding has JavaScript rule for JavaScript processing.
@@ -1362,9 +1382,11 @@ private fun java_script_native_provider_not_wired_body(declaration: CompiledNati
 
 /// Checks whether a function matches the tail recursive function metadata.
 private fun java_script_tail_recursive_function(function: CompiledFunction, module: CompiledModule): bool =
-    !java_script_extension_method_function(function)
-        & java_script_local_function_count(function.name, module.functions) == 1
-        & java_script_tail_position_has_self_call(function.body, function.name)
+    if java_script_extension_method_function(function)
+    then false
+    else if java_script_local_function_count(function.name, module.functions) == 1
+    then java_script_tail_position_has_self_call(function.body, function.name)
+    else false
 
 /// Checks whether a call has the tail position has self call shape.
 private fun java_script_tail_position_has_self_call(expression: CompiledExpression, functionName: String): bool =
@@ -5757,7 +5779,7 @@ private fun java_script_string_list_contains(value: String, values: List[String]
 private fun java_script_exports(functions: List[CompiledFunction]): String =
     let functionEntries = java_script_export_entries(functions, true)
     let dispatchEntries = java_script_export_dispatch_entries(functions, [], functionEntries.is_empty())
-    let objectEntries = java_script_object_export_entries(functions, dispatchEntries.is_empty() & functionEntries.is_empty())
+    let objectEntries = java_script_object_export_entries(functions, if dispatchEntries.is_empty() then functionEntries.is_empty() else false)
     "module.exports = {"
         + java_script_newline()
         + functionEntries
@@ -5772,10 +5794,12 @@ private fun java_script_export_dispatch_entries(functions: List[CompiledFunction
     case None -> ""
     case Some { function } ->
         if java_script_exported_function(function)
-            & java_script_exported_function_count(function.name, functions) > 1
-            & !java_script_string_list_contains(function.name, emittedNames)
-        then java_script_export_dispatch_entry(function.name, first)
-            + java_script_export_dispatch_entries(functions[1:], emittedNames + [function.name], false)
+        then if java_script_exported_function_count(function.name, functions) > 1
+            then if !java_script_string_list_contains(function.name, emittedNames)
+                then java_script_export_dispatch_entry(function.name, first)
+                    + java_script_export_dispatch_entries(functions[1:], emittedNames + [function.name], false)
+                else java_script_export_dispatch_entries(functions[1:], emittedNames, first)
+            else java_script_export_dispatch_entries(functions[1:], emittedNames, first)
         else java_script_export_dispatch_entries(functions[1:], emittedNames, first)
 
 /// Formats JavaScript source text for export dispatch entry.
@@ -5857,12 +5881,15 @@ private fun java_script_exported_object_interface(function: CompiledFunction): b
 private fun java_script_exported_function(function: CompiledFunction): bool =
     if java_script_emitted_constant(function)
     then java_script_exported_constant(function)
-    else !java_script_skip_function(function)
-        & function.visibility != "private"
+    else if java_script_skip_function(function)
+    then false
+    else function.visibility != "private"
 
 /// Checks whether the current value satisfies the exported constant rule for JavaScript processing.
 private fun java_script_exported_constant(function: CompiledFunction): bool =
-    java_script_emitted_constant(function) & function.visibility != "const:private"
+    if java_script_emitted_constant(function)
+    then function.visibility != "const:private"
+    else false
 
 /// Checks whether a function matches the overloaded function name metadata.
 private fun java_script_overloaded_function_name(name: String, functions: List[CompiledFunction]): bool =

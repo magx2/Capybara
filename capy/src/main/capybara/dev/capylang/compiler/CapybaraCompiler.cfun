@@ -1638,11 +1638,15 @@ private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParame
     let leftType = infer_return_type(binary.left, env, depth + 1)
     if compiler_collection_pipe_expression(binary, leftType)
     then missing_type()
-    else compiler_binary_result_type(
-        binary.operator,
-        leftType,
-        infer_return_type(binary.right, env, depth + 1)
-    )
+    else
+        let leftOnlyType = compiler_binary_result_type_from_left(binary.operator, leftType)
+        if !leftOnlyType.name.is_empty()
+        then leftOnlyType
+        else compiler_binary_result_type(
+            binary.operator,
+            leftType,
+            infer_return_type(binary.right, env, depth + 1)
+        )
 
 /// Checks whether an expression has the collection pipe expression shape.
 private fun compiler_collection_pipe_expression(binary: BinaryExpression, leftType: TypeReference): bool =
@@ -1708,6 +1712,16 @@ private fun compiler_match_expression_type(cases: List[MatchCase], env: List[Fun
     case Some { matchCase } -> infer_return_type(matchCase.body, env, depth + 1)
 
 /// Computes the compiled type for binary result.
+private fun compiler_binary_result_type_from_left(operator: String, leftType: TypeReference): TypeReference =
+    if compiler_boolean_binary_operator(operator)
+    then compiler_bool_type()
+    else if compiler_comparison_operator(operator)
+    then compiler_bool_type()
+    else if operator == "+"
+    then if leftType.name == "String" then compiler_string_type() else missing_type()
+    else missing_type()
+
+/// Computes the compiled type for binary result.
 private fun compiler_binary_result_type(operator: String, leftType: TypeReference, rightType: TypeReference): TypeReference =
     if compiler_boolean_binary_operator(operator)
     then compiler_bool_type()
@@ -1717,10 +1731,14 @@ private fun compiler_binary_result_type(operator: String, leftType: TypeReferenc
     then compiler_string_type()
     else if compiler_string_left_numeric_operator(operator, leftType, rightType)
     then compiler_string_type()
-    else if compiler_bitwise_binary_operator(operator) & compiler_integer_type(leftType) & compiler_integer_type(rightType)
-    then compiler_promoted_numeric_type(leftType, rightType)
-    else if compiler_numeric_binary_operator(operator) & compiler_numeric_type(leftType) & compiler_numeric_type(rightType)
-    then compiler_promoted_numeric_type(leftType, rightType)
+    else if compiler_bitwise_binary_operator(operator)
+    then if compiler_integer_type(leftType)
+        then if compiler_integer_type(rightType) then compiler_promoted_numeric_type(leftType, rightType) else missing_type()
+        else missing_type()
+    else if compiler_numeric_binary_operator(operator)
+    then if compiler_numeric_type(leftType)
+        then if compiler_numeric_type(rightType) then compiler_promoted_numeric_type(leftType, rightType) else missing_type()
+        else missing_type()
     else missing_type()
 
 /// Checks whether an operator belongs to the binary operator category.
