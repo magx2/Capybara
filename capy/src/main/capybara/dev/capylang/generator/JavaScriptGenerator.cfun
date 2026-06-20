@@ -1161,9 +1161,11 @@ private fun java_script_type_reference_argument_tail(arguments: List[CompiledTyp
 
 /// Checks whether a function matches the skip function metadata.
 private fun java_script_skip_function(function: CompiledFunction): bool =
-    java_script_compiled_constant(function)
-        | java_script_imported_function(function)
-        | java_script_compiled_object_helper_function(function)
+    if java_script_compiled_constant(function)
+    then true
+    else if java_script_imported_function(function)
+    then true
+    else java_script_compiled_object_helper_function(function)
 
 /// Extracts compiled metadata for constant.
 private fun java_script_compiled_constant(function: CompiledFunction): bool =
@@ -1179,7 +1181,9 @@ private fun java_script_imported_function(function: CompiledFunction): bool =
 
 /// Extracts compiled metadata for object helper function.
 private fun java_script_compiled_object_helper_function(function: CompiledFunction): bool =
-    java_script_object_method_function(function)
+    if !java_script_string_has_prefix(function.name, "__capy_oo_")
+    then false
+    else java_script_object_method_function(function)
         | java_script_object_interface_method_function(function)
         | java_script_object_field_init_function(function)
         | java_script_object_init_function(function)

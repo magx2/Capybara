@@ -134,7 +134,7 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     + java_function_type_interfaces()
     + java_object_interfaces(objects.interfaces, module, allModules)
     + java_object_classes(objects.classes, constantBindings, module, allModules)
-    + java_constants(constants, [], module, allModules)
+    + java_constants(constants, module, allModules)
     + java_functions(module.functions, constantBindings, module, allModules, moduleNativeProviderCatalog)
     + java_helpers(module)
     + "}" + newline()
@@ -1070,11 +1070,13 @@ private fun explicit_static_imports(functions: List[CompiledFunction], declarati
 
 /// Checks whether a function matches the static import function metadata.
 private fun static_import_function(function: CompiledFunction, declaration: CompiledImportDeclaration): bool =
-    !compiled_schema(function)
-        & !compiled_object_helper_function(function)
-        & function.visibility != "private"
-        & function.visibility != "const:private"
-        & import_includes_name(function.name, declaration)
+    if compiled_schema(function)
+    then false
+    else if compiled_object_helper_function(function)
+    then false
+    else if function.visibility == "private" | function.visibility == "const:private"
+    then false
+    else import_includes_name(function.name, declaration)
 
 /// Checks whether an import matches the standard-library import rule.
 private fun stdlib_import(modulePath: String): bool =
@@ -1131,16 +1133,25 @@ private fun java_generator_string_has_suffix(value: String, suffix: String): boo
     else value[value.size().value - suffix.size().value, value.size().value] == suffix
 
 /// Formats Java source text for constants.
-private fun java_constants(constants: List[CompiledFunction], previous: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_constants(constants: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_constants_with_bindings(constants, [], module, allModules)
+
+/// Formats Java source text for constants with already computed previous constant bindings.
+private fun java_constants_with_bindings(constants: List[CompiledFunction], previousBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match constants[0] with
-    case None -> if previous.is_empty() then "" else newline()
+    case None -> if previousBindings.is_empty() then "" else newline()
     case Some { constant } ->
-        java_constant(constant, constant_bindings(previous, module, allModules), module, allModules)
-        + java_constants(constants[1:], [constant] + previous, module, allModules)
+        let type = constant_type(constant, previousBindings, module, allModules)
+        java_constant_with_type(constant, type, previousBindings, module, allModules)
+        + java_constants_with_bindings(constants[1:], [java_binding(constant.name, type)] + previousBindings, module, allModules)
 
 /// Formats Java source text for constant.
 private fun java_constant(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let type = constant_type(constant, env, module, allModules)
+    java_constant_with_type(constant, type, env, module, allModules)
+
+/// Formats Java source text for a constant after its type has already been resolved.
+private fun java_constant_with_type(constant: CompiledFunction, type: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "    " + constant_java_visibility(constant) + "static final " + java_type(type) + " " + java_identifier(constant.name)
     + " = " + expression_code(constant.body, env, type, module, allModules) + ";" + newline()
 
@@ -1189,10 +1200,20 @@ private fun imported_function(function: CompiledFunction): bool =
 
 /// Extracts compiled metadata for object helper function.
 private fun compiled_object_helper_function(function: CompiledFunction): bool =
-    compiled_object_method_function(function)
+    if !java_generator_string_has_prefix(function.name, "__capy_oo_")
+    then false
+    else compiled_object_method_function(function)
         | compiled_object_interface_method_function(function)
         | compiled_object_field_init_function(function)
         | compiled_object_init_function(function)
+
+/// Checks whether a compiled function should be skipped by regular Java function emission.
+private fun java_skip_function(function: CompiledFunction): bool =
+    if compiled_constant(function)
+    then true
+    else if imported_function(function)
+    then true
+    else compiled_object_helper_function(function)
 
 /// Computes constant metadata for Java visibility.
 private fun constant_java_visibility(function: CompiledFunction): String =
@@ -1203,7 +1224,7 @@ private fun java_functions(functions: List[CompiledFunction], constantBindings: 
     match functions[0] with
     case None -> ""
     case Some { function } ->
-        if compiled_constant(function) | compiled_object_helper_function(function) | imported_function(function)
+        if java_skip_function(function)
         then java_functions(functions[1:], constantBindings, module, allModules, nativeProviderCatalog)
         else java_function(function, constantBindings, module, allModules, nativeProviderCatalog) + newline() + java_functions(functions[1:], constantBindings, module, allModules, nativeProviderCatalog)
 

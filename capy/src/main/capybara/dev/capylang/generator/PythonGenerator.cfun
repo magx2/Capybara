@@ -561,9 +561,11 @@ private fun python_functions(functions: List[CompiledFunction], module: Compiled
 
 /// Checks whether a function matches the skip function metadata.
 private fun python_skip_function(function: CompiledFunction): bool =
-    python_compiled_constant(function)
-        | python_imported_function(function)
-        | python_compiled_object_helper_function(function)
+    if python_compiled_constant(function)
+    then true
+    else if python_imported_function(function)
+    then true
+    else python_compiled_object_helper_function(function)
 
 /// Extracts compiled metadata for constant.
 private fun python_compiled_constant(function: CompiledFunction): bool =
@@ -579,7 +581,9 @@ private fun python_imported_function(function: CompiledFunction): bool =
 
 /// Extracts compiled metadata for object helper function.
 private fun python_compiled_object_helper_function(function: CompiledFunction): bool =
-    python_string_has_prefix(function.name, "__capy_oo_method|")
+    if !python_string_has_prefix(function.name, "__capy_oo_")
+    then false
+    else python_string_has_prefix(function.name, "__capy_oo_method|")
         | python_string_has_prefix(function.name, "__capy_oo_interface_method|")
         | python_string_has_prefix(function.name, "__capy_oo_field_init|")
         | python_string_has_prefix(function.name, "__capy_oo_init|")
@@ -5101,7 +5105,9 @@ private fun python_find_method_function(ownerName: String, methodName: String, f
 
 /// Checks whether method function matches the requested declaration, type, or name.
 private fun python_method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
-    if python_skip_function(function) | !python_extension_method_function(function)
+    if python_skip_function(function)
+    then false
+    else if !python_extension_method_function(function)
     then false
     else
         let idx = python_last_dot_index(function.name)
