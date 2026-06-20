@@ -122,6 +122,7 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     let constants = constant_functions(module.functions)
     let constantBindings = constant_bindings(constants, module, allModules)
     let objects = compiled_objects(module.functions)
+    let moduleNativeProviderCatalog = java_native_provider_catalog_for_module(module, nativeProviderCatalog)
     java_package(module)
     + java_imports(module, allModules)
     + "public final class " + module.name + " {" + newline()
@@ -130,7 +131,7 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     + java_object_interfaces(objects.interfaces, module, allModules)
     + java_object_classes(objects.classes, constantBindings, module, allModules)
     + java_constants(constants, [], module, allModules)
-    + java_functions(module.functions, constantBindings, module, allModules, nativeProviderCatalog)
+    + java_functions(module.functions, constantBindings, module, allModules, moduleNativeProviderCatalog)
     + java_helpers(module)
     + "}" + newline()
 
@@ -1358,14 +1359,27 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
 
+private fun java_native_provider_catalog_for_module(module: CompiledModule, catalog: NativeProviderCatalog): NativeProviderCatalog =
+    catalog.with(declarations: java_native_provider_declarations_for_module(module, catalog.declarations))
+
+private fun java_native_provider_declarations_for_module(module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): List[CompiledNativeProviderDeclaration] =
+    match declarations[0] with
+    case None -> []
+    case Some { declaration } ->
+        if java_native_provider_declaration_in_module(declaration, module)
+        then [declaration] + java_native_provider_declarations_for_module(module, declarations[1:])
+        else java_native_provider_declarations_for_module(module, declarations[1:])
+
+private fun java_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
+    declaration.sourceModuleName == module.name & declaration.sourceModulePath == module.path
+
 /// Finds a native provider declaration in available declarations, imports, or modules.
 private fun find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
     match declarations[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-            & declaration.sourceModuleName == module.name
-            & declaration.sourceModulePath == module.path
+            & java_native_provider_declaration_in_module(declaration, module)
         then /capy/lang/Option.Some { declaration }
         else find_native_provider_declaration(function, module, declarations[1:])
 

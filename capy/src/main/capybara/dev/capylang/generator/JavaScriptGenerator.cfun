@@ -61,6 +61,7 @@ private fun java_script_modules(modules: List[CompiledModule], allModules: List[
 
 /// Emits the complete CommonJS source for one compiled module.
 private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+    let moduleNativeProviderCatalog = java_script_native_provider_catalog_for_module(module, nativeProviderCatalog)
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_runtime_import(module)
@@ -68,7 +69,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + java_script_newline()
     + java_script_constants(module.functions, module, allModules)
     + java_script_newline()
-    + java_script_functions(module.functions, module, allModules, nativeProviderCatalog)
+    + java_script_functions(module.functions, module, allModules, moduleNativeProviderCatalog)
     + java_script_overload_dispatchers(module.functions)
     + java_script_exports(module.functions)
 
@@ -1252,14 +1253,27 @@ private fun first_function_parameter_name(function: CompiledFunction): String =
     case Some { parameter } -> parameter.name
     case None -> "value"
 
+private fun java_script_native_provider_catalog_for_module(module: CompiledModule, catalog: NativeProviderCatalog): NativeProviderCatalog =
+    catalog.with(declarations: java_script_native_provider_declarations_for_module(module, catalog.declarations))
+
+private fun java_script_native_provider_declarations_for_module(module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): List[CompiledNativeProviderDeclaration] =
+    match declarations[0] with
+    case None -> []
+    case Some { declaration } ->
+        if java_script_native_provider_declaration_in_module(declaration, module)
+        then [declaration] + java_script_native_provider_declarations_for_module(module, declarations[1:])
+        else java_script_native_provider_declarations_for_module(module, declarations[1:])
+
+private fun java_script_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
+    declaration.sourceModuleName == module.name & declaration.sourceModulePath == module.path
+
 /// Finds a native provider declaration in scope, imports, or compiled modules.
 private fun java_script_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
     match declarations[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-            & declaration.sourceModuleName == module.name
-            & declaration.sourceModulePath == module.path
+            & java_script_native_provider_declaration_in_module(declaration, module)
         then /capy/lang/Option.Some { declaration }
         else java_script_find_native_provider_declaration(function, module, declarations[1:])
 
@@ -4364,58 +4378,74 @@ private fun java_script_data_field_type(name: String, fields: List[String]): Str
 
 /// Infers the expression type for method call.
 private fun java_script_method_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    let receiverBaseType = java_script_type_unqualified_name(receiverType)
+    let emptyArguments = call.arguments.is_empty()
+    let oneArgument = java_script_one_method_argument(call.arguments)
+    let twoArguments = java_script_two_method_arguments(call.arguments)
     if call.name == "__capy_call"
-    then java_script_callable_call_expression_type(call, env, module, allModules)
+    then if java_script_callable_binding_type(receiverType)
+        then java_script_callable_return_type(receiverType)
+        else java_script_unknown_type()
     else if java_script_size_method_call(call)
     then "int"
-    else if java_script_enum_name_method_call(call, env, module, allModules)
+    else if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
     then "String"
-    else if java_script_char_to_string_method_call(call, env, module, allModules)
+    else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
     then "String"
-    else if java_script_string_get_method_call(call, env, module, allModules)
+    else if call.name == "get" & (oneArgument | twoArguments) & receiverType == "String"
     then java_script_string_get_method_return_type(call)
-    else if java_script_string_parse_method_call(call, env, module, allModules)
+    else if java_script_string_parse_method_name(call.name) & emptyArguments & java_script_string_parse_receiver_type(receiverType)
     then "Result"
-    else if java_script_string_method_call(call, env, module, allModules)
+    else if java_script_string_method_arity(call.name, call.arguments) & java_script_string_method_receiver_type(call.name, receiverType)
     then java_script_string_method_return_type(call.name)
-    else if java_script_regex_method_call(call, env, module, allModules)
+    else if java_script_regex_method_arity(call) & java_script_regex_receiver_type(receiverType)
     then java_script_regex_method_call_type(call.name)
-    else if java_script_date_time_method_call_expression(call, env, module, allModules)
-    then java_script_date_time_method_call_type(java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)), call.name)
-    else if java_script_effect_start_method_call(call, env, module, allModules)
+    else if java_script_date_time_method_candidate(call.name, emptyArguments, oneArgument, twoArguments)
+        & java_script_date_time_method_call(receiverBaseType, call.name, emptyArguments, oneArgument, twoArguments)
+    then java_script_date_time_method_call_type(receiverBaseType, call.name)
+    else if call.name == "start" & emptyArguments & receiverType == "Effect"
     then "Async"
-    else if java_script_async_join_method_call(call, env, module, allModules)
+    else if call.name == "join" & emptyArguments & receiverBaseType == "Async"
     then "Effect"
-    else if java_script_async_map_method_call(call, env, module, allModules)
+    else if java_script_async_map_method_name(call.name) & java_script_single_callable_argument(call.arguments) & receiverBaseType == "Async"
     then "Async"
-    else if java_script_effect_method_call(call, env, module, allModules)
+    else if (call.name == "map" | call.name == "flat_map" | call.name == "flatMap") & java_script_single_callable_argument(call.arguments) & receiverType == "Effect"
     then "Effect"
-    else if java_script_collection_is_empty_call(call, env, module, allModules)
+    else if call.name == "is_empty" & emptyArguments & java_script_collection_receiver_type(receiverType)
     then "bool"
-    else if java_script_collection_get_call(call, env, module, allModules)
-    then java_script_collection_get_return_type(call, env, module, allModules)
-    else if java_script_collection_contains_call(call, env, module, allModules)
+    else if call.name == "get" & (oneArgument | twoArguments) & java_script_collection_get_receiver_type(receiverBaseType) & java_script_collection_get_arity(receiverBaseType, call.arguments)
+    then if receiverBaseType == "List" & twoArguments
+        then "List"
+        else if receiverBaseType == "Tuple"
+        then java_script_unknown_type()
+        else "Option"
+    else if (call.name == "contains" | call.name == "contains_key") & oneArgument & ((call.name == "contains" & java_script_collection_contains_receiver_type(receiverBaseType)) | (call.name == "contains_key" & receiverBaseType == "Dict"))
     then "bool"
-    else if java_script_set_method_call(call, env, module, allModules)
+    else if java_script_set_method_arity(call) & receiverBaseType == "Set"
     then java_script_set_method_return_type(call.name)
     else if java_script_seq_as_list_call(call)
     then "List"
-    else if java_script_collection_first_call(call, env, module, allModules)
+    else if call.name == "first" & emptyArguments & java_script_collection_receiver_type(receiverType)
     then "Option"
-    else if java_script_collection_method_call(call, env, module, allModules)
-    then java_script_collection_pipe_result_type(java_script_collection_method_operator(call.name), java_script_expression_type(call.receiver, env, module, allModules))
-    else if java_script_collection_reduce_method_call(call, env, module, allModules)
+    else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
+    then java_script_collection_pipe_result_type(java_script_collection_method_operator(call.name), receiverType)
+    else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments
+        & match call.arguments[1] with
+            case Some { reducer } -> java_script_callable_expression(reducer)
+            case None -> false
+        & java_script_collection_pipe_receiver_type(receiverType)
     then java_script_collection_reduce_method_type(call, env, module, allModules)
-    else if java_script_collection_predicate_call(call, env, module, allModules)
+    else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
     then "bool"
-    else if java_script_primitive_conversion_call(call, env, module, allModules)
+    else if java_script_primitive_conversion_method(call.name) & emptyArguments & java_script_primitive_conversion_receiver(call.name, receiverType)
     then java_script_primitive_conversion_result_type(call.name)
-    else if java_script_result_reduce_method_call(call, env, module, allModules)
+    else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
     then java_script_unknown_type()
-    else match java_script_find_local_extension_method(call, env, module, allModules) with
+    else match java_script_find_local_extension_method_with_receiver_type(receiverType, call, module) with
     case Some { function } -> function.returnType.name
     case None ->
-        match java_script_find_imported_extension_method_return_type(call, env, module, allModules) with
+        match java_script_find_imported_extension_method_return_type_with_receiver_type(receiverType, call, module, allModules) with
         case Some { returnType } -> returnType
         case None -> java_script_unknown_type()
 
@@ -5400,6 +5430,9 @@ private fun java_script_find_function_definition_in_imported_module(name: String
 /// Finds a local extension method in scope, imports, or compiled modules.
 private fun java_script_find_local_extension_method(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    java_script_find_local_extension_method_with_receiver_type(receiverType, call, module)
+
+private fun java_script_find_local_extension_method_with_receiver_type(receiverType: String, call: CompiledMethodCallExpression, module: CompiledModule): /capy/lang/Option[CompiledFunction] =
     if receiverType == java_script_unknown_type()
     then /capy/lang/Option.None {}
     else java_script_find_local_method_function(receiverType, call.name, module.functions)
@@ -5414,6 +5447,9 @@ private fun java_script_find_imported_extension_method(call: CompiledMethodCallE
 /// Finds an imported extension method return type in scope, imports, or compiled modules.
 private fun java_script_find_imported_extension_method_return_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+    java_script_find_imported_extension_method_return_type_with_receiver_type(receiverType, call, module, allModules)
+
+private fun java_script_find_imported_extension_method_return_type_with_receiver_type(receiverType: String, call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     if receiverType == java_script_unknown_type()
     then /capy/lang/Option.None {}
     else java_script_find_imported_method_function_return_type(receiverType, call.name, module.imports, module, allModules)
