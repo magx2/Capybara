@@ -61,6 +61,8 @@ private data RawModuleValidationInput { names: List[String], paths: List[String]
 private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 /// Imported library function and explicit static-import selection computed in one function scan.
 private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+/// Field schema and initializer functions built together after compiling the field type once.
+private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
 
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
@@ -545,14 +547,15 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
     case None -> []
     case Some { class } ->
         let compiledParameters = compile_parameters_in_module(class.parameters, module, allModules)
+        let compiledFields = compile_object_field_functions(class.name, compiledParameters, class.fields, module, allModules, 0)
         [compile_object_class_schema_function(class)]
             + [compile_object_class_open_schema_function(class)]
-            + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
+            + compile_object_class_parameter_schema_functions(class.name, compiledParameters, 0)
             + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0, class.location)
             + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(class.name), class.annotations, 0)
-            + compile_object_field_schema_functions(class.name, class.fields, module, allModules, 0)
+            + compiledFields.schemas
             + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
-            + compile_object_field_init_functions(class.name, compiledParameters, class.fields, module, allModules)
+            + compiledFields.initializers
             + compile_object_init_functions(class.name, compiledParameters, class.initBlocks, module, allModules, 0)
             + compile_object_method_functions(class.name, class.methods, module, allModules)
             + compile_object_class_functions(classes[1:], module, allModules)
@@ -575,24 +578,28 @@ private fun compile_object_class_open_schema_function(class: ObjectOrientedClass
     )
 
 /// Converts parsed object class parameter schema functions into compiled metadata.
-private fun compile_object_class_parameter_schema_functions(className: String, parameters: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+private fun compile_object_class_parameter_schema_functions(className: String, parameters: List[CompiledFunctionParameter], idx: int): List[CompiledFunction] =
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [compile_schema_constant(object_indexed_schema_key(object_class_parameter_schema_prefix(), className, idx), parameter.name + "|" + compiled_type_reference_schema(compile_type_in_module(parameter.typeReference, module, allModules)), parameter.location)]
-            + compile_object_class_parameter_schema_functions(className, parameters[1:], module, allModules, idx + 1)
+        [compile_schema_constant(object_indexed_schema_key(object_class_parameter_schema_prefix(), className, idx), parameter.name + "|" + compiled_type_reference_schema(parameter.typeReference), SourceLocation { line: parameter.location.line, column: parameter.location.column })]
+            + compile_object_class_parameter_schema_functions(className, parameters[1:], idx + 1)
 
 /// Converts parsed object class parent schema functions into compiled metadata.
 private fun compile_object_class_parent_schema_functions(className: String, parents: List[TypeReference], module: ParsedModule, allModules: List[ParsedModule], idx: int, location: SourceLocation): List[CompiledFunction] =
     compile_object_parent_schema_functions(object_class_parent_schema_prefix(), className, parents, module, allModules, idx, location)
 
 /// Converts parsed object field schema functions into compiled metadata.
-private fun compile_object_field_schema_functions(className: String, fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+private fun compile_object_field_functions(className: String, parameters: List[CompiledFunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledObjectFieldFunctions =
     match fields[0] with
-    case None -> []
+    case None -> CompiledObjectFieldFunctions { schemas: [], initializers: [] }
     case Some { field } ->
-        [compile_documented_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, module, allModules), field.documentation, field.location)]
-            + compile_object_field_schema_functions(className, fields[1:], module, allModules, idx + 1)
+        let typeReference = compile_type_in_module(field.typeReference, module, allModules)
+        let rest = compile_object_field_functions(className, parameters, fields[1:], module, allModules, idx + 1)
+        CompiledObjectFieldFunctions {
+            schemas: [compile_documented_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, typeReference), field.documentation, field.location)] + rest.schemas,
+            initializers: if field.hasValue then [compile_object_field_init_function(className, parameters, field, typeReference)] + rest.initializers else rest.initializers
+        }
 
 /// Converts parsed object field annotation schema functions into compiled metadata.
 private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
@@ -603,30 +610,21 @@ private fun compile_object_field_annotation_schema_functions(className: String, 
             + compile_object_field_annotation_schema_functions(className, fields[1:], idx + 1)
 
 /// Encodes schema metadata for object field.
-private fun object_field_schema(field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): String =
-    field.name + "|" + field.visibility + "|" + compiled_type_reference_schema(compile_type_in_module(field.typeReference, module, allModules)) + "|" + object_field_has_value_schema(field)
+private fun object_field_schema(field: ObjectOrientedField, typeReference: CompiledTypeReference): String =
+    field.name + "|" + field.visibility + "|" + compiled_type_reference_schema(typeReference) + "|" + object_field_has_value_schema(field)
 
 /// Encodes schema metadata for object field has value.
 private fun object_field_has_value_schema(field: ObjectOrientedField): String =
     if field.hasValue then "true" else "false"
 
-/// Converts parsed object field initializer functions into compiled metadata.
-private fun compile_object_field_init_functions(className: String, parameters: List[CompiledFunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
-    match fields[0] with
-    case None -> []
-    case Some { field } ->
-        if field.hasValue
-        then [compile_object_field_init_function(className, parameters, field, module, allModules)] + compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
-        else compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
-
 /// Converts a parsed object field initializer function into compiled metadata.
-private fun compile_object_field_init_function(className: String, parameters: List[CompiledFunctionParameter], field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+private fun compile_object_field_init_function(className: String, parameters: List[CompiledFunctionParameter], field: ObjectOrientedField, typeReference: CompiledTypeReference): CompiledFunction =
     CompiledFunction {
         name: object_field_init_schema_key(className, field.name),
         visibility: "oo_field_init",
         documentation: [],
         parameters: parameters,
-        returnType: compile_type_in_module(field.typeReference, module, allModules),
+        returnType: typeReference,
         body: compile_expression_in_function(field.value, className + "." + field.name),
         location: compile_location(field.location)
     }

@@ -51,6 +51,8 @@ data AnnotationBinding { declaration: CompiledAnnotationDeclaration, module: Com
 data SchemaAnnotationArgument { name: String, kind: String, value: String }
 /// Schema lookup result that distinguishes a type with no values from a missing type.
 data JavaSchemaValues { typeExists: bool, values: List[String] }
+/// Decoded object field schema metadata used while rebuilding object classes and reflection metadata.
+data JavaObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
 
 const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -852,14 +854,14 @@ private fun compiled_object_field_schema_for_class(function: CompiledFunction, c
 /// Extracts compiled metadata for object field.
 private fun compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
     let value = schema_value(function)
-    let fieldName = object_field_schema_name(value)
+    let schema = object_field_schema_metadata(value)
     CompiledObjectOrientedField {
-        name: fieldName,
-        visibility: object_field_schema_visibility(value),
+        name: schema.name,
+        visibility: schema.visibility,
         documentation: function.documentation,
-        typeReference: schema_type_reference(object_field_schema_type(value)),
-        value: compiled_object_field_value(className, fieldName, functions, function.location),
-        hasValue: object_field_schema_has_value(value),
+        typeReference: schema_type_reference(schema.typeName),
+        value: compiled_object_field_value(className, schema.name, functions, function.location),
+        hasValue: schema.hasValue,
         location: function.location
     }
 
@@ -882,6 +884,22 @@ private fun find_compiled_object_field_init(className: String, fieldName: String
 private fun object_field_schema_name(value: String): String =
     let first = first_index_of(value, "|", 0)
     if first < 0 then value else value[0, first]
+
+/// Decodes object field schema separators once for generated object metadata.
+private fun object_field_schema_metadata(value: String): JavaObjectFieldSchema =
+    let first = first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else first_index_of(value, "|", first + 1)
+    let last = last_index_of(value, "|", 0, -1)
+    JavaObjectFieldSchema {
+        name: if first < 0 then value else value[0, first],
+        visibility: if first < 0 | second < 0 then "public" else value[first + 1, second],
+        typeName: if second < 0
+            then "any"
+            else if last <= second
+            then value[second + 1, value.size().value]
+            else value[second + 1, last],
+        hasValue: last >= 0 & value[last + 1, value.size().value] == "true"
+    }
 
 /// Encodes schema metadata text for object field schema visibility.
 private fun object_field_schema_visibility(value: String): String =
@@ -2632,7 +2650,10 @@ private fun stdlib_duration_receiver(receiver: String): bool =
 
 /// Computes the compiled type for standard-library date time method.
 private fun stdlib_date_time_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiver = type_unqualified_name(expression_type(call.receiver, env, module, allModules).name)
+    stdlib_date_time_method_type_with_receiver(call, expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun stdlib_date_time_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiver = type_unqualified_name(receiverType.name)
     if receiver == "Date"
     then if call.name == "to_days_since_unix_epoch" then int_type() else if call.name == "to_iso_8601" then string_type() else if call.name == "leap_year" then bool_type() else date_type()
     else if receiver == "Time"
@@ -3635,9 +3656,10 @@ private fun reflection_object_field_info_codes(className: String, fields: List[S
 
 /// Emits generated code for reflection object field info.
 private fun reflection_object_field_info_code(className: String, field: String, idx: int, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    let schema = object_field_schema_metadata(field)
     "__capy_data(\"FieldInfo\", java.util.Map.ofEntries("
-        + java_map_entry("name", "\"" + escape_java_string(object_field_schema_name(field)) + "\"")
-        + ", " + java_map_entry("type", reflection_any_info_code(schema_type_reference(object_field_schema_type(field)), owner, allModules))
+        + java_map_entry("name", "\"" + escape_java_string(schema.name) + "\"")
+        + ", " + java_map_entry("type", reflection_any_info_code(schema_type_reference(schema.typeName), owner, allModules))
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
             schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", owner.functions),
             owner,
@@ -4879,19 +4901,22 @@ private fun native_stdlib_method_call(call: CompiledMethodCallExpression, env: L
     if native_stdlib_method_name(call.name)
     then
         let receiverType = expression_type(call.receiver, env, module, allModules)
-        if receiverType.name == "String"
-        then call.name == "get" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
-        else if receiverType.name == "List"
-        then call.name == "get" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
-        else if receiverType.name == "Dict"
-        then (call.name == "contains_key" | call.name == "get") & one_method_argument(call.arguments)
-        else if receiverType.name == "Tuple"
-        then call.name == "get" & one_method_argument(call.arguments)
-        else false
+        native_stdlib_receiver_method(receiverType, call)
     else false
 
 private fun native_stdlib_method_name(name: String): bool =
     name == "get" | name == "contains_key"
+
+private fun native_stdlib_receiver_method(receiverType: CompiledTypeReference, call: CompiledMethodCallExpression): bool =
+    if receiverType.name == "String"
+    then call.name == "get" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
+    else if receiverType.name == "List"
+    then call.name == "get" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
+    else if receiverType.name == "Dict"
+    then (call.name == "contains_key" | call.name == "get") & one_method_argument(call.arguments)
+    else if receiverType.name == "Tuple"
+    then call.name == "get" & one_method_argument(call.arguments)
+    else false
 
 /// Emits generated code for native standard-library method.
 private fun native_stdlib_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -8195,61 +8220,66 @@ private fun stdlib_byte_count_value_code(access: CompiledFieldAccessExpression, 
 private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if call.name == "size"
     then int_type()
-    else if char_to_string_call(call, env, module, allModules)
+    else
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    if call.name == "to_string" & call.arguments.is_empty() & receiverType.name == "char"
     then string_type()
-    else if enum_name_method_call(call, env, module, allModules)
+    else if call.name == "name" & call.arguments.is_empty() & (receiverType.name == "enum" | enum_type_exists(receiverType.name, module, allModules))
     then string_type()
     else if assert_status_call(call, env, module, allModules)
     then bool_type()
     else if assert_method_call(call, env, module, allModules)
     then assert_type()
-    else if assert_is_empty_call(call) | negated_collection_is_empty_call(call, env, module, allModules) | collection_is_empty_call(call, env, module, allModules)
+    else if assert_is_empty_call(call) | negated_collection_is_empty_call(call, env, module, allModules) | (call.name == "is_empty" & call.arguments.is_empty() & collection_empty_receiver_type(receiverType))
     then bool_type()
-    else if collection_predicate_call(call, env, module, allModules)
+    else if collection_predicate_method(call.name) & one_method_argument(call.arguments) & lambda_expression(argument(call.arguments, 0)) & collection_predicate_receiver_type(receiverType)
     then bool_type()
-    else if collection_reduce_method_call(call, env, module, allModules)
+    else if (call.name == "reduce" | call.name == "reduce_left") & collection_pipe_receiver_type(receiverType) & collection_reduce_method_arguments(call.arguments, receiverType)
     then collection_reduce_method_type(call, env, module, allModules)
-    else if option_method_call(call, env, module, allModules)
-    then option_pipe_result_type(option_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
-    else if collection_method_call(call, env, module, allModules)
-    then collection_pipe_result_type(collection_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
-    else if set_method_call(call, env, module, allModules)
-    then set_method_call_type(call, env, module, allModules)
-    else if seq_as_list_call(call, env, module, allModules)
-    then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
-    else if seq_first_call(call, env, module, allModules)
-    then option_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
-    else if effect_start_method_call(call, env, module, allModules)
-    then async_type(first_type_argument(expression_type(call.receiver, env, module, allModules)))
-    else if async_join_method_call(call, env, module, allModules)
-    then effect_type(result_type(first_type_argument(expression_type(call.receiver, env, module, allModules))))
-    else if async_map_method_call(call, env, module, allModules)
-    then async_pipe_result_type(async_map_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
-    else if function_value_method_call(call, env, module, allModules)
-    then function_type_return_type(expression_type(call.receiver, env, module, allModules))
-    else if result_reduce_method_call(call, env, module, allModules)
-    then result_reduce_method_type(call, env, module, allModules)
-    else if result_map_method_call(call, env, module, allModules)
-    then result_map_method_type(call, env, module, allModules)
-    else if result_or_else_method_call(call, env, module, allModules)
-    then result_or_else_method_type(call, env, module, allModules)
-    else if result_or_method_call(call, env, module, allModules)
-    then result_or_method_type(call, env, module, allModules)
-    else if effect_map_method_call(call, env, module, allModules)
+    else if option_method_name(call.name) & one_method_argument(call.arguments) & option_type_name(receiverType.name)
+        & match argument(call.arguments, 0) with
+            case CompiledLambdaExpression _ -> true
+            case _ -> false
+    then option_pipe_result_type(option_method_binary(call), receiverType, env, module, allModules)
+    else if collection_method_name(call.name) & one_method_argument(call.arguments) & lambda_expression(argument(call.arguments, 0)) & collection_pipe_receiver_type(receiverType)
+    then collection_pipe_result_type(collection_method_binary(call), receiverType, env, module, allModules)
+    else if set_method_arity(call) & receiverType.name == "Set"
+    then set_method_call_type_with_receiver(call, receiverType, env, module, allModules)
+    else if call.name == "as_list" & call.arguments.is_empty() & seq_type_name(receiverType.name)
+    then list_type(collection_value_type(receiverType))
+    else if call.name == "first" & call.arguments.is_empty() & seq_type_name(receiverType.name)
+    then option_type(collection_value_type(receiverType))
+    else if call.name == "__capy_call" & function_type(receiverType)
+    then function_type_return_type(receiverType)
+    else if (call.name == "reduce" | call.name == "reduce_left") & result_reduce_method_arguments(call.arguments) & result_type_name(receiverType.name)
+    then result_reduce_method_type_with_receiver(call, receiverType, env, module, allModules)
+    else if (call.name == "map" | call.name == "flat_map") & result_map_method_argument(call.arguments) & result_type_name(receiverType.name)
+    then result_map_method_type_with_receiver(call, receiverType, env, module, allModules)
+    else if call.name == "or_else" & one_method_argument(call.arguments) & result_type_name(receiverType.name)
+    then result_or_else_method_type_with_receiver(call, receiverType, env, module, allModules)
+    else if call.name == "or" & one_method_argument(call.arguments) & result_type_name(receiverType.name)
+    then result_or_method_type_with_receiver(call, receiverType, env, module, allModules)
+    else if call.name == "start" & call.arguments.is_empty() & receiverType.name == "Effect"
+    then async_type(first_type_argument(receiverType))
+    else if call.name == "join" & call.arguments.is_empty() & async_type_name(receiverType.name)
+    then effect_type(result_type(first_type_argument(receiverType)))
+    else if async_map_method_name(call.name) & result_map_method_argument(call.arguments) & async_type_name(receiverType.name)
+    then async_pipe_result_type(async_map_method_binary(call), receiverType, env, module, allModules)
+    else if call.name == "map" & receiverType.name == "Effect"
     then
-        let valueType = first_type_argument(expression_type(call.receiver, env, module, allModules))
+        let valueType = first_type_argument(receiverType)
         match argument(call.arguments, 0) with
         case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules))
         case _ -> effect_type(object_type())
-    else if string_parse_method_call(call, env, module, allModules)
+    else if string_parse_method(call.name) & call.arguments.is_empty() & receiverType.name == "String"
     then string_parse_result_type(call.name)
-    else if native_stdlib_method_call(call, env, module, allModules)
-    then native_stdlib_method_type(call, env, module, allModules)
-    else if regex_method_call(call, env, module, allModules)
+    else if native_stdlib_method_name(call.name) & native_stdlib_receiver_method(receiverType, call)
+    then native_stdlib_method_type_with_receiver(call, receiverType)
+    else if regex_method_name(call.name) & one_method_argument(call.arguments) & regex_type_name(receiverType.name)
     then regex_method_type(call.name)
-    else if stdlib_date_time_method_call(call, env, module, allModules)
-    then stdlib_date_time_method_type(call, env, module, allModules)
-    else if string_java_method_call(call, env, module, allModules)
+    else if stdlib_date_time_method_name(call.name) & stdlib_date_time_method(receiverType.name, call.name)
+    then stdlib_date_time_method_type_with_receiver(call, receiverType, env, module, allModules)
+    else if string_java_method(call.name) & receiverType.name == "String"
     then string_java_method_type(call.name)
     else if call.name == "to_int"
     then int_type()
@@ -8257,17 +8287,21 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then long_type()
     else if object_type_method_call(call, module, allModules)
     then object_type_method_call_type(call, module, allModules)
-    else if object_method_call(call, env, module, allModules)
-    then object_method_call_type(call, env, module, allModules)
-    else match find_extension_method(call, env, module, allModules) with
-        case Some { function } -> bound_extension_method_return_type(function, expression_type(call.receiver, env, module, allModules))
-        case None -> assert_type()
+    else match find_object_method(call, env, module, allModules) with
+        case Some { binding } -> effect_type(binding.method.returnType)
+        case None ->
+            match find_extension_method(call, env, module, allModules) with
+            case Some { function } -> bound_extension_method_return_type(function, receiverType)
+            case None -> assert_type()
 
 /// Computes the compiled type for result map method.
 private fun result_map_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    result_map_method_type_with_receiver(call, expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun result_map_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     result_pipe_result_type(
         result_map_method_binary(call),
-        expression_type(call.receiver, env, module, allModules),
+        receiverType,
         env,
         module,
         allModules
@@ -8275,7 +8309,9 @@ private fun result_map_method_type(call: CompiledMethodCallExpression, env: List
 
 /// Computes the compiled type for result reduce method.
 private fun result_reduce_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    result_reduce_method_type_with_receiver(call, expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun result_reduce_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let valueType = first_type_argument(receiverType)
     match argument(call.arguments, 0) with
     case CompiledLambdaExpression lambda -> expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
@@ -8283,14 +8319,18 @@ private fun result_reduce_method_type(call: CompiledMethodCallExpression, env: L
 
 /// Computes the compiled type for result or else method.
 private fun result_or_else_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    result_or_else_method_type_with_receiver(call, expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun result_or_else_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let valueType = first_type_argument(receiverType)
     let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
     if result_value_type_needs_context(valueType) then argumentType else valueType
 
 /// Computes the compiled type for result or method.
 private fun result_or_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    result_or_method_type_with_receiver(call, expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun result_or_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let valueType = first_type_argument(receiverType)
     let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
     if result_value_type_needs_context(valueType) & result_type_name(argumentType.name) then argumentType else receiverType
@@ -8341,7 +8381,9 @@ private fun string_java_method_type(name: String): CompiledTypeReference =
 
 /// Computes the compiled type for native standard-library method.
 private fun native_stdlib_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    native_stdlib_method_type_with_receiver(call, expression_type(call.receiver, env, module, allModules))
+
+private fun native_stdlib_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference): CompiledTypeReference =
     if receiverType.name == "String"
     then if one_method_argument(call.arguments) then option_type(string_type()) else string_type()
     else if receiverType.name == "List"
@@ -8354,7 +8396,9 @@ private fun native_stdlib_method_type(call: CompiledMethodCallExpression, env: L
 
 /// Computes the compiled type for set method call.
 private fun set_method_call_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    set_method_call_type_with_receiver(call, expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun set_method_call_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if set_predicate_method(call.name)
     then bool_type()
     else if call.name == "cartesian_product"

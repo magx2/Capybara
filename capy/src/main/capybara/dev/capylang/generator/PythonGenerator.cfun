@@ -387,18 +387,20 @@ private fun python_object_parent_infos_tail_literal(parents: List[CompiledTypeRe
 
 /// Formats any info as a Python literal.
 private fun python_any_info_literal(typeReference: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = typeReference.name
+    let unqualifiedName = python_type_unqualified_name(typeName)
     "__capy_data(\"DataInfo\", dict("
-        + "name=" + python_string_literal(python_type_unqualified_name(typeReference.name))
-        + ", pkg=" + python_type_package_info_literal(typeReference.name, module, allModules)
+        + "name=" + python_string_literal(unqualifiedName)
+        + ", pkg=" + python_type_package_info_literal(typeName, unqualifiedName, module, allModules)
         + ", annotations=[]"
         + "))"
 
 /// Formats type package info as a Python literal.
-private fun python_type_package_info_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_type_package_info_literal(typeName: String, unqualifiedName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_object_class_by_type(typeName, allModules) with
     case Some { binding } -> python_package_info_literal(binding.module.name, binding.module.path)
     case None ->
-        match python_data_type_owner_module(python_type_unqualified_name(typeName), module, allModules) with
+        match python_data_type_owner_module(unqualifiedName, module, allModules) with
         case Some { owner } -> python_package_info_literal(owner.name, owner.path)
         case None -> python_package_info_literal("", "")
 

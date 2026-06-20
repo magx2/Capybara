@@ -32,6 +32,8 @@ private data JavaScriptSchemaValues { typeExists: bool, values: List[String] }
 private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 /// Constructor statements collected in one scan over object helper functions.
 private data JavaScriptObjectConstructorStatements { fieldStatements: String, initStatements: String }
+/// Decoded object field schema metadata used while emitting object reflection metadata.
+private data JavaScriptObjectFieldSchema { name: String, typeName: String }
 
 const JAVA_SCRIPT_RUNTIME_SYMBOLS = "Effect, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, reflection, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_throw, __capy_try, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_export, __capy_unsafe_run, __capy_deep_equal, __capy_native_provider"
 
@@ -454,9 +456,10 @@ private fun java_script_object_field_info_literals(className: String, fields: Li
 
 /// Formats object field info as a JavaScript literal.
 private fun java_script_object_field_info_literal(className: String, field: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let schema = java_script_object_field_schema_metadata(field)
     java_script_code_object([
-        java_script_code_object_entry("name", java_script_string_literal(java_script_schema_field_name(field))),
-        java_script_code_object_entry("type", java_script_object_type_info_literal(java_script_object_field_schema_type(field))),
+        java_script_code_object_entry("name", java_script_string_literal(schema.name)),
+        java_script_code_object_entry("type", java_script_object_type_info_literal(schema.typeName)),
         java_script_code_object_entry("annotations", java_script_object_annotations_literal(
             java_script_schema_values(java_script_object_field_annotation_schema_prefix(className, idx), module.functions),
             module,
@@ -7958,6 +7961,20 @@ private fun java_script_object_field_schema_type(value: String): String =
     else if third < 0
     then java_script_schema_type_name(value[second + 1, value.size().value])
     else java_script_schema_type_name(value[second + 1, third])
+
+/// Decodes object field schema separators once for generated object metadata.
+private fun java_script_object_field_schema_metadata(value: String): JavaScriptObjectFieldSchema =
+    let first = java_script_first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else java_script_first_index_of(value, "|", first + 1)
+    let third = if second < 0 then -1 else java_script_first_index_of(value, "|", second + 1)
+    JavaScriptObjectFieldSchema {
+        name: if first < 0 then value else value[0, first],
+        typeName: if second < 0
+            then java_script_unknown_type()
+            else if third < 0
+            then java_script_schema_type_name(value[second + 1, value.size().value])
+            else java_script_schema_type_name(value[second + 1, third])
+    }
 
 /// Computes a numeric value for object field schema second separator.
 private fun java_script_object_field_schema_second_separator(value: String): int =
