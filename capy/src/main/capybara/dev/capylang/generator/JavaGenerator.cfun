@@ -3788,17 +3788,19 @@ private fun object_method_call_type(call: CompiledMethodCallExpression, env: Lis
 /// Emits generated code for object method call.
 private fun object_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_object_method(call, env, module, allModules) with
-    case Some { binding } ->
-        let valueType = if expectedType.name == "Effect" then first_type_argument(expectedType) else binding.method.returnType
-        let rawCode = expression_code(call.receiver, env, binding.receiverType, module, allModules)
-            + "." + java_method_name(call.name)
-            + "(" + parameter_expression_list_code(binding.method.parameters, call.arguments, env, module, allModules) + ")"
-        if expectedType.name == "Effect"
-        then "capy.lang.Effect.delay(() -> " + java_object_value_code(rawCode, binding.method.returnType, valueType) + ")"
-        else java_object_value_code(rawCode, binding.method.returnType, valueType)
+    case Some { binding } -> object_method_call_code_with_binding(binding, call, env, expectedType, module, allModules)
     case None -> expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
         + "." + java_method_name(call.name)
         + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+
+private fun object_method_call_code_with_binding(binding: JavaResolvedObjectMethod, call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let valueType = if expectedType.name == "Effect" then first_type_argument(expectedType) else binding.method.returnType
+    let rawCode = expression_code(call.receiver, env, binding.receiverType, module, allModules)
+        + "." + java_method_name(call.name)
+        + "(" + parameter_expression_list_code(binding.method.parameters, call.arguments, env, module, allModules) + ")"
+    if expectedType.name == "Effect"
+    then "capy.lang.Effect.delay(() -> " + java_object_value_code(rawCode, binding.method.returnType, valueType) + ")"
+    else java_object_value_code(rawCode, binding.method.returnType, valueType)
 
 /// Checks whether object method call can be emitted by the target backend.
 private fun object_method_call_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3811,6 +3813,9 @@ private fun object_method_call_emittable(call: CompiledMethodCallExpression, env
 /// Finds an object method in available declarations, imports, or modules.
 private fun find_object_method(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaResolvedObjectMethod] =
     let receiverType = expression_type(call.receiver, env, module, allModules)
+    find_object_method_with_receiver_type(call, receiverType, module, allModules)
+
+private fun find_object_method_with_receiver_type(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaResolvedObjectMethod] =
     match find_object_class_by_type(receiverType, allModules) with
     case Some { binding } ->
         {
@@ -4248,13 +4253,14 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then primitive_conversion_code(call, env, module, allModules)
     else if object_type_method_call(call, module, allModules)
     then object_type_method_call_code(call, module, allModules)
-    else if object_method_call(call, env, module, allModules)
-    then object_method_call_code(call, env, expectedType, module, allModules)
-    else match find_extension_method(call, env, module, allModules) with
-        case Some { function } -> extension_method_call_code(function, call, env, module, allModules)
-        case None -> expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
-            + "." + java_method_name(call.name)
-            + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+    else match find_object_method(call, env, module, allModules) with
+        case Some { binding } -> object_method_call_code_with_binding(binding, call, env, expectedType, module, allModules)
+        case None ->
+            match find_extension_method(call, env, module, allModules) with
+            case Some { function } -> extension_method_call_code(function, call, env, module, allModules)
+            case None -> expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules)
+                + "." + java_method_name(call.name)
+                + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a function matches the function value method call metadata.
 private fun function_value_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -8301,10 +8307,10 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then long_type()
     else if object_type_method_call(call, module, allModules)
     then object_type_method_call_type(call, module, allModules)
-    else match find_object_method(call, env, module, allModules) with
+    else match find_object_method_with_receiver_type(call, receiverType, module, allModules) with
         case Some { binding } -> effect_type(binding.method.returnType)
         case None ->
-            match find_extension_method(call, env, module, allModules) with
+            match find_extension_method_in_scope(receiverType.name, call.name, module, allModules) with
             case Some { function } -> bound_extension_method_return_type(function, receiverType)
             case None -> assert_type()
 

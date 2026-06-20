@@ -1170,8 +1170,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_string_method_code(call, env, module, allModules)
     else if python_regex_method_call(call, receiverType)
     then python_regex_method_call_code(call, env, module, allModules)
-    else if python_stdlib_date_time_method_call(call, env, module, allModules)
-    then python_stdlib_date_time_method_call_code(call, env, module, allModules)
+    else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+    then python_stdlib_date_time_method_call_code_with_receiver_type(call, python_type_unqualified_name(receiverType), receiver, env, module, allModules)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_code(call, env, module, allModules)
     else if python_collection_reduce_method_call(call, receiverType)
@@ -1190,13 +1190,18 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_primitive_conversion_method_code(call, env, module, allModules)
     else if python_object_type_method_call(call, env, module, allModules)
     then python_object_type_method_call_code(call, module, allModules)
-    else if python_object_method_call(call, env, module, allModules)
-    then python_object_method_call_code(call, env, module, allModules)
-    else match python_find_extension_method(call, env, module, allModules) with
-        case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
+    else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+        case Some _ ->
+            "Effect.delay(lambda: "
+                + receiver
+                + "." + python_method_name(call.name)
+                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
         case None ->
-            receiver + "." + python_method_name(call.name)
-                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+            match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+            case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
+            case None ->
+                receiver + "." + python_method_name(call.name)
+                    + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a call has the object constructor call shape.
 private fun python_object_constructor_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1965,7 +1970,10 @@ private fun python_regex_receiver_type(typeName: String): bool =
 
 /// Checks whether method metadata matches the standard-library date/time method call rule.
 private fun python_stdlib_date_time_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_stdlib_date_time_method(python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules)), call.name, call.arguments, env, module, allModules)
+    python_stdlib_date_time_method_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun python_stdlib_date_time_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_stdlib_date_time_method(python_type_unqualified_name(receiverType), call.name, call.arguments, env, module, allModules)
 
 /// Checks whether method metadata matches the standard-library date/time method rule.
 private fun python_stdlib_date_time_method(receiver: String, methodName: String, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1995,6 +2003,9 @@ private fun python_stdlib_date_time_method(receiver: String, methodName: String,
 private fun python_stdlib_date_time_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
     let receiver = python_expression_code(call.receiver, env, module, allModules)
+    python_stdlib_date_time_method_call_code_with_receiver_type(call, receiverType, receiver, env, module, allModules)
+
+private fun python_stdlib_date_time_method_call_code_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if receiverType == "Date"
     then python_stdlib_date_method_call_code(call, receiver, env, module, allModules)
     else if receiverType == "Time"
@@ -3388,8 +3399,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_string_method_return_type(call.name)
     else if python_regex_method_call(call, receiverType)
     then python_regex_method_call_type(call.name)
-    else if python_stdlib_date_time_method_call(call, env, module, allModules)
-    then python_stdlib_date_time_method_call_type(call, env, module, allModules)
+    else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+    then python_stdlib_date_time_method_call_type_with_receiver(call, python_type_unqualified_name(receiverType), env, module, allModules)
     else if python_set_method_call(call, receiverType)
     then python_set_method_call_type(call, env, module, allModules)
     else if python_native_collection_method_call_with_receiver_type(call, receiverType)
@@ -3416,17 +3427,18 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_option_type()
     else if python_assert_method(call.name)
     then python_assert_type()
-    else if python_object_method_call(call, env, module, allModules)
-    then python_effect_type()
-    else if python_collection_reduce_method_call(call, receiverType)
-    then python_first_method_argument_type(call.arguments, env, module, allModules)
-    else if python_collection_method_call(call, receiverType)
-    then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
-    else if python_seq_first_call(call, receiverType)
-    then python_option_type()
-    else match python_find_extension_method(call, env, module, allModules) with
-        case Some { function } -> function.returnType.name
-        case None -> python_unknown_type()
+    else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+        case Some _ -> python_effect_type()
+        case None ->
+            if python_collection_reduce_method_call(call, receiverType)
+            then python_first_method_argument_type(call.arguments, env, module, allModules)
+            else if python_collection_method_call(call, receiverType)
+            then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
+            else if python_seq_first_call(call, receiverType)
+            then python_option_type()
+            else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                case Some { function } -> function.returnType.name
+                case None -> python_unknown_type()
 
 /// Computes the Python type for result method call.
 private fun python_result_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3901,6 +3913,9 @@ private fun python_stdlib_data_constructor_type(typeName: String, family: String
 /// Computes the Python type for standard-library date time method call.
 private fun python_stdlib_date_time_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiver = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
+    python_stdlib_date_time_method_call_type_with_receiver(call, receiver, env, module, allModules)
+
+private fun python_stdlib_date_time_method_call_type_with_receiver(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if receiver == "Date"
     then if call.name == "to_days_since_unix_epoch" then python_int_type() else if call.name == "to_iso_8601" then python_string_type() else "Date"
     else if receiver == "Time"
@@ -5014,6 +5029,9 @@ private fun python_find_object_class_by_type_in_module(typeName: String, functio
 /// Finds an object method in scope, imports, or compiled modules.
 private fun python_find_object_method(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectMethodBinding] =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    python_find_object_method_with_receiver_type(call, receiverType, allModules)
+
+private fun python_find_object_method_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectMethodBinding] =
     match python_find_object_class_by_type(receiverType, allModules) with
     case Some { binding } -> {
         match python_find_object_method_in_methods(call.name, binding.objectClass.methods) with
@@ -5048,6 +5066,9 @@ private fun python_object_type_name(module: CompiledModule, className: String): 
 /// Finds an extension method in scope, imports, or compiled modules.
 private fun python_find_extension_method(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    python_find_extension_method_with_receiver_type(receiverType, call, module, allModules)
+
+private fun python_find_extension_method_with_receiver_type(receiverType: String, call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     if receiverType == python_unknown_type()
     then /capy/lang/Option.None {}
     else python_find_extension_method_in_scope(receiverType, call.name, module, allModules)
@@ -7414,7 +7435,7 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     else if python_regex_method_call(call, receiverType)
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_stdlib_date_time_method_call(call, env, module, allModules)
+    else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_set_method_call(call, receiverType)
@@ -7431,35 +7452,37 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then python_expression_gatherable(call.receiver, env, module, allModules)
     else if python_enum_name_method_call(call, receiverType, module, allModules)
     then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_object_method_call(call, env, module, allModules)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_object_receiver_type(receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_effect_method_call(call, receiverType)
-    then python_effect_method_gatherable(call, env, module, allModules)
-    else if python_effect_start_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_async_join_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_async_map_method_call(call, receiverType)
-    then python_async_pipe_gatherable(python_async_map_method_binary(call), env, module, allModules)
-    else if python_result_method_call(call, receiverType)
-    then python_result_method_gatherable(call, env, module, allModules)
-    else if python_option_method_call(call, receiverType)
-    then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
-    else if python_collection_reduce_method_call(call, receiverType)
-    then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
-    else if python_collection_method_call(call, receiverType)
-    then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
-    else if python_seq_first_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else match python_find_extension_method(call, env, module, allModules) with
+    else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
         case Some _ ->
             python_expression_gatherable(call.receiver, env, module, allModules)
                 & python_expressions_gatherable(call.arguments, env, module, allModules)
-        case None -> false
+        case None ->
+            if python_object_receiver_type(receiverType)
+            then python_expression_gatherable(call.receiver, env, module, allModules)
+                & python_expressions_gatherable(call.arguments, env, module, allModules)
+            else if python_effect_method_call(call, receiverType)
+            then python_effect_method_gatherable(call, env, module, allModules)
+            else if python_effect_start_method_call(call, receiverType)
+            then python_expression_gatherable(call.receiver, env, module, allModules)
+            else if python_async_join_method_call(call, receiverType)
+            then python_expression_gatherable(call.receiver, env, module, allModules)
+            else if python_async_map_method_call(call, receiverType)
+            then python_async_pipe_gatherable(python_async_map_method_binary(call), env, module, allModules)
+            else if python_result_method_call(call, receiverType)
+            then python_result_method_gatherable(call, env, module, allModules)
+            else if python_option_method_call(call, receiverType)
+            then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
+            else if python_collection_reduce_method_call(call, receiverType)
+            then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
+            else if python_collection_method_call(call, receiverType)
+            then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
+            else if python_seq_first_call(call, receiverType)
+            then python_expression_gatherable(call.receiver, env, module, allModules)
+            else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                case Some _ ->
+                    python_expression_gatherable(call.receiver, env, module, allModules)
+                        & python_expressions_gatherable(call.arguments, env, module, allModules)
+                case None -> false
 
 /// Checks whether effect method can be included in generated test gathering.
 private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

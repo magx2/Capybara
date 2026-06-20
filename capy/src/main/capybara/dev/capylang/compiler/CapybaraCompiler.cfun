@@ -1811,7 +1811,7 @@ private fun compile_type(type: TypeReference): CompiledTypeReference =
 
 /// Converts a parsed type in a module into compiled metadata.
 private fun compile_type_in_module(type: TypeReference, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
-    let objectTypeName = object_type_reference_name(type.name, module, allModules)
+    let objectTypeName = if compiler_object_type_reference_candidate(type.name) then object_type_reference_name(type.name, module, allModules) else ""
     if objectTypeName.is_empty()
     then CompiledTypeReference {
         name: type.name,
@@ -1821,6 +1821,10 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
         name: objectTypeName,
         arguments: []
     }
+
+/// Checks whether a parsed type name can refer to an object class or interface.
+private fun compiler_object_type_reference_candidate(name: String): bool =
+    compiler_uppercase_type_name(name)
 
 /// Converts parsed types into compiled metadata.
 private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =
