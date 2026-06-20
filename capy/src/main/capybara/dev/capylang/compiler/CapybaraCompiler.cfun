@@ -1899,7 +1899,9 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
     let separators = compiler_type_name_separators(type.name)
     let objectTypeName =
         if compiler_uppercase_type_name_at(type.name, separators.lastTypeSeparator + 1)
-        then object_type_reference_name_at(type.name, separators.lastDotSeparator, module, allModules)
+        then if compiler_unqualified_type_without_visible_objects(separators, module)
+            then ""
+            else object_type_reference_name_at(type.name, separators.lastDotSeparator, module, allModules)
         else ""
     if objectTypeName.is_empty()
     then CompiledTypeReference {
@@ -1914,6 +1916,13 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
 /// Checks whether a parsed type name can refer to an object class or interface.
 private fun compiler_object_type_reference_candidate(name: String): bool =
     compiler_uppercase_type_name_at(name, compiler_last_type_separator(name) + 1)
+
+/// Checks whether unqualified type resolution can skip object lookups for this module.
+private fun compiler_unqualified_type_without_visible_objects(separators: CompilerTypeNameSeparators, module: ParsedModule): bool =
+    separators.lastDotSeparator < 0
+        & module.imports.is_empty()
+        & module.objectOriented.interfaces.is_empty()
+        & module.objectOriented.classes.is_empty()
 
 /// Computes reusable separator positions for a parsed type name.
 private fun compiler_type_name_separators(name: String): CompilerTypeNameSeparators =

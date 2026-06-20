@@ -1479,7 +1479,7 @@ private fun java_visibility_prefix(visibility: String): String =
 
 /// Emits Java expression text for function body.
 private fun java_function_body(function: CompiledFunction, returnType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    match find_native_provider_declaration(function, module, nativeProviderCatalog.declarations) with
+    match find_native_provider_declaration(function, nativeProviderCatalog.declarations) with
     case Some { declaration } -> java_native_provider_function_body(declaration, returnType, nativeProviderCatalog)
     case None ->
     if tail_recursive_function(function, env, module, allModules)
@@ -1515,15 +1515,13 @@ private fun java_native_provider_declaration_in_module(declaration: CompiledNati
     else false
 
 /// Finds a native provider declaration in available declarations, imports, or modules.
-private fun find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
+private fun find_native_provider_declaration(function: CompiledFunction, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
     match declarations[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-        then if java_native_provider_declaration_in_module(declaration, module)
-            then /capy/lang/Option.Some { declaration }
-            else find_native_provider_declaration(function, module, declarations[1:])
-        else find_native_provider_declaration(function, module, declarations[1:])
+        then /capy/lang/Option.Some { declaration }
+        else find_native_provider_declaration(function, declarations[1:])
 
 /// Emits Java expression text for native provider function body.
 private fun java_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =

@@ -307,7 +307,9 @@ private fun java_script_import(declaration: CompiledImportDeclaration, module: C
 
 /// Checks whether a function matches the object helper function metadata.
 private fun java_script_object_helper_function(function: CompiledFunction): bool =
-    if java_script_object_class_schema_function(function)
+    if !java_script_string_has_prefix(function.name, "__capy_oo_")
+    then false
+    else if java_script_object_class_schema_function(function)
     then true
     else if java_script_object_interface_schema_function(function)
     then true
@@ -319,7 +321,9 @@ private fun java_script_object_helper_function(function: CompiledFunction): bool
 
 /// Emits JavaScript code for object helper.
 private fun java_script_object_helper_code(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_object_class_schema_function(function)
+    if !java_script_string_has_prefix(function.name, "__capy_oo_")
+    then ""
+    else if java_script_object_class_schema_function(function)
     then java_script_object_class(function, functions, module, allModules)
     else if java_script_object_interface_schema_function(function)
     then java_script_object_interface(function, functions, module, allModules)
@@ -1341,7 +1345,7 @@ private fun java_script_function(function: CompiledFunction, module: CompiledMod
 
 /// Emits JavaScript expression text for function body expression.
 private fun java_script_function_body_expression(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    match java_script_find_native_provider_declaration(function, module, nativeProviderCatalog.declarations) with
+    match java_script_find_native_provider_declaration(function, nativeProviderCatalog.declarations) with
     case Some { declaration } -> java_script_native_provider_function_body(declaration, function.returnType, nativeProviderCatalog)
     case None ->
         if java_script_async_native_function(function, module)
@@ -1382,15 +1386,13 @@ private fun java_script_native_provider_declaration_in_module(declaration: Compi
     else false
 
 /// Finds a native provider declaration in scope, imports, or compiled modules.
-private fun java_script_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
+private fun java_script_find_native_provider_declaration(function: CompiledFunction, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
     match declarations[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-        then if java_script_native_provider_declaration_in_module(declaration, module)
-            then /capy/lang/Option.Some { declaration }
-            else java_script_find_native_provider_declaration(function, module, declarations[1:])
-        else java_script_find_native_provider_declaration(function, module, declarations[1:])
+        then /capy/lang/Option.Some { declaration }
+        else java_script_find_native_provider_declaration(function, declarations[1:])
 
 /// Emits JavaScript expression text for native provider function body.
 private fun java_script_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =

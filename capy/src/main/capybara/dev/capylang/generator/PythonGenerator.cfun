@@ -659,7 +659,7 @@ private fun python_function(function: CompiledFunction, module: CompiledModule, 
 
 /// Emits Python expression text for function body.
 private fun python_function_body(function: CompiledFunction, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    match python_find_native_provider_declaration(function, module, nativeProviderCatalog.declarations) with
+    match python_find_native_provider_declaration(function, nativeProviderCatalog.declarations) with
     case Some { declaration } -> python_native_provider_function_body(declaration, function.returnType, nativeProviderCatalog)
     case None ->
         if python_async_native_function(function, module)
@@ -700,15 +700,13 @@ private fun python_native_provider_declaration_in_module(declaration: CompiledNa
     else false
 
 /// Finds a native provider declaration in scope, imports, or compiled modules.
-private fun python_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
+private fun python_find_native_provider_declaration(function: CompiledFunction, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
     match declarations[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if declaration.providerName == function.name
-        then if python_native_provider_declaration_in_module(declaration, module)
-            then /capy/lang/Option.Some { declaration }
-            else python_find_native_provider_declaration(function, module, declarations[1:])
-        else python_find_native_provider_declaration(function, module, declarations[1:])
+        then /capy/lang/Option.Some { declaration }
+        else python_find_native_provider_declaration(function, declarations[1:])
 
 /// Emits Python expression text for native provider function body.
 private fun python_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =
