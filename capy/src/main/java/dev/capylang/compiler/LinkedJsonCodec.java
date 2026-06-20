@@ -76,7 +76,7 @@ public final class LinkedJsonCodec {
     }
 
     public static <T> T read(String json, Class<T> targetType) {
-        return targetType.cast(fromJson(parseObject(json), targetType, targetType));
+        return targetType.cast(fromJson(normalizeTypedJson(parseObject(json)), targetType, targetType));
     }
 
     public static Object readPlain(String json) {
@@ -95,6 +95,103 @@ public final class LinkedJsonCodec {
 
     private static Json.JsonObject parseObject(String json) {
         return new Parser(json).parseObject();
+    }
+
+    private static Json normalizeTypedJson(Json json) {
+        if (json instanceof Json.JsonObject object) {
+            var value = object.value();
+            var envelope = value.get("$capybaraTypedJson");
+            if (envelope instanceof Json.JsonString string) {
+                return switch (string.value()) {
+                    case "data" -> normalizeTypedData(value);
+                    case "object" -> normalizeTypedObject(value);
+                    case "array" -> normalizeTypedArray(value);
+                    case "value" -> normalizeTypedValue(value);
+                    default -> normalizeObjectFields(value);
+                };
+            }
+            return normalizeObjectFields(value);
+        }
+        if (json instanceof Json.JsonArray array) {
+            return new Json.JsonArray(array.value().stream()
+                    .map(LinkedJsonCodec::normalizeTypedJson)
+                    .toList());
+        }
+        return json;
+    }
+
+    private static Json normalizeTypedData(Map<String, Json> value) {
+        var name = stringValue(value.get("name"));
+        var fields = typedFields(value.get("fields"));
+        if ("None".equals(name)) {
+            return Json.JsonNull.INSTANCE;
+        }
+        if ("Some".equals(name)) {
+            return normalizeTypedJson(fields.getOrDefault("value", Json.JsonNull.INSTANCE));
+        }
+
+        var result = new LinkedHashMap<String, Json>();
+        var className = typedDataClassName(name, value.get("pkg"));
+        if (!className.isBlank()) {
+            result.put(CLASS_KEY, new Json.JsonString(className));
+        }
+        fields.forEach((fieldName, fieldValue) -> result.put(fieldName, normalizeTypedJson(fieldValue)));
+        return new Json.JsonObject(result);
+    }
+
+    private static Json normalizeTypedObject(Map<String, Json> value) {
+        var result = new LinkedHashMap<String, Json>();
+        result.put(CLASS_KEY, new Json.JsonString(TREE_MAP_CLASS));
+        typedFields(value.get("value")).forEach((fieldName, fieldValue) ->
+                result.put(fieldName, normalizeTypedJson(fieldValue)));
+        return new Json.JsonObject(result);
+    }
+
+    private static Json normalizeTypedArray(Map<String, Json> value) {
+        var items = value.get("value") instanceof Json.JsonArray array
+                ? array.value().stream().map(LinkedJsonCodec::normalizeTypedJson).toList()
+                : List.<Json>of();
+        return new Json.JsonArray(List.of(new Json.JsonString(LIST_CLASS), new Json.JsonArray(items)));
+    }
+
+    private static Json normalizeTypedValue(Map<String, Json> value) {
+        var kind = stringValue(value.get("kind"));
+        var item = value.get("value");
+        if ("null".equals(kind)) {
+            return Json.JsonNull.INSTANCE;
+        }
+        return item == null ? Json.JsonNull.INSTANCE : normalizeTypedJson(item);
+    }
+
+    private static Json.JsonObject normalizeObjectFields(Map<String, Json> value) {
+        var result = new LinkedHashMap<String, Json>();
+        value.forEach((fieldName, fieldValue) -> result.put(fieldName, normalizeTypedJson(fieldValue)));
+        return new Json.JsonObject(result);
+    }
+
+    private static Map<String, Json> typedFields(Json json) {
+        if (json instanceof Json.JsonObject object) {
+            return object.value();
+        }
+        return Map.of();
+    }
+
+    private static String typedDataClassName(String name, Json pkg) {
+        if (!(pkg instanceof Json.JsonObject object)) {
+            return "";
+        }
+        var pathJson = object.value().get("path");
+        if (pathJson == null) {
+            return "";
+        }
+        var path = stringValue(pathJson);
+        if (path.isBlank()) {
+            return "";
+        }
+        var className = path.replace('/', '.');
+        var lastSeparator = className.lastIndexOf('.');
+        var simpleName = lastSeparator < 0 ? className : className.substring(lastSeparator + 1);
+        return simpleName.equals(name) ? className : className + "$" + name;
     }
 
     private static Object fromJson(Json json, Type declaredType, Class<?> rawDeclaredType) {

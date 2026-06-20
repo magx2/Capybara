@@ -55,6 +55,10 @@ from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
 /// Captured placeholders and original arguments for expanding a partially applied call.
 private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
+/// Raw module values shaped for the Java validator bridge.
+private data RawModuleValidationInput { names: List[String], paths: List[String], inputs: List[String], sourceKinds: List[String] }
+/// Library import additions computed together to avoid repeated import/library scans.
+private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
@@ -104,34 +108,27 @@ private fun validate_program(
     nativeProviders: NativeProviderManifest
 ): Effect[List[CompilerError]] =
     let libraryModules = validation_library_modules(libraries.to_list())
+    let rawModuleInput = raw_module_validation_input(rawModules)
     capybaraValidator.validate(
-        raw_module_names(rawModules),
-        raw_module_paths(rawModules),
-        raw_module_inputs(rawModules),
-        raw_module_source_kinds(rawModules),
+        rawModuleInput.names,
+        rawModuleInput.paths,
+        rawModuleInput.inputs,
+        rawModuleInput.sourceKinds,
         libraryModules,
         nativeProviders
     )
 
-private fun raw_module_names(modules: List[RawModule]): List[String] =
+private fun raw_module_validation_input(modules: List[RawModule]): RawModuleValidationInput =
     match modules[0] with
-    case None -> []
-    case Some { module } -> [module.name] + raw_module_names(modules[1:])
-
-private fun raw_module_paths(modules: List[RawModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } -> [module.path] + raw_module_paths(modules[1:])
-
-private fun raw_module_inputs(modules: List[RawModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } -> [module.input] + raw_module_inputs(modules[1:])
-
-private fun raw_module_source_kinds(modules: List[RawModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } -> [raw_module_source_kind(module.sourceKind)] + raw_module_source_kinds(modules[1:])
+    case None -> RawModuleValidationInput { names: [], paths: [], inputs: [], sourceKinds: [] }
+    case Some { module } ->
+        let rest = raw_module_validation_input(modules[1:])
+        RawModuleValidationInput {
+            names: [module.name] + rest.names,
+            paths: [module.path] + rest.paths,
+            inputs: [module.input] + rest.inputs,
+            sourceKinds: [raw_module_source_kind(module.sourceKind)] + rest.sourceKinds
+        }
 
 private fun raw_module_source_kind(sourceKind: SourceKind): String =
     match sourceKind with
@@ -218,25 +215,26 @@ private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclar
 /// Compiles a parsed module and appends functions and static imports made visible by library imports.
 private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraries: List[CompiledModule]): CompiledModule =
     let compiled = compile_module(module, allModules)
+    let libraryImports = compile_library_imports(compiled.imports, libraries)
     compiled.with(
-        functions: compiled.functions + imported_library_functions(compiled.imports, libraries),
-        staticImports: library_static_imports(compiled.imports, libraries)
+        functions: compiled.functions + libraryImports.functions,
+        staticImports: libraryImports.staticImports
     )
 
-/// Collects library functions imported unqualified into a compiled module.
-private fun imported_library_functions(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[CompiledFunction] =
+private fun compile_library_imports(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): CompiledLibraryImports =
     match imports[0] with
-    case None -> []
+    case None -> CompiledLibraryImports { functions: [], staticImports: [] }
     case Some { declaration } ->
+        let rest = compile_library_imports(imports[1:], libraries)
         if declaration.qualified
-        then imported_library_functions(imports[1:], libraries)
-        else imported_library_functions_for_import(declaration, libraries) + imported_library_functions(imports[1:], libraries)
-
-/// Collects library functions made visible by one compiled import declaration.
-private fun imported_library_functions_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[CompiledFunction] =
-    match find_imported_library(declaration, libraries) with
-    case Some { library } -> imported_library_functions_from_module(declaration, library.functions)
-    case None -> []
+        then rest
+        else match find_imported_library(declaration, libraries) with
+            case Some { library } ->
+                CompiledLibraryImports {
+                    functions: imported_library_functions_from_module(declaration, library.functions) + rest.functions,
+                    staticImports: library_static_imports_from_module(declaration, library) + rest.staticImports
+                }
+            case None -> rest
 
 /// Filters exported library functions against the names requested by an import.
 private fun imported_library_functions_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction]): List[CompiledFunction] =
@@ -254,23 +252,12 @@ private fun imported_library_function(declaration: CompiledImportDeclaration, fu
         & function.visibility != "const:private"
         & !compiler_string_has_prefix(function.visibility, "const:schema")
 
-/// Collects Java static imports needed for unqualified library imports.
-private fun library_static_imports(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): List[StaticImport] =
-    match imports[0] with
-    case None -> []
-    case Some { declaration } ->
-        if declaration.qualified | compiler_stdlib_import(declaration.modulePath)
-        then library_static_imports(imports[1:], libraries)
-        else library_static_imports_for_import(declaration, libraries) + library_static_imports(imports[1:], libraries)
-
-/// Creates static import entries for one library import declaration.
-private fun library_static_imports_for_import(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): List[StaticImport] =
-    match find_imported_library(declaration, libraries) with
-    case Some { library } ->
-        if declaration.wildcard & declaration.excludedNames.is_empty()
-        then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
-        else explicit_library_static_imports(declaration, library, library.functions)
-    case None -> []
+private fun library_static_imports_from_module(declaration: CompiledImportDeclaration, library: CompiledModule): List[StaticImport] =
+    if compiler_stdlib_import(declaration.modulePath)
+    then []
+    else if declaration.wildcard & declaration.excludedNames.is_empty()
+    then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
+    else explicit_library_static_imports(declaration, library, library.functions)
 
 /// Creates member-level static imports when a library import cannot use a wildcard import.
 private fun explicit_library_static_imports(declaration: CompiledImportDeclaration, library: CompiledModule, functions: List[CompiledFunction]): List[StaticImport] =
@@ -999,6 +986,7 @@ private fun compile_enum_values(enumName: String, values: List[EnumValueDeclarat
 
 /// Converts a parsed enum value constant into compiled metadata.
 private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclaration, idx: int): CompiledFunction =
+    let location = compile_location(value.location)
     CompiledFunction {
         name: value.name,
         visibility: "const:public",
@@ -1013,25 +1001,25 @@ private fun compile_enum_value_constant(enumName: String, value: EnumValueDeclar
                     value: CompiledStringLiteral {
                         value: value.name,
                         source: "\"" + value.name + "\"",
-                        location: compile_location(value.location)
+                        location: location
                     },
                     spread: false,
-                    location: compile_location(value.location)
+                    location: location
                 },
                 CompiledDataField {
                     name: "order",
                     value: CompiledIntLiteral {
                         value: idx,
                         source: "" + idx,
-                        location: compile_location(value.location)
+                        location: location
                     },
                     spread: false,
-                    location: compile_location(value.location)
+                    location: location
                 },
             ],
-            location: compile_location(value.location)
+            location: location
         },
-        location: compile_location(value.location)
+        location: location
     }
 
 /// Converts parsed data schema parameters into compiled metadata.
@@ -1329,6 +1317,7 @@ private fun compile_schema_constant(name: String, value: String, location: Sourc
 
 /// Converts a parsed documented schema constant into compiled metadata.
 private fun compile_documented_schema_constant(name: String, value: String, documentation: List[String], location: SourceLocation): CompiledFunction =
+    let compiledLocation = compile_location(location)
     CompiledFunction {
         name: name,
         visibility: "const:schema",
@@ -1338,9 +1327,9 @@ private fun compile_documented_schema_constant(name: String, value: String, docu
         body: CompiledStringLiteral {
             value: value,
             source: "\"" + value + "\"",
-            location: compile_location(location)
+            location: compiledLocation
         },
-        location: compile_location(location)
+        location: compiledLocation
     }
 
 /// Converts a parsed function into compiled metadata.
