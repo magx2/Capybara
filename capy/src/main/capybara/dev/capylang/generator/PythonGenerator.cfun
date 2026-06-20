@@ -4309,20 +4309,26 @@ private fun python_enum_static_field_access_type_name(access: CompiledFieldAcces
 
 /// Checks whether the current value satisfies the qualified enum value name rule for Python processing.
 private fun python_qualified_enum_value_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_qualified_name(name)
-        & python_enum_value_exists(python_enum_qualified_type_name(name), python_enum_qualified_member_name(name), module, allModules)
+    let idx = python_last_dot_index(name)
+    python_qualified_name_at(name, idx)
+        & python_enum_value_exists(python_enum_qualified_type_name_at(name, idx), python_qualified_call_member_at(name, idx), module, allModules)
 
 /// Computes the Python type name for enum qualified.
 private fun python_enum_qualified_type_name(name: String): String =
-    name[0, python_last_dot_index(name)]
+    python_enum_qualified_type_name_at(name, python_last_dot_index(name))
+
+/// Computes the Python type name for enum qualified using a precomputed separator.
+private fun python_enum_qualified_type_name_at(name: String, idx: int): String =
+    name[0, idx]
 
 /// Computes the Python name for enum qualified member.
 private fun python_enum_qualified_member_name(name: String): String =
-    name[python_last_dot_index(name) + 1, name.size().value]
+    python_qualified_call_member_at(name, python_last_dot_index(name))
 
 /// Emits Python code for enum qualified value.
 private fun python_enum_qualified_value_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_enum_value_reference_code(python_enum_qualified_type_name(name), python_enum_qualified_member_name(name), module, allModules)
+    let idx = python_last_dot_index(name)
+    python_enum_value_reference_code(python_enum_qualified_type_name_at(name, idx), python_qualified_call_member_at(name, idx), module, allModules)
 
 /// Checks whether enum type exists in the relevant declarations or imports.
 private fun python_enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -4420,8 +4426,9 @@ private fun python_module_import_expression(module: CompiledModule): String =
 
 /// Finds a qualified function binding in scope, imports, or compiled modules.
 private fun python_find_qualified_function_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
-    match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
-    case Some { targetModule } -> python_find_qualified_function_in_module(python_qualified_call_member(name), targetModule)
+    let idx = python_last_dot_index(name)
+    match python_find_module_by_path(python_qualified_call_module_path_at(name, idx, module), allModules) with
+    case Some { targetModule } -> python_find_qualified_function_in_module(python_qualified_call_member_at(name, idx), targetModule)
     case None -> /capy/lang/Option.None {}
 
 /// Finds a qualified function in a module in scope, imports, or compiled modules.
@@ -4432,21 +4439,34 @@ private fun python_find_qualified_function_in_module(name: String, module: Compi
 
 /// Checks whether the current value satisfies the qualified name rule for Python processing.
 private fun python_qualified_name(name: String): bool =
-    let idx = python_last_dot_index(name)
+    python_qualified_name_at(name, python_last_dot_index(name))
+
+/// Checks whether a precomputed separator satisfies the qualified name rule for Python processing.
+private fun python_qualified_name_at(name: String, idx: int): bool =
     idx > 0 & idx < name.size().value - 1
 
 /// Emits Python expression text for qualified call member.
 private fun python_qualified_call_member(name: String): String =
-    let idx = python_last_dot_index(name)
+    python_qualified_call_member_at(name, python_last_dot_index(name))
+
+/// Emits Python expression text for qualified call member using a precomputed separator.
+private fun python_qualified_call_member_at(name: String, idx: int): String =
     if idx < 0 then name else name[idx + 1, name.size().value]
 
 /// Computes the output or module path for qualified call module.
 private fun python_qualified_call_module_path(name: String, module: CompiledModule): String =
-    python_qualified_module_path(python_qualified_call_class_name(name), module)
+    python_qualified_call_module_path_at(name, python_last_dot_index(name), module)
+
+/// Computes the output or module path for qualified call module using a precomputed separator.
+private fun python_qualified_call_module_path_at(name: String, idx: int, module: CompiledModule): String =
+    python_qualified_module_path(python_qualified_call_class_name_at(name, idx), module)
 
 /// Computes the Python name for qualified call class.
 private fun python_qualified_call_class_name(name: String): String =
-    let idx = python_last_dot_index(name)
+    python_qualified_call_class_name_at(name, python_last_dot_index(name))
+
+/// Computes the Python name for qualified call class using a precomputed separator.
+private fun python_qualified_call_class_name_at(name: String, idx: int): String =
     if idx < 0 then name else name[0, idx]
 
 /// Checks whether qualified import matches the requested declaration, type, or name.

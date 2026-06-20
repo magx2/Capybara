@@ -8897,72 +8897,108 @@ private fun constant_import_matches(name: String, declaration: CompiledImportDec
 
 /// Finds a function for arguments in available declarations, imports, or modules.
 private fun find_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match find_function_for_arguments_in_functions(name, arguments, env, module.functions, module, allModules) with
+    let argumentTypes = expression_types(arguments, env, module, allModules)
+    match find_function_for_argument_types_in_functions(name, arguments, argumentTypes, env, module.functions, module, allModules) with
     case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> find_function_in_imports_for_arguments(name, arguments, env, module.imports, module, allModules)
+    case None -> find_function_in_imports_for_argument_types(name, arguments, argumentTypes, env, module.imports, module, allModules)
 
 /// Finds a function for arguments in functions in available declarations, imports, or modules.
 private fun find_function_for_arguments_in_functions(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    best_function_for_arguments(name, arguments, env, functions, module, allModules, /capy/lang/Option.None {}, 1000000)
+    find_function_for_argument_types_in_functions(name, arguments, expression_types(arguments, env, module, allModules), env, functions, module, allModules)
+
+/// Finds a function for precomputed argument types in functions in available declarations, imports, or modules.
+private fun find_function_for_argument_types_in_functions(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    best_function_for_argument_types(name, arguments, argumentTypes, env, functions, module, allModules, /capy/lang/Option.None {}, 1000000)
 
 /// Formats best function for arguments for generated emission.
 private fun best_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
+    best_function_for_argument_types(name, arguments, expression_types(arguments, env, module, allModules), env, functions, module, allModules, best, bestScore)
+
+/// Formats best function for precomputed argument types for generated emission.
+private fun best_function_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> best
     case Some { function } ->
         if function_name_matches(name, function.name)
-        then best_matching_function_for_arguments(name, arguments, env, functions, module, allModules, best, bestScore, function)
-        else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
+        then best_matching_function_for_argument_types(name, arguments, argumentTypes, env, functions, module, allModules, best, bestScore, function)
+        else best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
 
 /// Formats best matching function for arguments for generated emission.
 private fun best_matching_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int, function: CompiledFunction): /capy/lang/Option[CompiledFunction] =
+    best_matching_function_for_argument_types(name, arguments, expression_types(arguments, env, module, allModules), env, functions, module, allModules, best, bestScore, function)
+
+/// Formats best matching function for precomputed argument types for generated emission.
+private fun best_matching_function_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int, function: CompiledFunction): /capy/lang/Option[CompiledFunction] =
     if compiled_constant(function)
-    then best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
-    else if parameters_assignable(function.parameters, arguments, env, module, allModules)
+    then best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
+    else if parameters_assignable_with_types(function.parameters, arguments, argumentTypes, env, module, allModules)
     then
-        let score = function_argument_score(function.parameters, arguments, env, module, allModules)
+        let score = function_argument_score_with_types(function.parameters, arguments, argumentTypes, env, module, allModules)
         if score < bestScore
-        then best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, /capy/lang/Option.Some { function }, score)
-        else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
-    else best_function_for_arguments(name, arguments, env, functions[1:], module, allModules, best, bestScore)
+        then best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, /capy/lang/Option.Some { function }, score)
+        else best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
+    else best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
 
 /// Finds a function in imports for arguments in available declarations, imports, or modules.
 private fun find_function_in_imports_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    find_function_in_imports_for_argument_types(name, arguments, expression_types(arguments, env, module, allModules), env, imports, module, allModules)
+
+/// Finds a function in imports for precomputed argument types in available declarations, imports, or modules.
+private fun find_function_in_imports_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
         if function_import_matches(name, declaration)
-        then find_function_in_import_for_arguments(name, arguments, env, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
-        else find_function_in_imports_for_arguments(name, arguments, env, imports[1:], module, allModules)
+        then find_function_in_import_for_argument_types(name, arguments, argumentTypes, env, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else find_function_in_imports_for_argument_types(name, arguments, argumentTypes, env, imports[1:], module, allModules)
 
 /// Finds a function in import for arguments in available declarations, imports, or modules.
 private fun find_function_in_import_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledFunction] =
+    find_function_in_import_for_argument_types(name, arguments, expression_types(arguments, env, module, allModules), env, rest, module, allModules, className)
+
+/// Finds a function in import for precomputed argument types in available declarations, imports, or modules.
+private fun find_function_in_import_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledFunction] =
     match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> find_function_in_imported_module_for_arguments(name, arguments, env, rest, module, allModules, importedModule)
-    case None -> find_function_in_imports_for_arguments(name, arguments, env, rest, module, allModules)
+    case Some { importedModule } -> find_function_in_imported_module_for_argument_types(name, arguments, argumentTypes, env, rest, module, allModules, importedModule)
+    case None -> find_function_in_imports_for_argument_types(name, arguments, argumentTypes, env, rest, module, allModules)
 
 /// Finds a function in imported module for arguments in available declarations, imports, or modules.
 private fun find_function_in_imported_module_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunction] =
-    match find_function_for_arguments_in_functions(name, arguments, env, importedModule.functions, module, allModules) with
+    find_function_in_imported_module_for_argument_types(name, arguments, expression_types(arguments, env, module, allModules), env, rest, module, allModules, importedModule)
+
+/// Finds a function in imported module for precomputed argument types in available declarations, imports, or modules.
+private fun find_function_in_imported_module_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunction] =
+    match find_function_for_argument_types_in_functions(name, arguments, argumentTypes, env, importedModule.functions, module, allModules) with
     case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> find_function_in_imports_for_arguments(name, arguments, env, rest, module, allModules)
+    case None -> find_function_in_imports_for_argument_types(name, arguments, argumentTypes, env, rest, module, allModules)
 
 /// Computes the match score for function argument score.
 private fun function_argument_score(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): int =
+    function_argument_score_with_types(parameters, arguments, expression_types(arguments, env, module, allModules), env, module, allModules)
+
+/// Computes the match score for function argument score with precomputed argument types.
+private fun function_argument_score_with_types(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): int =
     match parameters[0] with
     case None -> 0
     case Some { parameter } ->
         match arguments[0] with
         case None -> 1000000
         case Some { argument } ->
-            parameter_argument_score(parameter.typeReference, argument, env, module, allModules)
-                + function_argument_score(parameters[1:], arguments[1:], env, module, allModules)
+            match argumentTypes[0] with
+            case None -> 1000000
+            case Some { argumentType } ->
+                parameter_argument_score_with_type(parameter.typeReference, argument, argumentType, env, module, allModules)
+                    + function_argument_score_with_types(parameters[1:], arguments[1:], argumentTypes[1:], env, module, allModules)
 
 /// Computes the match score for parameter argument score.
 private fun parameter_argument_score(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): int =
+    parameter_argument_score_with_type(target, argument, expression_type(argument, env, module, allModules), env, module, allModules)
+
+/// Computes the match score for parameter argument score with a precomputed argument type.
+private fun parameter_argument_score_with_type(target: CompiledTypeReference, argument: CompiledExpression, argumentType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): int =
     if empty_collection_literal_assignable(target, argument) | function_reference_assignable(target, argument, module, allModules) | function_lambda_assignable(target, argument, env, module, allModules)
     then 0
-    else type_match_score(target, expression_type(argument, env, module, allModules), module, allModules)
+    else type_match_score(target, argumentType, module, allModules)
 
 /// Computes the match score for type match score.
 private fun type_match_score(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): int =
@@ -10873,14 +10909,21 @@ private fun callable_return_type(type: CompiledTypeReference): bool =
 
 /// Checks whether parameters is assignable under the generator type rules.
 private fun parameters_assignable(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    parameters_assignable_with_types(parameters, arguments, expression_types(arguments, env, module, allModules), env, module, allModules)
+
+/// Checks whether parameters is assignable under the generator type rules with precomputed argument types.
+private fun parameters_assignable_with_types(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match parameters[0] with
     case None -> arguments.is_empty()
     case Some { parameter } ->
         match arguments[0] with
         case None -> false
         case Some { argument } ->
-            parameter_argument_assignable(parameter.typeReference, argument, env, module, allModules)
-            & parameters_assignable(parameters[1:], arguments[1:], env, module, allModules)
+            match argumentTypes[0] with
+            case None -> false
+            case Some { argumentType } ->
+                parameter_argument_assignable_with_type(parameter.typeReference, argument, argumentType, env, module, allModules)
+                    & parameters_assignable_with_types(parameters[1:], arguments[1:], argumentTypes[1:], env, module, allModules)
 
 /// Checks whether parameters emittable and assignable can be emitted by the target backend.
 private fun parameters_emittable_and_assignable(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -10909,13 +10952,17 @@ private fun function_argument_emittable(target: CompiledTypeReference, argument:
 
 /// Checks whether parameter argument is assignable under the generator type rules.
 private fun parameter_argument_assignable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    parameter_argument_assignable_with_type(target, argument, expression_type(argument, env, module, allModules), env, module, allModules)
+
+/// Checks whether parameter argument is assignable under the generator type rules with a precomputed argument type.
+private fun parameter_argument_assignable_with_type(target: CompiledTypeReference, argument: CompiledExpression, argumentType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if empty_collection_literal_assignable(target, argument)
     then true
     else if function_reference_assignable(target, argument, module, allModules)
     then true
     else if function_lambda_assignable(target, argument, env, module, allModules)
     then true
-    else value_assignable(target, expression_type(argument, env, module, allModules), module, allModules)
+    else value_assignable(target, argumentType, module, allModules)
 
 /// Checks whether function lambda is assignable under the generator type rules.
 private fun function_lambda_assignable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

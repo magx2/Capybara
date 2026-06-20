@@ -1459,14 +1459,19 @@ private fun block_type_env_in_module(bindings: List[LetBinding], env: List[Funct
 
 /// Infers the compiled type for function call type.
 private fun infer_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
-    if compiler_qualified_name(call.name)
-    then infer_qualified_function_call_type(call, module, allModules, depth + 1)
-    else infer_function_call_type_in_module(compiler_qualified_member_name("." + call.name), module, allModules, depth + 1)
+    let separator = compiler_last_index_of(call.name, ".", 0, -1)
+    if compiler_qualified_name_at(call.name, separator)
+    then infer_qualified_function_call_type_at(call, separator, module, allModules, depth + 1)
+    else infer_function_call_type_in_module(call.name, module, allModules, depth + 1)
 
 /// Infers the compiled type for qualified function call type.
 private fun infer_qualified_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
-    match find_parsed_module_by_class(compiler_qualified_class_name(call.name, module), allModules) with
-    case Some { targetModule } -> infer_function_call_type_in_module(compiler_qualified_member_name(call.name), targetModule, allModules, depth + 1)
+    infer_qualified_function_call_type_at(call, compiler_last_index_of(call.name, ".", 0, -1), module, allModules, depth)
+
+/// Infers the compiled type for qualified function call type using a precomputed separator.
+private fun infer_qualified_function_call_type_at(call: FunctionCallExpression, separator: int, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    match find_parsed_module_by_class(compiler_qualified_class_name_at(call.name, separator, module), allModules) with
+    case Some { targetModule } -> infer_function_call_type_in_module(compiler_qualified_member_name_at(call.name, separator), targetModule, allModules, depth + 1)
     case None -> missing_type()
 
 /// Infers the compiled type for function call type in a module.
@@ -2046,7 +2051,11 @@ private fun compiler_qualified_name_at(name: String, idx: int): bool =
 
 /// Computes the name for qualified member.
 private fun compiler_qualified_member_name(name: String): String =
-    name[compiler_last_index_of(name, ".", 0, -1) + 1, name.size().value]
+    compiler_qualified_member_name_at(name, compiler_last_index_of(name, ".", 0, -1))
+
+/// Computes the name for qualified member using a precomputed separator.
+private fun compiler_qualified_member_name_at(name: String, separator: int): String =
+    name[separator + 1, name.size().value]
 
 /// Computes the name for qualified class.
 private fun compiler_qualified_class_name(name: String, module: ParsedModule): String =
