@@ -1914,7 +1914,14 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
 
 /// Checks whether a parsed type name can refer to an object class or interface.
 private fun compiler_object_type_reference_candidate(name: String): bool =
-    compiler_uppercase_type_name(name)
+    match name[0] with
+    case None -> false
+    case Some { char } ->
+        if name ? "/"
+        then compiler_uppercase_type_name(name)
+        else if name ? "."
+        then compiler_uppercase_type_name(name)
+        else "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ? char
 
 /// Converts parsed types into compiled metadata.
 private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =

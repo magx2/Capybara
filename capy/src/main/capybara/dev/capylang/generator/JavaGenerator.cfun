@@ -55,6 +55,8 @@ data SchemaAnnotationArgument { name: String, kind: String, value: String }
 data JavaSchemaValues { typeExists: bool, values: List[String] }
 /// Decoded object field schema metadata used while rebuilding object classes and reflection metadata.
 data JavaObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
+/// Object field schemas and initializer helpers collected in one class scan.
+data JavaObjectFieldSources { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
 
 const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -789,6 +791,7 @@ private fun compiled_object_class_schema(function: CompiledFunction): bool =
 /// Extracts compiled metadata for object class.
 private fun compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
     let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
+    let fieldSources = compiled_object_field_sources(className, functions)
     CompiledObjectOrientedClass {
         name: className,
         visibility: schema_value(function),
@@ -796,7 +799,7 @@ private fun compiled_object_class(function: CompiledFunction, functions: List[Co
         open: compiled_object_class_open(className, functions),
         parameters: compiled_object_class_parameters(className, functions),
         parents: schema_type_references(schema_values("__capy_oo_parent|" + className + "|", functions)),
-        fields: compiled_object_fields(className, functions),
+        fields: compiled_object_fields(className, fieldSources.schemas, fieldSources.initializers),
         initBlocks: compiled_object_init_blocks(className, functions),
         methods: compiled_object_methods(className, functions),
         location: function.location
@@ -842,13 +845,11 @@ private fun schema_type_references(values: List[String]): List[CompiledTypeRefer
     case Some { value } -> [schema_type_reference(value)] + schema_type_references(values[1:])
 
 /// Extracts compiled metadata for object fields.
-private fun compiled_object_fields(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedField] =
-    match functions[0] with
+private fun compiled_object_fields(className: String, fieldSchemas: List[CompiledFunction], fieldInitializers: List[CompiledFunction]): List[CompiledObjectOrientedField] =
+    match fieldSchemas[0] with
     case None -> []
     case Some { function } ->
-        if compiled_object_field_schema_for_class(function, className)
-        then [compiled_object_field(className, function, functions)] + compiled_object_fields(className, functions[1:])
-        else compiled_object_fields(className, functions[1:])
+        [compiled_object_field(className, function, fieldInitializers)] + compiled_object_fields(className, fieldSchemas[1:], fieldInitializers)
 
 /// Extracts compiled metadata for object field schema for class.
 private fun compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
@@ -857,7 +858,7 @@ private fun compiled_object_field_schema_for_class(function: CompiledFunction, c
     else false
 
 /// Extracts compiled metadata for object field.
-private fun compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
+private fun compiled_object_field(className: String, function: CompiledFunction, fieldInitializers: List[CompiledFunction]): CompiledObjectOrientedField =
     let value = schema_value(function)
     let schema = object_field_schema_metadata(value)
     CompiledObjectOrientedField {
@@ -865,20 +866,38 @@ private fun compiled_object_field(className: String, function: CompiledFunction,
         visibility: schema.visibility,
         documentation: function.documentation,
         typeReference: schema_type_reference(schema.typeName),
-        value: compiled_object_field_value(className, schema.name, functions, function.location),
+        value: compiled_object_field_value(className, schema.name, fieldInitializers, function.location),
         hasValue: schema.hasValue,
         location: function.location
     }
 
+/// Extracts compiled object field schema and initializer helpers for one class once.
+private fun compiled_object_field_sources(className: String, functions: List[CompiledFunction]): JavaObjectFieldSources =
+    match functions[0] with
+    case None -> JavaObjectFieldSources { schemas: [], initializers: [] }
+    case Some { function } ->
+        let rest = compiled_object_field_sources(className, functions[1:])
+        if compiled_object_field_schema_for_class(function, className)
+        then JavaObjectFieldSources {
+            schemas: [function] + rest.schemas,
+            initializers: rest.initializers
+        }
+        else if compiled_object_field_init_function_for_class(function, className)
+        then JavaObjectFieldSources {
+            schemas: rest.schemas,
+            initializers: [function] + rest.initializers
+        }
+        else rest
+
 /// Extracts compiled metadata for object field value.
-private fun compiled_object_field_value(className: String, fieldName: String, functions: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
-    match find_compiled_object_field_init(className, fieldName, functions) with
+private fun compiled_object_field_value(className: String, fieldName: String, fieldInitializers: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
+    match find_compiled_object_field_init(className, fieldName, fieldInitializers) with
     case Some { function } -> function.body
     case None -> missing_compiled_expression(location)
 
 /// Finds a compiled object field initializer in available declarations, imports, or modules.
-private fun find_compiled_object_field_init(className: String, fieldName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    find_compiled_object_field_init_by_name(OO_FIELD_INIT_FUNCTION_PREFIX + className + "|" + fieldName, functions)
+private fun find_compiled_object_field_init(className: String, fieldName: String, fieldInitializers: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    find_compiled_object_field_init_by_name(OO_FIELD_INIT_FUNCTION_PREFIX + className + "|" + fieldName, fieldInitializers)
 
 /// Finds a compiled object field initializer by its encoded helper name.
 private fun find_compiled_object_field_init_by_name(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
@@ -972,6 +991,12 @@ private fun compiled_object_init_class_name(name: String): String =
 /// Extracts compiled metadata for object field initializer function.
 private fun compiled_object_field_init_function(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.name, OO_FIELD_INIT_FUNCTION_PREFIX)
+
+/// Extracts compiled metadata for object field initializer function for class.
+private fun compiled_object_field_init_function_for_class(function: CompiledFunction, className: String): bool =
+    if compiled_object_field_init_function(function)
+    then java_generator_string_has_prefix(function.name, OO_FIELD_INIT_FUNCTION_PREFIX + className + "|")
+    else false
 
 /// Resolves expression metadata for missing compiled expression.
 private fun missing_compiled_expression(location: CompiledSourceLocation): CompiledExpression =

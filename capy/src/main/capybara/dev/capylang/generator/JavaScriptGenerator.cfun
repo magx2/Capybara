@@ -1039,11 +1039,12 @@ private fun java_script_function_sections(functions: List[CompiledFunction], mod
 
 /// Formats JavaScript source text for overload dispatchers.
 private fun java_script_overload_dispatchers(functions: List[CompiledFunction]): String =
-    if java_script_has_overloaded_functions(functions)
-    then java_script_dispatch_parent_metadata(functions)
+    let dispatchers = java_script_overload_dispatcher_functions(functions, [])
+    if dispatchers.is_empty()
+    then ""
+    else java_script_dispatch_parent_metadata(functions)
         + java_script_dispatch_runtime_code()
-        + java_script_overload_dispatcher_functions(functions, [])
-    else ""
+        + dispatchers
 
 /// Checks whether overloaded functions is present.
 private fun java_script_has_overloaded_functions(functions: List[CompiledFunction]): bool =

@@ -42,6 +42,8 @@ data PythonStdlibValue { pythonName: String, typeName: String }
 data PythonSchemaValues { typeExists: bool, values: List[String] }
 /// Decoded object field schema metadata used while rebuilding object classes.
 data PythonObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
+/// Object field schemas and initializer helpers collected in one class scan.
+data PythonObjectFieldSources { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
 /// Python reflection table entries collected together to avoid duplicate schema scans.
 data PythonReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 /// Python source sections collected in one pass over compiled functions.
@@ -4720,6 +4722,7 @@ private fun python_compiled_object_class_schema(function: CompiledFunction): boo
 /// Extracts compiled metadata for object class.
 private fun python_compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
     let className = python_compiled_object_class_name(function)
+    let fieldSources = python_compiled_object_field_sources(className, functions)
     CompiledObjectOrientedClass {
         name: className,
         visibility: python_schema_value(function),
@@ -4727,7 +4730,7 @@ private fun python_compiled_object_class(function: CompiledFunction, functions: 
         open: python_compiled_object_class_open(className, functions),
         parameters: python_compiled_object_class_parameters(className, functions),
         parents: python_object_schema_type_references(python_schema_values("__capy_oo_parent|" + className + "|", functions)),
-        fields: python_compiled_object_fields(className, functions),
+        fields: python_compiled_object_fields(className, fieldSources.schemas, fieldSources.initializers),
         initBlocks: python_compiled_object_init_blocks(className, functions),
         methods: python_compiled_object_methods(className, functions),
         location: function.location
@@ -4785,13 +4788,11 @@ private fun python_object_schema_type_references(values: List[String]): List[Com
     case Some { value } -> [python_object_schema_type_reference(value)] + python_object_schema_type_references(values[1:])
 
 /// Extracts compiled metadata for object fields.
-private fun python_compiled_object_fields(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedField] =
-    match functions[0] with
+private fun python_compiled_object_fields(className: String, fieldSchemas: List[CompiledFunction], fieldInitializers: List[CompiledFunction]): List[CompiledObjectOrientedField] =
+    match fieldSchemas[0] with
     case None -> []
     case Some { function } ->
-        if python_compiled_object_field_schema_for_class(function, className)
-        then [python_compiled_object_field(className, function, functions)] + python_compiled_object_fields(className, functions[1:])
-        else python_compiled_object_fields(className, functions[1:])
+        [python_compiled_object_field(className, function, fieldInitializers)] + python_compiled_object_fields(className, fieldSchemas[1:], fieldInitializers)
 
 /// Extracts compiled metadata for object field schema for class.
 private fun python_compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
@@ -4800,7 +4801,7 @@ private fun python_compiled_object_field_schema_for_class(function: CompiledFunc
     else false
 
 /// Extracts compiled metadata for object field.
-private fun python_compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
+private fun python_compiled_object_field(className: String, function: CompiledFunction, fieldInitializers: List[CompiledFunction]): CompiledObjectOrientedField =
     let value = python_schema_value(function)
     let schema = python_object_field_schema_metadata(value)
     CompiledObjectOrientedField {
@@ -4808,20 +4809,38 @@ private fun python_compiled_object_field(className: String, function: CompiledFu
         visibility: schema.visibility,
         documentation: function.documentation,
         typeReference: python_object_schema_type_reference(schema.typeName),
-        value: python_compiled_object_field_value(className, schema.name, functions, function.location),
+        value: python_compiled_object_field_value(className, schema.name, fieldInitializers, function.location),
         hasValue: schema.hasValue,
         location: function.location
     }
 
+/// Extracts compiled object field schema and initializer helpers for one class once.
+private fun python_compiled_object_field_sources(className: String, functions: List[CompiledFunction]): PythonObjectFieldSources =
+    match functions[0] with
+    case None -> PythonObjectFieldSources { schemas: [], initializers: [] }
+    case Some { function } ->
+        let rest = python_compiled_object_field_sources(className, functions[1:])
+        if python_compiled_object_field_schema_for_class(function, className)
+        then PythonObjectFieldSources {
+            schemas: [function] + rest.schemas,
+            initializers: rest.initializers
+        }
+        else if python_compiled_object_field_init_function(function, className)
+        then PythonObjectFieldSources {
+            schemas: rest.schemas,
+            initializers: [function] + rest.initializers
+        }
+        else rest
+
 /// Extracts compiled metadata for object field value.
-private fun python_compiled_object_field_value(className: String, fieldName: String, functions: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
-    match python_find_compiled_object_field_init(className, fieldName, functions) with
+private fun python_compiled_object_field_value(className: String, fieldName: String, fieldInitializers: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
+    match python_find_compiled_object_field_init(className, fieldName, fieldInitializers) with
     case Some { function } -> function.body
     case None -> CompiledUnsupportedExpression { source: "", location: location }
 
 /// Finds a compiled object field initializer in scope, imports, or compiled modules.
-private fun python_find_compiled_object_field_init(className: String, fieldName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    python_find_compiled_object_field_init_by_name("__capy_oo_field_init|" + className + "|" + fieldName, functions)
+private fun python_find_compiled_object_field_init(className: String, fieldName: String, fieldInitializers: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    python_find_compiled_object_field_init_by_name("__capy_oo_field_init|" + className + "|" + fieldName, fieldInitializers)
 
 /// Finds a compiled object field initializer by its encoded helper name.
 private fun python_find_compiled_object_field_init_by_name(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
@@ -4831,6 +4850,12 @@ private fun python_find_compiled_object_field_init_by_name(name: String, functio
         if function.name == name
         then /capy/lang/Option.Some { function }
         else python_find_compiled_object_field_init_by_name(name, functions[1:])
+
+/// Extracts compiled metadata for object field initializer function for class.
+private fun python_compiled_object_field_init_function(function: CompiledFunction, className: String): bool =
+    if python_string_has_prefix(function.name, "__capy_oo_field_init|")
+    then python_string_has_prefix(function.name, "__capy_oo_field_init|" + className + "|")
+    else false
 
 /// Computes the Python name for object field schema.
 private fun python_object_field_schema_name(value: String): String =
