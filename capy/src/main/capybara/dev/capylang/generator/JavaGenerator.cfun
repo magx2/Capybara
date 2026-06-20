@@ -45,6 +45,8 @@ data JavaQualifiedFunctionBinding { module: CompiledModule, function: CompiledFu
 data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
 /// Java object metadata extracted from schema helper functions for one module.
 data JavaCompiledObjects { interfaces: List[CompiledObjectOrientedInterface], classes: List[CompiledObjectOrientedClass] }
+/// Java generated modules split to preserve top-level interface files before module classes.
+data JavaGeneratedModules { objectInterfaceModules: List[GeneratedModule], javaModules: List[GeneratedModule] }
 /// Generator lookup entry for an annotation declaration and the compiled module that declares it.
 data AnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
 /// Decoded annotation schema argument with field name, value kind, and encoded source value.
@@ -97,23 +99,31 @@ private fun oo_method_function_prefix_size(): int =
 
 /// Generates Java source modules, object interface files, and test runtime modules from a compiled program.
 fun java_generator(program: CompiledProgram): GeneratedProgram =
+    let generated = java_generated_modules(program.modules, program.modules, program.nativeProviderCatalog)
     GeneratedProgram {
-        modules: java_object_interface_modules(program.modules, program.modules)
-            + java_modules(program.modules, program.modules, program.nativeProviderCatalog)
+        modules: generated.objectInterfaceModules
+            + generated.javaModules
             + test_runtime_modules(program.modules)
     }
 
-/// Creates Java generated source modules for compiled modules.
-private fun java_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): List[GeneratedModule] =
+/// Creates Java object interface and module source entries while decoding object schemas once per module.
+private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): JavaGeneratedModules =
     match modules[0] with
-    case None -> []
-    case Some { module } -> [GeneratedModule {
-        relativePath: java_module_relative_path(module, ".java"),
-        code: java_module_code(module, allModules, nativeProviderCatalog)
-    }] + java_modules(modules[1:], allModules, nativeProviderCatalog)
+    case None -> JavaGeneratedModules { objectInterfaceModules: [], javaModules: [] }
+    case Some { module } ->
+        let objects = compiled_objects(module.functions)
+        let rest = java_generated_modules(modules[1:], allModules, nativeProviderCatalog)
+        JavaGeneratedModules {
+            objectInterfaceModules: java_object_interface_modules_for_module(objects.interfaces, module, allModules)
+                + rest.objectInterfaceModules,
+            javaModules: [GeneratedModule {
+                relativePath: java_module_relative_path(module, ".java"),
+                code: java_module_code_with_objects(module, allModules, nativeProviderCatalog, objects)
+            }] + rest.javaModules
+        }
 
 /// Emits the complete Java class source for one compiled module.
-private fun java_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun java_module_code_with_objects(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog, objects: JavaCompiledObjects): String =
     if module.path == "capy/lang" & module.name == "Effect"
     then java_effect_module_code(module)
     else if module.path == "capy/lang" & module.name == "Async"
@@ -125,7 +135,6 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     else
     let constants = constant_functions(module.functions)
     let constantBindings = constant_bindings(constants, module, allModules)
-    let objects = compiled_objects(module.functions)
     let moduleNativeProviderCatalog = java_native_provider_catalog_for_module(module, nativeProviderCatalog)
     java_package(module)
     + java_imports(module, allModules)
@@ -386,14 +395,6 @@ private fun java_function_type_interfaces(): String =
     + "    private interface __CapyFunction4<A, B, C, D, R> {" + newline()
     + "        R apply(A a, B b, C c, D d);" + newline()
     + "    }" + newline() + newline()
-
-/// Creates top-level Java interface source modules for compiled object interfaces.
-private fun java_object_interface_modules(modules: List[CompiledModule], allModules: List[CompiledModule]): List[GeneratedModule] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        java_object_interface_modules_for_module(compiled_object_interfaces(module.functions), module, allModules)
-            + java_object_interface_modules(modules[1:], allModules)
 
 /// Creates top-level Java interface modules declared inside one compiled module.
 private fun java_object_interface_modules_for_module(interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule, allModules: List[CompiledModule]): List[GeneratedModule] =
@@ -695,15 +696,6 @@ private fun compiled_objects(functions: List[CompiledFunction]): JavaCompiledObj
             classes: [compiled_object_class(function, functions)] + rest.classes
         }
         else rest
-
-/// Extracts compiled metadata for object interfaces.
-private fun compiled_object_interfaces(functions: List[CompiledFunction]): List[CompiledObjectOrientedInterface] =
-    match functions[0] with
-    case None -> []
-    case Some { function } ->
-        if compiled_object_interface_schema(function)
-        then [compiled_object_interface(function, functions)] + compiled_object_interfaces(functions[1:])
-        else compiled_object_interfaces(functions[1:])
 
 /// Extracts compiled metadata for object interface schema.
 private fun compiled_object_interface_schema(function: CompiledFunction): bool =

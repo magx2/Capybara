@@ -30,6 +30,8 @@ private data JavaScriptSchemaAnnotationArgument { name: String, kind: String, va
 private data JavaScriptSchemaValues { typeExists: bool, values: List[String] }
 /// JavaScript reflection table entries collected together to avoid duplicate schema scans.
 private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
+/// JavaScript source sections collected in one pass over compiled functions.
+private data JavaScriptFunctionSections { constants: String, functions: String }
 /// Constructor statements collected in one scan over object helper functions.
 private data JavaScriptObjectConstructorStatements { fieldStatements: String, initStatements: String }
 /// Decoded object field schema metadata used while emitting object reflection metadata.
@@ -62,14 +64,15 @@ private fun java_script_modules(modules: List[CompiledModule], allModules: List[
 /// Emits the complete CommonJS source for one compiled module.
 private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     let moduleNativeProviderCatalog = java_script_native_provider_catalog_for_module(module, nativeProviderCatalog)
+    let sections = java_script_function_sections(module.functions, module, allModules, moduleNativeProviderCatalog)
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_runtime_import(module)
     + java_script_imports(module.imports, module)
     + java_script_newline()
-    + java_script_constants(module.functions, module, allModules)
+    + sections.constants
     + java_script_newline()
-    + java_script_functions(module.functions, module, allModules, moduleNativeProviderCatalog)
+    + sections.functions
     + java_script_overload_dispatchers(module.functions)
     + java_script_exports(module.functions)
 
@@ -1009,19 +1012,30 @@ private fun java_script_object_runtime_class_name(className: String): String =
 private fun java_script_object_constructor_name(className: String): String =
     java_script_identifier(className)
 
-/// Formats JavaScript source text for functions.
-private fun java_script_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+/// Formats JavaScript constants and functions in one pass over compiled functions.
+private fun java_script_function_sections(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): JavaScriptFunctionSections =
     match functions[0] with
-    case None -> ""
+    case None -> JavaScriptFunctionSections { constants: "", functions: "" }
     case Some { function } ->
-        if java_script_object_helper_function(function)
-        then java_script_object_helper_code(function, functions, module, allModules)
-            + java_script_functions(functions[1:], module, allModules, nativeProviderCatalog)
+        let rest = java_script_function_sections(functions[1:], module, allModules, nativeProviderCatalog)
+        if java_script_emitted_constant(function)
+        then JavaScriptFunctionSections {
+            constants: java_script_constant(function, module, allModules) + rest.constants,
+            functions: rest.functions
+        }
+        else if java_script_object_helper_function(function)
+        then JavaScriptFunctionSections {
+            constants: rest.constants,
+            functions: java_script_object_helper_code(function, functions, module, allModules) + rest.functions
+        }
         else if java_script_skip_function(function)
-        then java_script_functions(functions[1:], module, allModules, nativeProviderCatalog)
-        else java_script_function(function, module, allModules, nativeProviderCatalog)
-            + java_script_newline()
-            + java_script_functions(functions[1:], module, allModules, nativeProviderCatalog)
+        then rest
+        else JavaScriptFunctionSections {
+            constants: rest.constants,
+            functions: java_script_function(function, module, allModules, nativeProviderCatalog)
+                + java_script_newline()
+                + rest.functions
+        }
 
 /// Formats JavaScript source text for overload dispatchers.
 private fun java_script_overload_dispatchers(functions: List[CompiledFunction]): String =
@@ -1205,15 +1219,6 @@ private fun java_script_compiled_object_helper_function(function: CompiledFuncti
     else if java_script_object_field_init_function(function)
     then true
     else java_script_object_init_function(function)
-
-/// Formats JavaScript source text for constants.
-private fun java_script_constants(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match functions[0] with
-    case None -> ""
-    case Some { function } ->
-        if java_script_emitted_constant(function)
-        then java_script_constant(function, module, allModules) + java_script_constants(functions[1:], module, allModules)
-        else java_script_constants(functions[1:], module, allModules)
 
 /// Checks whether the current value satisfies the emitted constant rule for JavaScript processing.
 private fun java_script_emitted_constant(function: CompiledFunction): bool =

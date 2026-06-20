@@ -63,6 +63,8 @@ private data CompiledLibraryImports { functions: List[CompiledFunction], staticI
 private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 /// Precomputed import path forms used while matching one import against available libraries.
 private data CompiledImportLibraryLookup { modulePath: String, normalizedPath: String, normalizedImportPath: String }
+/// Object type names discovered while scanning imports once for an unqualified type reference.
+private data CompiledObjectImportTypeReferenceNames { interfaceTypeName: String, classTypeName: String }
 /// Field schema and initializer functions built together after compiling the field type once.
 private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], annotations: List[CompiledFunction], initializers: List[CompiledFunction] }
 /// Field schema and annotation functions built together in one field pass.
@@ -1930,11 +1932,15 @@ private fun compile_types_in_module(types: List[TypeReference], module: ParsedMo
 private fun object_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     if compiler_qualified_name(name)
     then object_type_reference_name_qualified(name, module, allModules)
+    else if find_object_interface_in_module(name, module)
+    then compiler_java_object_type_name(object_interface_java_name(module, name))
     else
-        let interfaceType = object_interface_type_reference_name(name, module, allModules)
-        if interfaceType.is_empty()
-        then object_class_type_reference_name(name, module, allModules)
-        else interfaceType
+        let importedTypes = object_type_reference_names_in_imports(name, module.imports, module, allModules, "")
+        if !importedTypes.interfaceTypeName.is_empty()
+        then importedTypes.interfaceTypeName
+        else if find_object_class_in_module(name, module)
+        then compiler_java_object_type_name(object_class_java_name(module, name))
+        else importedTypes.classTypeName
 
 /// Computes the name for a qualified object type reference in one module lookup.
 private fun object_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
@@ -1949,47 +1955,25 @@ private fun object_type_reference_name_qualified(name: String, module: ParsedMod
         else ""
     case None -> ""
 
-/// Computes the name for object interface type reference.
-private fun object_interface_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    match find_object_interface_in_module(name, module) with
-    case true -> compiler_java_object_type_name(object_interface_java_name(module, name))
-    case false -> object_interface_type_reference_name_in_imports(name, module.imports, module, allModules)
-
-/// Computes the name for object class type reference.
-private fun object_class_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    match find_object_class_in_module(name, module) with
-    case true -> compiler_java_object_type_name(object_class_java_name(module, name))
-    case false -> object_class_type_reference_name_in_imports(name, module.imports, module, allModules)
-
-/// Emits import statements for object interface type reference name in.
-private fun object_interface_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =
+/// Finds imported object type names in one pass while preserving interface-before-local-class resolution.
+private fun object_type_reference_names_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule], classTypeName: String): CompiledObjectImportTypeReferenceNames =
     match imports[0] with
-    case None -> ""
+    case None -> CompiledObjectImportTypeReferenceNames { interfaceTypeName: "", classTypeName: classTypeName }
     case Some { declaration } ->
         if compiler_import_includes_name(name, declaration)
         then
             match find_parsed_module_by_class(compiler_imported_module_class(module, declaration.modulePath), allModules) with
             case Some { importedModule } ->
                 if find_object_interface_in_module(name, importedModule)
-                then compiler_java_object_type_name(object_interface_java_name(importedModule, name))
-                else object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
-            case None -> object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
-        else object_interface_type_reference_name_in_imports(name, imports[1:], module, allModules)
-
-/// Emits import statements for object class type reference name in.
-private fun object_class_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =
-    match imports[0] with
-    case None -> ""
-    case Some { declaration } ->
-        if compiler_import_includes_name(name, declaration)
-        then
-            match find_parsed_module_by_class(compiler_imported_module_class(module, declaration.modulePath), allModules) with
-            case Some { importedModule } ->
-                if find_object_class_in_module(name, importedModule)
-                then compiler_java_object_type_name(object_class_java_name(importedModule, name))
-                else object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
-            case None -> object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
-        else object_class_type_reference_name_in_imports(name, imports[1:], module, allModules)
+                then CompiledObjectImportTypeReferenceNames {
+                    interfaceTypeName: compiler_java_object_type_name(object_interface_java_name(importedModule, name)),
+                    classTypeName: classTypeName
+                }
+                else if classTypeName.is_empty() & find_object_class_in_module(name, importedModule)
+                then object_type_reference_names_in_imports(name, imports[1:], module, allModules, compiler_java_object_type_name(object_class_java_name(importedModule, name)))
+                else object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
+            case None -> object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
+        else object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
 
 /// Finds an object interface in a module in available declarations, imports, or modules.
 private fun find_object_interface_in_module(name: String, module: ParsedModule): bool =
