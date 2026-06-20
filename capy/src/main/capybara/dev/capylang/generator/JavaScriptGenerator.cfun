@@ -2486,8 +2486,9 @@ private fun java_script_find_object_type_in_import(name: String, declaration: Co
 
 /// Finds a qualified object constructor call in scope, imports, or compiled modules.
 private fun java_script_find_qualified_object_constructor_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_qualified_object_constructor_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { binding } -> /capy/lang/Option.Some { binding }
     case None -> java_script_find_qualified_object_constructor_in_modules(qualifier, member, module, allModules)
@@ -2521,8 +2522,9 @@ private fun java_script_find_qualified_object_constructor_in_modules(qualifier: 
 
 /// Finds a qualified object type call in scope, imports, or compiled modules.
 private fun java_script_find_qualified_object_type_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_qualified_object_type_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { binding } -> /capy/lang/Option.Some { binding }
     case None -> java_script_find_qualified_object_type_in_modules(qualifier, member, module, allModules)
@@ -5290,8 +5292,9 @@ private fun java_script_callable_function(function: CompiledFunction): bool =
 
 /// Finds a qualified module export call in scope, imports, or compiled modules.
 private fun java_script_find_qualified_module_export_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
     case Some { targetModule } ->
         /capy/lang/Option.Some {
@@ -5305,8 +5308,9 @@ private fun java_script_find_qualified_module_export_call(name: String, module: 
 
 /// Finds a qualified function call in scope, imports, or compiled modules.
 private fun java_script_find_qualified_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_qualified_function_call_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { binding } -> /capy/lang/Option.Some { binding }
     case None -> java_script_find_qualified_function_call_in_modules(qualifier, member, module, allModules)
@@ -5348,8 +5352,9 @@ private fun java_script_find_qualified_function_call_in_modules(qualifier: Strin
 
 /// Finds a qualified function return type in scope, imports, or compiled modules.
 private fun java_script_find_qualified_function_return_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_qualified_function_return_type_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { returnType } -> /capy/lang/Option.Some { returnType }
     case None -> java_script_find_qualified_function_return_type_in_modules(qualifier, member, module, allModules)
@@ -5389,8 +5394,9 @@ private fun java_script_find_qualified_function_return_type_in_modules(qualifier
 
 /// Finds a qualified function effect payload type in scope, imports, or compiled modules.
 private fun java_script_find_qualified_function_effect_payload_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_qualified_function_effect_payload_type_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { payloadType } -> payloadType
     case None -> java_script_find_qualified_function_effect_payload_type_in_modules(qualifier, member, module, allModules)
@@ -5430,8 +5436,9 @@ private fun java_script_find_qualified_function_effect_payload_type_in_modules(q
 
 /// Finds a qualified function result payload type in scope, imports, or compiled modules.
 private fun java_script_find_qualified_function_result_payload_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let qualifier = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     match java_script_find_qualified_function_result_payload_type_in_imports(qualifier, member, module.imports, module, allModules) with
     case Some { payloadType } -> payloadType
     case None -> java_script_find_qualified_function_result_payload_type_in_modules(qualifier, member, module, allModules)
@@ -5483,7 +5490,7 @@ private fun java_script_module_function_binding(targetModule: CompiledModule, fu
 
 /// Collects imported function export name visible to the current module.
 private fun java_script_imported_function_export_name(function: CompiledFunction, functions: List[CompiledFunction]): String =
-    if java_script_exported_function_count(function.name, functions) > 1
+    if java_script_exported_function_overloaded(function.name, functions)
     then function.name
     else java_script_export_name(function)
 
@@ -5882,7 +5889,7 @@ private fun java_script_export_dispatch_entries(functions: List[CompiledFunction
     case None -> ""
     case Some { function } ->
         if java_script_exported_function(function)
-        then if java_script_exported_function_count(function.name, functions) > 1
+        then if java_script_exported_function_overloaded(function.name, functions)
             then if !java_script_string_list_contains(function.name, emittedNames)
                 then java_script_export_dispatch_entry(function.name, first)
                     + java_script_export_dispatch_entries(functions[1:], emittedNames + [function.name], false)
@@ -5920,7 +5927,7 @@ private fun java_script_export_entry(function: CompiledFunction, functions: List
 
 /// Formats JavaScript source text for semantic export entry.
 private fun java_script_semantic_export_entry(function: CompiledFunction, functions: List[CompiledFunction]): String =
-    if java_script_exported_function_count(function.name, functions) > 1
+    if java_script_exported_function_overloaded(function.name, functions)
     then ""
     else if function.name == java_script_export_name(function)
     then ""
@@ -5983,13 +5990,20 @@ private fun java_script_exported_constant(function: CompiledFunction): bool =
 private fun java_script_overloaded_function_name(name: String, functions: List[CompiledFunction]): bool =
     java_script_local_function_overloaded(name, functions)
 
-/// Counts exported function count for overload or test discovery logic.
-private fun java_script_exported_function_count(name: String, functions: List[CompiledFunction]): int =
-    match functions[0] with
+/// Checks whether an exported function name has overloads.
+private fun java_script_exported_function_overloaded(name: String, functions: List[CompiledFunction]): bool =
+    java_script_exported_function_count_at_most(name, functions, 2) > 1
+
+/// Counts exported functions up to the requested cap.
+private fun java_script_exported_function_count_at_most(name: String, functions: List[CompiledFunction], limit: int): int =
+    if limit <= 0
+    then 0
+    else match functions[0] with
     case None -> 0
     case Some { function } ->
-        let current = if java_script_exported_function(function) & function.name == name then 1 else 0
-        current + java_script_exported_function_count(name, functions[1:])
+        if java_script_exported_function(function) & function.name == name
+        then 1 + java_script_exported_function_count_at_most(name, functions[1:], limit - 1)
+        else java_script_exported_function_count_at_most(name, functions[1:], limit)
 
 /// Computes the JavaScript name for export value.
 private fun java_script_export_value_name(function: CompiledFunction): String =
@@ -7650,8 +7664,9 @@ private fun java_script_find_annotation_binding(name: String, module: CompiledMo
 
 /// Finds a qualified annotation binding in scope, imports, or compiled modules.
 private fun java_script_find_qualified_annotation_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptAnnotationBinding] =
-    let className = java_script_qualified_call_qualifier(name)
-    let member = java_script_qualified_call_member(name)
+    let idx = java_script_last_dot_index(name)
+    let className = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
     if java_script_stdlib_annotations_class(className)
     then java_script_stdlib_annotation_binding(member)
     else match java_script_find_qualified_annotation_binding_in_imports(className, member, module.imports, module, allModules) with
@@ -8249,11 +8264,19 @@ private fun java_script_qualified_call_name(name: String): bool =
 
 /// Emits JavaScript expression text for qualified call qualifier.
 private fun java_script_qualified_call_qualifier(name: String): String =
-    name[0, java_script_last_dot_index(name)]
+    java_script_qualified_call_qualifier_at(name, java_script_last_dot_index(name))
+
+/// Emits JavaScript expression text for qualified call qualifier using a precomputed separator.
+private fun java_script_qualified_call_qualifier_at(name: String, idx: int): String =
+    name[0, idx]
 
 /// Emits JavaScript expression text for qualified call member.
 private fun java_script_qualified_call_member(name: String): String =
-    name[java_script_last_dot_index(name) + 1, name.size().value]
+    java_script_qualified_call_member_at(name, java_script_last_dot_index(name))
+
+/// Emits JavaScript expression text for qualified call member using a precomputed separator.
+private fun java_script_qualified_call_member_at(name: String, idx: int): String =
+    name[idx + 1, name.size().value]
 
 /// Checks whether a function matches the extension method function metadata.
 private fun java_script_extension_method_function(function: CompiledFunction): bool =

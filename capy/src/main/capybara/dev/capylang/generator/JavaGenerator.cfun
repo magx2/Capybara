@@ -10879,34 +10879,35 @@ private fun index_literal_emittable(index: CompiledExpression): bool =
 
 /// Checks whether function call target can be emitted by the target backend.
 private fun function_call_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match find_function_for_arguments_in_functions(name, arguments, env, module.functions, module, allModules) with
+    let argumentTypes = expression_types(arguments, env, module, allModules)
+    match find_function_for_argument_types_in_functions(name, arguments, argumentTypes, env, module.functions, module, allModules) with
     case Some { function } ->
         callable_return_type(effective_function_return_type(function, module, allModules))
-            & parameters_emittable_and_assignable(function.parameters, arguments, env, module, allModules)
-    case None -> imported_function_target_emittable(name, arguments, env, module.imports, module, allModules)
+            & parameters_emittable_and_assignable_with_types(function.parameters, arguments, argumentTypes, env, module, allModules)
+    case None -> imported_function_target_emittable(name, arguments, argumentTypes, env, module.imports, module, allModules)
 
 /// Collects imported function target emittable visible to the current module.
-private fun imported_function_target_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun imported_function_target_emittable(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match imports[0] with
     case None -> false
     case Some { declaration } ->
         if function_import_matches(name, declaration)
-        then imported_module_function_emittable(name, arguments, env, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
-        else imported_function_target_emittable(name, arguments, env, imports[1:], module, allModules)
+        then imported_module_function_emittable(name, arguments, argumentTypes, env, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
+        else imported_function_target_emittable(name, arguments, argumentTypes, env, imports[1:], module, allModules)
 
 /// Collects imported module function emittable visible to the current module.
-private fun imported_module_function_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): bool =
+private fun imported_module_function_emittable(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): bool =
     match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> imported_module_function_body_emittable(name, arguments, env, rest, module, allModules, importedModule)
-    case _ -> imported_function_target_emittable(name, arguments, env, rest, module, allModules)
+    case Some { importedModule } -> imported_module_function_body_emittable(name, arguments, argumentTypes, env, rest, module, allModules, importedModule)
+    case _ -> imported_function_target_emittable(name, arguments, argumentTypes, env, rest, module, allModules)
 
 /// Collects imported module function body emittable visible to the current module.
-private fun imported_module_function_body_emittable(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): bool =
-    match find_function_for_arguments_in_functions(name, arguments, env, importedModule.functions, module, allModules) with
+private fun imported_module_function_body_emittable(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): bool =
+    match find_function_for_argument_types_in_functions(name, arguments, argumentTypes, env, importedModule.functions, module, allModules) with
     case Some { function } ->
         callable_return_type(effective_function_return_type(function, importedModule, allModules))
-            & parameters_emittable_and_assignable(function.parameters, arguments, env, module, allModules)
-    case _ -> imported_function_target_emittable(name, arguments, env, rest, module, allModules)
+            & parameters_emittable_and_assignable_with_types(function.parameters, arguments, argumentTypes, env, module, allModules)
+    case _ -> imported_function_target_emittable(name, arguments, argumentTypes, env, rest, module, allModules)
 
 /// Checks whether a type reference matches the concrete return type rule.
 private fun concrete_return_type(type: CompiledTypeReference): bool =
@@ -10945,6 +10946,21 @@ private fun parameters_emittable_and_assignable(parameters: List[CompiledFunctio
             parameter_argument_assignable(parameter.typeReference, argument, env, module, allModules)
                 & parameter_argument_emittable(parameter.typeReference, argument, env, module, allModules)
                 & parameters_emittable_and_assignable(parameters[1:], arguments[1:], env, module, allModules)
+
+/// Checks whether parameters emittable and assignable can be emitted by the target backend with precomputed argument types.
+private fun parameters_emittable_and_assignable_with_types(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match parameters[0] with
+    case None -> arguments.is_empty()
+    case Some { parameter } ->
+        match arguments[0] with
+        case None -> false
+        case Some { argument } ->
+            match argumentTypes[0] with
+            case None -> false
+            case Some { argumentType } ->
+                parameter_argument_assignable_with_type(parameter.typeReference, argument, argumentType, env, module, allModules)
+                    & parameter_argument_emittable(parameter.typeReference, argument, env, module, allModules)
+                    & parameters_emittable_and_assignable_with_types(parameters[1:], arguments[1:], argumentTypes[1:], env, module, allModules)
 
 /// Checks whether parameter argument can be emitted by the target backend.
 private fun parameter_argument_emittable(target: CompiledTypeReference, argument: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

@@ -38,6 +38,8 @@ data PythonQualifiedFunctionBinding { module: CompiledModule, function: Compiled
 data PythonSchemaAnnotationArgument { name: String, kind: String, value: String }
 /// Python generator mapping from a standard-library value to its Python identifier and type name.
 data PythonStdlibValue { pythonName: String, typeName: String }
+/// Decoded overload request name used for backend dispatch lookups.
+data PythonOverloadRequest { requested: bool, functionName: String, argumentType: String }
 /// Schema lookup result that distinguishes a type with no values from a missing type.
 data PythonSchemaValues { typeExists: bool, values: List[String] }
 /// Decoded object field schema metadata used while rebuilding object classes.
@@ -4512,6 +4514,17 @@ private fun python_overload_requested_argument_type(name: String): String =
     let marker = python_first_index_of(name, "__capy_overload_arg__", 0)
     if marker < 0 then python_unknown_type() else name[marker + "__capy_overload_arg__".size().value, name.size().value]
 
+/// Decodes an overload request in one marker scan.
+private fun python_overload_request_parts(name: String): PythonOverloadRequest =
+    let marker = python_first_index_of(name, "__capy_overload_arg__", 0)
+    if marker < 0
+    then PythonOverloadRequest { requested: false, functionName: name, argumentType: python_unknown_type() }
+    else PythonOverloadRequest {
+        requested: true,
+        functionName: name[0, marker],
+        argumentType: name[marker + "__capy_overload_arg__".size().value, name.size().value]
+    }
+
 /// Computes the Python name for type reference name key.
 private fun python_type_reference_name_key(name: String, argumentName: String): String =
     if argumentName.is_empty()
@@ -4571,10 +4584,11 @@ private fun python_callable_function(function: CompiledFunction): bool =
 
 /// Finds a local function in scope, imports, or compiled modules.
 private fun python_find_local_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    if python_overload_request(name)
+    let request = python_overload_request_parts(name)
+    if request.requested
     then python_find_local_overload(
-        python_overload_requested_function_name(name),
-        python_overload_requested_argument_type(name),
+        request.functionName,
+        request.argumentType,
         functions,
         /capy/lang/Option.None {},
         1000000

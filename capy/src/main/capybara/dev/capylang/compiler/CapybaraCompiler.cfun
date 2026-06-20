@@ -71,6 +71,8 @@ private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], ann
 private data CompiledDataFieldFunctions { schemas: List[CompiledFunction], annotations: List[CompiledFunction] }
 /// Raw deriver data needed for derived method expansion.
 private data CompiledRawDeriverDeclaration { name: String, methods: List[FunctionDeclaration] }
+/// Last separator positions for parsed type names.
+private data CompilerTypeNameSeparators { lastTypeSeparator: int, lastDotSeparator: int }
 /// Raw deriver declarations indexed once per module for derive expansion.
 private data CompiledDefinitionIndexes {
     derivers: Dict[CompiledRawDeriverDeclaration],
@@ -94,23 +96,23 @@ fun compile(
         column: 0
         }] })
     else
+        let libraryModules = libraries.to_list()
         let capybara_parser <- parser()
         let capybara_validator <- validator()
         capybara_parser.parse(rawModules).flat_map(program =>
-            validate_program(capybara_validator, rawModules, libraries, nativeProviders).map(errors =>
-                compiled_program(program, libraries, nativeProviders, nativeImplementationProviders, errors)
+            validate_program(capybara_validator, rawModules, libraryModules, nativeProviders).map(errors =>
+                compiled_program(program, libraryModules, nativeProviders, nativeImplementationProviders, errors)
             )
         )
 
 /// Converts parsed modules and provider manifests into whole-program compiler output.
 private fun compiled_program(
     program: /dev/capylang/compiler/parser/ParsedProgram,
-    libraries: Set[CompiledModule],
+    libraryModules: List[CompiledModule],
     nativeProviders: NativeProviderManifest,
     nativeImplementationProviders: NativeProviderManifest,
     errors: List[CompilerError]
 ): Either[CompiledProgram, List[CompilerError]] =
-    let libraryModules = libraries.to_list()
     if !errors.is_empty()
     then Right { errors }
     else Left { CompiledProgram {
@@ -123,10 +125,10 @@ private fun compiled_program(
 private fun validate_program(
     capybaraValidator: CapybaraValidator,
     rawModules: List[RawModule],
-    libraries: Set[CompiledModule],
+    libraries: List[CompiledModule],
     nativeProviders: NativeProviderManifest
 ): Effect[List[CompilerError]] =
-    let libraryModules = validation_library_modules(libraries.to_list())
+    let libraryModules = validation_library_modules(libraries)
     let rawModuleInput = raw_module_validation_input(rawModules)
     capybaraValidator.validate(
         rawModuleInput.names,
@@ -1920,7 +1922,11 @@ private fun compile_type(type: TypeReference): CompiledTypeReference =
 
 /// Converts a parsed type in a module into compiled metadata.
 private fun compile_type_in_module(type: TypeReference, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
-    let objectTypeName = if compiler_object_type_reference_candidate(type.name) then object_type_reference_name(type.name, module, allModules) else ""
+    let separators = compiler_type_name_separators(type.name)
+    let objectTypeName =
+        if compiler_uppercase_type_name_at(type.name, separators.lastTypeSeparator + 1)
+        then object_type_reference_name_at(type.name, separators.lastDotSeparator, module, allModules)
+        else ""
     if objectTypeName.is_empty()
     then CompiledTypeReference {
         name: type.name,
@@ -1934,6 +1940,24 @@ private fun compile_type_in_module(type: TypeReference, module: ParsedModule, al
 /// Checks whether a parsed type name can refer to an object class or interface.
 private fun compiler_object_type_reference_candidate(name: String): bool =
     compiler_uppercase_type_name_at(name, compiler_last_type_separator(name) + 1)
+
+/// Computes reusable separator positions for a parsed type name.
+private fun compiler_type_name_separators(name: String): CompilerTypeNameSeparators =
+    compiler_type_name_separators_from(name, 0, -1, -1)
+
+/// Computes reusable separator positions for a parsed type name from an offset.
+private fun compiler_type_name_separators_from(name: String, idx: int, lastTypeSeparator: int, lastDotSeparator: int): CompilerTypeNameSeparators =
+    if idx >= name.size().value
+    then CompilerTypeNameSeparators { lastTypeSeparator: lastTypeSeparator, lastDotSeparator: lastDotSeparator }
+    else match name[idx] with
+        case None -> CompilerTypeNameSeparators { lastTypeSeparator: lastTypeSeparator, lastDotSeparator: lastDotSeparator }
+        case Some { char } ->
+            compiler_type_name_separators_from(
+                name,
+                idx + 1,
+                if char == "." | char == "/" then idx else lastTypeSeparator,
+                if char == "." then idx else lastDotSeparator
+            )
 
 /// Converts parsed types into compiled metadata.
 private fun compile_types(types: List[TypeReference]): List[CompiledTypeReference] =
@@ -1949,7 +1973,10 @@ private fun compile_types_in_module(types: List[TypeReference], module: ParsedMo
 
 /// Computes the name for object type reference.
 private fun object_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    let separator = compiler_last_index_of(name, ".", 0, -1)
+    object_type_reference_name_at(name, compiler_last_index_of(name, ".", 0, -1), module, allModules)
+
+/// Computes the name for object type reference using a precomputed dot separator.
+private fun object_type_reference_name_at(name: String, separator: int, module: ParsedModule, allModules: List[ParsedModule]): String =
     if compiler_qualified_name_at(name, separator)
     then object_type_reference_name_qualified_at(name, separator, module, allModules)
     else if find_object_interface_in_module(name, module)
