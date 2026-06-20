@@ -740,8 +740,9 @@ private fun java_script_object_function_bindings(className: String, parameters: 
 
 /// Checks whether a function matches the object class schema function metadata.
 private fun java_script_object_class_schema_function(function: CompiledFunction): bool =
-    java_script_compiled_schema(function)
-        & java_script_string_has_prefix(function.name, java_script_object_class_schema_prefix())
+    if java_script_compiled_schema(function)
+    then java_script_string_has_prefix(function.name, java_script_object_class_schema_prefix())
+    else false
 
 /// Computes the JavaScript name for object class schema.
 private fun java_script_object_class_schema_name(function: CompiledFunction): String =
@@ -789,8 +790,9 @@ private fun java_script_object_class_open_schema_prefix(): String =
 
 /// Checks whether a function matches the object interface schema function metadata.
 private fun java_script_object_interface_schema_function(function: CompiledFunction): bool =
-    java_script_compiled_schema(function)
-        & java_script_string_has_prefix(function.name, java_script_object_interface_schema_prefix())
+    if java_script_compiled_schema(function)
+    then java_script_string_has_prefix(function.name, java_script_object_interface_schema_prefix())
+    else false
 
 /// Computes the JavaScript name for object interface schema.
 private fun java_script_object_interface_schema_name(function: CompiledFunction): String =
@@ -1049,7 +1051,9 @@ private fun java_script_dispatch_parent_assignments(functions: List[CompiledFunc
 
 /// Checks whether a function matches the schema parent function metadata.
 private fun java_script_schema_parent_function(function: CompiledFunction): bool =
-    java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, "__capy_schema_parent|")
+    if java_script_compiled_schema(function)
+    then java_script_string_has_prefix(function.name, "__capy_schema_parent|")
+    else false
 
 /// Formats JavaScript source text for dispatch parent assignment.
 private fun java_script_dispatch_parent_assignment(function: CompiledFunction): String =
@@ -1183,10 +1187,13 @@ private fun java_script_imported_function(function: CompiledFunction): bool =
 private fun java_script_compiled_object_helper_function(function: CompiledFunction): bool =
     if !java_script_string_has_prefix(function.name, "__capy_oo_")
     then false
-    else java_script_object_method_function(function)
-        | java_script_object_interface_method_function(function)
-        | java_script_object_field_init_function(function)
-        | java_script_object_init_function(function)
+    else if java_script_object_method_function(function)
+    then true
+    else if java_script_object_interface_method_function(function)
+    then true
+    else if java_script_object_field_init_function(function)
+    then true
+    else java_script_object_init_function(function)
 
 /// Formats JavaScript source text for constants.
 private fun java_script_constants(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3660,15 +3667,17 @@ private fun java_script_data_constructor_pipeline_returns_result(constructorType
     match constructorTypes[0] with
     case None -> false
     case Some { constructorType } ->
-        java_script_data_constructor_type_returns_result(constructorType, module, allModules)
-            | java_script_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
+        if java_script_data_constructor_type_returns_result(constructorType, module, allModules)
+        then true
+        else java_script_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
 
 /// Checks whether a type reference matches the data constructor type returns result rule.
 private fun java_script_data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match java_script_data_constructor_function(typeName, module) with
     case Some { function } ->
-        java_script_result_pipe_receiver_type(function.returnType.name)
-            | java_script_result_pipe_receiver_type(java_script_data_constructor_inferred_expression_type(function.body, java_script_function_bindings(function), module, allModules))
+        if java_script_result_pipe_receiver_type(function.returnType.name)
+        then true
+        else java_script_result_pipe_receiver_type(java_script_data_constructor_inferred_expression_type(function.body, java_script_function_bindings(function), module, allModules))
     case None -> false
 
 /// Infers the expression type for data constructor inferred.
@@ -4579,7 +4588,9 @@ private fun java_script_result_payload_type_from_data_literal(literal: CompiledD
     else
         let declaredTypeName = java_script_data_literal_declared_type_name(literal.typeName)
         let constructorTypes = java_script_data_constructor_type_names(declaredTypeName, module, allModules)
-        if !java_script_raw_data_literal(literal.typeName) & java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+        if java_script_raw_data_literal(literal.typeName)
+        then java_script_unknown_type()
+        else if java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
         then declaredTypeName
         else java_script_unknown_type()
 
@@ -7956,7 +7967,10 @@ private fun java_script_schema_fields_not_named(fields: List[String], existing: 
 private fun java_script_schema_field_name_exists(name: String, fields: List[String]): bool =
     match fields[0] with
     case None -> false
-    case Some { field } -> java_script_schema_field_name(field) == name | java_script_schema_field_name_exists(name, fields[1:])
+    case Some { field } ->
+        if java_script_schema_field_name(field) == name
+        then true
+        else java_script_schema_field_name_exists(name, fields[1:])
 
 /// Checks whether schema type exists in the relevant declarations or imports.
 private fun java_script_schema_type_exists(name: String, functions: List[CompiledFunction]): bool =
@@ -7967,8 +7981,10 @@ private fun java_script_schema_type_exists_named(name: String, functions: List[C
     match functions[0] with
     case None -> false
     case Some { function } ->
-        if java_script_compiled_schema(function) & function.name == name
-        then true
+        if java_script_compiled_schema(function)
+        then if function.name == name
+            then true
+            else java_script_schema_type_exists_named(name, functions[1:])
         else java_script_schema_type_exists_named(name, functions[1:])
 
 /// Collects schema values while also checking whether the owning data type exists.
@@ -7982,7 +7998,7 @@ private fun java_script_schema_values_for_type_named(typeSchemaName: String, val
         let rest = java_script_schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
         if java_script_compiled_schema(function)
         then JavaScriptSchemaValues {
-            typeExists: rest.typeExists | function.name == typeSchemaName,
+            typeExists: if rest.typeExists then true else function.name == typeSchemaName,
             values: if java_script_string_has_prefix(function.name, valuePrefix) then [java_script_schema_value(function)] + rest.values else rest.values
         }
         else rest
@@ -7992,8 +8008,10 @@ private fun java_script_schema_values(prefix: String, functions: List[CompiledFu
     match functions[0] with
     case None -> []
     case Some { function } ->
-        if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, prefix)
-        then [java_script_schema_value(function)] + java_script_schema_values(prefix, functions[1:])
+        if java_script_compiled_schema(function)
+        then if java_script_string_has_prefix(function.name, prefix)
+            then [java_script_schema_value(function)] + java_script_schema_values(prefix, functions[1:])
+            else java_script_schema_values(prefix, functions[1:])
         else java_script_schema_values(prefix, functions[1:])
 
 /// Looks up optional metadata for schema value named.
@@ -8001,8 +8019,10 @@ private fun java_script_schema_value_named(name: String, functions: List[Compile
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if java_script_compiled_schema(function) & function.name == name
-        then /capy/lang/Option.Some { java_script_schema_value(function) }
+        if java_script_compiled_schema(function)
+        then if function.name == name
+            then /capy/lang/Option.Some { java_script_schema_value(function) }
+            else java_script_schema_value_named(name, functions[1:])
         else java_script_schema_value_named(name, functions[1:])
 
 /// Computes value metadata for schema value.

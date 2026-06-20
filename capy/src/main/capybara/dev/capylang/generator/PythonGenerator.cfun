@@ -533,9 +533,11 @@ private fun python_import_extension_method_aliases_for_functions(declaration: Co
 
 /// Collects imported extension method alias visible to the current module.
 private fun python_imported_extension_method_alias(function: CompiledFunction, declaration: CompiledImportDeclaration): bool =
-    python_extension_method_function(function)
-        & !python_skip_function(function)
-        & !python_string_list_contains(python_method_member_name(python_method_owner_member_name(function.name)), declaration.excludedNames)
+    if python_extension_method_function(function)
+    then if python_skip_function(function)
+        then false
+        else !python_string_list_contains(python_method_member_name(python_method_owner_member_name(function.name)), declaration.excludedNames)
+    else false
 
 /// Computes the Python name for method owner member.
 private fun python_method_owner_member_name(name: String): String =
@@ -585,10 +587,13 @@ private fun python_imported_function(function: CompiledFunction): bool =
 private fun python_compiled_object_helper_function(function: CompiledFunction): bool =
     if !python_string_has_prefix(function.name, "__capy_oo_")
     then false
-    else python_string_has_prefix(function.name, "__capy_oo_method|")
-        | python_string_has_prefix(function.name, "__capy_oo_interface_method|")
-        | python_string_has_prefix(function.name, "__capy_oo_field_init|")
-        | python_string_has_prefix(function.name, "__capy_oo_init|")
+    else if python_string_has_prefix(function.name, "__capy_oo_method|")
+    then true
+    else if python_string_has_prefix(function.name, "__capy_oo_interface_method|")
+    then true
+    else if python_string_has_prefix(function.name, "__capy_oo_field_init|")
+    then true
+    else python_string_has_prefix(function.name, "__capy_oo_init|")
 
 /// Formats Python source text for constants.
 private fun python_constants(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1309,7 +1314,10 @@ private fun python_partial_method_call(call: CompiledMethodCallExpression): bool
 private fun python_arguments_contain_placeholder(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case None -> false
-    case Some { expression } -> python_partial_placeholder_expression(expression) | python_arguments_contain_placeholder(arguments[1:])
+    case Some { expression } ->
+        if python_partial_placeholder_expression(expression)
+        then true
+        else python_arguments_contain_placeholder(arguments[1:])
 
 /// Checks whether an expression has the partial placeholder expression shape.
 private fun python_partial_placeholder_expression(expression: CompiledExpression): bool =
@@ -1399,7 +1407,9 @@ private fun python_partial_placeholder_names_with_used(arguments: List[CompiledE
 /// Computes the Python name for available partial parameter.
 private fun python_available_partial_parameter_name(used: List[String], env: List[PythonBinding], idx: int): String =
     let name = "capybaraPartial" + idx
-    if python_binding_exists(name, env) | python_string_list_contains(name, used)
+    if python_binding_exists(name, env)
+    then python_available_partial_parameter_name(used, env, idx + 1)
+    else if python_string_list_contains(name, used)
     then python_available_partial_parameter_name(used, env, idx + 1)
     else name
 
@@ -2898,7 +2908,10 @@ private fun python_effect_block(block: CompiledBlockExpression): bool =
 private fun python_effect_bindings(bindings: List[CompiledLetBinding]): bool =
     match bindings[0] with
     case None -> false
-    case Some { binding } -> binding.operator == "<-" | python_effect_bindings(bindings[1:])
+    case Some { binding } ->
+        if binding.operator == "<-"
+        then true
+        else python_effect_bindings(bindings[1:])
 
 /// Checks whether the current value satisfies the result block rule for Python processing.
 private fun python_result_block(block: CompiledBlockExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3498,15 +3511,17 @@ private fun python_data_constructor_pipeline_returns_result(constructorTypes: Li
     match constructorTypes[0] with
     case None -> false
     case Some { constructorType } ->
-        python_data_constructor_type_returns_result(constructorType, module, allModules)
-            | python_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
+        if python_data_constructor_type_returns_result(constructorType, module, allModules)
+        then true
+        else python_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
 
 /// Checks whether a type reference matches the data constructor type returns result rule.
 private fun python_data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_data_constructor_function(typeName, module) with
     case Some { function } ->
-        python_result_pipe_receiver_type(function.returnType.name)
-            | python_result_pipe_receiver_type(python_data_constructor_inferred_expression_type(function.body, python_function_bindings(function), module, allModules))
+        if python_result_pipe_receiver_type(function.returnType.name)
+        then true
+        else python_result_pipe_receiver_type(python_data_constructor_inferred_expression_type(function.body, python_function_bindings(function), module, allModules))
     case None -> false
 
 /// Infers the expression type for data constructor inferred.
@@ -3704,7 +3719,9 @@ private fun python_result_payload_type_from_data_literal(literal: CompiledDataLi
     else
         let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
         let constructorTypes = python_data_parent_constructor_type_names(declaredTypeName, module, allModules) + python_data_own_constructor_type_names(declaredTypeName, module)
-        if !python_raw_data_literal(literal.typeName) & python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+        if python_raw_data_literal(literal.typeName)
+        then python_unknown_type()
+        else if python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
         then declaredTypeName
         else python_unknown_type()
 
@@ -4668,7 +4685,9 @@ private fun python_compiled_object_classes(functions: List[CompiledFunction]): L
 
 /// Extracts compiled metadata for object class schema.
 private fun python_compiled_object_class_schema(function: CompiledFunction): bool =
-    python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_class|")
+    if python_compiled_schema(function)
+    then python_string_has_prefix(function.name, "__capy_oo_class|")
+    else false
 
 /// Extracts compiled metadata for object class.
 private fun python_compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
@@ -4707,7 +4726,9 @@ private fun python_compiled_object_class_parameters(className: String, functions
 
 /// Extracts compiled metadata for object class parameter schema.
 private fun python_compiled_object_class_parameter_schema(function: CompiledFunction, className: String): bool =
-    python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_param|" + className + "|")
+    if python_compiled_schema(function)
+    then python_string_has_prefix(function.name, "__capy_oo_param|" + className + "|")
+    else false
 
 /// Extracts compiled metadata for object class parameter.
 private fun python_compiled_object_class_parameter(function: CompiledFunction): CompiledFunctionParameter =
@@ -4746,7 +4767,9 @@ private fun python_compiled_object_fields(className: String, functions: List[Com
 
 /// Extracts compiled metadata for object field schema for class.
 private fun python_compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
-    python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_field|" + className + "|")
+    if python_compiled_schema(function)
+    then python_string_has_prefix(function.name, "__capy_oo_field|" + className + "|")
+    else false
 
 /// Extracts compiled metadata for object field.
 private fun python_compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
@@ -4868,7 +4891,9 @@ private fun python_compiled_object_methods(className: String, functions: List[Co
 
 /// Extracts compiled metadata for object method function.
 private fun python_compiled_object_method_function(function: CompiledFunction, className: String): bool =
-    python_string_has_prefix(function.name, "__capy_oo_method|") & python_compiled_object_method_class_name(function.name) == className
+    if python_string_has_prefix(function.name, "__capy_oo_method|")
+    then python_compiled_object_method_class_name(function.name) == className
+    else false
 
 /// Extracts compiled metadata for object method.
 private fun python_compiled_object_method(function: CompiledFunction): CompiledObjectOrientedMethod =
@@ -7188,8 +7213,11 @@ private fun python_module_has_primitive_backed_type(functions: List[CompiledFunc
     match functions[0] with
     case None -> false
     case Some { function } ->
-        (python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_schema_primitive|"))
-            | python_module_has_primitive_backed_type(functions[1:])
+        if python_compiled_schema(function)
+        then if python_string_has_prefix(function.name, "__capy_schema_primitive|")
+            then true
+            else python_module_has_primitive_backed_type(functions[1:])
+        else python_module_has_primitive_backed_type(functions[1:])
 
 /// Checks whether module functions can be included in generated test gathering.
 private fun python_module_functions_gatherable(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -8451,7 +8479,10 @@ private fun python_schema_fields_not_named(fields: List[String], existing: List[
 private fun python_schema_field_name_exists(name: String, fields: List[String]): bool =
     match fields[0] with
     case None -> false
-    case Some { field } -> python_schema_field_name(field) == name | python_schema_field_name_exists(name, fields[1:])
+    case Some { field } ->
+        if python_schema_field_name(field) == name
+        then true
+        else python_schema_field_name_exists(name, fields[1:])
 
 /// Checks whether schema type exists in the relevant declarations or imports.
 private fun python_schema_type_exists(name: String, functions: List[CompiledFunction]): bool =
@@ -8462,8 +8493,10 @@ private fun python_schema_type_exists_named(name: String, functions: List[Compil
     match functions[0] with
     case None -> false
     case Some { function } ->
-        if python_compiled_schema(function) & function.name == name
-        then true
+        if python_compiled_schema(function)
+        then if function.name == name
+            then true
+            else python_schema_type_exists_named(name, functions[1:])
         else python_schema_type_exists_named(name, functions[1:])
 
 /// Collects schema values while also checking whether the owning data type exists.
@@ -8477,7 +8510,7 @@ private fun python_schema_values_for_type_named(typeSchemaName: String, valuePre
         let rest = python_schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
         if python_compiled_schema(function)
         then PythonSchemaValues {
-            typeExists: rest.typeExists | function.name == typeSchemaName,
+            typeExists: if rest.typeExists then true else function.name == typeSchemaName,
             values: if python_string_has_prefix(function.name, valuePrefix) then [python_schema_value(function)] + rest.values else rest.values
         }
         else rest
@@ -8487,8 +8520,10 @@ private fun python_schema_values(prefix: String, functions: List[CompiledFunctio
     match functions[0] with
     case None -> []
     case Some { function } ->
-        if python_compiled_schema(function) & python_string_has_prefix(function.name, prefix)
-        then [python_schema_value(function)] + python_schema_values(prefix, functions[1:])
+        if python_compiled_schema(function)
+        then if python_string_has_prefix(function.name, prefix)
+            then [python_schema_value(function)] + python_schema_values(prefix, functions[1:])
+            else python_schema_values(prefix, functions[1:])
         else python_schema_values(prefix, functions[1:])
 
 /// Looks up optional metadata for schema value named.
@@ -8496,8 +8531,10 @@ private fun python_schema_value_named(name: String, functions: List[CompiledFunc
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if python_compiled_schema(function) & function.name == name
-        then /capy/lang/Option.Some { python_schema_value(function) }
+        if python_compiled_schema(function)
+        then if function.name == name
+            then /capy/lang/Option.Some { python_schema_value(function) }
+            else python_schema_value_named(name, functions[1:])
         else python_schema_value_named(name, functions[1:])
 
 /// Computes value metadata for schema value.

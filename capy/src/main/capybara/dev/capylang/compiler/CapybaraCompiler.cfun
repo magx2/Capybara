@@ -277,14 +277,19 @@ private fun imported_library_function(declaration: CompiledImportDeclaration, fu
 private fun library_static_imports_from_selection(declaration: CompiledImportDeclaration, library: CompiledModule, selection: CompiledLibraryImportSelection): List[StaticImport] =
     if compiler_stdlib_import(declaration.modulePath)
     then []
-    else if declaration.wildcard & declaration.excludedNames.is_empty()
-    then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
+    else if declaration.wildcard
+    then if declaration.excludedNames.is_empty()
+        then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
+        else selection.staticImports
     else selection.staticImports
 
 /// Checks whether a library import needs member-level static imports.
 private fun library_requires_explicit_static_imports(declaration: CompiledImportDeclaration): bool =
-    !compiler_stdlib_import(declaration.modulePath)
-        & !(declaration.wildcard & declaration.excludedNames.is_empty())
+    if compiler_stdlib_import(declaration.modulePath)
+    then false
+    else if declaration.wildcard
+    then !declaration.excludedNames.is_empty()
+    else true
 
 /// Finds an imported library in available declarations, imports, or modules.
 private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
@@ -309,12 +314,15 @@ private fun find_imported_library_by_lookup(lookup: CompiledImportLibraryLookup,
 
 /// Collects imported library matches visible to the current module.
 private fun imported_library_matches(lookup: CompiledImportLibraryLookup, library: CompiledModule): bool =
-    let modulePath = compiled_module_path(library)
-    let className = modulePath.replace("/", ".")
-    lookup.modulePath == library.name
-        | lookup.normalizedPath == modulePath
-        | lookup.normalizedImportPath == modulePath
-        | lookup.modulePath == className
+    if lookup.modulePath == library.name
+    then true
+    else
+        let modulePath = compiled_module_path(library)
+        if lookup.normalizedPath == modulePath
+        then true
+        else if lookup.normalizedImportPath == modulePath
+        then true
+        else lookup.modulePath == modulePath.replace("/", ".")
 
 /// Converts a compiled module path into a Java-style package path.
 private fun compiled_module_path(module: CompiledModule): String =
@@ -1258,7 +1266,9 @@ private fun native_provider_annotations(annotations: List[FunctionAnnotationAppl
     match annotations[0] with
     case None -> false
     case Some { annotation } ->
-        native_provider_annotation_name(annotation.name, standardNativeProviderImported) | native_provider_annotations(annotations[1:], standardNativeProviderImported)
+        if native_provider_annotation_name(annotation.name, standardNativeProviderImported)
+        then true
+        else native_provider_annotations(annotations[1:], standardNativeProviderImported)
 
 /// Checks whether annotation metadata matches the native provider annotation name rule.
 private fun native_provider_annotation_name(name: String, standardNativeProviderImported: bool): bool =
@@ -1429,10 +1439,14 @@ private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[Functi
     let elseType = infer_return_type_in_module(ifExpression.elseBranch, env, module, allModules, depth + 1)
     if thenType.name.is_empty()
     then elseType
-    else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
+    else if elseType.name.is_empty()
     then thenType
-    else if compiler_data_object_type(thenType) & compiler_data_object_type(elseType)
-    then compiler_preferred_data_object_type(thenType, elseType)
+    else if compiler_same_type(thenType, elseType)
+    then thenType
+    else if compiler_data_object_type(thenType)
+    then if compiler_data_object_type(elseType)
+        then compiler_preferred_data_object_type(thenType, elseType)
+        else missing_type()
     else missing_type()
 
 /// Collects block type environmentironment in a module for compiler processing.
@@ -1556,25 +1570,39 @@ private fun infer_if_type(ifExpression: IfExpression, env: List[FunctionParamete
     let elseType = infer_return_type(ifExpression.elseBranch, env, depth + 1)
     if thenType.name.is_empty()
     then elseType
-    else if elseType.name.is_empty() | compiler_same_type(thenType, elseType)
+    else if elseType.name.is_empty()
     then thenType
-    else if compiler_data_object_type(thenType) & compiler_data_object_type(elseType)
-    then compiler_preferred_data_object_type(thenType, elseType)
+    else if compiler_same_type(thenType, elseType)
+    then thenType
+    else if compiler_data_object_type(thenType)
+    then if compiler_data_object_type(elseType)
+        then compiler_preferred_data_object_type(thenType, elseType)
+        else missing_type()
     else missing_type()
 
 /// Checks whether a type reference matches the data object type rule.
 private fun compiler_data_object_type(type: TypeReference): bool =
-    !type.name.is_empty()
-        & !compiler_numeric_type(type)
-        & type.name != "bool"
-        & type.name != "String"
-        & type.name != "List"
-        & type.name != "Set"
-        & type.name != "Dict"
-        & type.name != "Tuple"
-        & type.name != "Effect"
-        & type.name != "Assert"
-        & compiler_uppercase_type_name(type.name)
+    if type.name.is_empty()
+    then false
+    else if compiler_numeric_type(type)
+    then false
+    else if type.name == "bool"
+    then false
+    else if type.name == "String"
+    then false
+    else if type.name == "List"
+    then false
+    else if type.name == "Set"
+    then false
+    else if type.name == "Dict"
+    then false
+    else if type.name == "Tuple"
+    then false
+    else if type.name == "Effect"
+    then false
+    else if type.name == "Assert"
+    then false
+    else compiler_uppercase_type_name(type.name)
 
 /// Checks whether a type reference matches the uppercase type name rule.
 private fun compiler_uppercase_type_name(name: String): bool =
@@ -1618,7 +1646,11 @@ private fun infer_binary_type(binary: BinaryExpression, env: List[FunctionParame
 
 /// Checks whether an expression has the collection pipe expression shape.
 private fun compiler_collection_pipe_expression(binary: BinaryExpression, leftType: TypeReference): bool =
-    compiler_collection_pipe_operator(binary.operator) & compiler_collection_receiver_type(leftType) & compiler_lambda_expression(binary.right)
+    if compiler_collection_pipe_operator(binary.operator)
+    then if compiler_collection_receiver_type(leftType)
+        then compiler_lambda_expression(binary.right)
+        else false
+    else false
 
 /// Checks whether an operator belongs to the collection pipe operator category.
 private fun compiler_collection_pipe_operator(operator: String): bool =
@@ -1709,7 +1741,11 @@ private fun compiler_bitwise_binary_operator(operator: String): bool =
 
 /// Checks whether an operator belongs to the string left numeric operator category.
 private fun compiler_string_left_numeric_operator(operator: String, leftType: TypeReference, rightType: TypeReference): bool =
-    (operator == "-" | operator == "*" | operator == "/" | operator == "^") & leftType.name == "String" & compiler_numeric_type(rightType)
+    if operator == "-" | operator == "*" | operator == "/" | operator == "^"
+    then if leftType.name == "String"
+        then compiler_numeric_type(rightType)
+        else false
+    else false
 
 /// Computes the compiled type for promoted numeric.
 private fun compiler_promoted_numeric_type(leftType: TypeReference, rightType: TypeReference): TypeReference =
@@ -1733,7 +1769,9 @@ private fun compiler_integer_type(type: TypeReference): bool =
 
 /// Checks whether two type values identify the same entity.
 private fun compiler_same_type(first: TypeReference, second: TypeReference): bool =
-    first.name == second.name & compiler_same_type_arguments(first.arguments, second.arguments)
+    if first.name == second.name
+    then compiler_same_type_arguments(first.arguments, second.arguments)
+    else false
 
 /// Checks whether two type arguments values identify the same entity.
 private fun compiler_same_type_arguments(first: List[TypeReference], second: List[TypeReference]): bool =
@@ -1742,7 +1780,10 @@ private fun compiler_same_type_arguments(first: List[TypeReference], second: Lis
     case Some { firstType } ->
         match second[0] with
         case None -> false
-        case Some { secondType } -> compiler_same_type(firstType, secondType) & compiler_same_type_arguments(first[1:], second[1:])
+        case Some { secondType } ->
+            if compiler_same_type(firstType, secondType)
+            then compiler_same_type_arguments(first[1:], second[1:])
+            else false
 
 /// Computes the compiled type for missing.
 private fun missing_type(): TypeReference =
@@ -1956,7 +1997,10 @@ private fun find_object_interface_in_module(name: String, module: ParsedModule):
 private fun find_object_interface_in_interfaces(name: String, interfaces: List[ObjectOrientedInterface]): bool =
     match interfaces[0] with
     case None -> false
-    case Some { interface } -> interface.name == name | find_object_interface_in_interfaces(name, interfaces[1:])
+    case Some { interface } ->
+        if interface.name == name
+        then true
+        else find_object_interface_in_interfaces(name, interfaces[1:])
 
 /// Finds an object class in a module in available declarations, imports, or modules.
 private fun find_object_class_in_module(name: String, module: ParsedModule): bool =
@@ -1966,7 +2010,10 @@ private fun find_object_class_in_module(name: String, module: ParsedModule): boo
 private fun find_object_class_in_classes(name: String, classes: List[ObjectOrientedClass]): bool =
     match classes[0] with
     case None -> false
-    case Some { class } -> class.name == name | find_object_class_in_classes(name, classes[1:])
+    case Some { class } ->
+        if class.name == name
+        then true
+        else find_object_class_in_classes(name, classes[1:])
 
 /// Finds a parsed module by class in available declarations, imports, or modules.
 private fun find_parsed_module_by_class(className: String, modules: List[ParsedModule]): /capy/lang/Option[ParsedModule] =
@@ -2318,7 +2365,10 @@ private fun compiled_partial_arguments(arguments: List[CompiledExpression], idx:
 private fun compiled_expressions_have_placeholders(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case None -> false
-    case Some { argument } -> compiled_placeholder_expression(argument) | compiled_expressions_have_placeholders(arguments[1:])
+    case Some { argument } ->
+        if compiled_placeholder_expression(argument)
+        then true
+        else compiled_expressions_have_placeholders(arguments[1:])
 
 /// Extracts compiled metadata for placeholder expression.
 private fun compiled_placeholder_expression(expression: CompiledExpression): bool =

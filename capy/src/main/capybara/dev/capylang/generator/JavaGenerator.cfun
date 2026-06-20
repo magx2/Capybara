@@ -707,7 +707,9 @@ private fun compiled_object_interfaces(functions: List[CompiledFunction]): List[
 
 /// Extracts compiled metadata for object interface schema.
 private fun compiled_object_interface_schema(function: CompiledFunction): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_INTERFACE_SCHEMA_PREFIX)
+    if compiled_schema(function)
+    then java_generator_string_has_prefix(function.name, OO_INTERFACE_SCHEMA_PREFIX)
+    else false
 
 /// Extracts compiled metadata for object interface.
 private fun compiled_object_interface(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedInterface =
@@ -788,7 +790,9 @@ private fun compiled_object_classes(functions: List[CompiledFunction]): List[Com
 
 /// Extracts compiled metadata for object class schema.
 private fun compiled_object_class_schema(function: CompiledFunction): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_CLASS_SCHEMA_PREFIX)
+    if compiled_schema(function)
+    then java_generator_string_has_prefix(function.name, OO_CLASS_SCHEMA_PREFIX)
+    else false
 
 /// Extracts compiled metadata for object class.
 private fun compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
@@ -823,7 +827,9 @@ private fun compiled_object_class_parameters(className: String, functions: List[
 
 /// Extracts compiled metadata for object class parameter schema for class.
 private fun compiled_object_class_parameter_schema_for_class(function: CompiledFunction, className: String): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_CLASS_PARAMETER_SCHEMA_PREFIX + className + "|")
+    if compiled_schema(function)
+    then java_generator_string_has_prefix(function.name, OO_CLASS_PARAMETER_SCHEMA_PREFIX + className + "|")
+    else false
 
 /// Extracts compiled metadata for object class parameter.
 private fun compiled_object_class_parameter(function: CompiledFunction): CompiledFunctionParameter =
@@ -854,7 +860,9 @@ private fun compiled_object_fields(className: String, functions: List[CompiledFu
 
 /// Extracts compiled metadata for object field schema for class.
 private fun compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
-    compiled_schema(function) & java_generator_string_has_prefix(function.name, OO_FIELD_SCHEMA_PREFIX + className + "|")
+    if compiled_schema(function)
+    then java_generator_string_has_prefix(function.name, OO_FIELD_SCHEMA_PREFIX + className + "|")
+    else false
 
 /// Extracts compiled metadata for object field.
 private fun compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
@@ -1210,10 +1218,13 @@ private fun imported_function(function: CompiledFunction): bool =
 private fun compiled_object_helper_function(function: CompiledFunction): bool =
     if !java_generator_string_has_prefix(function.name, "__capy_oo_")
     then false
-    else compiled_object_method_function(function)
-        | compiled_object_interface_method_function(function)
-        | compiled_object_field_init_function(function)
-        | compiled_object_init_function(function)
+    else if compiled_object_method_function(function)
+    then true
+    else if compiled_object_interface_method_function(function)
+    then true
+    else if compiled_object_field_init_function(function)
+    then true
+    else compiled_object_init_function(function)
 
 /// Checks whether a compiled function should be skipped by regular Java function emission.
 private fun java_skip_function(function: CompiledFunction): bool =
@@ -3114,7 +3125,10 @@ private fun partial_method_call(call: CompiledMethodCallExpression): bool =
 private fun arguments_contain_placeholder(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case None -> false
-    case Some { expression } -> partial_placeholder_expression(expression) | arguments_contain_placeholder(arguments[1:])
+    case Some { expression } ->
+        if partial_placeholder_expression(expression)
+        then true
+        else arguments_contain_placeholder(arguments[1:])
 
 /// Checks whether an expression has the partial placeholder expression shape.
 private fun partial_placeholder_expression(expression: CompiledExpression): bool =
@@ -3280,31 +3294,37 @@ private fun partial_method_return_type(call: CompiledMethodCallExpression, recei
 
 /// Checks whether partial function call can be emitted by the target backend.
 private fun partial_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    partial_arguments_emittable(call.arguments, env, module, allModules)
-        & if qualified_call_name(call.name)
-            then match find_qualified_function(call.name, module, allModules) with
-                case Some _ -> true
-                case None -> false
-            else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
-                case Some _ -> true
-                case None -> false
+    if partial_arguments_emittable(call.arguments, env, module, allModules)
+    then if qualified_call_name(call.name)
+        then match find_qualified_function(call.name, module, allModules) with
+            case Some _ -> true
+            case None -> false
+        else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
+            case Some _ -> true
+            case None -> false
+    else false
 
 /// Checks whether partial method call can be emitted by the target backend.
 private fun partial_method_call_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    expression_emittable(call.receiver, env, module, allModules)
-        & partial_arguments_emittable(call.arguments, env, module, allModules)
-        & (string_java_method_call(call, env, module, allModules)
-            | match find_extension_method(call, env, module, allModules) with
+    if expression_emittable(call.receiver, env, module, allModules)
+    then if partial_arguments_emittable(call.arguments, env, module, allModules)
+        then if string_java_method_call(call, env, module, allModules)
+            then true
+            else match find_extension_method(call, env, module, allModules) with
                 case Some _ -> true
-                case None -> java_method_supported(call.name))
+                case None -> java_method_supported(call.name)
+        else false
+    else false
 
 /// Checks whether partial arguments can be emitted by the target backend.
 private fun partial_arguments_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
     case None -> true
     case Some { expression } ->
-        (partial_placeholder_expression(expression) | expression_emittable(expression, env, module, allModules))
-            & partial_arguments_emittable(arguments[1:], env, module, allModules)
+        let current = if partial_placeholder_expression(expression) then true else expression_emittable(expression, env, module, allModules)
+        if current
+        then partial_arguments_emittable(arguments[1:], env, module, allModules)
+        else false
 
 /// Collects partial placeholder names for compiler processing.
 private fun partial_placeholder_names(arguments: List[CompiledExpression], env: List[JavaBinding]): List[String] =
@@ -3324,7 +3344,9 @@ private fun partial_placeholder_names_with_used(arguments: List[CompiledExpressi
 /// Computes the name for available partial parameter.
 private fun available_partial_parameter_name(used: List[String], env: List[JavaBinding], idx: int): String =
     let name = "capybaraPartial" + idx
-    if binding_exists(name, env) | string_list_contains(name, used)
+    if binding_exists(name, env)
+    then available_partial_parameter_name(used, env, idx + 1)
+    else if string_list_contains(name, used)
     then available_partial_parameter_name(used, env, idx + 1)
     else name
 
@@ -6165,8 +6187,9 @@ private fun data_constructor_pipeline_returns_result(constructorTypes: List[Stri
     match constructorTypes[0] with
     case None -> false
     case Some { constructorType } ->
-        data_constructor_type_returns_result(constructorType, module, allModules)
-            | data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
+        if data_constructor_type_returns_result(constructorType, module, allModules)
+        then true
+        else data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
 
 /// Checks whether a type reference matches the data constructor type returns result rule.
 private fun data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6176,8 +6199,9 @@ private fun data_constructor_type_returns_result(typeName: String, module: Compi
 
 /// Checks whether a function matches the data constructor function returns result metadata.
 private fun data_constructor_function_returns_result(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    result_type_name(function.returnType.name)
-        | result_type_name(data_constructor_inferred_return_type(function, module, allModules).name)
+    if result_type_name(function.returnType.name)
+    then true
+    else result_type_name(data_constructor_inferred_return_type(function, module, allModules).name)
 
 /// Emits generated code for data constructor data call.
 private fun data_constructor_data_call_code(function: CompiledFunction, dataName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -9106,7 +9130,7 @@ private fun schema_values_for_type_named(typeSchemaName: String, valuePrefix: St
         let rest = schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
         if compiled_schema(function)
         then JavaSchemaValues {
-            typeExists: rest.typeExists | function.name == typeSchemaName,
+            typeExists: if rest.typeExists then true else function.name == typeSchemaName,
             values: if java_generator_string_has_prefix(function.name, valuePrefix) then [schema_value(function)] + rest.values else rest.values
         }
         else rest
@@ -9122,8 +9146,10 @@ private fun schema_values(prefix: String, functions: List[CompiledFunction]): Li
     match functions[0] with
     case None -> []
     case Some { function } ->
-        if compiled_schema(function) & java_generator_string_has_prefix(function.name, prefix)
-        then [schema_value(function)] + schema_values(prefix, functions[1:])
+        if compiled_schema(function)
+        then if java_generator_string_has_prefix(function.name, prefix)
+            then [schema_value(function)] + schema_values(prefix, functions[1:])
+            else schema_values(prefix, functions[1:])
         else schema_values(prefix, functions[1:])
 
 /// Computes value metadata for schema value.
@@ -9605,7 +9631,10 @@ private fun schema_fields_not_named(fields: List[String], existing: List[String]
 private fun schema_field_name_exists(name: String, fields: List[String]): bool =
     match fields[0] with
     case None -> false
-    case Some { field } -> schema_field_name(field) == name | schema_field_name_exists(name, fields[1:])
+    case Some { field } ->
+        if schema_field_name(field) == name
+        then true
+        else schema_field_name_exists(name, fields[1:])
 
 /// Emits import statements for data type fields in.
 private fun data_type_fields_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[List[String]] =
@@ -10893,8 +10922,9 @@ private fun value_assignable(target: CompiledTypeReference, source: CompiledType
 private fun object_type_assignable(target: CompiledTypeReference, source: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match find_object_class_by_type(source, allModules) with
     case Some { binding } ->
-        object_type_name_matches(target.name, binding.objectClass.name)
-            | object_parent_assignable(target.name, binding.objectClass.parents, module, allModules)
+        if object_type_name_matches(target.name, binding.objectClass.name)
+        then true
+        else object_parent_assignable(target.name, binding.objectClass.parents, module, allModules)
     case None -> false
 
 /// Checks whether object parent is assignable under the generator type rules.
@@ -10902,9 +10932,11 @@ private fun object_parent_assignable(targetName: String, parents: List[CompiledT
     match parents[0] with
     case None -> false
     case Some { parent } ->
-        object_type_name_matches(targetName, parent.name)
-            | object_parent_assignable(targetName, object_interface_parent_types(parent.name, module, allModules), module, allModules)
-            | object_parent_assignable(targetName, parents[1:], module, allModules)
+        if object_type_name_matches(targetName, parent.name)
+        then true
+        else if object_parent_assignable(targetName, object_interface_parent_types(parent.name, module, allModules), module, allModules)
+        then true
+        else object_parent_assignable(targetName, parents[1:], module, allModules)
 
 /// Collects object-oriented metadata for object interface parent types.
 private fun object_interface_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[CompiledTypeReference] =
@@ -11601,8 +11633,9 @@ private fun test_function_emittable(function: CompiledFunction, env: List[JavaBi
     match function.body with
     case CompiledBlockExpression block ->
         let returnType = effective_function_return_type(function, module, allModules)
-        effect_block_emittable(block.bindings, block.result, env, returnType, module, allModules)
-            | expression_emittable(function.body, env, module, allModules)
+        if effect_block_emittable(block.bindings, block.result, env, returnType, module, allModules)
+        then true
+        else expression_emittable(function.body, env, module, allModules)
     case _ -> expression_emittable(function.body, env, module, allModules)
 
 /// Formats source text for join non empty.
