@@ -49,14 +49,11 @@ from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
 from /dev/capylang/compiler/parser/CapybaraParser import { CapybaraParser }
 from /dev/capylang/compiler/parser/CapybaraParserProvider import { parser }
 from /dev/capylang/compiler/parser/RawModule import { RawModule }
-from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
 from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
 from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 
 /// Captured placeholders and original arguments for expanding a partially applied call.
 private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
-/// Raw module values shaped for the Java validator bridge.
-private data RawModuleValidationInput { names: List[String], paths: List[String], inputs: List[String], sourceKinds: List[String] }
 /// Library import additions computed together to avoid repeated import/library scans.
 private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 /// Imported library function and explicit static-import selection computed in one function scan.
@@ -100,7 +97,7 @@ fun compile(
         let capybara_parser <- parser()
         let capybara_validator <- validator()
         capybara_parser.parse(rawModules).flat_map(program =>
-            validate_program(capybara_validator, rawModules, libraryModules, nativeProviders).map(errors =>
+            validate_program(capybara_validator, program.modules, libraryModules, nativeProviders).map(errors =>
                 compiled_program(program, libraryModules, nativeProviders, nativeImplementationProviders, errors)
             )
         )
@@ -124,37 +121,16 @@ private fun compiled_program(
 
 private fun validate_program(
     capybaraValidator: CapybaraValidator,
-    rawModules: List[RawModule],
+    modules: List[ParsedModule],
     libraries: List[CompiledModule],
     nativeProviders: NativeProviderManifest
 ): Effect[List[CompilerError]] =
     let libraryModules = validation_library_modules(libraries)
-    let rawModuleInput = raw_module_validation_input(rawModules)
     capybaraValidator.validate(
-        rawModuleInput.names,
-        rawModuleInput.paths,
-        rawModuleInput.inputs,
-        rawModuleInput.sourceKinds,
+        modules,
         libraryModules,
         nativeProviders
     )
-
-private fun raw_module_validation_input(modules: List[RawModule]): RawModuleValidationInput =
-    match modules[0] with
-    case None -> RawModuleValidationInput { names: [], paths: [], inputs: [], sourceKinds: [] }
-    case Some { module } ->
-        let rest = raw_module_validation_input(modules[1:])
-        RawModuleValidationInput {
-            names: [module.name] + rest.names,
-            paths: [module.path] + rest.paths,
-            inputs: [module.input] + rest.inputs,
-            sourceKinds: [raw_module_source_kind(module.sourceKind)] + rest.sourceKinds
-        }
-
-private fun raw_module_source_kind(sourceKind: SourceKind): String =
-    match sourceKind with
-    case FUNCTIONAL -> "FUNCTIONAL"
-    case OBJECT_ORIENTED -> "OBJECT_ORIENTED"
 
 private fun validation_library_modules(libraries: List[CompiledModule]): List[String] =
     match libraries[0] with

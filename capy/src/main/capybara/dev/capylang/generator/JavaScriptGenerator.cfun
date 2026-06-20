@@ -879,7 +879,12 @@ private fun java_script_object_interface_exists(name: String, functions: List[Co
 
 /// Checks whether object type exists in the relevant declarations or imports.
 private fun java_script_object_type_exists(name: String, functions: List[CompiledFunction]): bool =
-    java_script_object_class_exists(name, functions) | java_script_object_interface_exists(name, functions)
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_type_schema_matches(name, function)
+        then true
+        else java_script_object_type_exists(name, functions[1:])
 
 /// Checks whether the current value satisfies the object interface exported rule for JavaScript processing.
 private fun java_script_object_interface_exported(name: String, functions: List[CompiledFunction]): bool =
@@ -894,7 +899,20 @@ private fun java_script_object_interface_exported(name: String, functions: List[
 
 /// Checks whether a type reference matches the object type exported rule.
 private fun java_script_object_type_exported(name: String, functions: List[CompiledFunction]): bool =
-    java_script_object_class_exported(name, functions) | java_script_object_interface_exported(name, functions)
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_object_type_schema_matches(name, function)
+        then java_script_schema_value(function) != "private"
+        else java_script_object_type_exported(name, functions[1:])
+
+/// Checks whether a schema helper declares the requested object class or interface.
+private fun java_script_object_type_schema_matches(name: String, function: CompiledFunction): bool =
+    if java_script_object_class_schema_function(function)
+    then java_script_object_class_schema_name(function) == name
+    else if java_script_object_interface_schema_function(function)
+    then java_script_object_interface_schema_name(function) == name
+    else false
 
 /// Returns the encoded schema-key prefix for object interface metadata.
 private fun java_script_object_interface_schema_prefix(): String =

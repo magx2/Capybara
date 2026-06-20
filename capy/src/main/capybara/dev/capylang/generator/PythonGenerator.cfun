@@ -1099,30 +1099,29 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_stdlib_io_function_call_code(call, env, module, allModules)
     else if python_reflection_function_call(call)
     then python_reflection_function_call_code(call, env, module, allModules)
-    else if python_object_type_function_call(call, module, allModules)
-    then python_object_type_function_call_code(call, module, allModules)
-    else if python_object_constructor_call(call, module, allModules)
-    then python_object_constructor_call_code(call, env, module, allModules)
-    else if python_partial_function_call(call)
-    then
-        let names = python_partial_placeholder_names(call.arguments, env)
-        "lambda " + python_lambda_parameters(names) + ": "
-            + python_function_call_name(call.name, module, allModules)
-            + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
-    else if python_enum_parse_call(call, module, allModules)
-    then python_enum_parse_call_code(call, env, module, allModules)
-    else
-        let resolvedName =
-            if python_local_function_overloaded(call.name, module.functions) & python_one_method_argument(call.arguments)
+    else match python_object_special_function_call_code(call, env, module, allModules) with
+        case Some { code } -> code
+        case None ->
+            if python_partial_function_call(call)
             then
-                let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
-                if argumentType == python_unknown_type()
-                then python_function_call_name(call.name, module, allModules)
-                else match python_find_local_overload_in_module(call.name, argumentType, module, allModules) with
-                case Some { function } -> python_function_name(function)
-                case None -> python_function_call_name(call.name, module, allModules)
-            else python_function_call_name(call.name, module, allModules)
-        resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+                let names = python_partial_placeholder_names(call.arguments, env)
+                "lambda " + python_lambda_parameters(names) + ": "
+                    + python_function_call_name(call.name, module, allModules)
+                    + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+            else if python_enum_parse_call(call, module, allModules)
+            then python_enum_parse_call_code(call, env, module, allModules)
+            else
+                let resolvedName =
+                    if python_local_function_overloaded(call.name, module.functions) & python_one_method_argument(call.arguments)
+                    then
+                        let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
+                        if argumentType == python_unknown_type()
+                        then python_function_call_name(call.name, module, allModules)
+                        else match python_find_local_overload_in_module(call.name, argumentType, module, allModules) with
+                        case Some { function } -> python_function_name(function)
+                        case None -> python_function_call_name(call.name, module, allModules)
+                    else python_function_call_name(call.name, module, allModules)
+                resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a function matches the reflection function call metadata.
 private fun python_reflection_function_call(call: CompiledFunctionCallExpression): bool =
@@ -1253,14 +1252,16 @@ private fun python_object_constructor_call(call: CompiledFunctionCallExpression,
     case Some _ -> true
     case None -> false
 
-/// Emits Python code for object constructor call.
-private fun python_object_constructor_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match python_find_object_class_in_scope(call.name, module, allModules) with
-    case Some { binding } ->
-        "Effect.delay(lambda: " + python_object_class_reference(binding, module)
-            + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
-    case None -> python_function_call_name(call.name, module, allModules)
-        + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+/// Resolves object type and constructor calls while keeping lookup and emission in one pass.
+private fun python_object_special_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    if python_object_type_function_call_shape(call)
+    then python_object_type_call_code_for_name_option(python_object_type_function_receiver_name(call.name), module, allModules)
+    else match python_find_object_class_in_scope(call.name, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some {
+            "Effect.delay(lambda: " + python_object_class_reference(binding, module)
+                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
+        }
+        case None -> /capy/lang/Option.None {}
 
 /// Checks whether a type reference matches the object type method call rule.
 private fun python_object_type_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1280,14 +1281,14 @@ private fun python_object_type_method_call_code(call: CompiledMethodCallExpressi
 
 /// Checks whether a type reference matches the object type function call rule.
 private fun python_object_type_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_object_type_function_call_shape(call)
+        & python_object_type_receiver_name(python_object_type_function_receiver_name(call.name), module, allModules)
+
+/// Checks whether a call has the syntactic shape of an object type function call.
+private fun python_object_type_function_call_shape(call: CompiledFunctionCallExpression): bool =
     python_qualified_name(call.name)
         & python_qualified_call_member(call.name) == "type"
         & call.arguments.is_empty()
-        & python_object_type_receiver_name(python_object_type_function_receiver_name(call.name), module, allModules)
-
-/// Emits Python code for object type function call.
-private fun python_object_type_function_call_code(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_object_type_call_code_for_name(python_object_type_function_receiver_name(call.name), module, allModules)
 
 /// Computes the Python name for object type function receiver.
 private fun python_object_type_function_receiver_name(name: String): String =
@@ -1311,6 +1312,15 @@ private fun python_object_type_call_code_for_name(name: String, module: Compiled
         match python_find_object_interface_module_in_scope(name, module, allModules) with
         case Some { owner } -> python_object_interface_info_literal(python_object_interface_member_name(name), owner, allModules)
         case None -> "__capy_unsupported('COO type')"
+
+/// Computes Python object type call code only when the target exists.
+private fun python_object_type_call_code_for_name_option(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match python_find_object_class_in_scope(name, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { python_object_class_reference(binding, module) + ".type()" }
+    case None ->
+        match python_find_object_interface_module_in_scope(name, module, allModules) with
+        case Some { owner } -> /capy/lang/Option.Some { python_object_interface_info_literal(python_object_interface_member_name(name), owner, allModules) }
+        case None -> /capy/lang/Option.None {}
 
 /// Checks whether method metadata matches the object method call rule.
 private fun python_object_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

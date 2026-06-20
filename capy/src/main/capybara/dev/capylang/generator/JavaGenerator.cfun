@@ -41,6 +41,8 @@ data JavaResolvedObjectMethod { receiverType: CompiledTypeReference, method: Com
 data JavaDataTypeBinding { module: CompiledModule, name: String }
 /// Java generator lookup entry for a qualified function and the compiled module that declares it.
 data JavaQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
+/// Precomputed Java function-name request metadata reused across function scans.
+data JavaFunctionNameRequest { name: String, hasUppercase: bool }
 /// Java generator mapping from a standard-library value to its Java name and resolved type.
 data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
 /// Java object metadata extracted from schema helper functions for one module.
@@ -1344,15 +1346,19 @@ private fun java_function_call_name(name: String, module: CompiledModule, allMod
         case Some { function } -> java_function_name(function)
         case None -> java_identifier(name)
 
-/// Checks whether function name matches the requested declaration, type, or name.
-private fun function_name_matches(requested: String, declared: String): bool =
-    if requested == declared
+/// Builds precomputed metadata for matching a requested function name.
+private fun java_function_name_request(name: String): JavaFunctionNameRequest =
+    JavaFunctionNameRequest { name: name, hasUppercase: string_has_uppercase(name) }
+
+/// Checks whether function name matches a precomputed request.
+private fun function_name_request_matches(request: JavaFunctionNameRequest, declared: String): bool =
+    if request.name == declared
     then true
     else if !(declared ? "_")
     then false
-    else if !string_has_uppercase(requested)
+    else if !request.hasUppercase
     then false
-    else requested == exported_function_name(declared)
+    else request.name == exported_function_name(declared)
 
 /// Checks whether a string contains an uppercase character.
 private fun string_has_uppercase(value: String): bool =
@@ -8921,12 +8927,16 @@ private fun best_function_for_arguments(name: String, arguments: List[CompiledEx
 
 /// Formats best function for precomputed argument types for generated emission.
 private fun best_function_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
+    best_function_for_argument_request_types(java_function_name_request(name), arguments, argumentTypes, env, functions, module, allModules, best, bestScore)
+
+/// Formats best function for precomputed argument types with precomputed name request metadata.
+private fun best_function_for_argument_request_types(request: JavaFunctionNameRequest, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> best
     case Some { function } ->
-        if function_name_matches(name, function.name)
-        then best_matching_function_for_argument_types(name, arguments, argumentTypes, env, functions, module, allModules, best, bestScore, function)
-        else best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
+        if function_name_request_matches(request, function.name)
+        then best_matching_function_for_argument_request_types(request, arguments, argumentTypes, env, functions, module, allModules, best, bestScore, function)
+        else best_function_for_argument_request_types(request, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
 
 /// Formats best matching function for arguments for generated emission.
 private fun best_matching_function_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int, function: CompiledFunction): /capy/lang/Option[CompiledFunction] =
@@ -8934,15 +8944,19 @@ private fun best_matching_function_for_arguments(name: String, arguments: List[C
 
 /// Formats best matching function for precomputed argument types for generated emission.
 private fun best_matching_function_for_argument_types(name: String, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int, function: CompiledFunction): /capy/lang/Option[CompiledFunction] =
+    best_matching_function_for_argument_request_types(java_function_name_request(name), arguments, argumentTypes, env, functions, module, allModules, best, bestScore, function)
+
+/// Formats best matching function for precomputed argument types with precomputed name request metadata.
+private fun best_matching_function_for_argument_request_types(request: JavaFunctionNameRequest, arguments: List[CompiledExpression], argumentTypes: List[CompiledTypeReference], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], best: /capy/lang/Option[CompiledFunction], bestScore: int, function: CompiledFunction): /capy/lang/Option[CompiledFunction] =
     if compiled_constant(function)
-    then best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
+    then best_function_for_argument_request_types(request, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
     else if parameters_assignable_with_types(function.parameters, arguments, argumentTypes, env, module, allModules)
     then
         let score = function_argument_score_with_types(function.parameters, arguments, argumentTypes, env, module, allModules)
         if score < bestScore
-        then best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, /capy/lang/Option.Some { function }, score)
-        else best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
-    else best_function_for_argument_types(name, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
+        then best_function_for_argument_request_types(request, arguments, argumentTypes, env, functions[1:], module, allModules, /capy/lang/Option.Some { function }, score)
+        else best_function_for_argument_request_types(request, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
+    else best_function_for_argument_request_types(request, arguments, argumentTypes, env, functions[1:], module, allModules, best, bestScore)
 
 /// Finds a function in imports for arguments in available declarations, imports, or modules.
 private fun find_function_in_imports_for_arguments(name: String, arguments: List[CompiledExpression], env: List[JavaBinding], imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -9034,12 +9048,16 @@ private fun data_type_match_score(targetName: String, sourceName: String, module
 
 /// Finds a function in available declarations, imports, or modules.
 private fun find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    find_function_by_request(java_function_name_request(name), functions)
+
+/// Finds a function using precomputed name request metadata.
+private fun find_function_by_request(request: JavaFunctionNameRequest, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if function_name_matches(name, function.name) & !compiled_constant(function)
+        if function_name_request_matches(request, function.name) & !compiled_constant(function)
         then /capy/lang/Option.Some { function }
-        else find_function(name, functions[1:])
+        else find_function_by_request(request, functions[1:])
 
 /// Finds a function in imports in available declarations, imports, or modules.
 private fun find_function_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =

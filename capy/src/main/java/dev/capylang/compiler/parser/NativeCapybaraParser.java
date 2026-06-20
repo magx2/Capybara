@@ -47,40 +47,13 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<CompilerError> validate(
-            List<String> moduleNames,
-            List<String> modulePaths,
-            List<String> moduleInputs,
-            List<String> moduleSourceKinds,
+            Object modules,
             List<String> libraryModules,
             NativeProviderManifest nativeProviders
     ) {
-        var modules = rawModules(moduleNames, modulePaths, moduleInputs, moduleSourceKinds);
-        return validator.validate(parse(modules).modules(), libraryModules, nativeProviders);
-    }
-
-    private static List<RawModule> rawModules(
-            List<String> moduleNames,
-            List<String> modulePaths,
-            List<String> moduleInputs,
-            List<String> moduleSourceKinds
-    ) {
-        if (moduleNames.size() != modulePaths.size()
-                || moduleNames.size() != moduleInputs.size()
-                || moduleNames.size() != moduleSourceKinds.size()) {
-            throw new IllegalArgumentException("Raw module metadata lists must have the same length.");
-        }
-
-        var modules = new ArrayList<RawModule>();
-        for (var idx = 0; idx < moduleNames.size(); idx++) {
-            modules.add(new RawModule(
-                    moduleNames.get(idx),
-                    modulePaths.get(idx),
-                    moduleInputs.get(idx),
-                    SourceKind.valueOf(moduleSourceKinds.get(idx))
-            ));
-        }
-        return List.copyOf(modules);
+        return validator.validate((List<ParsedModule>) modules, libraryModules, nativeProviders);
     }
 
     private ParsedModule parseModule(RawModule module) {
