@@ -13,6 +13,7 @@ from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectO
 from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
 from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
@@ -113,7 +114,7 @@ private fun oo_method_function_prefix_size(): int =
 
 /// Generates Java source modules, object interface files, and test runtime modules from a compiled program.
 fun java_generator(program: CompiledProgram): GeneratedProgram =
-    let generated = java_generated_modules(program.modules, program.modules, program.nativeProviderCatalog)
+    let generated = java_generated_modules(program.modules, program.modules, program.objectOrientedModules, program.nativeProviderCatalog)
     GeneratedProgram {
         modules: generated.objectInterfaceModules
             + generated.javaModules
@@ -121,12 +122,12 @@ fun java_generator(program: CompiledProgram): GeneratedProgram =
     }
 
 /// Creates Java object interface and module source entries while decoding object schemas once per module.
-private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): JavaGeneratedModules =
+private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], objectOrientedModules: List[CompiledObjectOrientedUnit], nativeProviderCatalog: NativeProviderCatalog): JavaGeneratedModules =
     match modules[0] with
     case None -> JavaGeneratedModules { objectInterfaceModules: [], javaModules: [] }
     case Some { module } ->
-        let objects = compiled_objects(module.functions)
-        let rest = java_generated_modules(modules[1:], allModules, nativeProviderCatalog)
+        let objects = java_compiled_objects_for_module(module, objectOrientedModules)
+        let rest = java_generated_modules(modules[1:], allModules, objectOrientedModules, nativeProviderCatalog)
         JavaGeneratedModules {
             objectInterfaceModules: java_object_interface_modules_for_module(objects.interfaces, module, allModules)
                 + rest.objectInterfaceModules,
@@ -135,6 +136,23 @@ private fun java_generated_modules(modules: List[CompiledModule], allModules: Li
                 code: java_module_code_with_objects(module, allModules, nativeProviderCatalog, objects)
             }] + rest.javaModules
         }
+
+/// Returns object metadata carried by linked programs, falling back to schema decoding for legacy module-only linked input.
+private fun java_compiled_objects_for_module(module: CompiledModule, objectOrientedModules: List[CompiledObjectOrientedUnit]): JavaCompiledObjects =
+    if objectOrientedModules.is_empty()
+    then compiled_objects(module.functions)
+    else match java_object_oriented_unit_for_module(module, objectOrientedModules) with
+        case Some { unit } -> JavaCompiledObjects { interfaces: unit.interfaces, classes: unit.classes }
+        case None -> JavaCompiledObjects { interfaces: [], classes: [] }
+
+/// Finds the object-oriented metadata unit for a compiled module.
+private fun java_object_oriented_unit_for_module(module: CompiledModule, objectOrientedModules: List[CompiledObjectOrientedUnit]): /capy/lang/Option[CompiledObjectOrientedUnit] =
+    match objectOrientedModules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { unit } ->
+        if unit.name == module.name & unit.path == module.path
+        then /capy/lang/Option.Some { unit }
+        else java_object_oriented_unit_for_module(module, objectOrientedModules[1:])
 
 /// Emits the complete Java class source for one compiled module.
 private fun java_module_code_with_objects(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog, objects: JavaCompiledObjects): String =

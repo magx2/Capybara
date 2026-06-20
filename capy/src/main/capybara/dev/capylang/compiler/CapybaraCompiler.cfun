@@ -78,6 +78,9 @@ private data CompiledDefinitionIndexes {
     annotations: Dict[CompiledAnnotationDeclaration]
 }
 
+const STANDARD_NATIVE_PROVIDER_ABSOLUTE_IMPORT = "capy/meta_prog/NativeProvider"
+const STANDARD_NATIVE_PROVIDER_RELATIVE_IMPORT = "NativeProvider"
+
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
     rawModules: List[RawModule],
@@ -1212,50 +1215,45 @@ private fun compile_native_provider_declarations(modules: List[ParsedModule], al
     match modules[0] with
     case None -> []
     case Some { module } ->
-        let standardNativeProviderImported = standard_native_provider_imported(module)
-        if standardNativeProviderImported
-        then compile_native_provider_declarations_in_module(module.definitions, module, allModules, standardNativeProviderImported) + compile_native_provider_declarations(modules[1:], allModules)
+        if standard_native_provider_imported(module)
+        then compile_native_provider_declarations_in_module(module.definitions, module, allModules) + compile_native_provider_declarations(modules[1:], allModules)
         else compile_native_provider_declarations(modules[1:], allModules)
 
 /// Converts parsed native provider declarations in a module into compiled metadata.
-private fun compile_native_provider_declarations_in_module(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule], standardNativeProviderImported: bool): List[CompiledNativeProviderDeclaration] =
+private fun compile_native_provider_declarations_in_module(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledNativeProviderDeclaration] =
     match definitions[0] with
     case None -> []
     case Some { definition } ->
         match definition with
         case FunctionDefinition { function } ->
-            if native_provider_function(function, standardNativeProviderImported)
-            then [compile_native_provider_declaration(function, module, allModules, standardNativeProviderImported)] + compile_native_provider_declarations_in_module(definitions[1:], module, allModules, standardNativeProviderImported)
-            else compile_native_provider_declarations_in_module(definitions[1:], module, allModules, standardNativeProviderImported)
-        case _ -> compile_native_provider_declarations_in_module(definitions[1:], module, allModules, standardNativeProviderImported)
+            if native_provider_function(function)
+            then [compile_native_provider_declaration(function, module, allModules)] + compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
+            else compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
+        case _ -> compile_native_provider_declarations_in_module(definitions[1:], module, allModules)
 
 /// Checks whether a function matches the native provider function metadata.
-private fun native_provider_function(function: FunctionDeclaration, standardNativeProviderImported: bool): bool =
-    if standardNativeProviderImported
-    then native_provider_annotations(function.annotations, standardNativeProviderImported)
-    else false
+private fun native_provider_function(function: FunctionDeclaration): bool =
+    native_provider_annotations(function.annotations)
 
 /// Checks whether annotation metadata matches the native provider annotations rule.
-private fun native_provider_annotations(annotations: List[FunctionAnnotationApplication], standardNativeProviderImported: bool): bool =
+private fun native_provider_annotations(annotations: List[FunctionAnnotationApplication]): bool =
     match annotations[0] with
     case None -> false
     case Some { annotation } ->
-        if native_provider_annotation_name(annotation.name, standardNativeProviderImported)
+        if native_provider_annotation_name(annotation.name)
         then true
-        else native_provider_annotations(annotations[1:], standardNativeProviderImported)
+        else native_provider_annotations(annotations[1:])
 
 /// Checks whether annotation metadata matches the native provider annotation name rule.
-private fun native_provider_annotation_name(name: String, standardNativeProviderImported: bool): bool =
-    if standardNativeProviderImported
-    then compiler_unqualified_type_name(name) == "NativeProvider"
-    else false
+private fun native_provider_annotation_name(name: String): bool =
+    compiler_unqualified_type_name(name) == "NativeProvider"
 
 /// Checks whether the standard NativeProvider annotation is imported in a parsed module.
 private fun standard_native_provider_imported(module: ParsedModule): bool =
     module_imports_normalized_name(
         module.imports,
-        normalize_import_module_path("/capy/meta_prog/NativeProvider"),
-        normalize_import_module_path("NativeProvider"),
+        STANDARD_NATIVE_PROVIDER_ABSOLUTE_IMPORT,
+        STANDARD_NATIVE_PROVIDER_RELATIVE_IMPORT,
         "NativeProvider"
     )
 
@@ -1270,7 +1268,7 @@ private fun module_imports_normalized_name(imports: List[ImportDeclaration], abs
         else module_imports_normalized_name(imports[1:], absoluteModulePath, relativeModulePath, name)
 
 /// Converts a parsed native provider declaration into compiled metadata.
-private fun compile_native_provider_declaration(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule], standardNativeProviderImported: bool): CompiledNativeProviderDeclaration =
+private fun compile_native_provider_declaration(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledNativeProviderDeclaration =
     let returnType = compile_type_in_module(function.returnType, module, allModules)
     let targetType = native_provider_target_type(returnType)
     CompiledNativeProviderDeclaration {
@@ -1279,7 +1277,7 @@ private fun compile_native_provider_declaration(function: FunctionDeclaration, m
         sourceModuleName: module.name,
         targetTypeName: targetType.name,
         interfaceId: native_provider_interface_id(targetType),
-        qualifier: native_provider_qualifier(function.annotations, standardNativeProviderImported),
+        qualifier: native_provider_qualifier(function.annotations),
         sourceFile: native_provider_source_file(module)
     }
 
@@ -1298,13 +1296,13 @@ private fun native_provider_interface_id(type: CompiledTypeReference): String =
     else type.name
 
 /// Formats source text for native provider qualifier.
-private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplication], standardNativeProviderImported: bool): String =
+private fun native_provider_qualifier(annotations: List[FunctionAnnotationApplication]): String =
     match annotations[0] with
     case None -> ""
     case Some { annotation } ->
-        if native_provider_annotation_name(annotation.name, standardNativeProviderImported)
+        if native_provider_annotation_name(annotation.name)
         then native_provider_qualifier_argument(annotation.arguments)
-        else native_provider_qualifier(annotations[1:], standardNativeProviderImported)
+        else native_provider_qualifier(annotations[1:])
 
 /// Formats one native provider qualifier argument for generated emission.
 private fun native_provider_qualifier_argument(arguments: List[FunctionAnnotationArgument]): String =
