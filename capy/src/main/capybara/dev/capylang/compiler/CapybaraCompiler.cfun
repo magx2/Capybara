@@ -2046,9 +2046,40 @@ private fun find_parsed_module_by_class(className: String, modules: List[ParsedM
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        if parsed_module_fqcn(module) == className
+        if parsed_module_matches_class(module, className)
         then /capy/lang/Option.Some { module }
         else find_parsed_module_by_class(className, modules[1:])
+
+/// Checks whether a parsed module matches a generated class name without building the full class name.
+private fun parsed_module_matches_class(module: ParsedModule, className: String): bool =
+    let path = normalize_module_path(module.path)
+    if path.is_empty()
+    then module.name == className
+    else
+        let pathSize = path.size().value
+        let nameSize = module.name.size().value
+        if className.size().value != pathSize + 1 + nameSize
+        then false
+        else if !compiler_module_path_matches_class_prefix(path, className, 0)
+        then false
+        else if className[pathSize, pathSize + 1] != "."
+        then false
+        else className[className.size().value - nameSize, className.size().value] == module.name
+
+/// Checks whether a slash-separated module path matches a dot-separated generated class prefix.
+private fun compiler_module_path_matches_class_prefix(path: String, className: String, idx: int): bool =
+    if idx >= path.size().value
+    then true
+    else match path[idx] with
+        case None -> true
+        case Some { char } ->
+            match className[idx] with
+            case None -> false
+            case Some { actual } ->
+                let expected = if char == "/" then "." else char
+                if actual == expected
+                then compiler_module_path_matches_class_prefix(path, className, idx + 1)
+                else false
 
 /// Checks whether an import matches the import includes name rule.
 private fun compiler_import_includes_name(name: String, declaration: ImportDeclaration): bool =

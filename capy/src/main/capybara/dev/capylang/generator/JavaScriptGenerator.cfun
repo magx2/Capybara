@@ -1495,8 +1495,9 @@ private fun java_script_tail_position_has_self_call(expression: CompiledExpressi
     match expression with
     case CompiledFunctionCallExpression call -> call.name == functionName
     case CompiledIfExpression ifExpression ->
-        java_script_tail_position_has_self_call(ifExpression.thenBranch, functionName)
-            | java_script_tail_position_has_self_call(ifExpression.elseBranch, functionName)
+        if java_script_tail_position_has_self_call(ifExpression.thenBranch, functionName)
+        then true
+        else java_script_tail_position_has_self_call(ifExpression.elseBranch, functionName)
     case CompiledBlockExpression block -> java_script_tail_position_has_self_call(block.result, functionName)
     case _ -> false
 
@@ -5853,9 +5854,24 @@ private fun java_script_find_module_by_path(modulePath: String, modules: List[Co
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        if java_script_module_path(module) == modulePath
+        if java_script_module_matches_path(modulePath, module)
         then /capy/lang/Option.Some { module }
         else java_script_find_module_by_path(modulePath, modules[1:])
+
+/// Checks whether a compiled module matches a slash-separated module path without building the full path.
+private fun java_script_module_matches_path(modulePath: String, module: CompiledModule): bool =
+    if module.path.is_empty()
+    then module.name == modulePath
+    else
+        let pathSize = module.path.size().value
+        let nameSize = module.name.size().value
+        if modulePath.size().value != pathSize + 1 + nameSize
+        then false
+        else if !java_script_string_has_prefix(modulePath, module.path)
+        then false
+        else if modulePath[pathSize, pathSize + 1] != "/"
+        then false
+        else java_script_string_has_suffix(modulePath, module.name)
 
 /// Checks whether an import matches the import includes name rule.
 private fun java_script_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =

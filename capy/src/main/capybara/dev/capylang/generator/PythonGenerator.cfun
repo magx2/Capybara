@@ -5372,9 +5372,24 @@ private fun python_find_module_by_path(modulePath: String, modules: List[Compile
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        if python_module_path(module) == modulePath
+        if python_module_matches_path(modulePath, module)
         then /capy/lang/Option.Some { module }
         else python_find_module_by_path(modulePath, modules[1:])
+
+/// Checks whether a compiled module matches a slash-separated module path without building the full path.
+private fun python_module_matches_path(modulePath: String, module: CompiledModule): bool =
+    if module.path.is_empty()
+    then module.name == modulePath
+    else
+        let pathSize = module.path.size().value
+        let nameSize = module.name.size().value
+        if modulePath.size().value != pathSize + 1 + nameSize
+        then false
+        else if !python_string_has_prefix(modulePath, module.path)
+        then false
+        else if modulePath[pathSize, pathSize + 1] != "/"
+        then false
+        else python_string_has_suffix(modulePath, module.name)
 
 /// Checks whether an import matches the import includes name rule.
 private fun python_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
