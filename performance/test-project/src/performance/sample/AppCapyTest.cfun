@@ -3,7 +3,7 @@ from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
 from /performance/sample/App import { * }
 from /performance/sample/domain/ResultTypes import { WorkflowAccepted }
-from /performance/sample/interop/ObjectFunctionalInterop import { run_workflow, describe_with_facade }
+from /performance/sample/interop/ObjectFunctionalWorkflow import { run_workflow, describe_with_facade }
 from /performance/sample/nativeinterop/NativeClock import { FixedClock }
 from /performance/sample/nativeinterop/NativeHasher import { StableHasher }
 from /performance/sample/nativeinterop/NativeProviders import { fixed_clock, stable_hasher }
