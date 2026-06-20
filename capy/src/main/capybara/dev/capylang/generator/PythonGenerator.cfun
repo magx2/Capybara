@@ -3375,9 +3375,8 @@ private fun python_module_member_imported(member: String, imports: List[Compiled
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if (declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath)
-            & python_import_includes_name(member, declaration)
-        then true
+        if declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath
+        then if python_import_includes_name(member, declaration) then true else python_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
         else python_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
 /// Infers the expression type for method call.

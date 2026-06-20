@@ -5721,9 +5721,8 @@ private fun java_script_module_member_imported(member: String, imports: List[Com
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if (declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath)
-            & java_script_import_includes_name(member, declaration)
-        then true
+        if declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath
+        then if java_script_import_includes_name(member, declaration) then true else java_script_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
         else java_script_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
 /// Checks whether string list contains the requested value.

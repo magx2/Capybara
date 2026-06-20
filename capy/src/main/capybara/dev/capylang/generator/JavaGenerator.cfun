@@ -11302,9 +11302,8 @@ private fun module_member_imported(member: String, imports: List[CompiledImportD
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if (declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath)
-            & import_includes_name(member, declaration)
-        then true
+        if declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath
+        then if import_includes_name(member, declaration) then true else module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
         else module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
 /// Formats source text for console util method.

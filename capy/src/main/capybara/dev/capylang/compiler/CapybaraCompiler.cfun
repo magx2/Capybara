@@ -145,7 +145,8 @@ private fun validation_library_modules(libraries: List[CompiledModule]): List[St
     match libraries[0] with
     case None -> []
     case Some { library } ->
-        [compiled_module_path(library), library.name, compiled_module_class_name(library)]
+        let modulePath = compiled_module_path(library)
+        [modulePath, library.name, modulePath.replace("/", ".")]
             + validation_library_modules(libraries[1:])
 
 /// Compiles parsed modules and merges module fragments that share the same name and path.
@@ -1252,18 +1253,17 @@ private fun native_provider_annotation_name(name: String, standardNativeProvider
 
 /// Checks whether the standard NativeProvider annotation is imported in a parsed module.
 private fun standard_native_provider_imported(module: ParsedModule): bool =
-    module_imports_name(module.imports, "/capy/meta_prog/NativeProvider", "NativeProvider")
-        | module_imports_name(module.imports, "capy/meta_prog/NativeProvider", "NativeProvider")
-        | module_imports_name(module.imports, "NativeProvider", "NativeProvider")
+    module_imports_normalized_name(module.imports, normalize_import_module_path("/capy/meta_prog/NativeProvider"), "NativeProvider")
+        | module_imports_normalized_name(module.imports, normalize_import_module_path("NativeProvider"), "NativeProvider")
 
 /// Checks whether an import list makes a requested name visible from a module path.
-private fun module_imports_name(imports: List[ImportDeclaration], modulePath: String, name: String): bool =
+private fun module_imports_normalized_name(imports: List[ImportDeclaration], normalizedModulePath: String, name: String): bool =
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if normalize_import_module_path(declaration.modulePath) == normalize_import_module_path(modulePath)
+        if normalize_import_module_path(declaration.modulePath) == normalizedModulePath
         then declaration.wildcard | declaration.importedNames.contains(name)
-        else module_imports_name(imports[1:], modulePath, name)
+        else module_imports_normalized_name(imports[1:], normalizedModulePath, name)
 
 /// Converts a parsed native provider declaration into compiled metadata.
 private fun compile_native_provider_declaration(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule], standardNativeProviderImported: bool): CompiledNativeProviderDeclaration =
