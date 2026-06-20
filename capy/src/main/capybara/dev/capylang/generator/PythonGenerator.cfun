@@ -548,7 +548,9 @@ private fun python_import_module_name(modulePath: String, module: CompiledModule
 
 /// Checks whether an import matches the standard-library import rule.
 private fun python_stdlib_import(modulePath: String): bool =
-    python_string_has_prefix(modulePath, "/capy/") | python_string_has_prefix(modulePath, "capy/")
+    if python_string_has_prefix(modulePath, "/capy/")
+    then true
+    else python_string_has_prefix(modulePath, "capy/")
 
 /// Formats Python source text for functions.
 private fun python_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
@@ -4627,7 +4629,9 @@ private fun python_find_binding_in_imports(name: String, imports: List[CompiledI
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.qualified | !python_import_includes_name(name, declaration)
+        if declaration.qualified
+        then python_find_binding_in_imports(name, imports[1:], module, allModules, constant)
+        else if !python_import_includes_name(name, declaration)
         then python_find_binding_in_imports(name, imports[1:], module, allModules, constant)
         else python_find_binding_in_import(name, declaration, imports[1:], module, allModules, constant)
 
@@ -4766,12 +4770,16 @@ private fun python_compiled_object_field_value(className: String, fieldName: Str
 
 /// Finds a compiled object field initializer in scope, imports, or compiled modules.
 private fun python_find_compiled_object_field_init(className: String, fieldName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    python_find_compiled_object_field_init_by_name("__capy_oo_field_init|" + className + "|" + fieldName, functions)
+
+/// Finds a compiled object field initializer by its encoded helper name.
+private fun python_find_compiled_object_field_init_by_name(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if function.name == "__capy_oo_field_init|" + className + "|" + fieldName
+        if function.name == name
         then /capy/lang/Option.Some { function }
-        else python_find_compiled_object_field_init(className, fieldName, functions[1:])
+        else python_find_compiled_object_field_init_by_name(name, functions[1:])
 
 /// Computes the Python name for object field schema.
 private fun python_object_field_schema_name(value: String): String =
@@ -5181,7 +5189,7 @@ private fun python_import_includes_name(name: String, declaration: CompiledImpor
 private fun python_string_list_contains(value: String, values: List[String]): bool =
     match values[0] with
     case None -> false
-    case Some { item } -> item == value | python_string_list_contains(value, values[1:])
+    case Some { item } -> if item == value then true else python_string_list_contains(value, values[1:])
 
 /// Computes the output or module path for module.
 private fun python_module_path(module: CompiledModule): String =
@@ -8181,9 +8189,11 @@ private fun python_annotation_binding_in_module(name: String, module: CompiledMo
 
 /// Checks whether annotation import matches the requested declaration, type, or name.
 private fun python_annotation_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
-    !python_stdlib_import(declaration.modulePath)
-        & !declaration.qualified
-        & python_import_includes_name(name, declaration)
+    if python_stdlib_import(declaration.modulePath)
+    then false
+    else if declaration.qualified
+    then false
+    else python_import_includes_name(name, declaration)
 
 /// Emits one Python import statement for standard-library annotation binding in.
 private fun python_stdlib_annotation_binding_in_import(name: String, declaration: CompiledImportDeclaration): /capy/lang/Option[PythonAnnotationBinding] =
@@ -8361,9 +8371,11 @@ private fun python_data_type_schema_values_in_import(name: String, prefix: Strin
 
 /// Checks whether data import matches the requested declaration, type, or name.
 private fun python_data_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
-    !python_stdlib_import(declaration.modulePath)
-        & !declaration.qualified
-        & python_import_includes_name(name, declaration)
+    if python_stdlib_import(declaration.modulePath)
+    then false
+    else if declaration.qualified
+    then false
+    else python_import_includes_name(name, declaration)
 
 /// Checks whether a type reference matches the primitive backed type rule.
 private fun python_primitive_backed_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -8443,11 +8455,16 @@ private fun python_schema_field_name_exists(name: String, fields: List[String]):
 
 /// Checks whether schema type exists in the relevant declarations or imports.
 private fun python_schema_type_exists(name: String, functions: List[CompiledFunction]): bool =
+    python_schema_type_exists_named("__capy_schema_type|" + name, functions)
+
+/// Checks whether schema type exists using a precomputed schema key.
+private fun python_schema_type_exists_named(name: String, functions: List[CompiledFunction]): bool =
     match functions[0] with
     case None -> false
     case Some { function } ->
-        (python_compiled_schema(function) & function.name == "__capy_schema_type|" + name)
-            | python_schema_type_exists(name, functions[1:])
+        if python_compiled_schema(function) & function.name == name
+        then true
+        else python_schema_type_exists_named(name, functions[1:])
 
 /// Collects schema values while also checking whether the owning data type exists.
 private fun python_schema_values_for_type(name: String, valuePrefix: String, functions: List[CompiledFunction]): PythonSchemaValues =

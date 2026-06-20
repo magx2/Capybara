@@ -266,10 +266,13 @@ private fun imported_library_selection_from_module(declaration: CompiledImportDe
 
 /// Checks whether a library function is exported and selected by an import declaration.
 private fun imported_library_function(declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
-    compiled_import_includes_name(function.name, declaration)
-        & function.visibility != "private"
-        & function.visibility != "const:private"
-        & !compiler_string_has_prefix(function.visibility, "const:schema")
+    if function.visibility == "private"
+    then false
+    else if function.visibility == "const:private"
+    then false
+    else if compiler_string_has_prefix(function.visibility, "const:schema")
+    then false
+    else compiled_import_includes_name(function.name, declaration)
 
 private fun library_static_imports_from_selection(declaration: CompiledImportDeclaration, library: CompiledModule, selection: CompiledLibraryImportSelection): List[StaticImport] =
     if compiler_stdlib_import(declaration.modulePath)
@@ -325,7 +328,9 @@ private fun compiled_module_class_name(module: CompiledModule): String =
 
 /// Checks whether an import path targets the Capybara standard library.
 private fun compiler_stdlib_import(modulePath: String): bool =
-    compiler_string_has_prefix(modulePath, "/capy/") | compiler_string_has_prefix(modulePath, "capy/")
+    if compiler_string_has_prefix(modulePath, "/capy/")
+    then true
+    else compiler_string_has_prefix(modulePath, "capy/")
 
 /// Checks whether a compiled import selects a name after exclusions are applied.
 private fun compiled_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
@@ -490,8 +495,10 @@ private fun compile_object_interface_functions(interfaces: List[ObjectOrientedIn
     match interfaces[0] with
     case None -> []
     case Some { interface } ->
-        [compile_object_interface_schema_function(interface)]
-            + [compile_object_interface_kind_schema_function(interface)]
+        [
+            compile_object_interface_schema_function(interface),
+            compile_object_interface_kind_schema_function(interface),
+        ]
             + compile_object_interface_parent_schema_functions(interface.name, interface.parents, module, allModules, 0, interface.location)
             + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(interface.name), interface.annotations, 0)
             + compile_object_interface_method_functions(interface.name, interface.kind, interface.methods, module, allModules)
@@ -564,8 +571,10 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
     case Some { class } ->
         let compiledParameters = compile_parameters_in_module(class.parameters, module, allModules)
         let compiledFields = compile_object_field_functions(class.name, compiledParameters, class.fields, module, allModules, 0)
-        [compile_object_class_schema_function(class)]
-            + [compile_object_class_open_schema_function(class)]
+        [
+            compile_object_class_schema_function(class),
+            compile_object_class_open_schema_function(class),
+        ]
             + compile_object_class_parameter_schema_functions(class.name, compiledParameters, 0)
             + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0, class.location)
             + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(class.name), class.annotations, 0)
@@ -981,8 +990,10 @@ private fun compile_functions(definitions: List[Definition], allDefinitions: Lis
 
 /// Converts parsed data declaration into compiled metadata.
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
-    [compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location)]
-        + [compile_schema_constant("__capy_schema_visibility|" + declaration.name, declaration.visibility, declaration.location)]
+    [
+        compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
+        compile_schema_constant("__capy_schema_visibility|" + declaration.name, declaration.visibility, declaration.location),
+    ]
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
         + compile_data_schema_fields(declaration.name, declaration.fields, 0)
         + compile_data_schema_parents(declaration.name, declaration.parents, 0)
@@ -1271,7 +1282,7 @@ private fun module_imports_normalized_name(imports: List[ImportDeclaration], abs
     case Some { declaration } ->
         let modulePath = normalize_import_module_path(declaration.modulePath)
         if modulePath == absoluteModulePath | modulePath == relativeModulePath
-        then declaration.wildcard | declaration.importedNames.contains(name)
+        then if declaration.wildcard then true else declaration.importedNames.contains(name)
         else module_imports_normalized_name(imports[1:], absoluteModulePath, relativeModulePath, name)
 
 /// Converts a parsed native provider declaration into compiled metadata.
@@ -1978,7 +1989,7 @@ private fun compiler_import_includes_name(name: String, declaration: ImportDecla
 private fun compiler_string_list_contains(values: List[String], expected: String): bool =
     match values[0] with
     case None -> false
-    case Some { value } -> value == expected | compiler_string_list_contains(values[1:], expected)
+    case Some { value } -> if value == expected then true else compiler_string_list_contains(values[1:], expected)
 
 /// Checks whether the current value satisfies the qualified name rule for compiler processing.
 private fun compiler_qualified_name(name: String): bool =
