@@ -4,7 +4,7 @@ from /performance/sample/domain/Analytics import { metrics_label }
 from /performance/sample/domain/Order import { describe_status, submit, summary }
 from /performance/sample/domain/ResultTypes import { WorkflowAccepted, WorkflowRejected }
 from /performance/sample/domain/Shipment import { quote_shipment, shipment_label }
-from /performance/sample/interop/ObjectFunctionalInterop import { run_workflow }
+from /performance/sample/interop/ObjectFunctionalWorkflow import { run_workflow }
 from /performance/sample/support/Fixtures import { fixture_order, invalid_order }
 
 fun happy_path_summary(): Effect[String] =
