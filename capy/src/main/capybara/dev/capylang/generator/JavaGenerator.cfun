@@ -47,6 +47,8 @@ data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
 data AnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
 /// Decoded annotation schema argument with field name, value kind, and encoded source value.
 data SchemaAnnotationArgument { name: String, kind: String, value: String }
+/// Schema lookup result that distinguishes a type with no values from a missing type.
+data JavaSchemaValues { typeExists: bool, values: List[String] }
 
 const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -7243,8 +7245,9 @@ private fun reflection_dynamic_enum_value_cases_in_module_code(typeNames: List[S
     match typeNames[0] with
     case None -> ""
     case Some { typeName } ->
-        if enum_type_exists_in_functions(typeName, owner.functions)
-        then reflection_dynamic_enum_value_cases_for_type_code(typeName, enum_values_in_functions(typeName, owner.functions), owner, runtimeTypeName, valueCode, allModules)
+        let enumValues = enum_values_in_functions(typeName, owner.functions)
+        if !enumValues.is_empty()
+        then reflection_dynamic_enum_value_cases_for_type_code(typeName, enumValues, owner, runtimeTypeName, valueCode, allModules)
             + reflection_dynamic_enum_value_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
         else reflection_dynamic_enum_value_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
 
@@ -7271,7 +7274,8 @@ private fun reflection_dynamic_data_type_cases_in_module_code(typeNames: List[St
     match typeNames[0] with
     case None -> ""
     case Some { typeName } ->
-        if enum_type_exists_in_functions(typeName, owner.functions)
+        let enumValues = enum_values_in_functions(typeName, owner.functions)
+        if !enumValues.is_empty()
         then reflection_dynamic_data_type_cases_in_module_code(typeNames[1:], owner, runtimeTypeName, valueCode, allModules)
         else "                if (java.util.Objects.equals(" + runtimeTypeName + ", \"" + escape_java_string(typeName) + "\")) {" + newline()
             + "                    return " + reflection_data_value_info_code(typeName, valueCode, owner, allModules) + ";" + newline()
@@ -8913,6 +8917,22 @@ private fun schema_type_exists(name: String, functions: List[CompiledFunction]):
         then true
         else schema_type_exists(name, functions[1:])
 
+/// Collects schema values while also checking whether the owning data type exists.
+private fun schema_values_for_type(name: String, valuePrefix: String, functions: List[CompiledFunction]): JavaSchemaValues =
+    schema_values_for_type_named("__capy_schema_type|" + name, valuePrefix + name + "|", functions)
+
+private fun schema_values_for_type_named(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction]): JavaSchemaValues =
+    match functions[0] with
+    case None -> JavaSchemaValues { typeExists: false, values: [] }
+    case Some { function } ->
+        let rest = schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
+        if compiled_schema(function)
+        then JavaSchemaValues {
+            typeExists: rest.typeExists | function.name == typeSchemaName,
+            values: if java_generator_string_has_prefix(function.name, valuePrefix) then [schema_value(function)] + rest.values else rest.values
+        }
+        else rest
+
 /// Checks whether a function matches the schema function metadata.
 private fun schema_function(function: CompiledFunction, name: String): bool =
     if function.name == name
@@ -8953,8 +8973,9 @@ private fun enum_value_exists(typeName: String, valueName: String, module: Compi
 
 /// Computes value metadata for enum values.
 private fun enum_values(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if enum_type_exists_in_functions(name, module.functions)
-    then enum_values_in_functions(name, module.functions)
+    let localValues = enum_values_in_functions(name, module.functions)
+    if !localValues.is_empty()
+    then localValues
     else match enum_values_in_imports(name, module.imports, module, allModules) with
         case Some { values } -> values
         case None -> []
@@ -8980,8 +9001,9 @@ private fun enum_values_in_imports(name: String, imports: List[CompiledImportDec
 private fun enum_values_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } ->
-        if enum_type_exists_in_functions(name, importedModule.functions)
-        then /capy/lang/Option.Some { enum_values_in_functions(name, importedModule.functions) }
+        let values = enum_values_in_functions(name, importedModule.functions)
+        if !values.is_empty()
+        then /capy/lang/Option.Some { values }
         else enum_values_in_imports(name, rest, module, allModules)
     case _ -> enum_values_in_imports(name, rest, module, allModules)
 
@@ -9108,8 +9130,9 @@ private fun data_type_bindings(dataType: /capy/lang/Option[String], concreteType
 
 /// Formats data type parameters for generated emission.
 private fun data_type_parameters(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if schema_type_exists(name, module.functions)
-    then schema_values("__capy_schema_param|" + name + "|", module.functions)
+    let localParameters = schema_values_for_type(name, "__capy_schema_param|", module.functions)
+    if localParameters.typeExists
+    then localParameters.values
     else match data_type_parameters_in_imports(name, module.imports, module, allModules) with
         case Some { value } -> value
         case None -> data_type_parameters_in_modules(name, allModules)
@@ -9127,8 +9150,9 @@ private fun data_type_parameters_in_imports(name: String, imports: List[Compiled
 private fun data_type_parameters_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } ->
-        if schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { schema_values("__capy_schema_param|" + name + "|", importedModule.functions) }
+        let importedParameters = schema_values_for_type(name, "__capy_schema_param|", importedModule.functions)
+        if importedParameters.typeExists
+        then /capy/lang/Option.Some { importedParameters.values }
         else data_type_parameters_in_imports(name, rest, module, allModules)
     case _ -> data_type_parameters_in_imports(name, rest, module, allModules)
 
@@ -9137,8 +9161,9 @@ private fun data_type_parameters_in_modules(name: String, modules: List[Compiled
     match modules[0] with
     case None -> []
     case Some { module } ->
-        if schema_type_exists(name, module.functions)
-        then schema_values("__capy_schema_param|" + name + "|", module.functions)
+        let moduleParameters = schema_values_for_type(name, "__capy_schema_param|", module.functions)
+        if moduleParameters.typeExists
+        then moduleParameters.values
         else data_type_parameters_in_modules(name, modules[1:])
 
 /// Computes the compiled type for primitive backed backing.
@@ -9195,8 +9220,9 @@ private fun primitive_backed_backing_type_in_modules(name: String, modules: List
 
 /// Collects data type parent types for compiler processing.
 private fun data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if schema_type_exists(name, module.functions)
-    then schema_values("__capy_schema_parent|" + name + "|", module.functions)
+    let localParents = schema_values_for_type(name, "__capy_schema_parent|", module.functions)
+    if localParents.typeExists
+    then localParents.values
     else if stdlib_reflection_type(name)
     then stdlib_reflection_type_parents(name)
     else match data_type_parent_types_in_imports(name, module.imports, module, allModules) with
@@ -9216,8 +9242,9 @@ private fun data_type_parent_types_in_imports(name: String, imports: List[Compil
 private fun data_type_parent_types_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } ->
-        if schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { schema_values("__capy_schema_parent|" + name + "|", importedModule.functions) }
+        let importedParents = schema_values_for_type(name, "__capy_schema_parent|", importedModule.functions)
+        if importedParents.typeExists
+        then /capy/lang/Option.Some { importedParents.values }
         else data_type_parent_types_in_imports(name, rest, module, allModules)
     case _ -> data_type_parent_types_in_imports(name, rest, module, allModules)
 
@@ -9226,8 +9253,9 @@ private fun data_type_parent_types_in_modules(name: String, modules: List[Compil
     match modules[0] with
     case None -> []
     case Some { module } ->
-        if schema_type_exists(name, module.functions)
-        then schema_values("__capy_schema_parent|" + name + "|", module.functions)
+        let moduleParents = schema_values_for_type(name, "__capy_schema_parent|", module.functions)
+        if moduleParents.typeExists
+        then moduleParents.values
         else data_type_parent_types_in_modules(name, modules[1:])
 
 /// Computes a numeric value for data type distance.
@@ -9262,8 +9290,9 @@ private fun reflection_data_type_fields(name: String, module: CompiledModule, al
 
 /// Collects data type direct fields for compiler processing.
 private fun data_type_direct_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if schema_type_exists(name, module.functions)
-    then schema_values("__capy_schema_field|" + name + "|", module.functions)
+    let localFields = schema_values_for_type(name, "__capy_schema_field|", module.functions)
+    if localFields.typeExists
+    then localFields.values
     else if stdlib_reflection_type(name)
     then stdlib_reflection_type_fields(name)
     else match data_type_fields_in_imports(name, module.imports, module, allModules) with
@@ -9413,8 +9442,9 @@ private fun data_type_fields_in_imports(name: String, imports: List[CompiledImpo
 private fun data_type_fields_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[List[String]] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } ->
-        if schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { schema_values("__capy_schema_field|" + name + "|", importedModule.functions) }
+        let importedFields = schema_values_for_type(name, "__capy_schema_field|", importedModule.functions)
+        if importedFields.typeExists
+        then /capy/lang/Option.Some { importedFields.values }
         else data_type_fields_in_imports(name, rest, module, allModules)
     case _ -> data_type_fields_in_imports(name, rest, module, allModules)
 
@@ -9441,8 +9471,9 @@ private fun data_type_fields_in_modules(name: String, modules: List[CompiledModu
     match modules[0] with
     case None -> []
     case Some { module } ->
-        if schema_type_exists(name, module.functions)
-        then schema_values("__capy_schema_field|" + name + "|", module.functions)
+        let moduleFields = schema_values_for_type(name, "__capy_schema_field|", module.functions)
+        if moduleFields.typeExists
+        then moduleFields.values
         else data_type_fields_in_modules(name, modules[1:])
 
 /// Creates name/type bindings for type parameter.

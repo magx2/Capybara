@@ -26,6 +26,10 @@ data JavaScriptBinding { name: String, jsName: String, typeName: String }
 private data JavaScriptAnnotationBinding { name: String, moduleName: String, modulePath: String, fields: List[String] }
 /// Decoded JavaScript annotation schema argument with field name, value kind, and encoded source value.
 private data JavaScriptSchemaAnnotationArgument { name: String, kind: String, value: String }
+/// Schema lookup result that distinguishes a type with no values from a missing type.
+private data JavaScriptSchemaValues { typeExists: bool, values: List[String] }
+/// JavaScript reflection table entries collected together to avoid duplicate schema scans.
+private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 
 /// Passes an optional string through unchanged where JavaScript generator pipelines need a named adapter.
 private fun java_script_option_string_identity(value: /capy/lang/Option[String]): /capy/lang/Option[String] = value
@@ -67,10 +71,10 @@ private fun java_script_runtime_symbols(): String =
     java_script_code_list(java_script_runtime_symbol_names())
 
 private fun java_script_runtime_import_symbols(module: CompiledModule): String =
-    java_script_code_list(java_script_runtime_symbol_names_excluding(
-        java_script_runtime_symbol_names(),
-        java_script_runtime_excluded_symbols(module)
-    ))
+    let excluded = java_script_runtime_excluded_symbols(module)
+    if excluded.is_empty()
+    then java_script_runtime_symbols()
+    else java_script_code_list(java_script_runtime_symbol_names_excluding(java_script_runtime_symbol_names(), excluded))
 
 private fun java_script_runtime_symbol_names_excluding(symbols: List[String], excluded: List[String]): List[String] =
     match symbols[0] with
@@ -4960,8 +4964,9 @@ private fun java_script_enum_value_exists(typeName: String, valueName: String, m
 
 /// Computes value metadata for enum values.
 private fun java_script_enum_values(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if java_script_enum_type_exists_in_functions(name, module.functions)
-    then java_script_enum_values_in_functions(name, module.functions)
+    let localValues = java_script_enum_values_in_functions(name, module.functions)
+    if !localValues.is_empty()
+    then localValues
     else match java_script_enum_values_in_imports(name, module.imports, module, allModules) with
         case Some { values } -> values
         case None -> []
@@ -4987,8 +4992,9 @@ private fun java_script_enum_values_in_imports(name: String, imports: List[Compi
 private fun java_script_enum_values_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
     match java_script_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } ->
-        if java_script_enum_type_exists_in_functions(name, importedModule.functions)
-        then /capy/lang/Option.Some { java_script_enum_values_in_functions(name, importedModule.functions) }
+        let values = java_script_enum_values_in_functions(name, importedModule.functions)
+        if !values.is_empty()
+        then /capy/lang/Option.Some { values }
         else java_script_enum_values_in_imports(name, rest, module, allModules)
     case None -> java_script_enum_values_in_imports(name, rest, module, allModules)
 
@@ -6290,8 +6296,9 @@ private fun java_script_deep_equal_code(): String =
 
 /// Emits the JavaScript runtime support source for reflection.
 private fun java_script_reflection_runtime_code(modules: List[CompiledModule]): String =
-    "const __capy_reflection_types = " + java_script_reflection_types_literal(modules, modules) + ";" + java_script_newline()
-    + "const __capy_reflection_enum_values = " + java_script_reflection_enum_values_literal(modules, modules) + ";" + java_script_newline()
+    let entries = java_script_reflection_entries(modules, modules)
+    "const __capy_reflection_types = " + java_script_code_object(entries.typeEntries) + ";" + java_script_newline()
+    + "const __capy_reflection_enum_values = " + java_script_code_object(entries.enumValueEntries) + ";" + java_script_newline()
     + java_script_newline()
     + "function __capy_reflection_package(metadata) {" + java_script_newline()
     + "    metadata = metadata || Object.create(null);" + java_script_newline()
@@ -7028,6 +7035,35 @@ private fun java_script_zero_arg_lambda(expression: CompiledExpression): bool =
 private fun java_script_reflection_types_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
     java_script_code_object(java_script_reflection_type_entries(modules, allModules))
 
+/// Collects reflection type and enum metadata entries in one module pass.
+private fun java_script_reflection_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): JavaScriptReflectionEntries =
+    match modules[0] with
+    case None -> JavaScriptReflectionEntries { typeEntries: [], enumValueEntries: [] }
+    case Some { module } ->
+        let current = java_script_reflection_entries_in_module(java_script_schema_values("__capy_schema_type|", module.functions), module, allModules)
+        let rest = java_script_reflection_entries(modules[1:], allModules)
+        JavaScriptReflectionEntries {
+            typeEntries: current.typeEntries + rest.typeEntries,
+            enumValueEntries: current.enumValueEntries + rest.enumValueEntries
+        }
+
+/// Collects reflection entries for one module from its schema type list.
+private fun java_script_reflection_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): JavaScriptReflectionEntries =
+    match typeNames[0] with
+    case None -> JavaScriptReflectionEntries { typeEntries: [], enumValueEntries: [] }
+    case Some { typeName } ->
+        let enumValues = java_script_enum_values_in_functions(typeName, module.functions)
+        let rest = java_script_reflection_entries_in_module(typeNames[1:], module, allModules)
+        if !enumValues.is_empty()
+        then JavaScriptReflectionEntries {
+            typeEntries: rest.typeEntries,
+            enumValueEntries: java_script_reflection_enum_value_entries_for_type(typeName, enumValues, module, allModules) + rest.enumValueEntries
+        }
+        else JavaScriptReflectionEntries {
+            typeEntries: [java_script_code_object_entry(typeName, java_script_reflection_type_metadata_literal(typeName, module, allModules))] + rest.typeEntries,
+            enumValueEntries: rest.enumValueEntries
+        }
+
 /// Collects reflection metadata entries for reflection type.
 private fun java_script_reflection_type_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
     match modules[0] with
@@ -7102,8 +7138,9 @@ private fun java_script_reflection_enum_value_entries_in_module(typeNames: List[
     match typeNames[0] with
     case None -> []
     case Some { typeName } ->
-        if java_script_enum_type_exists_in_functions(typeName, module.functions)
-        then java_script_reflection_enum_value_entries_for_type(typeName, java_script_enum_values_in_functions(typeName, module.functions), module, allModules)
+        let enumValues = java_script_enum_values_in_functions(typeName, module.functions)
+        if !enumValues.is_empty()
+        then java_script_reflection_enum_value_entries_for_type(typeName, enumValues, module, allModules)
             + java_script_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
         else java_script_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
 
@@ -7705,8 +7742,9 @@ private fun java_script_data_type_parent_fields(parents: List[String], module: C
 
 /// Collects encoded schema constants for data type.
 private fun java_script_data_type_schema_values(name: String, prefix: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if java_script_schema_type_exists(name, module.functions)
-    then java_script_schema_values(prefix + name + "|", module.functions)
+    let localValues = java_script_schema_values_for_type(name, prefix, module.functions)
+    if localValues.typeExists
+    then localValues.values
     else match java_script_data_type_schema_values_in_imports(name, prefix, module.imports, module, allModules) with
         case Some { value } -> value
         case None -> java_script_data_type_schema_values_in_modules(name, prefix, allModules)
@@ -7716,8 +7754,9 @@ private fun java_script_data_type_schema_values_in_modules(name: String, prefix:
     match modules[0] with
     case None -> []
     case Some { module } ->
-        if java_script_schema_type_exists(name, module.functions)
-        then java_script_schema_values(prefix + name + "|", module.functions)
+        let moduleValues = java_script_schema_values_for_type(name, prefix, module.functions)
+        if moduleValues.typeExists
+        then moduleValues.values
         else java_script_data_type_schema_values_in_modules(name, prefix, modules[1:])
 
 /// Emits JavaScript import statements for data type schema values in.
@@ -7733,8 +7772,9 @@ private fun java_script_data_type_schema_values_in_imports(name: String, prefix:
 private fun java_script_data_type_schema_values_in_import(name: String, prefix: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
     match java_script_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } ->
-        if java_script_schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { java_script_schema_values(prefix + name + "|", importedModule.functions) }
+        let importedValues = java_script_schema_values_for_type(name, prefix, importedModule.functions)
+        if importedValues.typeExists
+        then /capy/lang/Option.Some { importedValues.values }
         else java_script_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
     case None -> java_script_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
 
@@ -7821,6 +7861,22 @@ private fun java_script_schema_type_exists(name: String, functions: List[Compile
     case Some { function } ->
         (java_script_compiled_schema(function) & function.name == "__capy_schema_type|" + name)
             | java_script_schema_type_exists(name, functions[1:])
+
+/// Collects schema values while also checking whether the owning data type exists.
+private fun java_script_schema_values_for_type(name: String, valuePrefix: String, functions: List[CompiledFunction]): JavaScriptSchemaValues =
+    java_script_schema_values_for_type_named("__capy_schema_type|" + name, valuePrefix + name + "|", functions)
+
+private fun java_script_schema_values_for_type_named(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction]): JavaScriptSchemaValues =
+    match functions[0] with
+    case None -> JavaScriptSchemaValues { typeExists: false, values: [] }
+    case Some { function } ->
+        let rest = java_script_schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
+        if java_script_compiled_schema(function)
+        then JavaScriptSchemaValues {
+            typeExists: rest.typeExists | function.name == typeSchemaName,
+            values: if java_script_string_has_prefix(function.name, valuePrefix) then [java_script_schema_value(function)] + rest.values else rest.values
+        }
+        else rest
 
 /// Computes value metadata for schema values.
 private fun java_script_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
