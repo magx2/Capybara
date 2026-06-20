@@ -4,6 +4,62 @@ Generated from `results.csv`. Do not edit by hand.
 
 Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regression.
 
+## 2026-06-20 [77cb03c](https://github.com/magx2/Capybara/commit/77cb03c00cf8d3f7c75bd323c86960d4486186c3)
+
+[Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/4c4e64a6fd0d83eb5718527f4f3d9f57211323b6...77cb03c00cf8d3f7c75bd323c86960d4486186c3)
+
+### Java
+
+- `compile`: 3s (2.632 s) 🟢 Δ-0s / -0%
+- `generate java`: 1m 26s (85.751 s) 🟡 Δ+5s / +6%
+- `generate python`: 1m 25s (84.86 s) 🟡 Δ+5s / +6%
+- `generate js`: 1m 23s (83.159 s) 🟡 Δ+3s / +4%
+- `compile-test`: 17s (16.597 s) 🟢 Δ-1s / -4%
+
+### Python
+
+- `compile`: 3s (2.524 s) 🟢 Δ-0s / -10%
+- `generate java`: 1m 25s (84.972 s) 🟢 Δ-1s / -1%
+- `generate python`: 1m 23s (83.485 s) 🔵 Δ+1s / +1%
+- `generate js`: 1m 22s (82.276 s) 🔵 Δ+1s / +1%
+- `compile-test`: 17s (16.867 s) 🟢 Δ-1s / -6%
+
+### JS
+
+- `compile`: 3s (2.811 s) 🟢 Δ-0s / -5%
+- `generate java`: 1m 25s (84.977 s) 🔵 Δ+1s / +1%
+- `generate python`: 1m 23s (82.86 s) 🔵 Δ+1s / +1%
+- `generate js`: 1m 24s (84.17 s) 🟡 Δ+3s / +4%
+- `compile-test`: 17s (17.205 s) 🔵 Δ+0s / +0%
+
+## 2026-06-19 [4c4e64a](https://github.com/magx2/Capybara/commit/4c4e64a6fd0d83eb5718527f4f3d9f57211323b6)
+
+[Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/5d6201373d073065277f10e8a0b9a37c5c918bf0...4c4e64a6fd0d83eb5718527f4f3d9f57211323b6)
+
+### Java
+
+- `compile`: 3s (2.638 s) 🟡 Δ+0s / +5%
+- `generate java`: 1m 21s (80.621 s) 🟡 Δ+5s / +7%
+- `generate python`: 1m 20s (79.758 s) 🟡 Δ+5s / +7%
+- `generate js`: 1m 20s (79.849 s) 🟡 Δ+6s / +8%
+- `compile-test`: 17s (17.31 s) 🟡 Δ+1s / +6%
+
+### Python
+
+- `compile`: 3s (2.789 s) 🔴 Δ+0s / +18%
+- `generate java`: 1m 26s (85.936 s) 🔴 Δ+10s / +13%
+- `generate python`: 1m 22s (82.359 s) 🟡 Δ+7s / +10%
+- `generate js`: 1m 21s (81.267 s) 🟡 Δ+7s / +9%
+- `compile-test`: 18s (17.941 s) 🟡 Δ+1s / +8%
+
+### JS
+
+- `compile`: 3s (2.955 s) 🔴 Δ+0s / +19%
+- `generate java`: 1m 24s (83.967 s) 🔴 Δ+8s / +11%
+- `generate python`: 1m 22s (82.067 s) 🟡 Δ+7s / +9%
+- `generate js`: 1m 21s (81.2 s) 🟡 Δ+7s / +9%
+- `compile-test`: 17s (17.133 s) 🔵 Δ+0s / +1%
+
 ## 2026-06-19 [5d62013](https://github.com/magx2/Capybara/commit/5d6201373d073065277f10e8a0b9a37c5c918bf0)
 
 [Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/349b20aa03c402bb010d856747a6bb5891e6ae4c...5d6201373d073065277f10e8a0b9a37c5c918bf0)
