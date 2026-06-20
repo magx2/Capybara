@@ -1928,48 +1928,38 @@ private fun compile_types_in_module(types: List[TypeReference], module: ParsedMo
 
 /// Computes the name for object type reference.
 private fun object_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    let interfaceType = object_interface_type_reference_name(name, module, allModules)
-    if interfaceType.is_empty()
-    then object_class_type_reference_name(name, module, allModules)
-    else interfaceType
-
-/// Computes the name for object interface type reference.
-private fun object_interface_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     if compiler_qualified_name(name)
-    then object_interface_type_reference_name_qualified(name, module, allModules)
-    else match find_object_interface_in_module(name, module) with
-        case true -> compiler_java_object_type_name(object_interface_java_name(module, name))
-        case false -> object_interface_type_reference_name_in_imports(name, module.imports, module, allModules)
+    then object_type_reference_name_qualified(name, module, allModules)
+    else
+        let interfaceType = object_interface_type_reference_name(name, module, allModules)
+        if interfaceType.is_empty()
+        then object_class_type_reference_name(name, module, allModules)
+        else interfaceType
 
-/// Computes the name for object class type reference.
-private fun object_class_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    if compiler_qualified_name(name)
-    then object_class_type_reference_name_qualified(name, module, allModules)
-    else match find_object_class_in_module(name, module) with
-        case true -> compiler_java_object_type_name(object_class_java_name(module, name))
-        case false -> object_class_type_reference_name_in_imports(name, module.imports, module, allModules)
-
-/// Computes the name for object interface type reference name qualified.
-private fun object_interface_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+/// Computes the name for a qualified object type reference in one module lookup.
+private fun object_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
     let className = compiler_qualified_class_name(name, module)
     let member = compiler_qualified_member_name(name)
     match find_parsed_module_by_class(className, allModules) with
     case Some { parsedModule } ->
         if find_object_interface_in_module(member, parsedModule)
         then compiler_java_object_type_name(object_interface_java_name(parsedModule, member))
-        else ""
-    case None -> ""
-
-/// Computes the name for object class type reference name qualified.
-private fun object_class_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    let className = compiler_qualified_class_name(name, module)
-    let member = compiler_qualified_member_name(name)
-    match find_parsed_module_by_class(className, allModules) with
-    case Some { parsedModule } ->
-        if find_object_class_in_module(member, parsedModule)
+        else if find_object_class_in_module(member, parsedModule)
         then compiler_java_object_type_name(object_class_java_name(parsedModule, member))
         else ""
     case None -> ""
+
+/// Computes the name for object interface type reference.
+private fun object_interface_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    match find_object_interface_in_module(name, module) with
+    case true -> compiler_java_object_type_name(object_interface_java_name(module, name))
+    case false -> object_interface_type_reference_name_in_imports(name, module.imports, module, allModules)
+
+/// Computes the name for object class type reference.
+private fun object_class_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
+    match find_object_class_in_module(name, module) with
+    case true -> compiler_java_object_type_name(object_class_java_name(module, name))
+    case false -> object_class_type_reference_name_in_imports(name, module.imports, module, allModules)
 
 /// Emits import statements for object interface type reference name in.
 private fun object_interface_type_reference_name_in_imports(name: String, imports: List[ImportDeclaration], module: ParsedModule, allModules: List[ParsedModule]): String =

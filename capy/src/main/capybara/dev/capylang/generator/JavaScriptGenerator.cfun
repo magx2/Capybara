@@ -5116,7 +5116,7 @@ private fun java_script_enum_values(name: String, module: CompiledModule, allMod
 
 /// Checks whether enum type exists in functions exists in the relevant declarations or imports.
 private fun java_script_enum_type_exists_in_functions(name: String, functions: List[CompiledFunction]): bool =
-    !java_script_enum_values_in_functions(name, functions).is_empty()
+    java_script_schema_value_with_prefix_exists("__capy_schema_enum|" + name + "|", functions)
 
 /// Collects enum metadata for enum values in functions.
 private fun java_script_enum_values_in_functions(name: String, functions: List[CompiledFunction]): List[String] =
@@ -7188,10 +7188,6 @@ private fun java_script_zero_arg_lambda(expression: CompiledExpression): bool =
     case CompiledLambdaExpression lambda -> lambda.parameters.is_empty()
     case _ -> false
 
-/// Formats reflection types as a JavaScript literal.
-private fun java_script_reflection_types_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
-    java_script_code_object(java_script_reflection_type_entries(modules, allModules))
-
 /// Collects reflection type and enum metadata entries in one module pass.
 private fun java_script_reflection_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): JavaScriptReflectionEntries =
     match modules[0] with
@@ -7220,24 +7216,6 @@ private fun java_script_reflection_entries_in_module(typeNames: List[String], mo
             typeEntries: [java_script_code_object_entry(typeName, java_script_reflection_type_metadata_literal(typeName, module, allModules))] + rest.typeEntries,
             enumValueEntries: rest.enumValueEntries
         }
-
-/// Collects reflection metadata entries for reflection type.
-private fun java_script_reflection_type_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        java_script_reflection_type_entries_in_module(java_script_schema_values("__capy_schema_type|", module.functions), module, allModules)
-            + java_script_reflection_type_entries(modules[1:], allModules)
-
-/// Collects reflection metadata entries for reflection type entries in a module.
-private fun java_script_reflection_type_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    match typeNames[0] with
-    case None -> []
-    case Some { typeName } ->
-        if java_script_enum_type_exists_in_functions(typeName, module.functions)
-        then java_script_reflection_type_entries_in_module(typeNames[1:], module, allModules)
-        else [java_script_code_object_entry(typeName, java_script_reflection_type_metadata_literal(typeName, module, allModules))]
-            + java_script_reflection_type_entries_in_module(typeNames[1:], module, allModules)
 
 /// Formats reflection type metadata as a JavaScript literal.
 private fun java_script_reflection_type_metadata_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7277,29 +7255,6 @@ private fun java_script_reflection_field_metadata_literal(dataName: String, fiel
             allModules
         )),
     ])
-
-/// Formats reflection enum values as a JavaScript literal.
-private fun java_script_reflection_enum_values_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
-    java_script_code_object(java_script_reflection_enum_value_entries(modules, allModules))
-
-/// Collects reflection metadata entries for reflection enum value.
-private fun java_script_reflection_enum_value_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        java_script_reflection_enum_value_entries_in_module(java_script_schema_values("__capy_schema_type|", module.functions), module, allModules)
-            + java_script_reflection_enum_value_entries(modules[1:], allModules)
-
-/// Collects reflection metadata entries for reflection enum value entries in a module.
-private fun java_script_reflection_enum_value_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    match typeNames[0] with
-    case None -> []
-    case Some { typeName } ->
-        let enumValues = java_script_enum_values_in_functions(typeName, module.functions)
-        if !enumValues.is_empty()
-        then java_script_reflection_enum_value_entries_for_type(typeName, enumValues, module, allModules)
-            + java_script_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
-        else java_script_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
 
 /// Computes the JavaScript type for reflection enum value entries for a.
 private fun java_script_reflection_enum_value_entries_for_type(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
@@ -8059,6 +8014,17 @@ private fun java_script_schema_values(prefix: String, functions: List[CompiledFu
             then [java_script_schema_value(function)] + java_script_schema_values(prefix, functions[1:])
             else java_script_schema_values(prefix, functions[1:])
         else java_script_schema_values(prefix, functions[1:])
+
+/// Checks whether any schema helper has the requested key prefix without materializing values.
+private fun java_script_schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if java_script_compiled_schema(function)
+        then if java_script_string_has_prefix(function.name, prefix)
+            then true
+            else java_script_schema_value_with_prefix_exists(prefix, functions[1:])
+        else java_script_schema_value_with_prefix_exists(prefix, functions[1:])
 
 /// Looks up optional metadata for schema value named.
 private fun java_script_schema_value_named(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =

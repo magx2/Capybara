@@ -27,10 +27,10 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 /// Java generator name binding from a Capybara symbol to its resolved type and Java identifier.
 data JavaBinding { name: String, typeReference: CompiledTypeReference, javaName: String }
-/// Java generator binding that pairs a module class name with a compiled object class.
-data JavaObjectClassBinding { moduleClassName: String, objectClass: CompiledObjectOrientedClass }
-/// Java generator binding that pairs a module class name with a compiled object interface.
-data JavaObjectInterfaceBinding { moduleClassName: String, objectInterface: CompiledObjectOrientedInterface }
+/// Java generator binding that pairs a declaring module with a compiled object class.
+data JavaObjectClassBinding { moduleClassName: String, module: CompiledModule, objectClass: CompiledObjectOrientedClass }
+/// Java generator binding that pairs a declaring module with a compiled object interface.
+data JavaObjectInterfaceBinding { moduleClassName: String, module: CompiledModule, objectInterface: CompiledObjectOrientedInterface }
 /// Java generator binding for an object field and the generated module class that owns it.
 data JavaObjectFieldBinding { moduleClassName: String, objectClass: CompiledObjectOrientedClass, field: CompiledObjectOrientedField }
 /// Java generator binding for an object method and the generated module class that owns it.
@@ -3672,17 +3672,11 @@ private fun object_type_function_call_code(call: CompiledFunctionCallExpression,
 /// Computes the name for object type method call code for.
 private fun object_type_method_call_code_for_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_object_class_in_scope(name, module, allModules) with
-    case Some { binding } -> reflection_object_info_code(binding.objectClass.name, object_class_module(binding.moduleClassName, module, allModules), allModules)
+    case Some { binding } -> reflection_object_info_code(binding.objectClass.name, binding.module, allModules)
     case None ->
         match find_object_interface_by_name(name, module, allModules) with
-        case Some { binding } -> reflection_object_interface_info_code(binding.objectInterface, object_class_module(binding.moduleClassName, module, allModules), allModules)
+        case Some { binding } -> reflection_object_interface_info_code(binding.objectInterface, binding.module, allModules)
         case None -> "unsupported(\"COO type\")"
-
-/// Resolves metadata for object class module during compiler processing.
-private fun object_class_module(moduleClassName: String, fallback: CompiledModule, allModules: List[CompiledModule]): CompiledModule =
-    match find_module_by_class(moduleClassName, allModules) with
-    case Some { module } -> module
-    case None -> fallback
 
 /// Emits generated code for reflection object info.
 private fun reflection_object_info_code(className: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3958,7 +3952,7 @@ private fun find_object_class_in_functions(name: String, functions: List[Compile
         then
             let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
             if className == name
-            then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: compiled_object_class(function, functions) } }
+            then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), module: module, objectClass: compiled_object_class(function, functions) } }
             else find_object_class_in_functions(name, functions[1:], module)
         else find_object_class_in_functions(name, functions[1:], module)
 
@@ -3976,7 +3970,7 @@ private fun find_object_class_in_classes(name: String, classes: List[CompiledObj
     case None -> /capy/lang/Option.None {}
     case Some { objectClass } ->
         if objectClass.name == name
-        then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: objectClass } }
+        then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), module: module, objectClass: objectClass } }
         else find_object_class_in_classes(name, classes[1:], module)
 
 /// Finds an object class in imports in available declarations, imports, or modules.
@@ -4023,7 +4017,7 @@ private fun find_object_class_by_type_in_module(typeName: String, functions: Lis
         then
             let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
             if typeName == java_object_type_name(module, className)
-            then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: compiled_object_class(function, functions) } }
+            then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), module: module, objectClass: compiled_object_class(function, functions) } }
             else find_object_class_by_type_in_module(typeName, functions[1:], module)
         else find_object_class_by_type_in_module(typeName, functions[1:], module)
 
@@ -4051,7 +4045,7 @@ private fun find_object_interface_by_type_in_module(typeName: String, functions:
         then
             let interfaceName = function.name[oo_interface_schema_prefix_size(), function.name.size().value]
             if typeName == java_object_interface_type_name(module, interfaceName)
-            then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: compiled_object_interface(function, functions) } }
+            then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), module: module, objectInterface: compiled_object_interface(function, functions) } }
             else find_object_interface_by_type_in_module(typeName, functions[1:], module)
         else find_object_interface_by_type_in_module(typeName, functions[1:], module)
 
@@ -4084,7 +4078,7 @@ private fun find_object_interface_in_functions(name: String, functions: List[Com
         then
             let interfaceName = function.name[oo_interface_schema_prefix_size(), function.name.size().value]
             if interfaceName == name
-            then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: compiled_object_interface(function, functions) } }
+            then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), module: module, objectInterface: compiled_object_interface(function, functions) } }
             else find_object_interface_in_functions(name, functions[1:], module)
         else find_object_interface_in_functions(name, functions[1:], module)
 
@@ -4094,7 +4088,7 @@ private fun find_object_interface_in_interfaces(name: String, interfaces: List[C
     case None -> /capy/lang/Option.None {}
     case Some { objectInterface } ->
         if objectInterface.name == name
-        then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: objectInterface } }
+        then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), module: module, objectInterface: objectInterface } }
         else find_object_interface_in_interfaces(name, interfaces[1:], module)
 
 /// Finds an object interface in imports in available declarations, imports, or modules.
@@ -9173,6 +9167,17 @@ private fun schema_values(prefix: String, functions: List[CompiledFunction]): Li
             else schema_values(prefix, functions[1:])
         else schema_values(prefix, functions[1:])
 
+/// Checks whether any schema helper has the requested key prefix without materializing values.
+private fun schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if compiled_schema(function)
+        then if java_generator_string_has_prefix(function.name, prefix)
+            then true
+            else schema_value_with_prefix_exists(prefix, functions[1:])
+        else schema_value_with_prefix_exists(prefix, functions[1:])
+
 /// Computes value metadata for schema value.
 private fun schema_value(function: CompiledFunction): String =
     match function.body with
@@ -9207,7 +9212,7 @@ private fun enum_values(name: String, module: CompiledModule, allModules: List[C
 
 /// Checks whether enum type exists in functions exists in the relevant declarations or imports.
 private fun enum_type_exists_in_functions(name: String, functions: List[CompiledFunction]): bool =
-    !enum_values_in_functions(name, functions).is_empty()
+    schema_value_with_prefix_exists("__capy_schema_enum|" + name + "|", functions)
 
 /// Collects enum metadata for enum values in functions.
 private fun enum_values_in_functions(name: String, functions: List[CompiledFunction]): List[String] =

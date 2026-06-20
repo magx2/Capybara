@@ -4328,7 +4328,7 @@ private fun python_enum_values(name: String, module: CompiledModule, allModules:
 
 /// Checks whether enum type exists in functions exists in the relevant declarations or imports.
 private fun python_enum_type_exists_in_functions(name: String, functions: List[CompiledFunction]): bool =
-    !python_enum_values_in_functions(name, functions).is_empty()
+    python_schema_value_with_prefix_exists("__capy_schema_enum|" + name + "|", functions)
 
 /// Collects enum metadata for enum values in functions.
 private fun python_enum_values_in_functions(name: String, functions: List[CompiledFunction]): List[String] =
@@ -7843,10 +7843,6 @@ private fun python_assert_method(name: String): bool =
         | name == "failed"
         | name == "succeeded"
 
-/// Formats reflection types as a Python literal.
-private fun python_reflection_types_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
-    python_code_dict(python_reflection_type_entries(modules, allModules))
-
 /// Collects reflection type and enum metadata entries in one module pass.
 private fun python_reflection_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): PythonReflectionEntries =
     match modules[0] with
@@ -7875,24 +7871,6 @@ private fun python_reflection_entries_in_module(typeNames: List[String], module:
             typeEntries: [python_code_dict_entry(typeName, python_reflection_type_metadata_literal(typeName, module, allModules))] + rest.typeEntries,
             enumValueEntries: rest.enumValueEntries
         }
-
-/// Collects reflection metadata entries for reflection type.
-private fun python_reflection_type_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        python_reflection_type_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
-            + python_reflection_type_entries(modules[1:], allModules)
-
-/// Collects reflection metadata entries for reflection type entries in a module.
-private fun python_reflection_type_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    match typeNames[0] with
-    case None -> []
-    case Some { typeName } ->
-        if python_enum_type_exists_in_functions(typeName, module.functions)
-        then python_reflection_type_entries_in_module(typeNames[1:], module, allModules)
-        else [python_code_dict_entry(typeName, python_reflection_type_metadata_literal(typeName, module, allModules))]
-            + python_reflection_type_entries_in_module(typeNames[1:], module, allModules)
 
 /// Formats reflection type metadata as a Python literal.
 private fun python_reflection_type_metadata_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7932,29 +7910,6 @@ private fun python_reflection_field_metadata_literal(dataName: String, field: St
             allModules
         )),
     ])
-
-/// Formats reflection enum values as a Python literal.
-private fun python_reflection_enum_values_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
-    python_code_dict(python_reflection_enum_value_entries(modules, allModules))
-
-/// Collects reflection metadata entries for reflection enum value.
-private fun python_reflection_enum_value_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        python_reflection_enum_value_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
-            + python_reflection_enum_value_entries(modules[1:], allModules)
-
-/// Collects reflection metadata entries for reflection enum value entries in a module.
-private fun python_reflection_enum_value_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    match typeNames[0] with
-    case None -> []
-    case Some { typeName } ->
-        let enumValues = python_enum_values_in_functions(typeName, module.functions)
-        if !enumValues.is_empty()
-        then python_reflection_enum_value_entries_for_type(typeName, enumValues, module, allModules)
-            + python_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
-        else python_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
 
 /// Computes the Python type for reflection enum value entries for a.
 private fun python_reflection_enum_value_entries_for_type(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
@@ -8551,6 +8506,17 @@ private fun python_schema_values(prefix: String, functions: List[CompiledFunctio
             then [python_schema_value(function)] + python_schema_values(prefix, functions[1:])
             else python_schema_values(prefix, functions[1:])
         else python_schema_values(prefix, functions[1:])
+
+/// Checks whether any schema helper has the requested key prefix without materializing values.
+private fun python_schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if python_compiled_schema(function)
+        then if python_string_has_prefix(function.name, prefix)
+            then true
+            else python_schema_value_with_prefix_exists(prefix, functions[1:])
+        else python_schema_value_with_prefix_exists(prefix, functions[1:])
 
 /// Looks up optional metadata for schema value named.
 private fun python_schema_value_named(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
