@@ -59,6 +59,8 @@ private data CompiledPartialArguments { parameters: List[String], arguments: Lis
 private data RawModuleValidationInput { names: List[String], paths: List[String], inputs: List[String], sourceKinds: List[String] }
 /// Library import additions computed together to avoid repeated import/library scans.
 private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+/// Imported library function and explicit static-import selection computed in one function scan.
+private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
@@ -230,20 +232,32 @@ private fun compile_library_imports(imports: List[CompiledImportDeclaration], li
         then rest
         else match find_imported_library(declaration, libraries) with
             case Some { library } ->
+                let selection = imported_library_selection_from_module(
+                    declaration,
+                    library.functions,
+                    compiled_module_class_name(library),
+                    library_requires_explicit_static_imports(declaration)
+                )
                 CompiledLibraryImports {
-                    functions: imported_library_functions_from_module(declaration, library.functions) + rest.functions,
-                    staticImports: library_static_imports_from_module(declaration, library) + rest.staticImports
+                    functions: selection.functions + rest.functions,
+                    staticImports: library_static_imports_from_selection(declaration, library, selection) + rest.staticImports
                 }
             case None -> rest
 
-/// Filters exported library functions against the names requested by an import.
-private fun imported_library_functions_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction]): List[CompiledFunction] =
+/// Filters exported library functions and explicit static imports in one pass.
+private fun imported_library_selection_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction], className: String, includeStaticImports: bool): CompiledLibraryImportSelection =
     match functions[0] with
-    case None -> []
+    case None -> CompiledLibraryImportSelection { functions: [], staticImports: [] }
     case Some { function } ->
+        let rest = imported_library_selection_from_module(declaration, functions[1:], className, includeStaticImports)
         if imported_library_function(declaration, function)
-        then [function.with(visibility: "imported")] + imported_library_functions_from_module(declaration, functions[1:])
-        else imported_library_functions_from_module(declaration, functions[1:])
+        then CompiledLibraryImportSelection {
+            functions: [function.with(visibility: "imported")] + rest.functions,
+            staticImports: if includeStaticImports
+                then [StaticImport { className: className, memberName: compiler_java_function_name(function), enumValue: false }] + rest.staticImports
+                else rest.staticImports
+        }
+        else rest
 
 /// Checks whether a library function is exported and selected by an import declaration.
 private fun imported_library_function(declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
@@ -252,22 +266,17 @@ private fun imported_library_function(declaration: CompiledImportDeclaration, fu
         & function.visibility != "const:private"
         & !compiler_string_has_prefix(function.visibility, "const:schema")
 
-private fun library_static_imports_from_module(declaration: CompiledImportDeclaration, library: CompiledModule): List[StaticImport] =
+private fun library_static_imports_from_selection(declaration: CompiledImportDeclaration, library: CompiledModule, selection: CompiledLibraryImportSelection): List[StaticImport] =
     if compiler_stdlib_import(declaration.modulePath)
     then []
     else if declaration.wildcard & declaration.excludedNames.is_empty()
     then [StaticImport { className: compiled_module_class_name(library), memberName: "*", enumValue: false }]
-    else explicit_library_static_imports(declaration, library, library.functions)
+    else selection.staticImports
 
-/// Creates member-level static imports when a library import cannot use a wildcard import.
-private fun explicit_library_static_imports(declaration: CompiledImportDeclaration, library: CompiledModule, functions: List[CompiledFunction]): List[StaticImport] =
-    match functions[0] with
-    case None -> []
-    case Some { function } ->
-        if imported_library_function(declaration, function)
-        then [StaticImport { className: compiled_module_class_name(library), memberName: compiler_java_function_name(function), enumValue: false }]
-            + explicit_library_static_imports(declaration, library, functions[1:])
-        else explicit_library_static_imports(declaration, library, functions[1:])
+/// Checks whether a library import needs member-level static imports.
+private fun library_requires_explicit_static_imports(declaration: CompiledImportDeclaration): bool =
+    !compiler_stdlib_import(declaration.modulePath)
+        & !(declaration.wildcard & declaration.excludedNames.is_empty())
 
 /// Finds an imported library in available declarations, imports, or modules.
 private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =

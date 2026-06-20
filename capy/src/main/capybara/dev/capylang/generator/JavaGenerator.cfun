@@ -114,15 +114,18 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     then java_seq_module_code(module)
     else if module.path == "capy/lang" & module.name == "System"
     then java_system_module_code(module)
-    else java_package(module)
+    else
+    let constants = constant_functions(module.functions)
+    let constantBindings = constant_bindings(constants, module, allModules)
+    java_package(module)
     + java_imports(module, allModules)
     + "public final class " + module.name + " {" + newline()
     + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
     + java_function_type_interfaces()
     + java_object_interfaces(compiled_object_interfaces(module.functions), module, allModules)
     + java_object_classes(compiled_object_classes(module.functions), module, allModules)
-    + java_constants(constant_functions(module.functions), [], module, allModules)
-    + java_functions(module.functions, module, allModules, nativeProviderCatalog)
+    + java_constants(constants, [], module, allModules)
+    + java_functions(module.functions, constantBindings, module, allModules, nativeProviderCatalog)
     + java_helpers(module)
     + "}" + newline()
 
@@ -1152,19 +1155,19 @@ private fun constant_java_visibility(function: CompiledFunction): String =
     java_visibility_prefix(function.visibility.replace("const:", ""))
 
 /// Formats Java source text for functions.
-private fun java_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun java_functions(functions: List[CompiledFunction], constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
         if compiled_constant(function) | compiled_object_helper_function(function) | imported_function(function)
-        then java_functions(functions[1:], module, allModules, nativeProviderCatalog)
-        else java_function(function, module, allModules, nativeProviderCatalog) + newline() + java_functions(functions[1:], module, allModules, nativeProviderCatalog)
+        then java_functions(functions[1:], constantBindings, module, allModules, nativeProviderCatalog)
+        else java_function(function, constantBindings, module, allModules, nativeProviderCatalog) + newline() + java_functions(functions[1:], constantBindings, module, allModules, nativeProviderCatalog)
 
 /// Formats Java source text for function.
-private fun java_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun java_function(function: CompiledFunction, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     let returnTypeReference = effective_function_return_type(function, module, allModules)
     let returnType = java_type(returnTypeReference)
-    let env = java_function_bindings(function) + constant_bindings(constant_functions(module.functions), module, allModules)
+    let env = java_function_bindings(function) + constantBindings
     "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
     + java_function_body(function, returnTypeReference, env, module, allModules, nativeProviderCatalog)
     + "    }" + newline()
@@ -7177,9 +7180,10 @@ private fun reflection_call_emittable(call: CompiledFunctionCallExpression, env:
     match call.arguments[0] with
     case None -> false
     case Some { value } ->
+        let valueType = expression_type(value, env, module, allModules)
         call.arguments[1:].is_empty()
             & expression_emittable(value, env, module, allModules)
-            & (generated_data_object_type(expression_type(value, env, module, allModules)) | expression_type(value, env, module, allModules).name == "data")
+            & (generated_data_object_type(valueType) | valueType.name == "data")
 
 /// Emits generated code for reflection call.
 private fun reflection_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
