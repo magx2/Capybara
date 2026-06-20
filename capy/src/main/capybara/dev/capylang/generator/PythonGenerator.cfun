@@ -7386,9 +7386,11 @@ private fun python_test_gather_call_for_function(function: CompiledFunction, mod
 
 /// Checks whether module can be included in generated test gathering.
 private fun python_module_gatherable(module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !python_module_has_primitive_backed_type(module.functions)
-        & python_module_imports_gatherable(module.imports, module, allModules)
-        & python_module_functions_gatherable(module.functions, module, allModules)
+    if python_module_has_primitive_backed_type(module.functions)
+    then false
+    else if python_module_imports_gatherable(module.imports, module, allModules)
+    then python_module_functions_gatherable(module.functions, module, allModules)
+    else false
 
 /// Checks whether module imports can be included in generated test gathering.
 private fun python_module_imports_gatherable(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7399,8 +7401,9 @@ private fun python_module_imports_gatherable(imports: List[CompiledImportDeclara
         then python_module_imports_gatherable(imports[1:], module, allModules)
         else match python_find_imported_module(declaration, module, allModules) with
             case Some { importedModule } ->
-                python_module_functions_gatherable(importedModule.functions, importedModule, allModules)
-                    & python_module_imports_gatherable(imports[1:], module, allModules)
+                if python_module_functions_gatherable(importedModule.functions, importedModule, allModules)
+                then python_module_imports_gatherable(imports[1:], module, allModules)
+                else false
             case None -> false
 
 /// Checks whether a type reference matches the module has primitive backed type rule.
@@ -7419,8 +7422,9 @@ private fun python_module_functions_gatherable(functions: List[CompiledFunction]
     match functions[0] with
     case None -> true
     case Some { function } ->
-        python_function_gatherable(function, module, allModules)
-            & python_module_functions_gatherable(functions[1:], module, allModules)
+        if python_function_gatherable(function, module, allModules)
+        then python_module_functions_gatherable(functions[1:], module, allModules)
+        else false
 
 /// Checks whether function can be included in generated test gathering.
 private fun python_function_gatherable(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7450,8 +7454,9 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
     case CompiledThrowExpression throwExpression -> python_expression_gatherable(throwExpression.value, env, module, allModules)
     case CompiledTryCatchExpression tryCatch ->
-        python_expression_gatherable(tryCatch.body, env, module, allModules)
-            & python_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
+        if python_expression_gatherable(tryCatch.body, env, module, allModules)
+        then python_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
+        else false
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
@@ -7460,21 +7465,25 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledStringLiteral _ -> true
     case CompiledVariableExpression _ -> true
     case CompiledIfExpression ifExpression ->
-        python_expression_gatherable(ifExpression.condition, env, module, allModules)
-            & python_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
-            & python_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+        if python_expression_gatherable(ifExpression.condition, env, module, allModules)
+        then if python_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
+            then python_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+            else false
+        else false
     case CompiledBinaryExpression binary -> python_binary_expression_gatherable(binary, env, module, allModules)
     case CompiledUnaryExpression unary ->
-        python_unary_operator_gatherable(unary.operator)
-            & python_expression_gatherable(unary.expression, env, module, allModules)
+        if python_unary_operator_gatherable(unary.operator)
+        then python_expression_gatherable(unary.expression, env, module, allModules)
+        else false
     case CompiledFunctionCallExpression call ->
         python_function_call_gatherable(call, env, module, allModules)
     case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
     case CompiledMethodCallExpression call ->
         python_method_call_gatherable(call, env, module, allModules)
     case CompiledWithExpression withExpression ->
-        python_expression_gatherable(withExpression.receiver, env, module, allModules)
-            & python_data_fields_gatherable(withExpression.fields, env, module, allModules)
+        if python_expression_gatherable(withExpression.receiver, env, module, allModules)
+        then python_data_fields_gatherable(withExpression.fields, env, module, allModules)
+        else false
     case CompiledLambdaExpression lambda ->
         python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
     case CompiledListLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
@@ -7483,12 +7492,16 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledTupleLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
     case CompiledIndexExpression index -> python_index_expression_gatherable(index, env, module, allModules)
     case CompiledDataLiteral literal -> python_data_fields_gatherable(literal.fields, env, module, allModules)
-    case CompiledFieldAccessExpression access -> python_enum_static_field_access(access, env, module, allModules) | python_expression_gatherable(access.receiver, env, module, allModules)
+    case CompiledFieldAccessExpression access ->
+        if python_enum_static_field_access(access, env, module, allModules)
+        then true
+        else python_expression_gatherable(access.receiver, env, module, allModules)
     case CompiledReduceExpression reduce -> python_reduce_expression_gatherable(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
-        python_bindings_gatherable(block.bindings, env, module, allModules)
-            & python_expression_gatherable(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+        if python_bindings_gatherable(block.bindings, env, module, allModules)
+        then python_expression_gatherable(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+        else false
 
 /// Checks whether OO try/catch branches can be included in generated test gathering.
 private fun python_try_catch_branches_gatherable(branches: List[CompiledTryCatchBranch], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7496,8 +7509,9 @@ private fun python_try_catch_branches_gatherable(branches: List[CompiledTryCatch
     case None -> true
     case Some { branch } ->
         let catchEnv = [PythonBinding { name: branch.catchName, pythonName: python_identifier(branch.catchName), typeName: "Error" }] + env
-        python_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
-            & python_try_catch_branches_gatherable(branches[1:], env, module, allModules)
+        if python_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
+        then python_try_catch_branches_gatherable(branches[1:], env, module, allModules)
+        else false
 
 /// Checks whether binary operator can be included in generated test gathering.
 private fun python_binary_operator_gatherable(operator: String): bool =
@@ -7538,8 +7552,9 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
 
 /// Checks whether collection pipe can be included in generated test gathering.
 private fun python_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(binary.left, env, module, allModules)
-        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+    if python_expression_gatherable(binary.left, env, module, allModules)
+    then python_callable_expression_gatherable(binary.right, env, module, allModules)
+    else false
 
 /// Checks whether lambda expression can be included in generated test gathering.
 private fun python_lambda_expression_gatherable(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7551,8 +7566,9 @@ private fun python_lambda_expression_gatherable_with_bindings(lambda: CompiledLa
 
 /// Checks whether result pipe can be included in generated test gathering.
 private fun python_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(binary.left, env, module, allModules)
-        & python_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+    if python_expression_gatherable(binary.left, env, module, allModules)
+    then python_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+    else false
 
 /// Checks whether async pipe can be included in generated test gathering.
 private fun python_async_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7563,14 +7579,16 @@ private fun python_async_pipe_gatherable(binary: CompiledBinaryExpression, env: 
 private fun python_result_reduce_operator_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match binary.right with
     case CompiledTupleLiteral literal ->
-        python_expression_gatherable(binary.left, env, module, allModules)
-            & python_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+        if python_expression_gatherable(binary.left, env, module, allModules)
+        then python_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+        else false
     case _ -> false
 
 /// Checks whether option pipe can be included in generated test gathering.
 private fun python_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(binary.left, env, module, allModules)
-        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+    if python_expression_gatherable(binary.left, env, module, allModules)
+    then python_callable_expression_gatherable(binary.right, env, module, allModules)
+    else false
 
 /// Checks whether callable expression can be included in generated test gathering.
 private fun python_callable_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7771,16 +7789,18 @@ private fun python_single_callable_argument_gatherable(arguments: List[CompiledE
     match arguments[0] with
     case None -> false
     case Some { argument } ->
-        arguments[1:].is_empty()
-            & python_callable_expression_gatherable(argument, env, module, allModules)
+        if arguments[1:].is_empty()
+        then python_callable_expression_gatherable(argument, env, module, allModules)
+        else false
 
 /// Checks whether result single callable argument can be included in generated test gathering.
 private fun python_result_single_callable_argument_gatherable(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
     case None -> false
     case Some { argument } ->
-        arguments[1:].is_empty()
-            & python_result_callable_expression_gatherable(receiver, argument, env, module, allModules)
+        if arguments[1:].is_empty()
+        then python_result_callable_expression_gatherable(receiver, argument, env, module, allModules)
+        else false
 
 /// Checks whether result reduce arguments can be included in generated test gathering.
 private fun python_result_reduce_arguments_gatherable(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7790,9 +7810,11 @@ private fun python_result_reduce_arguments_gatherable(receiver: CompiledExpressi
         match arguments[1] with
         case None -> false
         case Some { errorMapper } ->
-            arguments[2:].is_empty()
-                & python_result_callable_expression_gatherable(receiver, successMapper, env, module, allModules)
-                & python_callable_expression_gatherable(errorMapper, env, module, allModules)
+            if arguments[2:].is_empty()
+            then if python_result_callable_expression_gatherable(receiver, successMapper, env, module, allModules)
+                then python_callable_expression_gatherable(errorMapper, env, module, allModules)
+                else false
+            else false
 
 /// Checks whether result callable expression can be included in generated test gathering.
 private fun python_result_callable_expression_gatherable(receiver: CompiledExpression, mapper: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7842,34 +7864,44 @@ private fun python_expressions_gatherable(expressions: List[CompiledExpression],
     match expressions[0] with
     case None -> true
     case Some { expression } ->
-        python_expression_gatherable(expression, env, module, allModules)
-            & python_expressions_gatherable(expressions[1:], env, module, allModules)
+        if python_expression_gatherable(expression, env, module, allModules)
+        then python_expressions_gatherable(expressions[1:], env, module, allModules)
+        else false
 
 /// Checks whether dict entries can be included in generated test gathering.
 private fun python_dict_entries_gatherable(entries: List[CompiledDictEntry], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match entries[0] with
     case None -> true
     case Some { entry } ->
-        python_expression_gatherable(entry.key, env, module, allModules)
-            & python_expression_gatherable(entry.value, env, module, allModules)
-            & python_dict_entries_gatherable(entries[1:], env, module, allModules)
+        if python_expression_gatherable(entry.key, env, module, allModules)
+        then if python_expression_gatherable(entry.value, env, module, allModules)
+            then python_dict_entries_gatherable(entries[1:], env, module, allModules)
+            else false
+        else false
 
 /// Checks whether index expression can be included in generated test gathering.
 private fun python_index_expression_gatherable(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = python_expression_type(index.receiver, env, module, allModules)
     if !python_built_in_index_expression(index, receiverType)
     then python_user_defined_index_gatherable(index, receiverType, env, module, allModules)
-    else python_expression_gatherable(index.receiver, env, module, allModules)
-        & python_expression_gatherable(index.index, env, module, allModules)
-        & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+    else if python_expression_gatherable(index.receiver, env, module, allModules)
+    then python_index_parts_gatherable(index, env, module, allModules)
+    else false
+
+private fun python_index_parts_gatherable(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if python_expression_gatherable(index.index, env, module, allModules)
+    then if index.hasEndIndex
+        then python_expression_gatherable(index.endIndex, env, module, allModules)
+        else true
+    else false
 
 /// Checks whether user defined index can be included in generated test gathering.
 private fun python_user_defined_index_gatherable(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
     case Some _ ->
-        python_expression_gatherable(index.receiver, env, module, allModules)
-            & python_expression_gatherable(index.index, env, module, allModules)
-            & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+        if python_expression_gatherable(index.receiver, env, module, allModules)
+        then python_index_parts_gatherable(index, env, module, allModules)
+        else false
     case None -> false
 
 /// Checks whether data fields can be included in generated test gathering.
@@ -7877,22 +7909,29 @@ private fun python_data_fields_gatherable(fields: List[CompiledDataField], env: 
     match fields[0] with
     case None -> true
     case Some { field } ->
-        !field.spread
-            & python_expression_gatherable(field.value, env, module, allModules)
-            & python_data_fields_gatherable(fields[1:], env, module, allModules)
+        if field.spread
+        then false
+        else if python_expression_gatherable(field.value, env, module, allModules)
+        then python_data_fields_gatherable(fields[1:], env, module, allModules)
+        else false
 
 /// Checks whether reduce expression can be included in generated test gathering.
 private fun python_reduce_expression_gatherable(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !reduce.accumulatorName.is_empty()
-        & !reduce.valueName.is_empty()
-        & python_expression_gatherable(reduce.receiver, env, module, allModules)
-        & python_expression_gatherable(reduce.initial, env, module, allModules)
-        & python_expression_gatherable(reduce.body, python_reduce_bindings(reduce, env), module, allModules)
+    if reduce.accumulatorName.is_empty()
+    then false
+    else if reduce.valueName.is_empty()
+    then false
+    else if python_expression_gatherable(reduce.receiver, env, module, allModules)
+    then if python_expression_gatherable(reduce.initial, env, module, allModules)
+        then python_expression_gatherable(reduce.body, python_reduce_bindings(reduce, env), module, allModules)
+        else false
+    else false
 
 /// Checks whether match expression can be included in generated test gathering.
 private fun python_match_expression_gatherable(matchExpression: CompiledMatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(matchExpression.value, env, module, allModules)
-        & python_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    if python_expression_gatherable(matchExpression.value, env, module, allModules)
+    then python_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    else false
 
 /// Checks whether match is supported by the current backend.
 private fun python_match_supported(matchExpression: CompiledMatchExpression): bool =
@@ -7903,23 +7942,43 @@ private fun python_match_cases_gatherable(cases: List[CompiledMatchCase], env: L
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        python_match_case_gatherable(matchCase, env, module, allModules)
-            & (cases[1:].is_empty() | python_match_cases_gatherable(cases[1:], env, module, allModules))
+        if python_match_case_gatherable(matchCase, env, module, allModules)
+        then if cases[1:].is_empty()
+            then true
+            else python_match_cases_gatherable(cases[1:], env, module, allModules)
+        else false
 
 /// Checks whether match case can be included in generated test gathering.
 private fun python_match_case_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_match_case_supported(matchCase)
-        & (!matchCase.hasLiteral | python_expression_gatherable(matchCase.literal, env, module, allModules))
-        & (!matchCase.hasGuard | python_expression_gatherable(matchCase.guard, python_match_case_env(matchCase, env), module, allModules))
-        & python_expression_gatherable(matchCase.body, python_match_case_env(matchCase, env), module, allModules)
+    if python_match_case_supported(matchCase)
+    then python_match_case_literal_guard_body_gatherable(matchCase, env, module, allModules)
+    else false
+
+private fun python_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if matchCase.hasLiteral
+    then if python_expression_gatherable(matchCase.literal, env, module, allModules)
+        then python_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+        else false
+    else python_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+
+private fun python_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let caseEnv = python_match_case_env(matchCase, env)
+    if matchCase.hasGuard
+    then if python_expression_gatherable(matchCase.guard, caseEnv, module, allModules)
+        then python_expression_gatherable(matchCase.body, caseEnv, module, allModules)
+        else false
+    else python_expression_gatherable(matchCase.body, caseEnv, module, allModules)
 
 /// Checks whether match cases is supported by the current backend.
 private fun python_match_cases_supported(cases: List[CompiledMatchCase]): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        python_match_case_supported(matchCase)
-            & (cases[1:].is_empty() | python_match_cases_supported(cases[1:]))
+        if python_match_case_supported(matchCase)
+        then if cases[1:].is_empty()
+            then true
+            else python_match_cases_supported(cases[1:])
+        else false
 
 /// Checks whether match case is supported by the current backend.
 private fun python_match_case_supported(matchCase: CompiledMatchCase): bool =
@@ -7930,9 +7989,11 @@ private fun python_bindings_gatherable(bindings: List[CompiledLetBinding], env: 
     match bindings[0] with
     case None -> true
     case Some { binding } ->
-        (binding.operator == "=" | binding.operator == "<-")
-            & python_expression_gatherable(binding.value, env, module, allModules)
-            & python_bindings_gatherable(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
+        if binding.operator == "=" | binding.operator == "<-"
+        then if python_expression_gatherable(binding.value, env, module, allModules)
+            then python_bindings_gatherable(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
+            else false
+        else false
 
 /// Checks whether test function can be included in generated test gathering.
 private fun python_test_function_gatherable(function: CompiledFunction): bool =

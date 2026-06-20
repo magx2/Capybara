@@ -1627,18 +1627,24 @@ private fun tail_recursive_body_emittable(expression: CompiledExpression, functi
     match expression with
     case CompiledFunctionCallExpression call ->
         if call.name == function.name
-        then tail_self_call_compatible(function.parameters, call.arguments) & expressions_emittable(call.arguments, env, module, allModules)
+        then if tail_self_call_compatible(function.parameters, call.arguments)
+            then expressions_emittable(call.arguments, env, module, allModules)
+            else false
         else expression_emittable(expression, env, module, allModules)
     case CompiledIfExpression ifExpression ->
-        truthy_expression_emittable(ifExpression.condition, env, module, allModules)
-            & tail_recursive_body_emittable(ifExpression.thenBranch, function, env, module, allModules)
-            & tail_recursive_body_emittable(ifExpression.elseBranch, function, env, module, allModules)
+        if truthy_expression_emittable(ifExpression.condition, env, module, allModules)
+        then if tail_recursive_body_emittable(ifExpression.thenBranch, function, env, module, allModules)
+            then tail_recursive_body_emittable(ifExpression.elseBranch, function, env, module, allModules)
+            else false
+        else false
     case CompiledBlockExpression block ->
-        let_bindings_emittable(block.bindings, env, module, allModules)
-            & tail_recursive_body_emittable(block.result, function, block_env(block.bindings, env, module, allModules), module, allModules)
+        if let_bindings_emittable(block.bindings, env, module, allModules)
+        then tail_recursive_body_emittable(block.result, function, block_env(block.bindings, env, module, allModules), module, allModules)
+        else false
     case CompiledMatchExpression matchExpression ->
-        expression_emittable(matchExpression.value, env, module, allModules)
-            & tail_match_cases_emittable(matchExpression.cases, expression_type(matchExpression.value, env, module, allModules), function, env, module, allModules)
+        if expression_emittable(matchExpression.value, env, module, allModules)
+        then tail_match_cases_emittable(matchExpression.cases, expression_type(matchExpression.value, env, module, allModules), function, env, module, allModules)
+        else false
     case _ -> expression_emittable(expression, env, module, allModules)
 
 /// Checks whether tail match cases can be emitted by the target backend.
@@ -1647,28 +1653,49 @@ private fun tail_match_cases_emittable(cases: List[CompiledMatchCase], valueType
     case None -> false
     case Some { matchCase } ->
         let caseEnv = match_env(matchCase.bindings, matchCase, valueType, 0, env, module, allModules)
-        tail_recursive_body_emittable(matchCase.body, function, caseEnv, module, allModules)
-            & (!matchCase.hasGuard | truthy_expression_emittable(matchCase.guard, caseEnv, module, allModules))
-            & (!matchCase.hasLiteral | expression_emittable(matchCase.literal, env, module, allModules))
-            & (cases[1:].is_empty() | tail_match_cases_emittable(cases[1:], valueType, function, env, module, allModules))
+        if tail_recursive_body_emittable(matchCase.body, function, caseEnv, module, allModules)
+        then if matchCase.hasGuard
+            then if truthy_expression_emittable(matchCase.guard, caseEnv, module, allModules)
+                then tail_match_case_literal_and_rest_emittable(matchCase, cases[1:], valueType, function, env, module, allModules)
+                else false
+            else tail_match_case_literal_and_rest_emittable(matchCase, cases[1:], valueType, function, env, module, allModules)
+        else false
+
+private fun tail_match_case_literal_and_rest_emittable(matchCase: CompiledMatchCase, rest: List[CompiledMatchCase], valueType: CompiledTypeReference, function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if matchCase.hasLiteral
+    then if expression_emittable(matchCase.literal, env, module, allModules)
+        then tail_match_case_rest_emittable(rest, valueType, function, env, module, allModules)
+        else false
+    else tail_match_case_rest_emittable(rest, valueType, function, env, module, allModules)
+
+private fun tail_match_case_rest_emittable(rest: List[CompiledMatchCase], valueType: CompiledTypeReference, function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if rest.is_empty()
+    then true
+    else tail_match_cases_emittable(rest, valueType, function, env, module, allModules)
 
 /// Checks whether an expression has the tail recursive expression shape.
 private fun tail_recursive_expression(expression: CompiledExpression, function: CompiledFunction): bool =
     match expression with
     case CompiledFunctionCallExpression call ->
         if call.name == function.name
-        then tail_self_call_compatible(function.parameters, call.arguments) & !expressions_reference_function(call.arguments, function.name)
+        then if tail_self_call_compatible(function.parameters, call.arguments)
+            then !expressions_reference_function(call.arguments, function.name)
+            else false
         else !expressions_reference_function(call.arguments, function.name)
     case CompiledIfExpression ifExpression ->
-        !expression_references_function(ifExpression.condition, function.name)
-            & tail_recursive_expression(ifExpression.thenBranch, function)
-            & tail_recursive_expression(ifExpression.elseBranch, function)
+        if expression_references_function(ifExpression.condition, function.name)
+        then false
+        else if tail_recursive_expression(ifExpression.thenBranch, function)
+        then tail_recursive_expression(ifExpression.elseBranch, function)
+        else false
     case CompiledBlockExpression block ->
-        !let_bindings_reference_function(block.bindings, function.name)
-            & tail_recursive_expression(block.result, function)
+        if let_bindings_reference_function(block.bindings, function.name)
+        then false
+        else tail_recursive_expression(block.result, function)
     case CompiledMatchExpression matchExpression ->
-        !expression_references_function(matchExpression.value, function.name)
-            & tail_match_cases_recursive(matchExpression.cases, function)
+        if expression_references_function(matchExpression.value, function.name)
+        then false
+        else tail_match_cases_recursive(matchExpression.cases, function)
     case _ -> !expression_references_function(expression, function.name)
 
 /// Checks whether the current value satisfies the tail match cases recursive rule for compiler processing.
@@ -1676,10 +1703,23 @@ private fun tail_match_cases_recursive(cases: List[CompiledMatchCase], function:
     match cases[0] with
     case None -> true
     case Some { matchCase } ->
-        (!matchCase.hasLiteral | !expression_references_function(matchCase.literal, function.name))
-            & (!matchCase.hasGuard | !expression_references_function(matchCase.guard, function.name))
-            & tail_recursive_expression(matchCase.body, function)
-            & tail_match_cases_recursive(cases[1:], function)
+        if matchCase.hasLiteral
+        then if expression_references_function(matchCase.literal, function.name)
+            then false
+            else tail_match_case_guard_and_body_recursive(matchCase, cases[1:], function)
+        else tail_match_case_guard_and_body_recursive(matchCase, cases[1:], function)
+
+private fun tail_match_case_guard_and_body_recursive(matchCase: CompiledMatchCase, rest: List[CompiledMatchCase], function: CompiledFunction): bool =
+    if matchCase.hasGuard
+    then if expression_references_function(matchCase.guard, function.name)
+        then false
+        else tail_match_case_body_and_rest_recursive(matchCase, rest, function)
+    else tail_match_case_body_and_rest_recursive(matchCase, rest, function)
+
+private fun tail_match_case_body_and_rest_recursive(matchCase: CompiledMatchCase, rest: List[CompiledMatchCase], function: CompiledFunction): bool =
+    if tail_recursive_expression(matchCase.body, function)
+    then tail_match_cases_recursive(rest, function)
+    else false
 
 /// Checks whether a call has the tail self call compatible shape.
 private fun tail_self_call_compatible(parameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression]): bool =
@@ -8791,7 +8831,9 @@ private fun module_contains_function(expected: CompiledFunction, functions: List
     match functions[0] with
     case None -> false
     case Some { function } ->
-        same_function(expected, function) | module_contains_function(expected, functions[1:])
+        if same_function(expected, function)
+        then true
+        else module_contains_function(expected, functions[1:])
 
 /// Checks whether two function values identify the same entity.
 private fun same_function(first: CompiledFunction, second: CompiledFunction): bool =
@@ -8811,91 +8853,132 @@ private fun expression_references_function(expression: CompiledExpression, name:
     case CompiledStringLiteral _ -> false
     case CompiledVariableExpression _ -> false
     case CompiledIfExpression ifExpression ->
-        expression_references_function(ifExpression.condition, name)
-            | expression_references_function(ifExpression.thenBranch, name)
-            | expression_references_function(ifExpression.elseBranch, name)
+        if expression_references_function(ifExpression.condition, name)
+        then true
+        else if expression_references_function(ifExpression.thenBranch, name)
+        then true
+        else expression_references_function(ifExpression.elseBranch, name)
     case CompiledBinaryExpression binary ->
-        expression_references_function(binary.left, name) | expression_references_function(binary.right, name)
+        if expression_references_function(binary.left, name)
+        then true
+        else expression_references_function(binary.right, name)
     case CompiledUnaryExpression unary -> expression_references_function(unary.expression, name)
     case CompiledFunctionCallExpression call ->
-        call.name == name | expressions_reference_function(call.arguments, name)
+        if call.name == name
+        then true
+        else expressions_reference_function(call.arguments, name)
     case CompiledFunctionReferenceExpression reference -> reference.name == name
     case CompiledMethodCallExpression call ->
-        expression_references_function(call.receiver, name) | expressions_reference_function(call.arguments, name)
+        if expression_references_function(call.receiver, name)
+        then true
+        else expressions_reference_function(call.arguments, name)
     case CompiledWithExpression withExpression ->
-        expression_references_function(withExpression.receiver, name)
-            | data_fields_reference_function(withExpression.fields, name)
+        if expression_references_function(withExpression.receiver, name)
+        then true
+        else data_fields_reference_function(withExpression.fields, name)
     case CompiledLambdaExpression lambda -> expression_references_function(lambda.body, name)
     case CompiledListLiteral literal -> expressions_reference_function(literal.values, name)
     case CompiledSetLiteral literal -> expressions_reference_function(literal.values, name)
     case CompiledDictLiteral literal -> dict_entries_reference_function(literal.entries, name)
     case CompiledTupleLiteral literal -> expressions_reference_function(literal.values, name)
     case CompiledIndexExpression index ->
-        expression_references_function(index.receiver, name)
-            | expression_references_function(index.index, name)
-            | (index.hasEndIndex & expression_references_function(index.endIndex, name))
+        if expression_references_function(index.receiver, name)
+        then true
+        else if expression_references_function(index.index, name)
+        then true
+        else if index.hasEndIndex
+        then expression_references_function(index.endIndex, name)
+        else false
     case CompiledDataLiteral literal -> data_fields_reference_function(literal.fields, name)
     case CompiledFieldAccessExpression access -> expression_references_function(access.receiver, name)
     case CompiledReduceExpression reduce ->
-        expression_references_function(reduce.receiver, name)
-            | expression_references_function(reduce.initial, name)
-            | expression_references_function(reduce.body, name)
+        if expression_references_function(reduce.receiver, name)
+        then true
+        else if expression_references_function(reduce.initial, name)
+        then true
+        else expression_references_function(reduce.body, name)
     case CompiledMatchExpression matchExpression ->
-        expression_references_function(matchExpression.value, name)
-            | match_cases_reference_function(matchExpression.cases, name)
+        if expression_references_function(matchExpression.value, name)
+        then true
+        else match_cases_reference_function(matchExpression.cases, name)
     case CompiledThrowExpression throwExpression -> expression_references_function(throwExpression.value, name)
     case CompiledTryCatchExpression tryCatch ->
-        expression_references_function(tryCatch.body, name)
-            | try_catch_branches_reference_function(tryCatch.branches, name)
+        if expression_references_function(tryCatch.body, name)
+        then true
+        else try_catch_branches_reference_function(tryCatch.branches, name)
     case CompiledBlockExpression block ->
-        let_bindings_reference_function(block.bindings, name)
-            | expression_references_function(block.result, name)
+        if let_bindings_reference_function(block.bindings, name)
+        then true
+        else expression_references_function(block.result, name)
 
 private fun try_catch_branches_reference_function(branches: List[CompiledTryCatchBranch], name: String): bool =
     match branches[0] with
     case None -> false
     case Some { branch } ->
-        expression_references_function(branch.catchBody, name)
-            | try_catch_branches_reference_function(branches[1:], name)
+        if expression_references_function(branch.catchBody, name)
+        then true
+        else try_catch_branches_reference_function(branches[1:], name)
 
 /// Checks whether an expression has the expressions reference function shape.
 private fun expressions_reference_function(expressions: List[CompiledExpression], name: String): bool =
     match expressions[0] with
     case None -> false
-    case Some { expression } -> expression_references_function(expression, name) | expressions_reference_function(expressions[1:], name)
+    case Some { expression } ->
+        if expression_references_function(expression, name)
+        then true
+        else expressions_reference_function(expressions[1:], name)
 
 /// Checks whether a function matches the dict entries reference function metadata.
 private fun dict_entries_reference_function(entries: List[CompiledDictEntry], name: String): bool =
     match entries[0] with
     case None -> false
     case Some { entry } ->
-        expression_references_function(entry.key, name)
-            | expression_references_function(entry.value, name)
-            | dict_entries_reference_function(entries[1:], name)
+        if expression_references_function(entry.key, name)
+        then true
+        else if expression_references_function(entry.value, name)
+        then true
+        else dict_entries_reference_function(entries[1:], name)
 
 /// Checks whether a function matches the data fields reference function metadata.
 private fun data_fields_reference_function(fields: List[CompiledDataField], name: String): bool =
     match fields[0] with
     case None -> false
     case Some { field } ->
-        expression_references_function(field.value, name) | data_fields_reference_function(fields[1:], name)
+        if expression_references_function(field.value, name)
+        then true
+        else data_fields_reference_function(fields[1:], name)
 
 /// Checks whether a function matches the match cases reference function metadata.
 private fun match_cases_reference_function(cases: List[CompiledMatchCase], name: String): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        (matchCase.hasLiteral & expression_references_function(matchCase.literal, name))
-            | (matchCase.hasGuard & expression_references_function(matchCase.guard, name))
-            | expression_references_function(matchCase.body, name)
-            | match_cases_reference_function(cases[1:], name)
+        if matchCase.hasLiteral
+        then if expression_references_function(matchCase.literal, name)
+            then true
+            else match_case_guard_body_or_rest_references_function(matchCase, cases[1:], name)
+        else match_case_guard_body_or_rest_references_function(matchCase, cases[1:], name)
+
+private fun match_case_guard_body_or_rest_references_function(matchCase: CompiledMatchCase, rest: List[CompiledMatchCase], name: String): bool =
+    if matchCase.hasGuard
+    then if expression_references_function(matchCase.guard, name)
+        then true
+        else match_case_body_or_rest_references_function(matchCase, rest, name)
+    else match_case_body_or_rest_references_function(matchCase, rest, name)
+
+private fun match_case_body_or_rest_references_function(matchCase: CompiledMatchCase, rest: List[CompiledMatchCase], name: String): bool =
+    if expression_references_function(matchCase.body, name)
+    then true
+    else match_cases_reference_function(rest, name)
 
 /// Checks whether a function matches the let bindings reference function metadata.
 private fun let_bindings_reference_function(bindings: List[CompiledLetBinding], name: String): bool =
     match bindings[0] with
     case None -> false
     case Some { binding } ->
-        expression_references_function(binding.value, name) | let_bindings_reference_function(bindings[1:], name)
+        if expression_references_function(binding.value, name)
+        then true
+        else let_bindings_reference_function(bindings[1:], name)
 
 /// Finds a function in scope in available declarations, imports, or modules.
 private fun find_function_in_scope(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -10697,7 +10780,10 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     else if call.name == "pure" & effect_member_imported("pure", module.imports)
     then match call.arguments[0] with
         case None -> false
-        case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
+        case Some { argument } ->
+            if call.arguments[1:].is_empty()
+            then expression_emittable(argument, env, module, allModules)
+            else false
     else if async_function_call(call, module)
     then async_function_call_emittable(call, env, module, allModules)
     else if stdlib_effect_function_call(call, module)
@@ -10711,7 +10797,10 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     else if console_print_name(call.name) & console_member_imported(call.name, module.imports)
     then match call.arguments[0] with
         case None -> false
-        case Some { argument } -> call.arguments[1:].is_empty() & expression_emittable(argument, env, module, allModules)
+        case Some { argument } ->
+            if call.arguments[1:].is_empty()
+            then expression_emittable(argument, env, module, allModules)
+            else false
     else if console_read_line_call(call, module)
     then true
     else if stdlib_to_seq_call(call, module)
@@ -10750,12 +10839,14 @@ private fun stdlib_to_seq_call_emittable(call: CompiledFunctionCallExpression, e
 
 /// Checks whether qualified function call can be emitted by the target backend.
 private fun qualified_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !binding_exists(call.name, env)
-        & match find_qualified_function_binding(call.name, module, allModules) with
-            case Some { binding } ->
-                callable_return_type(effective_function_return_type(binding.function, binding.module, allModules))
-                    & parameters_emittable_and_assignable(binding.function.parameters, call.arguments, env, module, allModules)
-            case None -> qualified_call_member(call.name) == "main"
+    if binding_exists(call.name, env)
+    then false
+    else match find_qualified_function_binding(call.name, module, allModules) with
+        case Some { binding } ->
+            if callable_return_type(effective_function_return_type(binding.function, binding.module, allModules))
+            then parameters_emittable_and_assignable(binding.function.parameters, call.arguments, env, module, allModules)
+            else false
+        case None -> qualified_call_member(call.name) == "main"
 
 /// Checks whether function value call can be emitted by the target backend.
 private fun function_value_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -10770,9 +10861,11 @@ private fun function_type_call_arguments_emittable(parameters: List[CompiledType
         match arguments[0] with
         case None -> false
         case Some { argument } ->
-            expression_emittable(argument, env, module, allModules)
-                & value_assignable(parameter, expression_type(argument, env, module, allModules), module, allModules)
-                & function_type_call_arguments_emittable(parameters[1:], arguments[1:], env, module, allModules)
+            if expression_emittable(argument, env, module, allModules)
+            then if value_assignable(parameter, expression_type(argument, env, module, allModules), module, allModules)
+                then function_type_call_arguments_emittable(parameters[1:], arguments[1:], env, module, allModules)
+                else false
+            else false
 
 /// Checks whether function reference can be emitted by the target backend.
 private fun function_reference_emittable(reference: CompiledFunctionReferenceExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =

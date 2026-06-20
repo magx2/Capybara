@@ -6698,8 +6698,9 @@ private fun java_script_test_gather_call_for_function(function: CompiledFunction
 
 /// Checks whether module can be included in generated test gathering.
 private fun java_script_module_gatherable(module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_module_imports_gatherable(module.imports, module, allModules)
-        & java_script_module_functions_gatherable(module.functions, module, allModules)
+    if java_script_module_imports_gatherable(module.imports, module, allModules)
+    then java_script_module_functions_gatherable(module.functions, module, allModules)
+    else false
 
 /// Checks whether module imports can be included in generated test gathering.
 private fun java_script_module_imports_gatherable(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6710,8 +6711,9 @@ private fun java_script_module_imports_gatherable(imports: List[CompiledImportDe
         then java_script_module_imports_gatherable(imports[1:], module, allModules)
         else match java_script_find_imported_module(declaration, module, allModules) with
             case Some { importedModule } ->
-                java_script_module_functions_gatherable(importedModule.functions, importedModule, allModules)
-                    & java_script_module_imports_gatherable(imports[1:], module, allModules)
+                if java_script_module_functions_gatherable(importedModule.functions, importedModule, allModules)
+                then java_script_module_imports_gatherable(imports[1:], module, allModules)
+                else false
             case None -> false
 
 /// Checks whether module functions can be included in generated test gathering.
@@ -6719,8 +6721,9 @@ private fun java_script_module_functions_gatherable(functions: List[CompiledFunc
     match functions[0] with
     case None -> true
     case Some { function } ->
-        java_script_function_gatherable(function, module, allModules)
-            & java_script_module_functions_gatherable(functions[1:], module, allModules)
+        if java_script_function_gatherable(function, module, allModules)
+        then java_script_module_functions_gatherable(functions[1:], module, allModules)
+        else false
 
 /// Checks whether function can be included in generated test gathering.
 private fun java_script_function_gatherable(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6756,8 +6759,9 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
     case CompiledUnsupportedExpression _ -> false
     case CompiledThrowExpression throwExpression -> java_script_expression_gatherable(throwExpression.value, env, module, allModules)
     case CompiledTryCatchExpression tryCatch ->
-        java_script_expression_gatherable(tryCatch.body, env, module, allModules)
-            & java_script_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
+        if java_script_expression_gatherable(tryCatch.body, env, module, allModules)
+        then java_script_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
+        else false
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
@@ -6766,19 +6770,23 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
     case CompiledStringLiteral _ -> true
     case CompiledVariableExpression _ -> true
     case CompiledIfExpression ifExpression ->
-        java_script_expression_gatherable(ifExpression.condition, env, module, allModules)
-            & java_script_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
-            & java_script_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+        if java_script_expression_gatherable(ifExpression.condition, env, module, allModules)
+        then if java_script_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
+            then java_script_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+            else false
+        else false
     case CompiledBinaryExpression binary -> java_script_binary_expression_gatherable(binary, env, module, allModules)
     case CompiledUnaryExpression unary ->
-        java_script_unary_operator_gatherable(unary.operator)
-            & java_script_expression_gatherable(unary.expression, env, module, allModules)
+        if java_script_unary_operator_gatherable(unary.operator)
+        then java_script_expression_gatherable(unary.expression, env, module, allModules)
+        else false
     case CompiledFunctionCallExpression call -> java_script_function_call_gatherable(call, env, module, allModules)
     case CompiledFunctionReferenceExpression reference -> java_script_function_reference_gatherable(reference, module, allModules)
     case CompiledMethodCallExpression call -> java_script_method_call_gatherable(call, env, module, allModules)
     case CompiledWithExpression withExpression ->
-        java_script_expression_gatherable(withExpression.receiver, env, module, allModules)
-            & java_script_data_fields_gatherable(withExpression.fields, env, module, allModules)
+        if java_script_expression_gatherable(withExpression.receiver, env, module, allModules)
+        then java_script_data_fields_gatherable(withExpression.fields, env, module, allModules)
+        else false
     case CompiledLambdaExpression lambda ->
         java_script_expression_gatherable(lambda.body, java_script_lambda_bindings(lambda.parameters) + env, module, allModules)
     case CompiledListLiteral literal -> java_script_expressions_gatherable(literal.values, env, module, allModules)
@@ -6791,8 +6799,9 @@ private fun java_script_expression_gatherable(expression: CompiledExpression, en
     case CompiledReduceExpression reduce -> java_script_reduce_expression_gatherable(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> java_script_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
-        java_script_bindings_gatherable(block.bindings, env, module, allModules)
-            & java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
+        if java_script_bindings_gatherable(block.bindings, env, module, allModules)
+        then java_script_expression_gatherable(block.result, java_script_block_env(block.bindings, env, module, allModules), module, allModules)
+        else false
 
 /// Checks whether OO try/catch branches can be included in generated test gathering.
 private fun java_script_try_catch_branches_gatherable(branches: List[CompiledTryCatchBranch], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6800,8 +6809,9 @@ private fun java_script_try_catch_branches_gatherable(branches: List[CompiledTry
     case None -> true
     case Some { branch } ->
         let catchEnv = [JavaScriptBinding { name: branch.catchName, jsName: java_script_identifier(branch.catchName), typeName: "Error" }] + env
-        java_script_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
-            & java_script_try_catch_branches_gatherable(branches[1:], env, module, allModules)
+        if java_script_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
+        then java_script_try_catch_branches_gatherable(branches[1:], env, module, allModules)
+        else false
 
 /// Checks whether binary expression can be included in generated test gathering.
 private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6846,13 +6856,15 @@ private fun java_script_option_pipe_gatherable(binary: CompiledBinaryExpression,
 
 /// Checks whether pipe can be included in generated test gathering.
 private fun java_script_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_expression_gatherable(binary.left, env, module, allModules)
-        & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
+    if java_script_expression_gatherable(binary.left, env, module, allModules)
+    then java_script_callable_expression_gatherable(binary.right, env, module, allModules)
+    else false
 
 /// Checks whether result pipe can be included in generated test gathering.
 private fun java_script_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_expression_gatherable(binary.left, env, module, allModules)
-        & java_script_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+    if java_script_expression_gatherable(binary.left, env, module, allModules)
+    then java_script_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+    else false
 
 /// Checks whether async pipe can be included in generated test gathering.
 private fun java_script_async_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6863,8 +6875,9 @@ private fun java_script_async_pipe_gatherable(binary: CompiledBinaryExpression, 
 private fun java_script_result_reduce_operator_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match binary.right with
     case CompiledTupleLiteral literal ->
-        java_script_expression_gatherable(binary.left, env, module, allModules)
-            & java_script_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+        if java_script_expression_gatherable(binary.left, env, module, allModules)
+        then java_script_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+        else false
     case _ -> false
 
 private fun java_script_collection_reduce_operator_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6876,9 +6889,11 @@ private fun java_script_collection_reduce_operator_gatherable(binary: CompiledBi
             match literal.values[1] with
             case None -> false
             case Some { reducer } ->
-                java_script_expression_gatherable(binary.left, env, module, allModules)
-                    & java_script_expression_gatherable(initial, env, module, allModules)
-                    & java_script_callable_expression_gatherable(reducer, env, module, allModules)
+                if java_script_expression_gatherable(binary.left, env, module, allModules)
+                then if java_script_expression_gatherable(initial, env, module, allModules)
+                    then java_script_callable_expression_gatherable(reducer, env, module, allModules)
+                    else false
+                else false
     }
     case _ -> false
 
@@ -6932,9 +6947,13 @@ private fun java_script_unary_operator_gatherable(operator: String): bool =
 
 /// Checks whether index expression can be included in generated test gathering.
 private fun java_script_index_expression_gatherable(index: CompiledIndexExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_expression_gatherable(index.receiver, env, module, allModules)
-        & java_script_expression_gatherable(index.index, env, module, allModules)
-        & (!index.hasEndIndex | java_script_expression_gatherable(index.endIndex, env, module, allModules))
+    if java_script_expression_gatherable(index.receiver, env, module, allModules)
+    then if java_script_expression_gatherable(index.index, env, module, allModules)
+        then if index.hasEndIndex
+            then java_script_expression_gatherable(index.endIndex, env, module, allModules)
+            else true
+        else false
+    else false
 
 /// Checks whether function call can be included in generated test gathering.
 private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7102,21 +7121,28 @@ private fun java_script_collection_reduce_method_gatherable(call: CompiledMethod
         match call.arguments[1] with
         case None -> false
         case Some { reducer } ->
-            call.arguments[2:].is_empty()
-                & java_script_expression_gatherable(call.receiver, env, module, allModules)
-                & java_script_expression_gatherable(initial, env, module, allModules)
-                & java_script_callable_expression_gatherable(reducer, env, module, allModules)
+            if call.arguments[2:].is_empty()
+            then if java_script_expression_gatherable(call.receiver, env, module, allModules)
+                then if java_script_expression_gatherable(initial, env, module, allModules)
+                    then java_script_callable_expression_gatherable(reducer, env, module, allModules)
+                    else false
+                else false
+            else false
 
 /// Checks whether collection predicate can be included in generated test gathering.
 private fun java_script_collection_predicate_gatherable(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_expression_gatherable(call.receiver, env, module, allModules)
-        & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+    if java_script_expression_gatherable(call.receiver, env, module, allModules)
+    then java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+    else false
 
 /// Checks whether single callable argument can be included in generated test gathering.
 private fun java_script_single_callable_argument_gatherable(arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
     case None -> false
-    case Some { argument } -> arguments[1:].is_empty() & java_script_callable_expression_gatherable(argument, env, module, allModules)
+    case Some { argument } ->
+        if arguments[1:].is_empty()
+        then java_script_callable_expression_gatherable(argument, env, module, allModules)
+        else false
 
 /// Checks whether result reduce arguments can be included in generated test gathering.
 private fun java_script_result_reduce_arguments_gatherable(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7126,9 +7152,11 @@ private fun java_script_result_reduce_arguments_gatherable(receiver: CompiledExp
         match arguments[1] with
         case None -> false
         case Some { errorMapper } ->
-            arguments[2:].is_empty()
-                & java_script_result_callable_expression_gatherable(receiver, successMapper, env, module, allModules)
-                & java_script_callable_expression_gatherable(errorMapper, env, module, allModules)
+            if arguments[2:].is_empty()
+            then if java_script_result_callable_expression_gatherable(receiver, successMapper, env, module, allModules)
+                then java_script_callable_expression_gatherable(errorMapper, env, module, allModules)
+                else false
+            else false
 
 /// Checks whether result callable expression can be included in generated test gathering.
 private fun java_script_result_callable_expression_gatherable(receiver: CompiledExpression, mapper: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7177,38 +7205,47 @@ private fun java_script_expressions_gatherable(expressions: List[CompiledExpress
     match expressions[0] with
     case None -> true
     case Some { expression } ->
-        java_script_expression_gatherable(expression, env, module, allModules)
-            & java_script_expressions_gatherable(expressions[1:], env, module, allModules)
+        if java_script_expression_gatherable(expression, env, module, allModules)
+        then java_script_expressions_gatherable(expressions[1:], env, module, allModules)
+        else false
 
 /// Checks whether dict entries can be included in generated test gathering.
 private fun java_script_dict_entries_gatherable(entries: List[CompiledDictEntry], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match entries[0] with
     case None -> true
     case Some { entry } ->
-        java_script_expression_gatherable(entry.key, env, module, allModules)
-            & java_script_expression_gatherable(entry.value, env, module, allModules)
-            & java_script_dict_entries_gatherable(entries[1:], env, module, allModules)
+        if java_script_expression_gatherable(entry.key, env, module, allModules)
+        then if java_script_expression_gatherable(entry.value, env, module, allModules)
+            then java_script_dict_entries_gatherable(entries[1:], env, module, allModules)
+            else false
+        else false
 
 /// Checks whether data fields can be included in generated test gathering.
 private fun java_script_data_fields_gatherable(fields: List[CompiledDataField], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match fields[0] with
     case None -> true
     case Some { field } ->
-        java_script_expression_gatherable(field.value, env, module, allModules)
-            & java_script_data_fields_gatherable(fields[1:], env, module, allModules)
+        if java_script_expression_gatherable(field.value, env, module, allModules)
+        then java_script_data_fields_gatherable(fields[1:], env, module, allModules)
+        else false
 
 /// Checks whether reduce expression can be included in generated test gathering.
 private fun java_script_reduce_expression_gatherable(reduce: CompiledReduceExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !reduce.accumulatorName.is_empty()
-        & !reduce.valueName.is_empty()
-        & java_script_expression_gatherable(reduce.receiver, env, module, allModules)
-        & java_script_expression_gatherable(reduce.initial, env, module, allModules)
-        & java_script_expression_gatherable(reduce.body, java_script_reduce_bindings(reduce, env), module, allModules)
+    if reduce.accumulatorName.is_empty()
+    then false
+    else if reduce.valueName.is_empty()
+    then false
+    else if java_script_expression_gatherable(reduce.receiver, env, module, allModules)
+    then if java_script_expression_gatherable(reduce.initial, env, module, allModules)
+        then java_script_expression_gatherable(reduce.body, java_script_reduce_bindings(reduce, env), module, allModules)
+        else false
+    else false
 
 /// Checks whether match expression can be included in generated test gathering.
 private fun java_script_match_expression_gatherable(matchExpression: CompiledMatchExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_expression_gatherable(matchExpression.value, env, module, allModules)
-        & java_script_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    if java_script_expression_gatherable(matchExpression.value, env, module, allModules)
+    then java_script_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    else false
 
 /// Checks whether match is supported by the current backend.
 private fun java_script_match_supported(matchExpression: CompiledMatchExpression): bool =
@@ -7219,23 +7256,43 @@ private fun java_script_match_cases_gatherable(cases: List[CompiledMatchCase], e
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        java_script_match_case_gatherable(matchCase, env, module, allModules)
-            & (cases[1:].is_empty() | java_script_match_cases_gatherable(cases[1:], env, module, allModules))
+        if java_script_match_case_gatherable(matchCase, env, module, allModules)
+        then if cases[1:].is_empty()
+            then true
+            else java_script_match_cases_gatherable(cases[1:], env, module, allModules)
+        else false
 
 /// Checks whether match case can be included in generated test gathering.
 private fun java_script_match_case_gatherable(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_match_case_supported(matchCase)
-        & (!matchCase.hasLiteral | java_script_expression_gatherable(matchCase.literal, env, module, allModules))
-        & (!matchCase.hasGuard | java_script_expression_gatherable(matchCase.guard, java_script_match_case_env(matchCase, env), module, allModules))
-        & java_script_expression_gatherable(matchCase.body, java_script_match_case_env(matchCase, env), module, allModules)
+    if java_script_match_case_supported(matchCase)
+    then java_script_match_case_literal_guard_body_gatherable(matchCase, env, module, allModules)
+    else false
+
+private fun java_script_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if matchCase.hasLiteral
+    then if java_script_expression_gatherable(matchCase.literal, env, module, allModules)
+        then java_script_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+        else false
+    else java_script_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+
+private fun java_script_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let caseEnv = java_script_match_case_env(matchCase, env)
+    if matchCase.hasGuard
+    then if java_script_expression_gatherable(matchCase.guard, caseEnv, module, allModules)
+        then java_script_expression_gatherable(matchCase.body, caseEnv, module, allModules)
+        else false
+    else java_script_expression_gatherable(matchCase.body, caseEnv, module, allModules)
 
 /// Checks whether match cases is supported by the current backend.
 private fun java_script_match_cases_supported(cases: List[CompiledMatchCase]): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        java_script_match_case_supported(matchCase)
-            & (cases[1:].is_empty() | java_script_match_cases_supported(cases[1:]))
+        if java_script_match_case_supported(matchCase)
+        then if cases[1:].is_empty()
+            then true
+            else java_script_match_cases_supported(cases[1:])
+        else false
 
 /// Checks whether match case is supported by the current backend.
 private fun java_script_match_case_supported(matchCase: CompiledMatchCase): bool =
@@ -7248,8 +7305,9 @@ private fun java_script_bindings_gatherable(bindings: List[CompiledLetBinding], 
     case Some { binding } ->
         let jsBinding = java_script_let_binding(binding, env, module, allModules)
         if binding.operator == "=" | binding.operator == "<-"
-        then java_script_expression_gatherable(binding.value, env, module, allModules)
-            & java_script_bindings_gatherable(bindings[1:], [jsBinding] + env, module, allModules)
+        then if java_script_expression_gatherable(binding.value, env, module, allModules)
+            then java_script_bindings_gatherable(bindings[1:], [jsBinding] + env, module, allModules)
+            else false
         else false
 
 /// Checks whether test function can be included in generated test gathering.

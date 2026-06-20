@@ -2009,8 +2009,10 @@ private fun object_type_reference_names_in_imports(name: String, imports: List[I
                     interfaceTypeName: compiler_java_object_type_name(object_interface_java_name(importedModule, name)),
                     classTypeName: classTypeName
                 }
-                else if classTypeName.is_empty() & find_object_class_in_module(name, importedModule)
-                then object_type_reference_names_in_imports(name, imports[1:], module, allModules, compiler_java_object_type_name(object_class_java_name(importedModule, name)))
+                else if classTypeName.is_empty()
+                then if find_object_class_in_module(name, importedModule)
+                    then object_type_reference_names_in_imports(name, imports[1:], module, allModules, compiler_java_object_type_name(object_class_java_name(importedModule, name)))
+                    else object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
                 else object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
             case None -> object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
         else object_type_reference_names_in_imports(name, imports[1:], module, allModules, classTypeName)
