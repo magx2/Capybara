@@ -31,7 +31,7 @@ private data JavaScriptSchemaValues { typeExists: bool, values: List[String] }
 /// JavaScript reflection table entries collected together to avoid duplicate schema scans.
 private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 /// JavaScript source sections collected in one pass over compiled functions.
-private data JavaScriptFunctionSections { constants: String, functions: String }
+private data JavaScriptFunctionSections { constants: String, functions: String, hasOverloadedFunctions: bool }
 /// Constructor statements collected in one scan over object helper functions.
 private data JavaScriptObjectConstructorStatements { fieldStatements: String, initStatements: String }
 /// Object class helper metadata collected in one scan over object helper functions.
@@ -84,7 +84,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     + sections.constants
     + java_script_newline()
     + sections.functions
-    + java_script_overload_dispatchers(module.functions)
+    + java_script_overload_dispatchers_with_flag(module.functions, sections.hasOverloadedFunctions)
     + java_script_exports(module.functions)
 
 /// Emits JavaScript runtime support source for runtime symbols.
@@ -1098,33 +1098,45 @@ private fun java_script_object_constructor_name(className: String): String =
 /// Formats JavaScript constants and functions in one pass over compiled functions.
 private fun java_script_function_sections(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): JavaScriptFunctionSections =
     match functions[0] with
-    case None -> JavaScriptFunctionSections { constants: "", functions: "" }
+    case None -> JavaScriptFunctionSections { constants: "", functions: "", hasOverloadedFunctions: false }
     case Some { function } ->
         let rest = java_script_function_sections(functions[1:], module, allModules, nativeProviderCatalog)
-        if java_script_emitted_constant(function)
+        if java_script_compiled_constant(function)
+            & !java_script_compiled_schema(function)
         then JavaScriptFunctionSections {
-            constants: java_script_constant(function, module, allModules) + rest.constants,
-            functions: rest.functions
-        }
+                constants: java_script_constant(function, module, allModules) + rest.constants,
+                functions: rest.functions,
+                hasOverloadedFunctions: rest.hasOverloadedFunctions
+            }
         else
             let objectHelperCode = java_script_object_helper_code(function, functions, module, allModules)
             if !objectHelperCode.is_empty()
             then JavaScriptFunctionSections {
                 constants: rest.constants,
-                functions: objectHelperCode + rest.functions
+                functions: objectHelperCode + rest.functions,
+                hasOverloadedFunctions: rest.hasOverloadedFunctions
             }
-            else if java_script_skip_function(function)
+            else if java_script_compiled_constant(function)
+            then rest
+            else if java_script_imported_function(function)
+            then rest
+            else if java_script_compiled_object_helper_function(function)
             then rest
             else JavaScriptFunctionSections {
                 constants: rest.constants,
                 functions: java_script_function(function, module, allModules, nativeProviderCatalog)
                     + java_script_newline()
-                    + rest.functions
+                    + rest.functions,
+                hasOverloadedFunctions: rest.hasOverloadedFunctions | java_script_overloaded_function_name(function.name, functions)
             }
 
 /// Formats JavaScript source text for overload dispatchers.
 private fun java_script_overload_dispatchers(functions: List[CompiledFunction]): String =
-    if !java_script_has_overloaded_functions(functions)
+    java_script_overload_dispatchers_with_flag(functions, java_script_has_overloaded_functions(functions))
+
+/// Formats JavaScript source text for overload dispatchers with a precomputed overload flag.
+private fun java_script_overload_dispatchers_with_flag(functions: List[CompiledFunction], hasOverloadedFunctions: bool): String =
+    if !hasOverloadedFunctions
     then ""
     else
         let dispatchers = java_script_overload_dispatcher_functions(functions, [])

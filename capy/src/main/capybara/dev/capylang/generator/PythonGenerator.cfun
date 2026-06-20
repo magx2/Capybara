@@ -597,12 +597,16 @@ private fun python_function_sections(functions: List[CompiledFunction], module: 
     case None -> PythonFunctionSections { constants: "", functions: "" }
     case Some { function } ->
         let rest = python_function_sections(functions[1:], module, allModules, nativeProviderCatalog)
-        if python_emitted_constant(function)
-        then PythonFunctionSections {
-            constants: python_constant(function, module, allModules) + rest.constants,
-            functions: rest.functions
-        }
-        else if python_skip_function(function)
+        if python_compiled_constant(function)
+        then if python_compiled_schema(function)
+            then rest
+            else PythonFunctionSections {
+                constants: python_constant(function, module, allModules) + rest.constants,
+                functions: rest.functions
+            }
+        else if python_imported_function(function)
+        then rest
+        else if python_compiled_object_helper_function(function)
         then rest
         else PythonFunctionSections {
             constants: rest.constants,

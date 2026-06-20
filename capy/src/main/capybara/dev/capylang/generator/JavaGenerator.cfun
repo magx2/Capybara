@@ -1340,7 +1340,7 @@ private fun java_functions(functions: List[CompiledFunction], constantBindings: 
 
 /// Formats Java source text for function.
 private fun java_function(function: CompiledFunction, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    let returnTypeReference = effective_function_return_type(function, module, allModules)
+    let returnTypeReference = effective_function_return_type_with_module_constants(function, module, allModules, constantBindings)
     let returnType = java_type(returnTypeReference)
     let env = java_function_bindings(function) + constantBindings
     "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
@@ -8743,8 +8743,37 @@ private fun effective_function_return_type(function: CompiledFunction, module: C
     then function.returnType
     else
         let owner = function_owner_module(function, module, allModules)
-        let env = java_function_bindings(function) + constant_bindings(constant_functions(owner.functions), owner, allModules)
-        expression_type(function.body, env, owner, allModules)
+        effective_function_return_type_with_constants(
+            function,
+            owner,
+            allModules,
+            constant_bindings(constant_functions(owner.functions), owner, allModules)
+        )
+
+/// Computes effective return type while reusing constants already collected for the generated module.
+private fun effective_function_return_type_with_module_constants(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], constantBindings: List[JavaBinding]): CompiledTypeReference =
+    if concrete_return_type(function.returnType) | function.returnType.name == "any"
+    then function.returnType
+    else if expression_references_function(function.body, function.name)
+    then function.returnType
+    else
+        let owner = function_owner_module(function, module, allModules)
+        if same_java_module(owner, module)
+        then effective_function_return_type_with_constants(function, owner, allModules, constantBindings)
+        else effective_function_return_type_with_constants(
+            function,
+            owner,
+            allModules,
+            constant_bindings(constant_functions(owner.functions), owner, allModules)
+        )
+
+/// Computes effective return type with precomputed constant bindings for the owning module.
+private fun effective_function_return_type_with_constants(function: CompiledFunction, owner: CompiledModule, allModules: List[CompiledModule], constantBindings: List[JavaBinding]): CompiledTypeReference =
+    expression_type(function.body, java_function_bindings(function) + constantBindings, owner, allModules)
+
+/// Checks whether two compiled modules identify the same generated Java module.
+private fun same_java_module(first: CompiledModule, second: CompiledModule): bool =
+    first.name == second.name & first.path == second.path
 
 /// Resolves metadata for function owner module during compiler processing.
 private fun function_owner_module(function: CompiledFunction, fallback: CompiledModule, modules: List[CompiledModule]): CompiledModule =

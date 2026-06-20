@@ -1896,22 +1896,28 @@ private fun compile_type(type: TypeReference): CompiledTypeReference =
 
 /// Converts a parsed type in a module into compiled metadata.
 private fun compile_type_in_module(type: TypeReference, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
-    let separators = compiler_type_name_separators(type.name)
-    let objectTypeName =
-        if compiler_uppercase_type_name_at(type.name, separators.lastTypeSeparator + 1)
-        then if compiler_unqualified_type_without_visible_objects(separators, module)
-            then ""
-            else object_type_reference_name_at(type.name, separators.lastDotSeparator, module, allModules)
-        else ""
-    if objectTypeName.is_empty()
+    if type.name.is_empty()
     then CompiledTypeReference {
         name: type.name,
         arguments: compile_types_in_module(type.arguments, module, allModules)
     }
-    else CompiledTypeReference {
-        name: objectTypeName,
-        arguments: []
-    }
+    else
+        let separators = compiler_type_name_separators(type.name)
+        let objectTypeName =
+            if compiler_uppercase_type_name_at(type.name, separators.lastTypeSeparator + 1)
+            then if compiler_unqualified_type_without_visible_objects(separators, module)
+                then ""
+                else object_type_reference_name_at(type.name, separators.lastDotSeparator, module, allModules)
+            else ""
+        if objectTypeName.is_empty()
+        then CompiledTypeReference {
+            name: type.name,
+            arguments: compile_types_in_module(type.arguments, module, allModules)
+        }
+        else CompiledTypeReference {
+            name: objectTypeName,
+            arguments: []
+        }
 
 /// Checks whether a parsed type name can refer to an object class or interface.
 private fun compiler_object_type_reference_candidate(name: String): bool =
