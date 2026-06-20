@@ -1159,73 +1159,76 @@ private fun python_this_binding_is_object(name: String, env: List[PythonBinding]
 
 /// Emits Python code for method call.
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = python_expression_type(call.receiver, env, module, allModules)
-    let receiver = python_expression_code(call.receiver, env, module, allModules)
     if python_partial_method_call(call)
     then
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        let receiver = python_expression_code(call.receiver, env, module, allModules)
         let names = python_partial_placeholder_names(call.arguments, env)
         "lambda " + python_lambda_parameters(names) + ": "
             + python_partial_method_call_body_code(call, receiverType, receiver, names, env, module, allModules)
     else if call.name == "__capy_call"
     then python_callable_call_code(call, env, module, allModules)
-    else if python_effect_method_call(call, receiverType)
-    then python_effect_method_call_code(call, env, module, allModules)
-    else if python_effect_start_method_call(call, receiverType)
-    then "__capy_async_start(" + receiver + ")"
-    else if python_async_join_method_call(call, receiverType)
-    then "__capy_async_join(" + receiver + ")"
-    else if python_async_map_method_call(call, receiverType)
-    then python_async_pipe_code(python_async_map_method_binary(call), env, module, allModules)
-    else if python_result_method_call(call, receiverType)
-    then python_result_method_call_code(call, env, module, allModules)
-    else if python_option_method_call(call, receiverType)
-    then python_option_pipe_code(python_option_method_binary(call), env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
-    then "__capy_size(" + receiver + ")"
-    else if python_enum_name_method_call(call, receiverType, module, allModules)
-    then "__capy_enum_name(" + receiver + ")"
-    else if python_char_to_string_method_call(call, receiverType)
-    then "__capy_to_string(" + receiver + ")"
-    else if python_string_get_method_call(call, receiverType)
-    then python_string_get_method_code(call, env, module, allModules)
-    else if python_string_parse_method_call(call, receiverType)
-    then python_string_parse_method_code(call, env, module, allModules)
-    else if python_string_method_call(call, receiverType)
-    then python_string_method_code(call, env, module, allModules)
-    else if python_regex_method_call(call, receiverType)
-    then python_regex_method_call_code(call, env, module, allModules)
-    else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
-    then python_stdlib_date_time_method_call_code_with_receiver_type(call, python_type_unqualified_name(receiverType), receiver, env, module, allModules)
-    else if python_set_method_call(call, receiverType)
-    then python_set_method_call_code(call, env, module, allModules)
-    else if python_collection_reduce_method_call(call, receiverType)
-    then python_collection_reduce_method_code(call, receiverType, env, module, allModules)
-    else if python_collection_method_call(call, receiverType)
-    then python_collection_pipe_code(python_collection_method_binary(call), env, module, allModules)
-    else if python_native_collection_method_call_with_receiver_type(call, receiverType)
-    then python_native_collection_method_call_code(call, receiverType, receiver, env, module, allModules)
-    else if python_seq_as_list_call(call)
-    then "__capy_as_list(" + receiver + ")"
-    else if python_seq_first_call(call, receiverType)
-    then "__capy_index(__capy_as_list(" + receiver + "), 0)"
-    else if python_collection_predicate_call(call, receiverType)
-    then python_collection_predicate_call_code(call, env, module, allModules)
-    else if python_primitive_conversion_method_call(call, receiverType)
-    then python_primitive_conversion_method_code(call, env, module, allModules)
-    else if python_object_type_method_call(call, env, module, allModules)
-    then python_object_type_method_call_code(call, module, allModules)
-    else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
-        case Some _ ->
-            "Effect.delay(lambda: "
-                + receiver
-                + "." + python_method_name(call.name)
-                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
-        case None ->
-            match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
-            case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
+    then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        let receiver = python_expression_code(call.receiver, env, module, allModules)
+        if python_effect_method_call(call, receiverType)
+        then python_effect_method_call_code(call, env, module, allModules)
+        else if python_effect_start_method_call(call, receiverType)
+        then "__capy_async_start(" + receiver + ")"
+        else if python_async_join_method_call(call, receiverType)
+        then "__capy_async_join(" + receiver + ")"
+        else if python_async_map_method_call(call, receiverType)
+        then python_async_pipe_code(python_async_map_method_binary(call), env, module, allModules)
+        else if python_result_method_call(call, receiverType)
+        then python_result_method_call_code(call, env, module, allModules)
+        else if python_option_method_call(call, receiverType)
+        then python_option_pipe_code(python_option_method_binary(call), env, module, allModules)
+        else if python_enum_name_method_call(call, receiverType, module, allModules)
+        then "__capy_enum_name(" + receiver + ")"
+        else if python_char_to_string_method_call(call, receiverType)
+        then "__capy_to_string(" + receiver + ")"
+        else if python_string_get_method_call(call, receiverType)
+        then python_string_get_method_code(call, env, module, allModules)
+        else if python_string_parse_method_call(call, receiverType)
+        then python_string_parse_method_code(call, env, module, allModules)
+        else if python_string_method_call(call, receiverType)
+        then python_string_method_code(call, env, module, allModules)
+        else if python_regex_method_call(call, receiverType)
+        then python_regex_method_call_code(call, env, module, allModules)
+        else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+        then python_stdlib_date_time_method_call_code_with_receiver_type(call, python_type_unqualified_name(receiverType), receiver, env, module, allModules)
+        else if python_set_method_call(call, receiverType)
+        then python_set_method_call_code(call, env, module, allModules)
+        else if python_collection_reduce_method_call(call, receiverType)
+        then python_collection_reduce_method_code(call, receiverType, env, module, allModules)
+        else if python_collection_method_call(call, receiverType)
+        then python_collection_pipe_code(python_collection_method_binary(call), env, module, allModules)
+        else if python_native_collection_method_call_with_receiver_type(call, receiverType)
+        then python_native_collection_method_call_code(call, receiverType, receiver, env, module, allModules)
+        else if python_seq_as_list_call(call)
+        then "__capy_as_list(" + receiver + ")"
+        else if python_seq_first_call(call, receiverType)
+        then "__capy_index(__capy_as_list(" + receiver + "), 0)"
+        else if python_collection_predicate_call(call, receiverType)
+        then python_collection_predicate_call_code(call, env, module, allModules)
+        else if python_primitive_conversion_method_call(call, receiverType)
+        then python_primitive_conversion_method_code(call, env, module, allModules)
+        else if python_object_type_method_call(call, env, module, allModules)
+        then python_object_type_method_call_code(call, module, allModules)
+        else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+            case Some _ ->
+                "Effect.delay(lambda: "
+                    + receiver
+                    + "." + python_method_name(call.name)
+                    + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
             case None ->
-                receiver + "." + python_method_name(call.name)
-                    + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+                match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
+                case None ->
+                    receiver + "." + python_method_name(call.name)
+                        + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a call has the object constructor call shape.
 private fun python_object_constructor_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3414,63 +3417,64 @@ private fun python_module_member_imported(member: String, imports: List[Compiled
 
 /// Infers the expression type for method call.
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = python_expression_type(call.receiver, env, module, allModules)
     if call.name == "__capy_call"
     then python_callable_call_expression_type(call, env, module, allModules)
     else if call.name == "size"
     then python_int_type()
-    else if python_enum_name_method_call(call, receiverType, module, allModules)
-    then python_string_type()
-    else if python_char_to_string_method_call(call, receiverType)
-    then python_string_type()
-    else if python_string_get_method_call(call, receiverType)
-    then python_string_get_method_return_type(call)
-    else if python_string_parse_method_call(call, receiverType)
-    then python_result_type()
-    else if python_string_method_call(call, receiverType)
-    then python_string_method_return_type(call.name)
-    else if python_regex_method_call(call, receiverType)
-    then python_regex_method_call_type(call.name)
-    else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
-    then python_stdlib_date_time_method_call_type_with_receiver(call, python_type_unqualified_name(receiverType), env, module, allModules)
-    else if python_set_method_call(call, receiverType)
-    then python_set_method_call_type(call, env, module, allModules)
-    else if python_native_collection_method_call_with_receiver_type(call, receiverType)
-    then python_native_collection_method_call_type(call, receiverType)
-    else if python_seq_as_list_call(call)
-    then python_list_type()
-    else if python_collection_predicate_call(call, receiverType)
-    then python_bool_type()
-    else if python_primitive_conversion_method_call(call, receiverType)
-    then if call.name == "to_int" then python_int_type() else python_long_type()
-    else if python_object_type_method_call(call, env, module, allModules)
-    then python_object_type_method_call_type(call, module, allModules)
-    else if python_effect_method_call(call, receiverType)
-    then python_effect_type()
-    else if python_effect_start_method_call(call, receiverType)
-    then python_async_type()
-    else if python_async_join_method_call(call, receiverType)
-    then python_effect_type()
-    else if python_async_map_method_call(call, receiverType)
-    then python_async_type()
-    else if python_result_method_call(call, receiverType)
-    then python_result_method_call_type(call, env, module, allModules)
-    else if python_option_method_call(call, receiverType)
-    then python_option_type()
-    else if python_assert_method(call.name)
-    then python_assert_type()
-    else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
-        case Some _ -> python_effect_type()
-        case None ->
-            if python_collection_reduce_method_call(call, receiverType)
-            then python_first_method_argument_type(call.arguments, env, module, allModules)
-            else if python_collection_method_call(call, receiverType)
-            then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
-            else if python_seq_first_call(call, receiverType)
-            then python_option_type()
-            else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
-                case Some { function } -> function.returnType.name
-                case None -> python_unknown_type()
+    else
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        if python_enum_name_method_call(call, receiverType, module, allModules)
+        then python_string_type()
+        else if python_char_to_string_method_call(call, receiverType)
+        then python_string_type()
+        else if python_string_get_method_call(call, receiverType)
+        then python_string_get_method_return_type(call)
+        else if python_string_parse_method_call(call, receiverType)
+        then python_result_type()
+        else if python_string_method_call(call, receiverType)
+        then python_string_method_return_type(call.name)
+        else if python_regex_method_call(call, receiverType)
+        then python_regex_method_call_type(call.name)
+        else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+        then python_stdlib_date_time_method_call_type_with_receiver(call, python_type_unqualified_name(receiverType), env, module, allModules)
+        else if python_set_method_call(call, receiverType)
+        then python_set_method_call_type(call, env, module, allModules)
+        else if python_native_collection_method_call_with_receiver_type(call, receiverType)
+        then python_native_collection_method_call_type(call, receiverType)
+        else if python_seq_as_list_call(call)
+        then python_list_type()
+        else if python_collection_predicate_call(call, receiverType)
+        then python_bool_type()
+        else if python_primitive_conversion_method_call(call, receiverType)
+        then if call.name == "to_int" then python_int_type() else python_long_type()
+        else if python_object_type_method_call(call, env, module, allModules)
+        then python_object_type_method_call_type(call, module, allModules)
+        else if python_effect_method_call(call, receiverType)
+        then python_effect_type()
+        else if python_effect_start_method_call(call, receiverType)
+        then python_async_type()
+        else if python_async_join_method_call(call, receiverType)
+        then python_effect_type()
+        else if python_async_map_method_call(call, receiverType)
+        then python_async_type()
+        else if python_result_method_call(call, receiverType)
+        then python_result_method_call_type(call, env, module, allModules)
+        else if python_option_method_call(call, receiverType)
+        then python_option_type()
+        else if python_assert_method(call.name)
+        then python_assert_type()
+        else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+            case Some _ -> python_effect_type()
+            case None ->
+                if python_collection_reduce_method_call(call, receiverType)
+                then python_first_method_argument_type(call.arguments, env, module, allModules)
+                else if python_collection_method_call(call, receiverType)
+                then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
+                else if python_seq_first_call(call, receiverType)
+                then python_option_type()
+                else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                    case Some { function } -> function.returnType.name
+                    case None -> python_unknown_type()
 
 /// Computes the Python type for result method call.
 private fun python_result_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7476,7 +7480,6 @@ private fun python_callable_binding_type(typeName: String): bool =
 
 /// Checks whether method call can be included in generated test gathering.
 private fun python_method_call_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let receiverType = python_expression_type(call.receiver, env, module, allModules)
     if python_assert_method(call.name)
     then if python_expression_gatherable(call.receiver, env, module, allModules)
         then python_expressions_gatherable(call.arguments, env, module, allModules)
@@ -7490,67 +7493,69 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then if call.arguments.is_empty()
         then python_expression_gatherable(call.receiver, env, module, allModules)
         else false
-    else if python_char_to_string_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_string_get_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_string_parse_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_string_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_regex_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_set_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_native_collection_method_call_with_receiver_type(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_seq_as_list_call(call)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_collection_predicate_call(call, receiverType)
-    then python_collection_predicate_gatherable(call, env, module, allModules)
-    else if python_primitive_conversion_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_enum_name_method_call(call, receiverType, module, allModules)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
-        case Some _ ->
-            python_expression_gatherable(call.receiver, env, module, allModules)
-                & python_expressions_gatherable(call.arguments, env, module, allModules)
-        case None ->
-            if python_object_receiver_type(receiverType)
-            then python_expression_gatherable(call.receiver, env, module, allModules)
-                & python_expressions_gatherable(call.arguments, env, module, allModules)
-            else if python_effect_method_call(call, receiverType)
-            then python_effect_method_gatherable(call, env, module, allModules)
-            else if python_effect_start_method_call(call, receiverType)
-            then python_expression_gatherable(call.receiver, env, module, allModules)
-            else if python_async_join_method_call(call, receiverType)
-            then python_expression_gatherable(call.receiver, env, module, allModules)
-            else if python_async_map_method_call(call, receiverType)
-            then python_async_pipe_gatherable(python_async_map_method_binary(call), env, module, allModules)
-            else if python_result_method_call(call, receiverType)
-            then python_result_method_gatherable(call, env, module, allModules)
-            else if python_option_method_call(call, receiverType)
-            then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
-            else if python_collection_reduce_method_call(call, receiverType)
-            then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
-            else if python_collection_method_call(call, receiverType)
-            then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
-            else if python_seq_first_call(call, receiverType)
-            then python_expression_gatherable(call.receiver, env, module, allModules)
-            else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
-                case Some _ ->
-                    python_expression_gatherable(call.receiver, env, module, allModules)
-                        & python_expressions_gatherable(call.arguments, env, module, allModules)
-                case None -> false
+    else
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        if python_char_to_string_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_string_get_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_string_parse_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_string_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_regex_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_set_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_native_collection_method_call_with_receiver_type(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_seq_as_list_call(call)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_collection_predicate_call(call, receiverType)
+        then python_collection_predicate_gatherable(call, env, module, allModules)
+        else if python_primitive_conversion_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_enum_name_method_call(call, receiverType, module, allModules)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+            case Some _ ->
+                python_expression_gatherable(call.receiver, env, module, allModules)
+                    & python_expressions_gatherable(call.arguments, env, module, allModules)
+            case None ->
+                if python_object_receiver_type(receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                    & python_expressions_gatherable(call.arguments, env, module, allModules)
+                else if python_effect_method_call(call, receiverType)
+                then python_effect_method_gatherable(call, env, module, allModules)
+                else if python_effect_start_method_call(call, receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                else if python_async_join_method_call(call, receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                else if python_async_map_method_call(call, receiverType)
+                then python_async_pipe_gatherable(python_async_map_method_binary(call), env, module, allModules)
+                else if python_result_method_call(call, receiverType)
+                then python_result_method_gatherable(call, env, module, allModules)
+                else if python_option_method_call(call, receiverType)
+                then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
+                else if python_collection_reduce_method_call(call, receiverType)
+                then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
+                else if python_collection_method_call(call, receiverType)
+                then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
+                else if python_seq_first_call(call, receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                    case Some _ ->
+                        python_expression_gatherable(call.receiver, env, module, allModules)
+                            & python_expressions_gatherable(call.arguments, env, module, allModules)
+                    case None -> false
 
 /// Checks whether effect method can be included in generated test gathering.
 private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

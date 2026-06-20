@@ -3397,10 +3397,11 @@ private fun partial_parameter_expression_list_code(parameters: List[CompiledFunc
     match expressions[0] with
     case None -> ""
     case Some { expression } ->
-        let parameterType = parameter_type_at(parameters, 0, expression_type(expression, env, module, allModules))
         if partial_placeholder_expression(expression)
         then partial_argument_name(names) + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names[1:], env, module, allModules)
-        else expression_code(expression, env, parameterType, module, allModules)
+        else
+            let parameterType = parameter_type_for_expression(parameters, expression, env, module, allModules)
+            expression_code(expression, env, parameterType, module, allModules)
             + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names, env, module, allModules)
 
 /// Formats the recursive tail segment for partial parameter expression list.
@@ -3408,10 +3409,11 @@ private fun partial_parameter_expression_list_tail(parameters: List[CompiledFunc
     match expressions[0] with
     case None -> ""
     case Some { expression } ->
-        let parameterType = parameter_type_at(parameters, 0, expression_type(expression, env, module, allModules))
         if partial_placeholder_expression(expression)
         then ", " + partial_argument_name(names) + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names[1:], env, module, allModules)
-        else ", " + expression_code(expression, env, parameterType, module, allModules)
+        else
+            let parameterType = parameter_type_for_expression(parameters, expression, env, module, allModules)
+            ", " + expression_code(expression, env, parameterType, module, allModules)
             + partial_parameter_expression_list_tail(parameters[1:], expressions[1:], names, env, module, allModules)
 
 /// Emits generated code for partial expression list.
@@ -4223,7 +4225,7 @@ private fun parameter_expression_list_code(parameters: List[CompiledFunctionPara
     match expressions[0] with
     case None -> ""
     case Some { expression } ->
-        let parameterType = parameter_type_at(parameters, 0, expression_type(expression, env, module, allModules))
+        let parameterType = parameter_type_for_expression(parameters, expression, env, module, allModules)
         expression_code(expression, env, parameterType, module, allModules)
         + parameter_expression_list_tail(parameters[1:], expressions[1:], env, module, allModules)
 
@@ -4232,9 +4234,15 @@ private fun parameter_expression_list_tail(parameters: List[CompiledFunctionPara
     match expressions[0] with
     case None -> ""
     case Some { expression } ->
-        let parameterType = parameter_type_at(parameters, 0, expression_type(expression, env, module, allModules))
+        let parameterType = parameter_type_for_expression(parameters, expression, env, module, allModules)
         ", " + expression_code(expression, env, parameterType, module, allModules)
         + parameter_expression_list_tail(parameters[1:], expressions[1:], env, module, allModules)
+
+/// Resolves a parameter type without inferring the expression type when a declaration is available.
+private fun parameter_type_for_expression(parameters: List[CompiledFunctionParameter], expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match parameters[0] with
+    case Some { parameter } -> parameter.typeReference
+    case None -> expression_type(expression, env, module, allModules)
 
 /// Resolves type metadata for parameter type at.
 private fun parameter_type_at(parameters: List[CompiledFunctionParameter], idx: int, fallback: CompiledTypeReference): CompiledTypeReference =
@@ -8326,7 +8334,9 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then int_type()
     else
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    if call.name == "to_string" & call.arguments.is_empty() & receiverType.name == "char"
+    if call.name == "__capy_call" & function_type(receiverType)
+    then function_type_return_type(receiverType)
+    else if call.name == "to_string" & call.arguments.is_empty() & receiverType.name == "char"
     then string_type()
     else if call.name == "name" & call.arguments.is_empty() & (receiverType.name == "enum" | enum_type_exists(receiverType.name, module, allModules))
     then string_type()
@@ -8353,8 +8363,6 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then list_type(collection_value_type(receiverType))
     else if call.name == "first" & call.arguments.is_empty() & seq_type_name(receiverType.name)
     then option_type(collection_value_type(receiverType))
-    else if call.name == "__capy_call" & function_type(receiverType)
-    then function_type_return_type(receiverType)
     else if (call.name == "reduce" | call.name == "reduce_left") & result_reduce_method_arguments(call.arguments) & result_type_name(receiverType.name)
     then result_reduce_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if (call.name == "map" | call.name == "flat_map") & result_map_method_argument(call.arguments) & result_type_name(receiverType.name)

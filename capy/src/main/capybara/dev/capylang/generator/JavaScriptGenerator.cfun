@@ -2275,6 +2275,8 @@ private fun java_script_reflection_call_code(call: CompiledFunctionCallExpressio
 private fun java_script_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "__capy_call"
     then java_script_callable_call_code(call, env, module, allModules)
+    else if java_script_size_method_call(call)
+    then "__capy_size(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else
         let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
         let receiverBaseType = java_script_type_unqualified_name(receiverType)
@@ -2282,9 +2284,7 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
         let emptyArguments = call.arguments.is_empty()
         let oneArgument = java_script_one_method_argument(call.arguments)
         let twoArguments = java_script_two_method_arguments(call.arguments)
-        if java_script_size_method_call(call)
-        then "__capy_size(" + receiver + ")"
-        else if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
+        if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
         then "__capy_enum_name(" + receiver + ")"
         else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
         then "__capy_to_string(" + receiver + ")"
@@ -4458,72 +4458,71 @@ private fun java_script_data_field_type(name: String, fields: List[String]): Str
 
 /// Infers the expression type for method call.
 private fun java_script_method_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
-    let receiverBaseType = java_script_type_unqualified_name(receiverType)
-    let emptyArguments = call.arguments.is_empty()
-    let oneArgument = java_script_one_method_argument(call.arguments)
-    let twoArguments = java_script_two_method_arguments(call.arguments)
     if call.name == "__capy_call"
-    then if java_script_callable_binding_type(receiverType)
-        then java_script_callable_return_type(receiverType)
-        else java_script_unknown_type()
+    then java_script_callable_call_expression_type(call, env, module, allModules)
     else if java_script_size_method_call(call)
     then "int"
-    else if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
-    then "String"
-    else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
-    then "String"
-    else if call.name == "get" & (oneArgument | twoArguments) & receiverType == "String"
-    then java_script_string_get_method_return_type(call)
-    else if java_script_string_parse_method_name(call.name) & emptyArguments & java_script_string_parse_receiver_type(receiverType)
-    then "Result"
-    else if java_script_string_method_arity(call.name, call.arguments) & java_script_string_method_receiver_type(call.name, receiverType)
-    then java_script_string_method_return_type(call.name)
-    else if java_script_regex_method_arity(call) & java_script_regex_receiver_type(receiverType)
-    then java_script_regex_method_call_type(call.name)
-    else if java_script_date_time_method_candidate(call.name, emptyArguments, oneArgument, twoArguments)
-        & java_script_date_time_method_call(receiverBaseType, call.name, emptyArguments, oneArgument, twoArguments)
-    then java_script_date_time_method_call_type(receiverBaseType, call.name)
-    else if call.name == "start" & emptyArguments & receiverType == "Effect"
-    then "Async"
-    else if call.name == "join" & emptyArguments & receiverBaseType == "Async"
-    then "Effect"
-    else if java_script_async_map_method_name(call.name) & java_script_single_callable_argument(call.arguments) & receiverBaseType == "Async"
-    then "Async"
-    else if (call.name == "map" | call.name == "flat_map" | call.name == "flatMap") & java_script_single_callable_argument(call.arguments) & receiverType == "Effect"
-    then "Effect"
-    else if call.name == "is_empty" & emptyArguments & java_script_collection_receiver_type(receiverType)
-    then "bool"
-    else if call.name == "get" & (oneArgument | twoArguments) & java_script_collection_get_receiver_type(receiverBaseType) & java_script_collection_get_arity(receiverBaseType, call.arguments)
-    then if receiverBaseType == "List" & twoArguments
+    else
+        let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+        let receiverBaseType = java_script_type_unqualified_name(receiverType)
+        let emptyArguments = call.arguments.is_empty()
+        let oneArgument = java_script_one_method_argument(call.arguments)
+        let twoArguments = java_script_two_method_arguments(call.arguments)
+        if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
+        then "String"
+        else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
+        then "String"
+        else if call.name == "get" & (oneArgument | twoArguments) & receiverType == "String"
+        then java_script_string_get_method_return_type(call)
+        else if java_script_string_parse_method_name(call.name) & emptyArguments & java_script_string_parse_receiver_type(receiverType)
+        then "Result"
+        else if java_script_string_method_arity(call.name, call.arguments) & java_script_string_method_receiver_type(call.name, receiverType)
+        then java_script_string_method_return_type(call.name)
+        else if java_script_regex_method_arity(call) & java_script_regex_receiver_type(receiverType)
+        then java_script_regex_method_call_type(call.name)
+        else if java_script_date_time_method_candidate(call.name, emptyArguments, oneArgument, twoArguments)
+            & java_script_date_time_method_call(receiverBaseType, call.name, emptyArguments, oneArgument, twoArguments)
+        then java_script_date_time_method_call_type(receiverBaseType, call.name)
+        else if call.name == "start" & emptyArguments & receiverType == "Effect"
+        then "Async"
+        else if call.name == "join" & emptyArguments & receiverBaseType == "Async"
+        then "Effect"
+        else if java_script_async_map_method_name(call.name) & java_script_single_callable_argument(call.arguments) & receiverBaseType == "Async"
+        then "Async"
+        else if (call.name == "map" | call.name == "flat_map" | call.name == "flatMap") & java_script_single_callable_argument(call.arguments) & receiverType == "Effect"
+        then "Effect"
+        else if call.name == "is_empty" & emptyArguments & java_script_collection_receiver_type(receiverType)
+        then "bool"
+        else if call.name == "get" & (oneArgument | twoArguments) & java_script_collection_get_receiver_type(receiverBaseType) & java_script_collection_get_arity(receiverBaseType, call.arguments)
+        then if receiverBaseType == "List" & twoArguments
+            then "List"
+            else if receiverBaseType == "Tuple"
+            then java_script_unknown_type()
+            else "Option"
+        else if (call.name == "contains" | call.name == "contains_key") & oneArgument & ((call.name == "contains" & java_script_collection_contains_receiver_type(receiverBaseType)) | (call.name == "contains_key" & receiverBaseType == "Dict"))
+        then "bool"
+        else if java_script_set_method_arity(call) & receiverBaseType == "Set"
+        then java_script_set_method_return_type(call.name)
+        else if java_script_seq_as_list_call(call)
         then "List"
-        else if receiverBaseType == "Tuple"
+        else if call.name == "first" & emptyArguments & java_script_collection_receiver_type(receiverType)
+        then "Option"
+        else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
+        then java_script_collection_pipe_result_type(java_script_collection_method_operator(call.name), receiverType)
+        else if java_script_collection_reduce_method_call_with_receiver_type(call, receiverType)
+        then java_script_collection_reduce_method_type(call, env, module, allModules)
+        else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
+        then "bool"
+        else if java_script_primitive_conversion_method(call.name) & emptyArguments & java_script_primitive_conversion_receiver(call.name, receiverType)
+        then java_script_primitive_conversion_result_type(call.name)
+        else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
         then java_script_unknown_type()
-        else "Option"
-    else if (call.name == "contains" | call.name == "contains_key") & oneArgument & ((call.name == "contains" & java_script_collection_contains_receiver_type(receiverBaseType)) | (call.name == "contains_key" & receiverBaseType == "Dict"))
-    then "bool"
-    else if java_script_set_method_arity(call) & receiverBaseType == "Set"
-    then java_script_set_method_return_type(call.name)
-    else if java_script_seq_as_list_call(call)
-    then "List"
-    else if call.name == "first" & emptyArguments & java_script_collection_receiver_type(receiverType)
-    then "Option"
-    else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
-    then java_script_collection_pipe_result_type(java_script_collection_method_operator(call.name), receiverType)
-    else if java_script_collection_reduce_method_call_with_receiver_type(call, receiverType)
-    then java_script_collection_reduce_method_type(call, env, module, allModules)
-    else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
-    then "bool"
-    else if java_script_primitive_conversion_method(call.name) & emptyArguments & java_script_primitive_conversion_receiver(call.name, receiverType)
-    then java_script_primitive_conversion_result_type(call.name)
-    else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
-    then java_script_unknown_type()
-    else match java_script_find_local_extension_method_with_receiver_type(receiverType, call, module) with
-    case Some { function } -> function.returnType.name
-    case None ->
-        match java_script_find_imported_extension_method_return_type_with_receiver_type(receiverType, call, module, allModules) with
-        case Some { returnType } -> returnType
-        case None -> java_script_unknown_type()
+        else match java_script_find_local_extension_method_with_receiver_type(receiverType, call, module) with
+        case Some { function } -> function.returnType.name
+        case None ->
+            match java_script_find_imported_extension_method_return_type_with_receiver_type(receiverType, call, module, allModules) with
+            case Some { returnType } -> returnType
+            case None -> java_script_unknown_type()
 
 /// Infers the expression type for callable call.
 private fun java_script_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =

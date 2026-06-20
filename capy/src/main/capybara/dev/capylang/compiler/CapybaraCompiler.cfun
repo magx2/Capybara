@@ -64,11 +64,18 @@ private data CompiledLibraryImportSelection { functions: List[CompiledFunction],
 /// Precomputed import path forms used while matching one import against available libraries.
 private data CompiledImportLibraryLookup { modulePath: String, normalizedPath: String, normalizedImportPath: String }
 /// Field schema and initializer functions built together after compiling the field type once.
-private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
+private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], annotations: List[CompiledFunction], initializers: List[CompiledFunction] }
+/// Field schema and annotation functions built together in one field pass.
+private data CompiledDataFieldFunctions { schemas: List[CompiledFunction], annotations: List[CompiledFunction] }
 /// Raw deriver data needed for derived method expansion.
 private data CompiledRawDeriverDeclaration { name: String, methods: List[FunctionDeclaration] }
 /// Raw deriver declarations indexed once per module for derive expansion.
-private data CompiledDefinitionIndexes { derivers: Dict[CompiledRawDeriverDeclaration], compiledDerivers: Dict[CompiledDeriverDeclaration] }
+private data CompiledDefinitionIndexes {
+    derivers: Dict[CompiledRawDeriverDeclaration],
+    compiledDerivers: Dict[CompiledDeriverDeclaration],
+    visiblePrimitiveBackedTypes: Dict[CompiledPrimitiveBackedType],
+    annotations: Dict[CompiledAnnotationDeclaration]
+}
 
 /// Parses raw modules and compiles them with libraries and native-provider manifests into a program or diagnostics.
 fun compile(
@@ -188,30 +195,20 @@ private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule
 
 /// Converts a parsed module into compiled metadata.
 private fun compile_module(module: ParsedModule, allModules: List[ParsedModule]): CompiledModule =
-    let definitionIndexes = compile_definition_indexes(module.definitions)
+    let definitionIndexes = compile_definition_indexes(module.definitions, module, allModules)
     CompiledModule {
         name: module.name,
         path: normalize_module_path(module.path),
         types: {:},
-        visiblePrimitiveBackedTypes: compile_primitive_backed_types(module.definitions, module, allModules),
+        visiblePrimitiveBackedTypes: definitionIndexes.visiblePrimitiveBackedTypes,
         functions: compile_functions(module.definitions, definitionIndexes, module, allModules)
             + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
             + compile_object_class_functions(module.objectOriented.classes, module, allModules),
         imports: compile_imports(module.imports),
         derivers: definitionIndexes.compiledDerivers,
-        annotations: compile_annotations(module.definitions),
+        annotations: definitionIndexes.annotations,
         staticImports: []
     }
-
-/// Converts parsed primitive backed types into compiled metadata.
-private fun compile_primitive_backed_types(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): Dict[CompiledPrimitiveBackedType] =
-    match definitions[0] with
-    case None -> {:}
-    case Some { definition } ->
-        match definition with
-        case PrimitiveBackedTypeDeclaration declaration ->
-            compile_primitive_backed_types(definitions[1:], module, allModules) + (declaration.name, compile_primitive_backed_type(declaration, module, allModules))
-        case _ -> compile_primitive_backed_types(definitions[1:], module, allModules)
 
 /// Converts a parsed primitive backed type into compiled metadata.
 private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledPrimitiveBackedType =
@@ -591,7 +588,7 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
             + compile_object_class_parent_schema_functions(class.name, class.parents, module, allModules, 0, class.location)
             + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(class.name), class.annotations, 0)
             + compiledFields.schemas
-            + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
+            + compiledFields.annotations
             + compiledFields.initializers
             + compile_object_init_functions(class.name, compiledParameters, class.initBlocks, module, allModules, 0)
             + compile_object_method_functions(class.name, class.methods, module, allModules)
@@ -629,22 +626,15 @@ private fun compile_object_class_parent_schema_functions(className: String, pare
 /// Converts parsed object field schema functions into compiled metadata.
 private fun compile_object_field_functions(className: String, parameters: List[CompiledFunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledObjectFieldFunctions =
     match fields[0] with
-    case None -> CompiledObjectFieldFunctions { schemas: [], initializers: [] }
+    case None -> CompiledObjectFieldFunctions { schemas: [], annotations: [], initializers: [] }
     case Some { field } ->
         let typeReference = compile_type_in_module(field.typeReference, module, allModules)
         let rest = compile_object_field_functions(className, parameters, fields[1:], module, allModules, idx + 1)
         CompiledObjectFieldFunctions {
             schemas: [compile_documented_schema_constant(object_indexed_schema_key(object_field_schema_prefix(), className, idx), object_field_schema(field, typeReference), field.documentation, field.location)] + rest.schemas,
+            annotations: compile_function_annotation_application_schema(object_field_annotation_schema_prefix(className, idx), field.annotations, 0) + rest.annotations,
             initializers: if field.hasValue then [compile_object_field_init_function(className, parameters, field, typeReference)] + rest.initializers else rest.initializers
         }
-
-/// Converts parsed object field annotation schema functions into compiled metadata.
-private fun compile_object_field_annotation_schema_functions(className: String, fields: List[ObjectOrientedField], idx: int): List[CompiledFunction] =
-    match fields[0] with
-    case None -> []
-    case Some { field } ->
-        compile_function_annotation_application_schema(object_field_annotation_schema_prefix(className, idx), field.annotations, 0)
-            + compile_object_field_annotation_schema_functions(className, fields[1:], idx + 1)
 
 /// Encodes schema metadata for object field.
 private fun object_field_schema(field: ObjectOrientedField, typeReference: CompiledTypeReference): String =
@@ -831,11 +821,11 @@ private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[Co
     case Some { method } -> [compile_function(method)] + compile_deriver_methods(methods[1:])
 
 /// Builds raw definition lookup structures used during module compilation.
-private fun compile_definition_indexes(definitions: List[Definition]): CompiledDefinitionIndexes =
+private fun compile_definition_indexes(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): CompiledDefinitionIndexes =
     match definitions[0] with
-    case None -> CompiledDefinitionIndexes { derivers: {:}, compiledDerivers: {:} }
+    case None -> CompiledDefinitionIndexes { derivers: {:}, compiledDerivers: {:}, visiblePrimitiveBackedTypes: {:}, annotations: {:} }
     case Some { definition } ->
-        let rest = compile_definition_indexes(definitions[1:])
+        let rest = compile_definition_indexes(definitions[1:], module, allModules)
         match definition with
         case DeriverDeclaration declaration ->
             CompiledDefinitionIndexes {
@@ -843,7 +833,23 @@ private fun compile_definition_indexes(definitions: List[Definition]): CompiledD
                     name: declaration.name,
                     methods: declaration.methods
                 }),
-                compiledDerivers: rest.compiledDerivers + (declaration.name, compile_deriver_declaration(declaration))
+                compiledDerivers: rest.compiledDerivers + (declaration.name, compile_deriver_declaration(declaration)),
+                visiblePrimitiveBackedTypes: rest.visiblePrimitiveBackedTypes,
+                annotations: rest.annotations
+            }
+        case PrimitiveBackedTypeDeclaration declaration ->
+            CompiledDefinitionIndexes {
+                derivers: rest.derivers,
+                compiledDerivers: rest.compiledDerivers,
+                visiblePrimitiveBackedTypes: rest.visiblePrimitiveBackedTypes + (declaration.name, compile_primitive_backed_type(declaration, module, allModules)),
+                annotations: rest.annotations
+            }
+        case AnnotationDeclaration declaration ->
+            CompiledDefinitionIndexes {
+                derivers: rest.derivers,
+                compiledDerivers: rest.compiledDerivers,
+                visiblePrimitiveBackedTypes: rest.visiblePrimitiveBackedTypes,
+                annotations: rest.annotations + (declaration.name, compile_annotation_declaration(declaration))
             }
         case _ -> rest
 
@@ -876,16 +882,6 @@ private fun compile_derived_method(typeName: String, method: FunctionDeclaration
         body: compile_expression_in_function(method.body, functionName),
         location: compile_location(method.location)
     }
-
-/// Converts parsed annotations into compiled metadata.
-private fun compile_annotations(definitions: List[Definition]): Dict[CompiledAnnotationDeclaration] =
-    match definitions[0] with
-    case None -> {:}
-    case Some { definition } ->
-        match definition with
-        case AnnotationDeclaration declaration ->
-            compile_annotations(definitions[1:]) + (declaration.name, compile_annotation_declaration(declaration))
-        case _ -> compile_annotations(definitions[1:])
 
 /// Converts a parsed annotation declaration into compiled metadata.
 private fun compile_annotation_declaration(declaration: AnnotationDeclaration): CompiledAnnotationDeclaration =
@@ -997,15 +993,16 @@ private fun compile_functions(definitions: List[Definition], definitionIndexes: 
 
 /// Converts parsed data declaration into compiled metadata.
 private fun compile_data_declaration(declaration: DataDeclaration): List[CompiledFunction] =
+    let fieldFunctions = compile_data_field_functions(declaration.name, declaration.fields, 0)
     [
         compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
         compile_schema_constant("__capy_schema_visibility|" + declaration.name, declaration.visibility, declaration.location),
     ]
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
-        + compile_data_schema_fields(declaration.name, declaration.fields, 0)
+        + fieldFunctions.schemas
         + compile_data_schema_parents(declaration.name, declaration.parents, 0)
         + compile_annotation_application_schema("__capy_schema_annotation|data|" + declaration.name + "|", declaration.annotations, 0)
-        + compile_data_field_annotation_schema(declaration.name, declaration.fields, 0)
+        + fieldFunctions.annotations
 
 /// Converts parsed enum declaration into compiled metadata.
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
@@ -1072,24 +1069,20 @@ private fun compile_data_schema_parameters(dataName: String, parameters: List[St
         [compile_schema_constant("__capy_schema_param|" + dataName + "|" + idx, parameter, location)]
             + compile_data_schema_parameters(dataName, parameters[1:], idx + 1, location)
 
-/// Converts parsed data schema fields into compiled metadata.
-private fun compile_data_schema_fields(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
+/// Converts parsed data field schema and annotation functions into compiled metadata.
+private fun compile_data_field_functions(dataName: String, fields: List[DataFieldDeclaration], idx: int): CompiledDataFieldFunctions =
     match fields[0] with
-    case None -> []
+    case None -> CompiledDataFieldFunctions { schemas: [], annotations: [] }
     case Some { field } ->
-        [compile_documented_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.documentation, field.location)]
-            + compile_data_schema_fields(dataName, fields[1:], idx + 1)
-
-/// Converts parsed data field annotation schema into compiled metadata.
-private fun compile_data_field_annotation_schema(dataName: String, fields: List[DataFieldDeclaration], idx: int): List[CompiledFunction] =
-    match fields[0] with
-    case None -> []
-    case Some { field } ->
-        compile_annotation_application_schema(
-            "__capy_schema_annotation|field|" + dataName + "|" + idx + "|",
-            field.annotations,
-            0
-        ) + compile_data_field_annotation_schema(dataName, fields[1:], idx + 1)
+        let rest = compile_data_field_functions(dataName, fields[1:], idx + 1)
+        CompiledDataFieldFunctions {
+            schemas: [compile_documented_schema_constant("__capy_schema_field|" + dataName + "|" + idx, data_declaration_field_schema(field), field.documentation, field.location)] + rest.schemas,
+            annotations: compile_annotation_application_schema(
+                "__capy_schema_annotation|field|" + dataName + "|" + idx + "|",
+                field.annotations,
+                0
+            ) + rest.annotations
+        }
 
 /// Converts parsed annotation application schema into compiled metadata.
 private fun compile_annotation_application_schema(prefix: String, annotations: List[AnnotationApplication], idx: int): List[CompiledFunction] =
