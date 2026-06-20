@@ -40,6 +40,8 @@ data PythonSchemaAnnotationArgument { name: String, kind: String, value: String 
 data PythonStdlibValue { pythonName: String, typeName: String }
 /// Schema lookup result that distinguishes a type with no values from a missing type.
 data PythonSchemaValues { typeExists: bool, values: List[String] }
+/// Decoded object field schema metadata used while rebuilding object classes.
+data PythonObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
 /// Python reflection table entries collected together to avoid duplicate schema scans.
 data PythonReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 
@@ -4711,14 +4713,14 @@ private fun python_compiled_object_field_schema_for_class(function: CompiledFunc
 /// Extracts compiled metadata for object field.
 private fun python_compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
     let value = python_schema_value(function)
-    let fieldName = python_object_field_schema_name(value)
+    let schema = python_object_field_schema_metadata(value)
     CompiledObjectOrientedField {
-        name: fieldName,
-        visibility: python_object_field_schema_visibility(value),
+        name: schema.name,
+        visibility: schema.visibility,
         documentation: function.documentation,
-        typeReference: python_object_schema_type_reference(python_object_field_schema_type(value)),
-        value: python_compiled_object_field_value(className, fieldName, functions, function.location),
-        hasValue: python_object_field_schema_has_value(value),
+        typeReference: python_object_schema_type_reference(schema.typeName),
+        value: python_compiled_object_field_value(className, schema.name, functions, function.location),
+        hasValue: schema.hasValue,
         location: function.location
     }
 
@@ -4741,6 +4743,22 @@ private fun python_find_compiled_object_field_init(className: String, fieldName:
 private fun python_object_field_schema_name(value: String): String =
     let first = python_first_index_of(value, "|", 0)
     if first < 0 then value else value[0, first]
+
+/// Decodes object field schema separators once for generated object metadata.
+private fun python_object_field_schema_metadata(value: String): PythonObjectFieldSchema =
+    let first = python_first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else python_first_index_of(value, "|", first + 1)
+    let last = python_last_index_of(value, "|")
+    PythonObjectFieldSchema {
+        name: if first < 0 then value else value[0, first],
+        visibility: if first < 0 | second < 0 then "public" else value[first + 1, second],
+        typeName: if second < 0
+            then "any"
+            else if last <= second
+            then value[second + 1, value.size().value]
+            else value[second + 1, last],
+        hasValue: last >= 0 & value[last + 1, value.size().value] == "true"
+    }
 
 /// Encodes schema metadata text for object field schema visibility.
 private fun python_object_field_schema_visibility(value: String): String =

@@ -544,6 +544,7 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
     match classes[0] with
     case None -> []
     case Some { class } ->
+        let compiledParameters = compile_parameters_in_module(class.parameters, module, allModules)
         [compile_object_class_schema_function(class)]
             + [compile_object_class_open_schema_function(class)]
             + compile_object_class_parameter_schema_functions(class.name, class.parameters, module, allModules, 0)
@@ -551,8 +552,8 @@ private fun compile_object_class_functions(classes: List[ObjectOrientedClass], m
             + compile_function_annotation_application_schema(object_type_annotation_schema_prefix(class.name), class.annotations, 0)
             + compile_object_field_schema_functions(class.name, class.fields, module, allModules, 0)
             + compile_object_field_annotation_schema_functions(class.name, class.fields, 0)
-            + compile_object_field_init_functions(class.name, class.parameters, class.fields, module, allModules)
-            + compile_object_init_functions(class.name, class.parameters, class.initBlocks, module, allModules, 0)
+            + compile_object_field_init_functions(class.name, compiledParameters, class.fields, module, allModules)
+            + compile_object_init_functions(class.name, compiledParameters, class.initBlocks, module, allModules, 0)
             + compile_object_method_functions(class.name, class.methods, module, allModules)
             + compile_object_class_functions(classes[1:], module, allModules)
 
@@ -610,7 +611,7 @@ private fun object_field_has_value_schema(field: ObjectOrientedField): String =
     if field.hasValue then "true" else "false"
 
 /// Converts parsed object field initializer functions into compiled metadata.
-private fun compile_object_field_init_functions(className: String, parameters: List[FunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
+private fun compile_object_field_init_functions(className: String, parameters: List[CompiledFunctionParameter], fields: List[ObjectOrientedField], module: ParsedModule, allModules: List[ParsedModule]): List[CompiledFunction] =
     match fields[0] with
     case None -> []
     case Some { field } ->
@@ -619,19 +620,19 @@ private fun compile_object_field_init_functions(className: String, parameters: L
         else compile_object_field_init_functions(className, parameters, fields[1:], module, allModules)
 
 /// Converts a parsed object field initializer function into compiled metadata.
-private fun compile_object_field_init_function(className: String, parameters: List[FunctionParameter], field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+private fun compile_object_field_init_function(className: String, parameters: List[CompiledFunctionParameter], field: ObjectOrientedField, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: object_field_init_schema_key(className, field.name),
         visibility: "oo_field_init",
         documentation: [],
-        parameters: compile_parameters_in_module(parameters, module, allModules),
+        parameters: parameters,
         returnType: compile_type_in_module(field.typeReference, module, allModules),
         body: compile_expression_in_function(field.value, className + "." + field.name),
         location: compile_location(field.location)
     }
 
 /// Converts parsed object initializer functions into compiled metadata.
-private fun compile_object_init_functions(className: String, parameters: List[FunctionParameter], initBlocks: List[ObjectOrientedInitBlock], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
+private fun compile_object_init_functions(className: String, parameters: List[CompiledFunctionParameter], initBlocks: List[ObjectOrientedInitBlock], module: ParsedModule, allModules: List[ParsedModule], idx: int): List[CompiledFunction] =
     match initBlocks[0] with
     case None -> []
     case Some { initBlock } ->
@@ -639,12 +640,12 @@ private fun compile_object_init_functions(className: String, parameters: List[Fu
             + compile_object_init_functions(className, parameters, initBlocks[1:], module, allModules, idx + 1)
 
 /// Converts a parsed object initializer function into compiled metadata.
-private fun compile_object_init_function(className: String, parameters: List[FunctionParameter], initBlock: ObjectOrientedInitBlock, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
+private fun compile_object_init_function(className: String, parameters: List[CompiledFunctionParameter], initBlock: ObjectOrientedInitBlock, module: ParsedModule, allModules: List[ParsedModule], idx: int): CompiledFunction =
     CompiledFunction {
         name: object_indexed_schema_key(object_init_schema_prefix(), className, idx),
         visibility: "oo_init",
         documentation: initBlock.documentation,
-        parameters: compile_parameters_in_module(parameters, module, allModules),
+        parameters: parameters,
         returnType: compile_type(compiler_any_type()),
         body: compile_expression_in_function(initBlock.body, className + ".init"),
         location: compile_location(initBlock.location)

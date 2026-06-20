@@ -43,6 +43,8 @@ data JavaDataTypeBinding { module: CompiledModule, name: String }
 data JavaQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
 /// Java generator mapping from a standard-library value to its Java name and resolved type.
 data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
+/// Java object metadata extracted from schema helper functions for one module.
+data JavaCompiledObjects { interfaces: List[CompiledObjectOrientedInterface], classes: List[CompiledObjectOrientedClass] }
 /// Generator lookup entry for an annotation declaration and the compiled module that declares it.
 data AnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
 /// Decoded annotation schema argument with field name, value kind, and encoded source value.
@@ -117,13 +119,14 @@ private fun java_module_code(module: CompiledModule, allModules: List[CompiledMo
     else
     let constants = constant_functions(module.functions)
     let constantBindings = constant_bindings(constants, module, allModules)
+    let objects = compiled_objects(module.functions)
     java_package(module)
     + java_imports(module, allModules)
     + "public final class " + module.name + " {" + newline()
     + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
     + java_function_type_interfaces()
-    + java_object_interfaces(compiled_object_interfaces(module.functions), module, allModules)
-    + java_object_classes(compiled_object_classes(module.functions), module, allModules)
+    + java_object_interfaces(objects.interfaces, module, allModules)
+    + java_object_classes(objects.classes, constantBindings, module, allModules)
     + java_constants(constants, [], module, allModules)
     + java_functions(module.functions, constantBindings, module, allModules, nativeProviderCatalog)
     + java_helpers(module)
@@ -475,20 +478,20 @@ private fun java_object_interface_method_body(method: CompiledObjectOrientedMeth
     else java_object_return_statements(method.body, method.returnType, env, module, allModules, indent)
 
 /// Formats Java source text for object classes.
-private fun java_object_classes(classes: List[CompiledObjectOrientedClass], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_object_classes(classes: List[CompiledObjectOrientedClass], constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match classes[0] with
     case None -> ""
     case Some { objectClass } ->
-        java_object_class(objectClass, module, allModules) + newline()
+        java_object_class(objectClass, constantBindings, module, allModules) + newline()
             + java_object_constructor_function(objectClass, module, allModules) + newline()
-            + java_object_classes(classes[1:], module, allModules)
+            + java_object_classes(classes[1:], constantBindings, module, allModules)
 
 /// Formats Java source text for object class.
-private fun java_object_class(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_object_class(objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "    " + java_visibility_prefix(objectClass.visibility) + "static " + java_object_class_final_modifier(objectClass) + "class " + java_identifier(objectClass.name) + java_object_class_parent_clause(objectClass.parents, module, allModules) + " {" + newline()
     + java_object_fields(objectClass.fields)
     + java_object_constructor(objectClass, module, allModules)
-    + java_object_methods(objectClass.methods, objectClass, module, allModules)
+    + java_object_methods(objectClass.methods, objectClass, constantBindings, module, allModules)
     + "    }" + newline()
 
 /// Formats Java source text for object class final modifier.
@@ -602,14 +605,14 @@ private fun java_object_init_statement(initBlock: CompiledObjectOrientedInitBloc
     else "            " + expression_code(initBlock.body, env, type, module, allModules) + ";" + newline()
 
 /// Formats Java source text for object methods.
-private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> ""
-    case Some { method } -> java_object_method(method, objectClass, module, allModules) + newline() + java_object_methods(methods[1:], objectClass, module, allModules)
+    case Some { method } -> java_object_method(method, objectClass, constantBindings, module, allModules) + newline() + java_object_methods(methods[1:], objectClass, constantBindings, module, allModules)
 
 /// Formats Java source text for object method.
-private fun java_object_method(method: CompiledObjectOrientedMethod, objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let env = java_object_method_bindings(method.parameters, objectClass, module) + constant_bindings(constant_functions(module.functions), module, allModules)
+private fun java_object_method(method: CompiledObjectOrientedMethod, objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let env = java_object_method_bindings(method.parameters, objectClass, module) + constantBindings
     "        " + java_visibility_prefix(method.visibility) + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ") {" + newline()
     + java_object_method_body(method, env, module, allModules)
     + "        }" + newline()
@@ -667,6 +670,24 @@ private fun java_object_constructor_argument_name_tail(parameters: List[Compiled
     match parameters[0] with
     case None -> ""
     case Some { parameter } -> ", " + java_identifier(parameter.name) + java_object_constructor_argument_name_tail(parameters[1:])
+
+/// Extracts object interface and class metadata in one top-level function pass.
+private fun compiled_objects(functions: List[CompiledFunction]): JavaCompiledObjects =
+    match functions[0] with
+    case None -> JavaCompiledObjects { interfaces: [], classes: [] }
+    case Some { function } ->
+        let rest = compiled_objects(functions[1:])
+        if compiled_object_interface_schema(function)
+        then JavaCompiledObjects {
+            interfaces: [compiled_object_interface(function, functions)] + rest.interfaces,
+            classes: rest.classes
+        }
+        else if compiled_object_class_schema(function)
+        then JavaCompiledObjects {
+            interfaces: rest.interfaces,
+            classes: [compiled_object_class(function, functions)] + rest.classes
+        }
+        else rest
 
 /// Extracts compiled metadata for object interfaces.
 private fun compiled_object_interfaces(functions: List[CompiledFunction]): List[CompiledObjectOrientedInterface] =
@@ -3819,7 +3840,20 @@ private fun find_object_class_in_scope(name: String, module: CompiledModule, all
 
 /// Finds an object class in available declarations, imports, or modules.
 private fun find_object_class(name: String, module: CompiledModule): /capy/lang/Option[JavaObjectClassBinding] =
-    find_object_class_in_classes(name, compiled_object_classes(module.functions), module)
+    find_object_class_in_functions(name, module.functions, module)
+
+/// Finds an object class in schema helper functions without materializing unrelated classes.
+private fun find_object_class_in_functions(name: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[JavaObjectClassBinding] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if compiled_object_class_schema(function)
+        then
+            let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
+            if className == name
+            then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: compiled_object_class(function, functions) } }
+            else find_object_class_in_functions(name, functions[1:], module)
+        else find_object_class_in_functions(name, functions[1:], module)
 
 /// Finds a qualified object class in available declarations, imports, or modules.
 private fun find_qualified_object_class(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectClassBinding] =
@@ -3863,36 +3897,44 @@ private fun find_object_class_by_type(type: CompiledTypeReference, modules: List
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        match find_object_class_by_type_in_module(type.name, compiled_object_classes(module.functions), module) with
+        match find_object_class_by_type_in_module(type.name, module.functions, module) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
         case None -> find_object_class_by_type(type, modules[1:])
 
-/// Finds an object class by type in a module in available declarations, imports, or modules.
-private fun find_object_class_by_type_in_module(typeName: String, classes: List[CompiledObjectOrientedClass], module: CompiledModule): /capy/lang/Option[JavaObjectClassBinding] =
-    match classes[0] with
+/// Finds an object class by type in a module without materializing unrelated classes.
+private fun find_object_class_by_type_in_module(typeName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[JavaObjectClassBinding] =
+    match functions[0] with
     case None -> /capy/lang/Option.None {}
-    case Some { objectClass } ->
-        if typeName == java_object_type_name(module, objectClass.name)
-        then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: objectClass } }
-        else find_object_class_by_type_in_module(typeName, classes[1:], module)
+    case Some { function } ->
+        if compiled_object_class_schema(function)
+        then
+            let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
+            if typeName == java_object_type_name(module, className)
+            then /capy/lang/Option.Some { JavaObjectClassBinding { moduleClassName: module_fqcn(module), objectClass: compiled_object_class(function, functions) } }
+            else find_object_class_by_type_in_module(typeName, functions[1:], module)
+        else find_object_class_by_type_in_module(typeName, functions[1:], module)
 
 /// Finds an object interface by type in available declarations, imports, or modules.
 private fun find_object_interface_by_type(type: CompiledTypeReference, modules: List[CompiledModule]): /capy/lang/Option[JavaObjectInterfaceBinding] =
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        match find_object_interface_by_type_in_module(type.name, compiled_object_interfaces(module.functions), module) with
+        match find_object_interface_by_type_in_module(type.name, module.functions, module) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
         case None -> find_object_interface_by_type(type, modules[1:])
 
-/// Finds an object interface by type in a module in available declarations, imports, or modules.
-private fun find_object_interface_by_type_in_module(typeName: String, interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
-    match interfaces[0] with
+/// Finds an object interface by type in a module without materializing unrelated interfaces.
+private fun find_object_interface_by_type_in_module(typeName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    match functions[0] with
     case None -> /capy/lang/Option.None {}
-    case Some { objectInterface } ->
-        if typeName == java_object_interface_type_name(module, objectInterface.name)
-        then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: objectInterface } }
-        else find_object_interface_by_type_in_module(typeName, interfaces[1:], module)
+    case Some { function } ->
+        if compiled_object_interface_schema(function)
+        then
+            let interfaceName = function.name[oo_interface_schema_prefix_size(), function.name.size().value]
+            if typeName == java_object_interface_type_name(module, interfaceName)
+            then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: compiled_object_interface(function, functions) } }
+            else find_object_interface_by_type_in_module(typeName, functions[1:], module)
+        else find_object_interface_by_type_in_module(typeName, functions[1:], module)
 
 /// Finds an object interface by name in available declarations, imports, or modules.
 private fun find_object_interface_by_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectInterfaceBinding] =
@@ -3912,7 +3954,20 @@ private fun find_qualified_object_interface(name: String, module: CompiledModule
 
 /// Finds an object interface in available declarations, imports, or modules.
 private fun find_object_interface(name: String, module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
-    find_object_interface_in_interfaces(name, compiled_object_interfaces(module.functions), module)
+    find_object_interface_in_functions(name, module.functions, module)
+
+/// Finds an object interface in schema helper functions without materializing unrelated interfaces.
+private fun find_object_interface_in_functions(name: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if compiled_object_interface_schema(function)
+        then
+            let interfaceName = function.name[oo_interface_schema_prefix_size(), function.name.size().value]
+            if interfaceName == name
+            then /capy/lang/Option.Some { JavaObjectInterfaceBinding { moduleClassName: module_fqcn(module), objectInterface: compiled_object_interface(function, functions) } }
+            else find_object_interface_in_functions(name, functions[1:], module)
+        else find_object_interface_in_functions(name, functions[1:], module)
 
 /// Finds an object interface in interfaces in available declarations, imports, or modules.
 private fun find_object_interface_in_interfaces(name: String, interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule): /capy/lang/Option[JavaObjectInterfaceBinding] =
