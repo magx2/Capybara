@@ -5008,12 +5008,18 @@ private fun python_object_interface_member_name(name: String): String =
 
 /// Finds an object class by type in scope, imports, or compiled modules.
 private fun python_find_object_class_by_type(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
+    if !python_object_receiver_type(typeName)
+    then /capy/lang/Option.None {}
+    else python_find_object_class_by_object_type(typeName, modules)
+
+/// Finds an object class by encoded object type in scope, imports, or compiled modules.
+private fun python_find_object_class_by_object_type(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
         match python_find_object_class_by_type_in_module(typeName, module.functions, module) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
-        case None -> python_find_object_class_by_type(typeName, modules[1:])
+        case None -> python_find_object_class_by_object_type(typeName, modules[1:])
 
 /// Finds an object class by type in a module without materializing unrelated object classes.
 private fun python_find_object_class_by_type_in_module(typeName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =

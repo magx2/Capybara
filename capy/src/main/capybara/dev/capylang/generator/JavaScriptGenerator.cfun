@@ -2300,7 +2300,7 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
         then java_script_primitive_conversion_code(call, env, module, allModules)
         else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
         then java_script_result_reduce_method_call_code(call, env, module, allModules)
-        else if java_script_oo_method_call_with_receiver_type(call, receiverBaseType, module, allModules)
+        else if java_script_oo_method_call_with_receiver_type(call, receiverType, module, allModules)
         then java_script_raw_method_call_code(call, env, module, allModules)
         else match java_script_find_local_extension_method_with_receiver_type(receiverType, call, module) with
             case Some { function } -> java_script_extension_method_call_code(function, call, env, module, allModules)
@@ -2463,13 +2463,17 @@ private fun java_script_module_object_constructor_binding(targetModule: Compiled
 
 /// Checks whether method metadata matches the object-oriented method call rule.
 private fun java_script_oo_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let receiverType = java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules))
+    let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
     java_script_oo_method_call_with_receiver_type(call, receiverType, module, allModules)
 
 private fun java_script_oo_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if receiverType == java_script_unknown_type()
+    if !java_script_object_receiver_type(receiverType)
     then false
-    else java_script_object_method_exists_in_modules(receiverType, call.name, [module] + allModules)
+    else java_script_object_method_exists_in_modules(java_script_type_unqualified_name(receiverType), call.name, [module] + allModules)
+
+/// Checks whether a compiled type name can resolve to object-oriented metadata.
+private fun java_script_object_receiver_type(typeName: String): bool =
+    java_script_string_has_prefix(typeName, "__capy_oo|")
 
 /// Emits JavaScript code for callable call.
 private fun java_script_callable_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -6853,7 +6857,7 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         else if (call.name == "or_else" | call.name == "or") & oneArgument & java_script_result_fallback_receiver_type(receiverType)
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
             & java_script_expressions_gatherable(call.arguments, env, module, allModules)
-        else if java_script_oo_method_call_with_receiver_type(call, receiverBaseType, module, allModules)
+        else if java_script_oo_method_call_with_receiver_type(call, receiverType, module, allModules)
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
             & java_script_expressions_gatherable(call.arguments, env, module, allModules)
         else match java_script_find_local_extension_method_with_receiver_type(receiverType, call, module) with

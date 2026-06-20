@@ -61,6 +61,8 @@ private data RawModuleValidationInput { names: List[String], paths: List[String]
 private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 /// Imported library function and explicit static-import selection computed in one function scan.
 private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+/// Precomputed import path forms used while matching one import against available libraries.
+private data CompiledImportLibraryLookup { modulePath: String, normalizedPath: String, normalizedImportPath: String }
 /// Field schema and initializer functions built together after compiling the field type once.
 private data CompiledObjectFieldFunctions { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
 
@@ -282,20 +284,33 @@ private fun library_requires_explicit_static_imports(declaration: CompiledImport
 
 /// Finds an imported library in available declarations, imports, or modules.
 private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    find_imported_library_by_lookup(compiled_import_library_lookup(declaration.modulePath), libraries)
+
+/// Builds precomputed import path forms for library matching.
+private fun compiled_import_library_lookup(modulePath: String): CompiledImportLibraryLookup =
+    CompiledImportLibraryLookup {
+        modulePath: modulePath,
+        normalizedPath: normalize_module_path(modulePath),
+        normalizedImportPath: normalize_import_module_path(modulePath)
+    }
+
+/// Finds an imported library using precomputed import path forms.
+private fun find_imported_library_by_lookup(lookup: CompiledImportLibraryLookup, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
     match libraries[0] with
     case None -> /capy/lang/Option.None {}
     case Some { library } ->
-        if imported_library_matches(declaration.modulePath, library)
+        if imported_library_matches(lookup, library)
         then /capy/lang/Option.Some { library }
-        else find_imported_library(declaration, libraries[1:])
+        else find_imported_library_by_lookup(lookup, libraries[1:])
 
 /// Collects imported library matches visible to the current module.
-private fun imported_library_matches(modulePath: String, library: CompiledModule): bool =
-    let className = compiled_module_class_name(library)
-    modulePath == library.name
-        | normalize_module_path(modulePath) == compiled_module_path(library)
-        | normalize_import_module_path(modulePath) == compiled_module_path(library)
-        | modulePath == className
+private fun imported_library_matches(lookup: CompiledImportLibraryLookup, library: CompiledModule): bool =
+    let modulePath = compiled_module_path(library)
+    let className = modulePath.replace("/", ".")
+    lookup.modulePath == library.name
+        | lookup.normalizedPath == modulePath
+        | lookup.normalizedImportPath == modulePath
+        | lookup.modulePath == className
 
 /// Converts a compiled module path into a Java-style package path.
 private fun compiled_module_path(module: CompiledModule): String =
