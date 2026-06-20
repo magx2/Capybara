@@ -44,6 +44,16 @@ data PythonSchemaValues { typeExists: bool, values: List[String] }
 data PythonObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
 /// Object field schemas and initializer helpers collected in one class scan.
 data PythonObjectFieldSources { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
+/// Object class schema helpers collected in one class scan.
+data PythonObjectClassSources {
+    openValue: String,
+    parameters: List[CompiledFunction],
+    parents: List[String],
+    fieldSchemas: List[CompiledFunction],
+    fieldInitializers: List[CompiledFunction],
+    initBlocks: List[CompiledFunction],
+    methods: List[CompiledFunction]
+}
 /// Python reflection table entries collected together to avoid duplicate schema scans.
 data PythonReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 /// Python source sections collected in one pass over compiled functions.
@@ -4722,19 +4732,41 @@ private fun python_compiled_object_class_schema(function: CompiledFunction): boo
 /// Extracts compiled metadata for object class.
 private fun python_compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
     let className = python_compiled_object_class_name(function)
-    let fieldSources = python_compiled_object_field_sources(className, functions)
+    let sources = python_compiled_object_class_sources(className, functions)
     CompiledObjectOrientedClass {
         name: className,
         visibility: python_schema_value(function),
         documentation: function.documentation,
-        open: python_compiled_object_class_open(className, functions),
-        parameters: python_compiled_object_class_parameters(className, functions),
-        parents: python_object_schema_type_references(python_schema_values("__capy_oo_parent|" + className + "|", functions)),
-        fields: python_compiled_object_fields(className, fieldSources.schemas, fieldSources.initializers),
-        initBlocks: python_compiled_object_init_blocks(className, functions),
-        methods: python_compiled_object_methods(className, functions),
+        open: sources.openValue == "true",
+        parameters: python_compiled_object_class_parameters_from_sources(sources.parameters),
+        parents: python_object_schema_type_references(sources.parents),
+        fields: python_compiled_object_fields(className, sources.fieldSchemas, sources.fieldInitializers),
+        initBlocks: python_compiled_object_init_blocks_from_sources(sources.initBlocks),
+        methods: python_compiled_object_methods_from_sources(sources.methods),
         location: function.location
     }
+
+/// Extracts compiled object class schema and helper sources for one class once.
+private fun python_compiled_object_class_sources(className: String, functions: List[CompiledFunction]): PythonObjectClassSources =
+    match functions[0] with
+    case None -> PythonObjectClassSources { openValue: "", parameters: [], parents: [], fieldSchemas: [], fieldInitializers: [], initBlocks: [], methods: [] }
+    case Some { function } ->
+        let rest = python_compiled_object_class_sources(className, functions[1:])
+        if python_compiled_schema(function) & function.name == "__capy_oo_class_open|" + className
+        then rest.with(openValue: python_schema_value(function))
+        else if python_compiled_object_class_parameter_schema(function, className)
+        then rest.with(parameters: [function] + rest.parameters)
+        else if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_parent|" + className + "|")
+        then rest.with(parents: [python_schema_value(function)] + rest.parents)
+        else if python_compiled_object_field_schema_for_class(function, className)
+        then rest.with(fieldSchemas: [function] + rest.fieldSchemas)
+        else if python_compiled_object_field_init_function(function, className)
+        then rest.with(fieldInitializers: [function] + rest.fieldInitializers)
+        else if python_compiled_object_init_function_for_class(function, className)
+        then rest.with(initBlocks: [function] + rest.initBlocks)
+        else if python_compiled_object_method_function(function, className)
+        then rest.with(methods: [function] + rest.methods)
+        else rest
 
 /// Extracts compiled metadata for object class name.
 private fun python_compiled_object_class_name(function: CompiledFunction): String =
@@ -4754,6 +4786,12 @@ private fun python_compiled_object_class_parameters(className: String, functions
         if python_compiled_object_class_parameter_schema(function, className)
         then [python_compiled_object_class_parameter(function)] + python_compiled_object_class_parameters(className, functions[1:])
         else python_compiled_object_class_parameters(className, functions[1:])
+
+/// Extracts compiled metadata for object class parameters from prefiltered schema functions.
+private fun python_compiled_object_class_parameters_from_sources(functions: List[CompiledFunction]): List[CompiledFunctionParameter] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [python_compiled_object_class_parameter(function)] + python_compiled_object_class_parameters_from_sources(functions[1:])
 
 /// Extracts compiled metadata for object class parameter schema.
 private fun python_compiled_object_class_parameter_schema(function: CompiledFunction, className: String): bool =
@@ -4921,6 +4959,16 @@ private fun python_compiled_object_init_blocks(className: String, functions: Lis
         }] + python_compiled_object_init_blocks(className, functions[1:])
         else python_compiled_object_init_blocks(className, functions[1:])
 
+/// Extracts compiled metadata for object initializer blocks from prefiltered functions.
+private fun python_compiled_object_init_blocks_from_sources(functions: List[CompiledFunction]): List[CompiledObjectOrientedInitBlock] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [CompiledObjectOrientedInitBlock {
+        body: function.body,
+        documentation: function.documentation,
+        location: function.location
+    }] + python_compiled_object_init_blocks_from_sources(functions[1:])
+
 /// Extracts compiled metadata for object initializer function for class.
 private fun python_compiled_object_init_function_for_class(function: CompiledFunction, className: String): bool =
     if python_string_has_prefix(function.name, "__capy_oo_init|")
@@ -4941,6 +4989,12 @@ private fun python_compiled_object_methods(className: String, functions: List[Co
         if python_compiled_object_method_function(function, className)
         then [python_compiled_object_method(function)] + python_compiled_object_methods(className, functions[1:])
         else python_compiled_object_methods(className, functions[1:])
+
+/// Extracts compiled metadata for object methods from prefiltered functions.
+private fun python_compiled_object_methods_from_sources(functions: List[CompiledFunction]): List[CompiledObjectOrientedMethod] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [python_compiled_object_method(function)] + python_compiled_object_methods_from_sources(functions[1:])
 
 /// Extracts compiled metadata for object method function.
 private fun python_compiled_object_method_function(function: CompiledFunction, className: String): bool =

@@ -1937,8 +1937,9 @@ private fun compile_types_in_module(types: List[TypeReference], module: ParsedMo
 
 /// Computes the name for object type reference.
 private fun object_type_reference_name(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    if compiler_qualified_name(name)
-    then object_type_reference_name_qualified(name, module, allModules)
+    let separator = compiler_last_index_of(name, ".", 0, -1)
+    if compiler_qualified_name_at(name, separator)
+    then object_type_reference_name_qualified_at(name, separator, module, allModules)
     else if find_object_interface_in_module(name, module)
     then compiler_java_object_type_name(object_interface_java_name(module, name))
     else
@@ -1951,8 +1952,12 @@ private fun object_type_reference_name(name: String, module: ParsedModule, allMo
 
 /// Computes the name for a qualified object type reference in one module lookup.
 private fun object_type_reference_name_qualified(name: String, module: ParsedModule, allModules: List[ParsedModule]): String =
-    let className = compiler_qualified_class_name(name, module)
-    let member = compiler_qualified_member_name(name)
+    object_type_reference_name_qualified_at(name, compiler_last_index_of(name, ".", 0, -1), module, allModules)
+
+/// Computes the name for a qualified object type reference using a precomputed separator.
+private fun object_type_reference_name_qualified_at(name: String, separator: int, module: ParsedModule, allModules: List[ParsedModule]): String =
+    let className = compiler_qualified_class_name_at(name, separator, module)
+    let member = name[separator + 1, name.size().value]
     match find_parsed_module_by_class(className, allModules) with
     case Some { parsedModule } ->
         if find_object_interface_in_module(member, parsedModule)
@@ -2033,7 +2038,10 @@ private fun compiler_string_list_contains(values: List[String], expected: String
 
 /// Checks whether the current value satisfies the qualified name rule for compiler processing.
 private fun compiler_qualified_name(name: String): bool =
-    let idx = compiler_last_index_of(name, ".", 0, -1)
+    compiler_qualified_name_at(name, compiler_last_index_of(name, ".", 0, -1))
+
+/// Checks whether a precomputed separator satisfies the qualified name rule.
+private fun compiler_qualified_name_at(name: String, idx: int): bool =
     idx > 0 & idx < name.size().value - 1
 
 /// Computes the name for qualified member.
@@ -2042,7 +2050,11 @@ private fun compiler_qualified_member_name(name: String): String =
 
 /// Computes the name for qualified class.
 private fun compiler_qualified_class_name(name: String, module: ParsedModule): String =
-    let qualifier = name[0, compiler_last_index_of(name, ".", 0, -1)]
+    compiler_qualified_class_name_at(name, compiler_last_index_of(name, ".", 0, -1), module)
+
+/// Computes the name for qualified class using a precomputed separator.
+private fun compiler_qualified_class_name_at(name: String, separator: int, module: ParsedModule): String =
+    let qualifier = name[0, separator]
     if compiler_string_has_prefix(qualifier, "/")
     then normalize_import_module_path(qualifier).replace("/", ".")
     else if qualifier ? "/"

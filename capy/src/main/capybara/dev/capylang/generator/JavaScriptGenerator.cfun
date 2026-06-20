@@ -34,6 +34,17 @@ private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueE
 private data JavaScriptFunctionSections { constants: String, functions: String }
 /// Constructor statements collected in one scan over object helper functions.
 private data JavaScriptObjectConstructorStatements { fieldStatements: String, initStatements: String }
+/// Object class helper metadata collected in one scan over object helper functions.
+private data JavaScriptObjectClassSources {
+    openValue: String,
+    fieldSchemas: List[String],
+    parentSchemas: List[String],
+    annotationSchemas: List[String],
+    fieldStatements: String,
+    initStatements: String
+}
+/// Object interface helper metadata collected in one scan over object helper functions.
+private data JavaScriptObjectInterfaceSources { methodInfoStatements: String, parentSchemas: List[String], annotationSchemas: List[String] }
 /// Decoded object field schema metadata used while emitting object reflection metadata.
 private data JavaScriptObjectFieldSchema { name: String, typeName: String }
 
@@ -329,7 +340,7 @@ private fun java_script_object_helper_code(function: CompiledFunction, functions
 /// Formats JavaScript source text for object class.
 private fun java_script_object_class(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     let className = java_script_object_class_schema_name(function)
-    let constructorStatements = java_script_object_constructor_statements(className, functions)
+    let sources = java_script_object_class_sources(className, functions)
     "function "
         + java_script_object_runtime_class_name(className)
         + "(...__capy_args) {"
@@ -338,8 +349,8 @@ private fun java_script_object_class(function: CompiledFunction, functions: List
         + java_script_string_literal(className)
         + ";"
         + java_script_newline()
-        + constructorStatements.fieldStatements
-        + constructorStatements.initStatements
+        + sources.fieldStatements
+        + sources.initStatements
         + "}"
         + java_script_newline()
         + java_script_newline()
@@ -354,25 +365,75 @@ private fun java_script_object_class(function: CompiledFunction, functions: List
         + "}"
         + java_script_newline()
         + java_script_newline()
-        + java_script_object_type_function(className, functions, module, allModules)
+        + java_script_object_type_function(className, sources, module, allModules)
+
+/// Collects JavaScript object class helper metadata for one class once.
+private fun java_script_object_class_sources(className: String, functions: List[CompiledFunction]): JavaScriptObjectClassSources =
+    match functions[0] with
+    case None -> JavaScriptObjectClassSources { openValue: "", fieldSchemas: [], parentSchemas: [], annotationSchemas: [], fieldStatements: "", initStatements: "" }
+    case Some { function } ->
+        let rest = java_script_object_class_sources(className, functions[1:])
+        if java_script_compiled_schema(function) & function.name == java_script_object_class_open_schema_key(className)
+        then rest.with(openValue: java_script_schema_value(function))
+        else if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, java_script_object_field_schema_prefix(className))
+        then rest.with(fieldSchemas: [java_script_schema_value(function)] + rest.fieldSchemas)
+        else if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, java_script_object_class_parent_schema_prefix(className))
+        then rest.with(parentSchemas: [java_script_schema_value(function)] + rest.parentSchemas)
+        else if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, java_script_object_type_annotation_schema_prefix(className))
+        then rest.with(annotationSchemas: [java_script_schema_value(function)] + rest.annotationSchemas)
+        else if java_script_object_field_init_function_for_class(className, function)
+        then rest.with(fieldStatements: "    this["
+            + java_script_string_literal(java_script_object_field_init_name(function))
+            + "] = "
+            + java_script_function_name(function)
+            + ".call(this, ...__capy_args);"
+            + java_script_newline()
+            + rest.fieldStatements)
+        else if java_script_object_init_function_for_class(className, function)
+        then rest.with(initStatements: "    __capy_unsafe_run("
+            + java_script_function_name(function)
+            + ".call(this, ...__capy_args));"
+            + java_script_newline()
+            + rest.initStatements)
+        else rest
 
 /// Formats JavaScript source text for object interface.
 private fun java_script_object_interface(function: CompiledFunction, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
     let interfaceName = java_script_object_interface_schema_name(function)
+    let sources = java_script_object_interface_sources(interfaceName, functions, module, allModules)
     "const "
         + java_script_object_constructor_name(interfaceName)
         + " = Object.create(null);"
         + java_script_newline()
-        + java_script_object_interface_type_function(interfaceName, functions, module, allModules)
+        + java_script_object_interface_type_function(interfaceName, sources, module, allModules)
+
+/// Collects JavaScript object interface helper metadata for one interface once.
+private fun java_script_object_interface_sources(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): JavaScriptObjectInterfaceSources =
+    match functions[0] with
+    case None -> JavaScriptObjectInterfaceSources { methodInfoStatements: "", parentSchemas: [], annotationSchemas: [] }
+    case Some { function } ->
+        let rest = java_script_object_interface_sources(interfaceName, functions[1:], module, allModules)
+        if java_script_object_interface_method_function_for_interface(interfaceName, function)
+        then rest.with(methodInfoStatements: java_script_object_constructor_name(interfaceName)
+            + ".__capy_methods.push("
+            + java_script_object_interface_method_info_literal(interfaceName, function, module, allModules)
+            + ");"
+            + java_script_newline()
+            + rest.methodInfoStatements)
+        else if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, java_script_object_interface_parent_schema_prefix(interfaceName))
+        then rest.with(parentSchemas: [java_script_schema_value(function)] + rest.parentSchemas)
+        else if java_script_compiled_schema(function) & java_script_string_has_prefix(function.name, java_script_object_type_annotation_schema_prefix(interfaceName))
+        then rest.with(annotationSchemas: [java_script_schema_value(function)] + rest.annotationSchemas)
+        else rest
 
 /// Formats type metadata text for object interface type function.
-private fun java_script_object_interface_type_function(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_object_interface_type_function(interfaceName: String, sources: JavaScriptObjectInterfaceSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_object_constructor_name(interfaceName)
         + ".__capy_methods = "
         + java_script_object_constructor_name(interfaceName)
         + ".__capy_methods || [];"
         + java_script_newline()
-        + java_script_object_interface_method_info_statements(interfaceName, functions, module, allModules)
+        + sources.methodInfoStatements
         + java_script_object_constructor_name(interfaceName)
         + ".type = function() {"
         + java_script_newline()
@@ -380,8 +441,8 @@ private fun java_script_object_interface_type_function(interfaceName: String, fu
         + "\"name\": " + java_script_string_literal(interfaceName)
         + ", \"pkg\": " + java_script_reflection_module_package_metadata_literal(module)
         + ", \"methods\": " + java_script_object_constructor_name(interfaceName) + ".__capy_methods"
-        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values(java_script_object_interface_parent_schema_prefix(interfaceName), functions), module, allModules)
-        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values(java_script_object_type_annotation_schema_prefix(interfaceName), functions), module, allModules)
+        + ", \"parents\": " + java_script_object_parent_infos_literal(sources.parentSchemas, module, allModules)
+        + ", \"annotations\": " + java_script_object_annotations_literal(sources.annotationSchemas, module, allModules)
         + "};"
         + java_script_newline()
         + "};"
@@ -403,7 +464,7 @@ private fun java_script_object_interface_method_info_statements(interfaceName: S
         else java_script_string_identity(java_script_object_interface_method_info_statements(interfaceName, functions[1:], module, allModules))
 
 /// Formats type metadata text for object type function.
-private fun java_script_object_type_function(className: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_object_type_function(className: String, sources: JavaScriptObjectClassSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     java_script_object_constructor_name(className)
         + ".__capy_methods = "
         + java_script_object_constructor_name(className)
@@ -415,11 +476,11 @@ private fun java_script_object_type_function(className: String, functions: List[
         + "    return {"
         + "\"name\": " + java_script_string_literal(className)
         + ", \"pkg\": " + java_script_reflection_module_package_metadata_literal(module)
-        + ", \"open\": " + java_script_bool_code(java_script_object_class_open(className, functions))
-        + ", \"fields\": " + java_script_object_field_infos_literal(className, java_script_schema_values(java_script_object_field_schema_prefix(className), functions), 0, module, allModules)
+        + ", \"open\": " + java_script_bool_code(sources.openValue == "true")
+        + ", \"fields\": " + java_script_object_field_infos_literal(className, sources.fieldSchemas, 0, module, allModules)
         + ", \"methods\": " + java_script_object_constructor_name(className) + ".__capy_methods"
-        + ", \"parents\": " + java_script_object_parent_infos_literal(java_script_schema_values(java_script_object_class_parent_schema_prefix(className), functions), module, allModules)
-        + ", \"annotations\": " + java_script_object_annotations_literal(java_script_schema_values(java_script_object_type_annotation_schema_prefix(className), functions), module, allModules)
+        + ", \"parents\": " + java_script_object_parent_infos_literal(sources.parentSchemas, module, allModules)
+        + ", \"annotations\": " + java_script_object_annotations_literal(sources.annotationSchemas, module, allModules)
         + "};"
         + java_script_newline()
         + "};"

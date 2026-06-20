@@ -57,6 +57,16 @@ data JavaSchemaValues { typeExists: bool, values: List[String] }
 data JavaObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
 /// Object field schemas and initializer helpers collected in one class scan.
 data JavaObjectFieldSources { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
+/// Object class schema helpers collected in one class scan.
+data JavaObjectClassSources {
+    openValue: String,
+    parameters: List[CompiledFunction],
+    parents: List[String],
+    fieldSchemas: List[CompiledFunction],
+    fieldInitializers: List[CompiledFunction],
+    initBlocks: List[CompiledFunction],
+    methods: List[CompiledFunction]
+}
 
 const JAVA_IDENTIFIER_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 const JAVA_IDENTIFIER_PART = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -791,19 +801,41 @@ private fun compiled_object_class_schema(function: CompiledFunction): bool =
 /// Extracts compiled metadata for object class.
 private fun compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
     let className = function.name[oo_class_schema_prefix_size(), function.name.size().value]
-    let fieldSources = compiled_object_field_sources(className, functions)
+    let sources = compiled_object_class_sources(className, functions)
     CompiledObjectOrientedClass {
         name: className,
         visibility: schema_value(function),
         documentation: function.documentation,
-        open: compiled_object_class_open(className, functions),
-        parameters: compiled_object_class_parameters(className, functions),
-        parents: schema_type_references(schema_values("__capy_oo_parent|" + className + "|", functions)),
-        fields: compiled_object_fields(className, fieldSources.schemas, fieldSources.initializers),
-        initBlocks: compiled_object_init_blocks(className, functions),
-        methods: compiled_object_methods(className, functions),
+        open: sources.openValue == "true",
+        parameters: compiled_object_class_parameters_from_sources(sources.parameters),
+        parents: schema_type_references(sources.parents),
+        fields: compiled_object_fields(className, sources.fieldSchemas, sources.fieldInitializers),
+        initBlocks: compiled_object_init_blocks_from_sources(sources.initBlocks),
+        methods: compiled_object_methods_from_sources(sources.methods),
         location: function.location
     }
+
+/// Extracts compiled object class schema and helper sources for one class once.
+private fun compiled_object_class_sources(className: String, functions: List[CompiledFunction]): JavaObjectClassSources =
+    match functions[0] with
+    case None -> JavaObjectClassSources { openValue: "", parameters: [], parents: [], fieldSchemas: [], fieldInitializers: [], initBlocks: [], methods: [] }
+    case Some { function } ->
+        let rest = compiled_object_class_sources(className, functions[1:])
+        if compiled_schema(function) & function.name == "__capy_oo_class_open|" + className
+        then rest.with(openValue: schema_value(function))
+        else if compiled_object_class_parameter_schema_for_class(function, className)
+        then rest.with(parameters: [function] + rest.parameters)
+        else if compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_parent|" + className + "|")
+        then rest.with(parents: [schema_value(function)] + rest.parents)
+        else if compiled_object_field_schema_for_class(function, className)
+        then rest.with(fieldSchemas: [function] + rest.fieldSchemas)
+        else if compiled_object_field_init_function_for_class(function, className)
+        then rest.with(fieldInitializers: [function] + rest.fieldInitializers)
+        else if compiled_object_init_function_for_class(function, className)
+        then rest.with(initBlocks: [function] + rest.initBlocks)
+        else if compiled_object_method_function_for_class(function, className)
+        then rest.with(methods: [function] + rest.methods)
+        else rest
 
 /// Extracts compiled metadata for object class open.
 private fun compiled_object_class_open(className: String, functions: List[CompiledFunction]): bool =
@@ -819,6 +851,12 @@ private fun compiled_object_class_parameters(className: String, functions: List[
         if compiled_object_class_parameter_schema_for_class(function, className)
         then [compiled_object_class_parameter(function)] + compiled_object_class_parameters(className, functions[1:])
         else compiled_object_class_parameters(className, functions[1:])
+
+/// Extracts compiled metadata for object class parameters from prefiltered schema functions.
+private fun compiled_object_class_parameters_from_sources(functions: List[CompiledFunction]): List[CompiledFunctionParameter] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [compiled_object_class_parameter(function)] + compiled_object_class_parameters_from_sources(functions[1:])
 
 /// Extracts compiled metadata for object class parameter schema for class.
 private fun compiled_object_class_parameter_schema_for_class(function: CompiledFunction, className: String): bool =
@@ -972,6 +1010,16 @@ private fun compiled_object_init_blocks(className: String, functions: List[Compi
         }] + compiled_object_init_blocks(className, functions[1:])
         else compiled_object_init_blocks(className, functions[1:])
 
+/// Extracts compiled metadata for object initializer blocks from prefiltered functions.
+private fun compiled_object_init_blocks_from_sources(functions: List[CompiledFunction]): List[CompiledObjectOrientedInitBlock] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [CompiledObjectOrientedInitBlock {
+        body: function.body,
+        documentation: function.documentation,
+        location: function.location
+    }] + compiled_object_init_blocks_from_sources(functions[1:])
+
 /// Extracts compiled metadata for object initializer function.
 private fun compiled_object_init_function(function: CompiledFunction): bool =
     java_generator_string_has_prefix(function.name, OO_INIT_FUNCTION_PREFIX)
@@ -1010,6 +1058,12 @@ private fun compiled_object_methods(className: String, functions: List[CompiledF
         if compiled_object_method_function_for_class(function, className)
         then [compiled_object_method(function)] + compiled_object_methods(className, functions[1:])
         else compiled_object_methods(className, functions[1:])
+
+/// Extracts compiled metadata for object methods from prefiltered functions.
+private fun compiled_object_methods_from_sources(functions: List[CompiledFunction]): List[CompiledObjectOrientedMethod] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [compiled_object_method(function)] + compiled_object_methods_from_sources(functions[1:])
 
 /// Extracts compiled metadata for object method function.
 private fun compiled_object_method_function(function: CompiledFunction): bool =
