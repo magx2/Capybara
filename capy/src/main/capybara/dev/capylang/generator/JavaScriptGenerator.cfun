@@ -5231,7 +5231,9 @@ private fun java_script_enum_qualified_value_code(name: String, module: Compiled
 
 /// Checks whether enum type exists in the relevant declarations or imports.
 private fun java_script_enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !java_script_enum_values(name, module, allModules).is_empty()
+    if java_script_enum_type_exists_in_functions(name, module.functions)
+    then true
+    else java_script_enum_type_exists_in_imports(name, module.imports, module, allModules)
 
 /// Checks whether enum value exists in the relevant declarations or imports.
 private fun java_script_enum_value_exists(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -5272,6 +5274,24 @@ private fun java_script_enum_values_in_import(name: String, rest: List[CompiledI
         then /capy/lang/Option.Some { values }
         else java_script_enum_values_in_imports(name, rest, module, allModules)
     case None -> java_script_enum_values_in_imports(name, rest, module, allModules)
+
+/// Checks imported modules for enum type existence without materializing enum values.
+private fun java_script_enum_type_exists_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if java_script_data_import_matches(name, declaration)
+        then java_script_enum_type_exists_in_import(name, imports[1:], module, allModules, declaration)
+        else java_script_enum_type_exists_in_imports(name, imports[1:], module, allModules)
+
+/// Checks one imported module for enum type existence without materializing enum values.
+private fun java_script_enum_type_exists_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): bool =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if java_script_enum_type_exists_in_functions(name, importedModule.functions)
+        then true
+        else java_script_enum_type_exists_in_imports(name, rest, module, allModules)
+    case None -> java_script_enum_type_exists_in_imports(name, rest, module, allModules)
 
 /// Emits JavaScript code for enum value references.
 private fun java_script_enum_value_references_code(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =

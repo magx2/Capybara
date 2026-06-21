@@ -56,6 +56,8 @@ from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
 /// Library import additions computed together to avoid repeated import/library scans.
 private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+/// Compiled modules accumulated by module key while preserving the historical reversed output order.
+private data CompiledModuleMergeIndex { modules: Dict[CompiledModule], order: List[String] }
 /// Imported library function and explicit static-import selection computed in one function scan.
 private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 /// Precomputed import path forms used while matching one import against available libraries.
@@ -151,22 +153,47 @@ private fun validation_library_modules(libraries: List[CompiledModule]): List[St
 
 /// Compiles parsed modules and merges module fragments that share the same name and path.
 private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex): List[CompiledModule] =
+    compiled_module_merge_index_values(
+        compile_module_merge_index(modules, allModules, libraryIndex, CompiledModuleMergeIndex { modules: {:}, order: [] })
+    )
+
+/// Builds a merge index for compiled modules without repeatedly scanning the already-compiled tail.
+private fun compile_module_merge_index(modules: List[ParsedModule], allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex, index: CompiledModuleMergeIndex): CompiledModuleMergeIndex =
     match modules[0] with
+    case None -> index
+    case Some { module } ->
+        let compiled = compile_module_with_libraries(module, allModules, libraryIndex)
+        let key = compiled_module_merge_key(compiled)
+        match index.modules.get(key) with
+        case Some { existing } ->
+            compile_module_merge_index(modules[1:], allModules, libraryIndex, CompiledModuleMergeIndex {
+                modules: index.modules + (key, merge_compiled_modules(existing, compiled)),
+                order: index.order
+            })
+        case None ->
+            compile_module_merge_index(modules[1:], allModules, libraryIndex, CompiledModuleMergeIndex {
+                modules: index.modules + (key, compiled),
+                order: [key] + index.order
+            })
+
+/// Expands the merge index to a module list in the same order produced by the old tail-recursive merge.
+private fun compiled_module_merge_index_values(index: CompiledModuleMergeIndex): List[CompiledModule] =
+    compiled_module_merge_index_values_by_order(index.order, index.modules)
+
+/// Expands merged module values by their preserved order keys.
+private fun compiled_module_merge_index_values_by_order(order: List[String], modules: Dict[CompiledModule]): List[CompiledModule] =
+    match order[0] with
     case None -> []
-    case Some { module } -> merge_compiled_module(compile_module_with_libraries(module, allModules, libraryIndex), compile_modules(modules[1:], allModules, libraryIndex))
+    case Some { key } ->
+        match modules.get(key) with
+        case Some { module } -> [module] + compiled_module_merge_index_values_by_order(order[1:], modules)
+        case None -> compiled_module_merge_index_values_by_order(order[1:], modules)
 
-/// Adds one compiled module to the result list, merging it with an existing module for the same source path.
-private fun merge_compiled_module(module: CompiledModule, modules: List[CompiledModule]): List[CompiledModule] =
-    match modules[0] with
-    case None -> [module]
-    case Some { existing } ->
-        if same_compiled_module(module, existing)
-        then [merge_compiled_modules(module, existing)] + modules[1:]
-        else [existing] + merge_compiled_module(module, modules[1:])
-
-/// Checks whether two compiled module values identify the same entity.
-private fun same_compiled_module(first: CompiledModule, second: CompiledModule): bool =
-    first.name == second.name & first.path == second.path
+/// Builds the merge key for compiled module fragments.
+private fun compiled_module_merge_key(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else module.path + "/" + module.name
 
 /// Combines declarations, functions, imports, and schema metadata from two fragments of the same module.
 private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule): CompiledModule =

@@ -4401,7 +4401,11 @@ private fun python_enum_qualified_value_code(name: String, module: CompiledModul
 
 /// Checks whether enum type exists in the relevant declarations or imports.
 private fun python_enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !python_enum_values(name, module, allModules).is_empty()
+    if python_enum_type_exists_in_functions(name, module.functions)
+    then true
+    else match python_enum_type_imported_module(name, module.imports, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 /// Checks whether enum value exists in the relevant declarations or imports.
 private fun python_enum_value_exists(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =

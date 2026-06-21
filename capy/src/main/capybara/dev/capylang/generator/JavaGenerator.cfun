@@ -9525,7 +9525,11 @@ private fun schema_value_named(name: String, functions: List[CompiledFunction]):
 
 /// Checks whether enum type exists in the relevant declarations or imports.
 private fun enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !enum_values(name, module, allModules).is_empty()
+    if enum_type_exists_in_functions(name, module.functions)
+    then true
+    else match enum_type_imported_class(name, module.imports, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 /// Checks whether enum value exists in the relevant declarations or imports.
 private fun enum_value_exists(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
