@@ -5313,12 +5313,53 @@ private fun python_find_object_class_by_type(typeName: String, modules: List[Com
 
 /// Finds an object class by encoded object type in scope, imports, or compiled modules.
 private fun python_find_object_class_by_object_type(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
+    let modulePath = python_object_type_module_path(typeName)
+    let className = python_object_type_member_name(typeName)
+    if modulePath.is_empty()
+    then python_find_object_class_by_object_type_in_modules(typeName, modules)
+    else match python_find_module_by_path(modulePath, modules) with
+        case Some { module } -> {
+            match python_find_object_class_by_encoded_name(className, module.functions, module) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> python_find_object_class_by_object_type_in_modules(typeName, modules)
+        }
+        case None -> python_find_object_class_by_object_type_in_modules(typeName, modules)
+
+/// Finds an object class by encoded object type with the historical module scan.
+private fun python_find_object_class_by_object_type_in_modules(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
         match python_find_object_class_by_type_in_module(typeName, module.functions, module) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
-        case None -> python_find_object_class_by_object_type(typeName, modules[1:])
+        case None -> python_find_object_class_by_object_type_in_modules(typeName, modules[1:])
+
+/// Finds an object class by the encoded Python identifier segment.
+private fun python_find_object_class_by_encoded_name(encodedName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if python_compiled_object_class_schema(function)
+        then if python_identifier(python_compiled_object_class_name(function)) == encodedName
+            then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: python_compiled_object_class(function, functions) } }
+            else python_find_object_class_by_encoded_name(encodedName, functions[1:], module)
+        else python_find_object_class_by_encoded_name(encodedName, functions[1:], module)
+
+/// Returns the length of the encoded Python object-type marker prefix.
+private fun python_object_type_prefix_size(): int =
+    "__capy_oo|".size().value
+
+/// Extracts the owner module path from an encoded object type name.
+private fun python_object_type_module_path(typeName: String): String =
+    let rawName = typeName[python_object_type_prefix_size(), typeName.size().value]
+    let idx = python_last_dot_index(rawName)
+    if idx < 0 then "" else rawName[0, idx]
+
+/// Extracts the encoded member identifier from an encoded object type name.
+private fun python_object_type_member_name(typeName: String): String =
+    let rawName = typeName[python_object_type_prefix_size(), typeName.size().value]
+    let idx = python_last_dot_index(rawName)
+    if idx < 0 then rawName else rawName[idx + 1, rawName.size().value]
 
 /// Finds an object class by type in a module without materializing unrelated object classes.
 private fun python_find_object_class_by_type_in_module(typeName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =

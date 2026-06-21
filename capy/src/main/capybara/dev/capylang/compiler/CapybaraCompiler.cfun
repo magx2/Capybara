@@ -82,6 +82,7 @@ private data CompiledNativeProviderAnnotation { found: bool, qualifier: String }
 private data CompilerTypeNameSeparators { lastTypeSeparator: int, lastDotSeparator: int }
 /// Raw deriver declarations indexed once per module for derive expansion.
 private data CompiledDefinitionIndexes {
+    functions: Dict[FunctionDeclaration],
     derivers: Dict[CompiledRawDeriverDeclaration],
     compiledDerivers: Dict[CompiledDeriverDeclaration],
     visiblePrimitiveBackedTypes: Dict[CompiledPrimitiveBackedType],
@@ -906,12 +907,21 @@ private fun compile_deriver_methods(methods: List[FunctionDeclaration]): List[Co
 /// Builds raw definition lookup structures used during module compilation.
 private fun compile_definition_indexes(definitions: List[Definition], module: ParsedModule, allModules: List[ParsedModule]): CompiledDefinitionIndexes =
     match definitions[0] with
-    case None -> CompiledDefinitionIndexes { derivers: {:}, compiledDerivers: {:}, visiblePrimitiveBackedTypes: {:}, annotations: {:} }
+    case None -> CompiledDefinitionIndexes { functions: {:}, derivers: {:}, compiledDerivers: {:}, visiblePrimitiveBackedTypes: {:}, annotations: {:} }
     case Some { definition } ->
         let rest = compile_definition_indexes(definitions[1:], module, allModules)
         match definition with
+        case FunctionDefinition { function } ->
+            CompiledDefinitionIndexes {
+                functions: rest.functions + (function.name, function),
+                derivers: rest.derivers,
+                compiledDerivers: rest.compiledDerivers,
+                visiblePrimitiveBackedTypes: rest.visiblePrimitiveBackedTypes,
+                annotations: rest.annotations
+            }
         case DeriverDeclaration declaration ->
             CompiledDefinitionIndexes {
+                functions: rest.functions,
                 derivers: rest.derivers + (declaration.name, CompiledRawDeriverDeclaration {
                     name: declaration.name,
                     methods: declaration.methods
@@ -922,6 +932,7 @@ private fun compile_definition_indexes(definitions: List[Definition], module: Pa
             }
         case PrimitiveBackedTypeDeclaration declaration ->
             CompiledDefinitionIndexes {
+                functions: rest.functions,
                 derivers: rest.derivers,
                 compiledDerivers: rest.compiledDerivers,
                 visiblePrimitiveBackedTypes: rest.visiblePrimitiveBackedTypes + (declaration.name, compile_primitive_backed_type(declaration, module, allModules)),
@@ -929,6 +940,7 @@ private fun compile_definition_indexes(definitions: List[Definition], module: Pa
             }
         case AnnotationDeclaration declaration ->
             CompiledDefinitionIndexes {
+                functions: rest.functions,
                 derivers: rest.derivers,
                 compiledDerivers: rest.compiledDerivers,
                 visiblePrimitiveBackedTypes: rest.visiblePrimitiveBackedTypes,
@@ -1071,7 +1083,7 @@ private fun compile_functions(definitions: List[Definition], definitionIndexes: 
             compile_derived_functions_for_type(declaration.name, declaration.derives, definitionIndexes)
                 + compile_functions(definitions[1:], definitionIndexes, module, allModules)
         case EnumDeclaration declaration -> compile_enum_declaration(declaration) + compile_functions(definitions[1:], definitionIndexes, module, allModules)
-        case FunctionDefinition { function } -> [compile_function_in_module(function, module, allModules)] + compile_functions(definitions[1:], definitionIndexes, module, allModules)
+        case FunctionDefinition { function } -> [compile_function_in_module(function, definitionIndexes.functions, module, allModules)] + compile_functions(definitions[1:], definitionIndexes, module, allModules)
         case _ -> compile_functions(definitions[1:], definitionIndexes, module, allModules)
 
 /// Converts parsed data declaration into compiled metadata.
@@ -1463,13 +1475,13 @@ private fun compile_function(function: FunctionDeclaration): CompiledFunction =
     }
 
 /// Converts a parsed function in a module into compiled metadata.
-private fun compile_function_in_module(function: FunctionDeclaration, module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
+private fun compile_function_in_module(function: FunctionDeclaration, functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule]): CompiledFunction =
     CompiledFunction {
         name: function.name,
         visibility: function.visibility,
         documentation: function.documentation,
         parameters: compile_parameters_in_module(function.parameters, module, allModules),
-        returnType: compile_return_type_in_module(function.returnType, function.parameters, function.body, module, allModules),
+        returnType: compile_return_type_in_module(function.returnType, function.parameters, function.body, functionDeclarations, module, allModules),
         body: compile_expression_in_function(function.body, function.name),
         location: compile_location(function.location)
     }
@@ -1481,25 +1493,25 @@ private fun compile_return_type(type: TypeReference, parameters: List[FunctionPa
     else compile_type(type)
 
 /// Converts a parsed return type in a module into compiled metadata.
-private fun compile_return_type_in_module(type: TypeReference, parameters: List[FunctionParameter], body: Expression, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
+private fun compile_return_type_in_module(type: TypeReference, parameters: List[FunctionParameter], body: Expression, functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
     if type.name.is_empty()
-    then compile_type_in_module(infer_return_type_in_module(body, parameters, module, allModules, 0), module, allModules)
+    then compile_type_in_module(infer_return_type_in_module(body, parameters, functionDeclarations, module, allModules, 0), module, allModules)
     else compile_type_in_module(type, module, allModules)
 
 /// Infers the compiled type for return type in a module.
-private fun infer_return_type_in_module(expression: Expression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+private fun infer_return_type_in_module(expression: Expression, env: List[FunctionParameter], functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     if depth > 16
     then missing_type()
     else match expression with
-    case FunctionCallExpression call -> infer_function_call_type(call, module, allModules, depth + 1)
-    case IfExpression ifExpression -> infer_if_type_in_module(ifExpression, env, module, allModules, depth + 1)
-    case BlockExpression block -> infer_return_type_in_module(block.result, block_type_env_in_module(block.bindings, env, module, allModules, depth + 1), module, allModules, depth + 1)
+    case FunctionCallExpression call -> infer_function_call_type(call, functionDeclarations, module, allModules, depth + 1)
+    case IfExpression ifExpression -> infer_if_type_in_module(ifExpression, env, functionDeclarations, module, allModules, depth + 1)
+    case BlockExpression block -> infer_return_type_in_module(block.result, block_type_env_in_module(block.bindings, env, functionDeclarations, module, allModules, depth + 1), functionDeclarations, module, allModules, depth + 1)
     case _ -> infer_return_type(expression, env, depth + 1)
 
 /// Infers the compiled type for if type in a module.
-private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
-    let thenType = infer_return_type_in_module(ifExpression.thenBranch, env, module, allModules, depth + 1)
-    let elseType = infer_return_type_in_module(ifExpression.elseBranch, env, module, allModules, depth + 1)
+private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[FunctionParameter], functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    let thenType = infer_return_type_in_module(ifExpression.thenBranch, env, functionDeclarations, module, allModules, depth + 1)
+    let elseType = infer_return_type_in_module(ifExpression.elseBranch, env, functionDeclarations, module, allModules, depth + 1)
     if thenType.name.is_empty()
     then elseType
     else if elseType.name.is_empty()
@@ -1513,23 +1525,23 @@ private fun infer_if_type_in_module(ifExpression: IfExpression, env: List[Functi
     else missing_type()
 
 /// Collects block type environmentironment in a module for compiler processing.
-private fun block_type_env_in_module(bindings: List[LetBinding], env: List[FunctionParameter], module: ParsedModule, allModules: List[ParsedModule], depth: int): List[FunctionParameter] =
+private fun block_type_env_in_module(bindings: List[LetBinding], env: List[FunctionParameter], functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule], depth: int): List[FunctionParameter] =
     match bindings[0] with
     case None -> env
     case Some { binding } ->
-        let bindingType = if binding.typeReference.name.is_empty() then infer_return_type_in_module(binding.value, env, module, allModules, depth + 1) else binding.typeReference
+        let bindingType = if binding.typeReference.name.is_empty() then infer_return_type_in_module(binding.value, env, functionDeclarations, module, allModules, depth + 1) else binding.typeReference
         block_type_env_in_module(bindings[1:], [FunctionParameter {
             name: binding.name,
             typeReference: bindingType,
             location: binding.location
-        }] + env, module, allModules, depth + 1)
+        }] + env, functionDeclarations, module, allModules, depth + 1)
 
 /// Infers the compiled type for function call type.
-private fun infer_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+private fun infer_function_call_type(call: FunctionCallExpression, functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     let separator = compiler_last_index_of(call.name, ".", 0, -1)
     if compiler_qualified_name_at(call.name, separator)
     then infer_qualified_function_call_type_at(call, separator, module, allModules, depth + 1)
-    else infer_function_call_type_in_module(call.name, module, allModules, depth + 1)
+    else infer_function_call_type_in_module(call.name, functionDeclarations, module, allModules, depth + 1)
 
 /// Infers the compiled type for qualified function call type.
 private fun infer_qualified_function_call_type(call: FunctionCallExpression, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
@@ -1538,15 +1550,24 @@ private fun infer_qualified_function_call_type(call: FunctionCallExpression, mod
 /// Infers the compiled type for qualified function call type using a precomputed separator.
 private fun infer_qualified_function_call_type_at(call: FunctionCallExpression, separator: int, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     match find_parsed_module_by_class(compiler_qualified_class_name_at(call.name, separator, module), allModules) with
-    case Some { targetModule } -> infer_function_call_type_in_module(compiler_qualified_member_name_at(call.name, separator), targetModule, allModules, depth + 1)
+    case Some { targetModule } -> infer_function_call_type_in_parsed_module(compiler_qualified_member_name_at(call.name, separator), targetModule, allModules, depth + 1)
     case None -> missing_type()
 
 /// Infers the compiled type for function call type in a module.
-private fun infer_function_call_type_in_module(name: String, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+private fun infer_function_call_type_in_module(name: String, functionDeclarations: Dict[FunctionDeclaration], module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
+    match functionDeclarations.get(name) with
+    case Some { function } ->
+        if function.returnType.name.is_empty()
+        then infer_return_type_in_module(function.body, function.parameters, functionDeclarations, module, allModules, depth + 1)
+        else function.returnType
+    case None -> missing_type()
+
+/// Infers a qualified call target type using the historical declaration scan for the target module.
+private fun infer_function_call_type_in_parsed_module(name: String, module: ParsedModule, allModules: List[ParsedModule], depth: int): TypeReference =
     match find_function_declaration(name, module.definitions) with
     case Some { function } ->
         if function.returnType.name.is_empty()
-        then infer_return_type_in_module(function.body, function.parameters, module, allModules, depth + 1)
+        then infer_return_type_in_module(function.body, function.parameters, parsed_module_function_declarations(module.definitions), module, allModules, depth + 1)
         else function.returnType
     case None -> missing_type()
 
@@ -1561,6 +1582,16 @@ private fun find_function_declaration(name: String, definitions: List[Definition
             then /capy/lang/Option.Some { function }
             else find_function_declaration(name, definitions[1:])
         case _ -> find_function_declaration(name, definitions[1:])
+
+/// Indexes parsed function declarations while preserving first declaration lookup semantics.
+private fun parsed_module_function_declarations(definitions: List[Definition]): Dict[FunctionDeclaration] =
+    match definitions[0] with
+    case None -> {:}
+    case Some { definition } ->
+        let rest = parsed_module_function_declarations(definitions[1:])
+        match definition with
+        case FunctionDefinition { function } -> rest + (function.name, function)
+        case _ -> rest
 
 /// Infers the compiled type for return type.
 private fun infer_return_type(expression: Expression, env: List[FunctionParameter], depth: int): TypeReference =

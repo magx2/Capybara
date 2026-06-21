@@ -1181,9 +1181,27 @@ private fun java_script_object_method_exists_in_modules(typeName: String, method
     match modules[0] with
     case None -> false
     case Some { module } ->
-        java_script_object_method_exists(typeName, methodName, module.functions)
-            | java_script_object_interface_method_exists(typeName, methodName, module.functions)
+        java_script_object_method_exists_in_module(typeName, methodName, module)
             | java_script_object_method_exists_in_modules(typeName, methodName, modules[1:])
+
+/// Checks whether object method exists in one module.
+private fun java_script_object_method_exists_in_module(typeName: String, methodName: String, module: CompiledModule): bool =
+    java_script_object_method_exists(typeName, methodName, module.functions)
+        | java_script_object_interface_method_exists(typeName, methodName, module.functions)
+
+/// Checks whether object method exists in modules other than the already-checked current module.
+private fun java_script_object_method_exists_in_other_modules(typeName: String, methodName: String, current: CompiledModule, modules: List[CompiledModule]): bool =
+    match modules[0] with
+    case None -> false
+    case Some { module } ->
+        if java_script_same_module(module, current)
+        then java_script_object_method_exists_in_other_modules(typeName, methodName, current, modules[1:])
+        else java_script_object_method_exists_in_module(typeName, methodName, module)
+            | java_script_object_method_exists_in_other_modules(typeName, methodName, current, modules[1:])
+
+/// Checks whether two module values identify the same compiled module.
+private fun java_script_same_module(first: CompiledModule, second: CompiledModule): bool =
+    first.name == second.name & first.path == second.path
 
 /// Computes the JavaScript name for object runtime class.
 private fun java_script_object_runtime_class_name(className: String): String =
@@ -2737,7 +2755,10 @@ private fun java_script_oo_method_call(call: CompiledMethodCallExpression, env: 
 private fun java_script_oo_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     if !java_script_object_receiver_type(receiverType)
     then false
-    else java_script_object_method_exists_in_modules(java_script_type_unqualified_name(receiverType), call.name, [module] + allModules)
+    else
+        let typeName = java_script_type_unqualified_name(receiverType)
+        java_script_object_method_exists_in_module(typeName, call.name, module)
+            | java_script_object_method_exists_in_other_modules(typeName, call.name, module, allModules)
 
 /// Checks whether a compiled type name can resolve to object-oriented metadata.
 private fun java_script_object_receiver_type(typeName: String): bool =
