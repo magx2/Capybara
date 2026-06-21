@@ -60,6 +60,8 @@ private data CompiledLibraryImports { functions: List[CompiledFunction], staticI
 private data CompiledModuleMergeIndex { modules: Dict[CompiledModule], order: List[String] }
 /// Imported library function and explicit static-import selection computed in one function scan.
 private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+/// Imported and excluded name indexes for one import declaration.
+private data CompiledImportNameIndexes { importedNames: Dict[bool], excludedNames: Dict[bool] }
 /// Precomputed import path forms used while matching one import against available libraries.
 private data CompiledImportLibraryLookup { modulePath: String, normalizedPath: String, normalizedImportPath: String }
 /// Indexed library module lookup entry with original list order for first-match compatibility.
@@ -268,11 +270,15 @@ private fun compile_library_imports(imports: List[CompiledImportDeclaration], li
 
 /// Filters exported library functions and explicit static imports in one pass.
 private fun imported_library_selection_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction], className: String, includeStaticImports: bool): CompiledLibraryImportSelection =
+    imported_library_selection_from_module_with_indexes(declaration, compiled_import_name_indexes(declaration), functions, className, includeStaticImports)
+
+/// Filters exported library functions and explicit static imports with precomputed import-name indexes.
+private fun imported_library_selection_from_module_with_indexes(declaration: CompiledImportDeclaration, indexes: CompiledImportNameIndexes, functions: List[CompiledFunction], className: String, includeStaticImports: bool): CompiledLibraryImportSelection =
     match functions[0] with
     case None -> CompiledLibraryImportSelection { functions: [], staticImports: [] }
     case Some { function } ->
-        let rest = imported_library_selection_from_module(declaration, functions[1:], className, includeStaticImports)
-        if imported_library_function(declaration, function)
+        let rest = imported_library_selection_from_module_with_indexes(declaration, indexes, functions[1:], className, includeStaticImports)
+        if imported_library_function(declaration, indexes, function)
         then CompiledLibraryImportSelection {
             functions: [function.with(visibility: "imported")] + rest.functions,
             staticImports: if includeStaticImports
@@ -282,14 +288,41 @@ private fun imported_library_selection_from_module(declaration: CompiledImportDe
         else rest
 
 /// Checks whether a library function is exported and selected by an import declaration.
-private fun imported_library_function(declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
+private fun imported_library_function(declaration: CompiledImportDeclaration, indexes: CompiledImportNameIndexes, function: CompiledFunction): bool =
     if function.visibility == "private"
     then false
     else if function.visibility == "const:private"
     then false
     else if compiler_string_has_prefix(function.visibility, "const:schema")
     then false
-    else compiled_import_includes_name(function.name, declaration)
+    else compiled_import_includes_name_with_indexes(function.name, declaration, indexes)
+
+/// Builds imported and excluded name indexes for one import declaration.
+private fun compiled_import_name_indexes(declaration: CompiledImportDeclaration): CompiledImportNameIndexes =
+    CompiledImportNameIndexes {
+        importedNames: compiler_string_list_index(declaration.importedNames),
+        excludedNames: compiler_string_list_index(declaration.excludedNames)
+    }
+
+/// Builds a string lookup index from a list.
+private fun compiler_string_list_index(values: List[String]): Dict[bool] =
+    compiler_string_list_index_with_acc(values, {:})
+
+/// Builds a string lookup index from a list using an accumulator.
+private fun compiler_string_list_index_with_acc(values: List[String], index: Dict[bool]): Dict[bool] =
+    match values[0] with
+    case None -> index
+    case Some { value } -> compiler_string_list_index_with_acc(values[1:], index + (value, true))
+
+/// Checks whether a compiled import selects a name using precomputed name indexes.
+private fun compiled_import_includes_name_with_indexes(name: String, declaration: CompiledImportDeclaration, indexes: CompiledImportNameIndexes): bool =
+    if declaration.wildcard
+    then match indexes.excludedNames.get(name) with
+        case Some _ -> false
+        case None -> true
+    else match indexes.importedNames.get(name) with
+        case Some _ -> true
+        case None -> false
 
 private fun library_static_imports_from_selection(declaration: CompiledImportDeclaration, library: CompiledModule, selection: CompiledLibraryImportSelection): List[StaticImport] =
     if compiler_stdlib_import(declaration.modulePath)

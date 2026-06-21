@@ -292,17 +292,17 @@ private fun java_script_runtime_import(module: CompiledModule): String =
 
 /// Emits JavaScript import source for imports.
 private fun java_script_imports(imports: List[CompiledImportDeclaration], module: CompiledModule): String =
-    java_script_unique_imports(imports, module, [])
+    java_script_unique_imports(imports, module, {:})
 
 /// Emits JavaScript import statements for unique.
-private fun java_script_unique_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, emittedAliases: List[String]): String =
+private fun java_script_unique_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, emittedAliases: Dict[bool]): String =
     match imports[0] with
     case None -> ""
     case Some { declaration } ->
         let alias = java_script_import_alias(declaration, module)
-        if java_script_string_list_contains(alias, emittedAliases)
-        then java_script_unique_imports(imports[1:], module, emittedAliases)
-        else java_script_import(declaration, module) + java_script_unique_imports(imports[1:], module, emittedAliases + [alias])
+        match emittedAliases.get(alias) with
+        case Some _ -> java_script_unique_imports(imports[1:], module, emittedAliases)
+        case None -> java_script_import(declaration, module) + java_script_unique_imports(imports[1:], module, emittedAliases + (alias, true))
 
 /// Emits JavaScript import source for import.
 private fun java_script_import(declaration: CompiledImportDeclaration, module: CompiledModule): String =
@@ -1410,31 +1410,41 @@ private fun java_script_empty_native_provider_declaration_dict(): Dict[CompiledN
     {:}
 
 private fun java_script_native_provider_declarations_by_module(declarations: List[CompiledNativeProviderDeclaration]): Dict[JavaScriptNativeProviderDeclarations] =
+    java_script_native_provider_declarations_by_module_with_acc(declarations, {:})
+
+private fun java_script_native_provider_declarations_by_module_with_acc(declarations: List[CompiledNativeProviderDeclaration], declarationsByModule: Dict[JavaScriptNativeProviderDeclarations]): Dict[JavaScriptNativeProviderDeclarations] =
     match declarations[0] with
-    case None -> {:}
+    case None -> declarationsByModule
     case Some { declaration } ->
-        java_script_native_provider_add_declaration(
-            java_script_native_provider_declarations_by_module(declarations[1:]),
-            declaration
-        )
+        java_script_native_provider_declarations_by_module_with_acc(declarations[1:], java_script_native_provider_add_declaration(declarationsByModule, declaration))
 
 private fun java_script_native_provider_add_declaration(declarationsByModule: Dict[JavaScriptNativeProviderDeclarations], declaration: CompiledNativeProviderDeclaration): Dict[JavaScriptNativeProviderDeclarations] =
     let moduleKey = java_script_native_provider_module_key(declaration.sourceModuleName, declaration.sourceModulePath)
     let declarations = match declarationsByModule.get(moduleKey) with
         case Some { moduleDeclarations } -> moduleDeclarations.declarations
         case None -> java_script_empty_native_provider_declaration_dict()
-    declarationsByModule + (moduleKey, JavaScriptNativeProviderDeclarations {
+    match declarations.get(declaration.providerName) with
+    case Some _ -> declarationsByModule
+    case None -> declarationsByModule + (moduleKey, JavaScriptNativeProviderDeclarations {
         declarations: declarations + (declaration.providerName, declaration)
     })
 
 private fun java_script_native_provider_binding_dict(bindings: List[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
+    java_script_native_provider_binding_dict_with_acc(bindings, {:})
+
+private fun java_script_native_provider_binding_dict_with_acc(bindings: List[CompiledNativeProviderBinding], bindingIndex: Dict[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
     match bindings[0] with
-    case None -> {:}
+    case None -> bindingIndex
     case Some { binding } ->
-        let rest = java_script_native_provider_binding_dict(bindings[1:])
         if java_script_native_provider_binding_has_javascript(binding)
-        then rest + (java_script_native_provider_binding_key(binding.interfaceId, binding.qualifier), binding)
-        else rest
+        then java_script_native_provider_binding_dict_with_acc(bindings[1:], java_script_native_provider_binding_dict_add(bindingIndex, binding))
+        else java_script_native_provider_binding_dict_with_acc(bindings[1:], bindingIndex)
+
+private fun java_script_native_provider_binding_dict_add(bindingIndex: Dict[CompiledNativeProviderBinding], binding: CompiledNativeProviderBinding): Dict[CompiledNativeProviderBinding] =
+    let key = java_script_native_provider_binding_key(binding.interfaceId, binding.qualifier)
+    match bindingIndex.get(key) with
+    case Some _ -> bindingIndex
+    case None -> bindingIndex + (key, binding)
 
 private fun java_script_native_provider_module_key(name: String, path: String): String =
     if path.is_empty()
