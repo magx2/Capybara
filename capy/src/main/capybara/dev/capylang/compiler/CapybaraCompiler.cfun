@@ -344,23 +344,34 @@ private fun compiler_best_library_index_entry(first: /capy/lang/Option[CompiledL
 
 /// Builds an index of library modules by supported import spelling.
 private fun compiler_library_index(libraries: List[CompiledModule]): CompiledLibraryIndex =
-    CompiledLibraryIndex { entries: compiler_library_index_entries(libraries, 0) }
+    CompiledLibraryIndex { entries: compiler_library_index_entries(libraries, 0, {:}) }
 
-/// Builds library index entries from the tail first so duplicate keys keep first-match behavior.
-private fun compiler_library_index_entries(libraries: List[CompiledModule], order: int): Dict[CompiledLibraryIndexEntry] =
+/// Builds library index entries while keeping the first module registered for each alias.
+private fun compiler_library_index_entries(libraries: List[CompiledModule], order: int, entries: Dict[CompiledLibraryIndexEntry]): Dict[CompiledLibraryIndexEntry] =
     match libraries[0] with
-    case None -> {:}
+    case None -> entries
     case Some { library } ->
-        compiler_library_index_entries(libraries[1:], order + 1) + compiler_library_index_entries_for_module(library, order)
+        compiler_library_index_entries(libraries[1:], order + 1, compiler_library_index_add_module_entries(entries, library, order))
 
 /// Builds all import aliases for one library module.
-private fun compiler_library_index_entries_for_module(library: CompiledModule, order: int): Dict[CompiledLibraryIndexEntry] =
+private fun compiler_library_index_add_module_entries(entries: Dict[CompiledLibraryIndexEntry], library: CompiledModule, order: int): Dict[CompiledLibraryIndexEntry] =
     let entry = CompiledLibraryIndexEntry { module: library, order: order }
     let modulePath = compiled_module_path(library)
-    {:}
-        + (library.name, entry)
-        + (modulePath, entry)
-        + (modulePath.replace("/", "."), entry)
+    compiler_library_index_add_entry(
+        compiler_library_index_add_entry(
+            compiler_library_index_add_entry(entries, library.name, entry),
+            modulePath,
+            entry
+        ),
+        modulePath.replace("/", "."),
+        entry
+    )
+
+/// Adds one library index entry unless an earlier library already owns the alias.
+private fun compiler_library_index_add_entry(entries: Dict[CompiledLibraryIndexEntry], key: String, entry: CompiledLibraryIndexEntry): Dict[CompiledLibraryIndexEntry] =
+    match entries.get(key) with
+    case Some _ -> entries
+    case None -> entries + (key, entry)
 
 /// Converts a compiled module path into a Java-style package path.
 private fun compiled_module_path(module: CompiledModule): String =

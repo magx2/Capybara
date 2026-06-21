@@ -8729,25 +8729,33 @@ private fun python_primitive_backed_backing_type_in_modules(name: String, module
 
 /// Merges schema fields while preserving compiler-visible metadata.
 private fun python_merge_schema_fields(first: List[String], second: List[String]): List[String] =
-    first + python_schema_fields_not_named(second, first)
+    first + python_schema_fields_not_named(second, python_schema_field_name_index(first))
 
 /// Collects schema metadata entries for schema fields not named.
-private fun python_schema_fields_not_named(fields: List[String], existing: List[String]): List[String] =
+private fun python_schema_fields_not_named(fields: List[String], existingNames: Dict[bool]): List[String] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        if python_schema_field_name_exists(python_schema_field_name(field), existing)
-        then python_schema_fields_not_named(fields[1:], existing)
-        else [field] + python_schema_fields_not_named(fields[1:], existing + [field])
+        let name = python_schema_field_name(field)
+        if python_schema_field_name_exists(name, existingNames)
+        then python_schema_fields_not_named(fields[1:], existingNames)
+        else [field] + python_schema_fields_not_named(fields[1:], existingNames + (name, true))
+
+/// Indexes schema field names already emitted by earlier fields.
+private fun python_schema_field_name_index(fields: List[String]): Dict[bool] =
+    python_schema_field_name_index_acc(fields, {:})
+
+/// Accumulates schema field names already emitted by earlier fields.
+private fun python_schema_field_name_index_acc(fields: List[String], names: Dict[bool]): Dict[bool] =
+    match fields[0] with
+    case None -> names
+    case Some { field } -> python_schema_field_name_index_acc(fields[1:], names + (python_schema_field_name(field), true))
 
 /// Checks whether schema field name exists in the relevant declarations or imports.
-private fun python_schema_field_name_exists(name: String, fields: List[String]): bool =
-    match fields[0] with
+private fun python_schema_field_name_exists(name: String, fields: Dict[bool]): bool =
+    match fields.get(name) with
+    case Some _ -> true
     case None -> false
-    case Some { field } ->
-        if python_schema_field_name(field) == name
-        then true
-        else python_schema_field_name_exists(name, fields[1:])
 
 /// Checks whether schema type exists in the relevant declarations or imports.
 private fun python_schema_type_exists(name: String, functions: List[CompiledFunction]): bool =
