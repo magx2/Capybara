@@ -60,6 +60,10 @@ private data CompiledLibraryImports { functions: List[CompiledFunction], staticI
 private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
 /// Precomputed import path forms used while matching one import against available libraries.
 private data CompiledImportLibraryLookup { modulePath: String, normalizedPath: String, normalizedImportPath: String }
+/// Indexed library module lookup entry with original list order for first-match compatibility.
+private data CompiledLibraryIndexEntry { module: CompiledModule, order: int }
+/// Library modules indexed by every import spelling accepted by the compiler.
+private data CompiledLibraryIndex { entries: Dict[CompiledLibraryIndexEntry] }
 /// Object type names discovered while scanning imports once for an unqualified type reference.
 private data CompiledObjectImportTypeReferenceNames { interfaceTypeName: String, classTypeName: String }
 /// Field schema and initializer functions built together after compiling the field type once.
@@ -115,8 +119,10 @@ private fun compiled_program(
 ): Either[CompiledProgram, List[CompilerError]] =
     if !errors.is_empty()
     then Right { errors }
-    else Left { CompiledProgram {
-        modules: compile_modules(program.modules, program.modules, libraryModules),
+    else
+        let libraryIndex = compiler_library_index(libraryModules)
+        Left { CompiledProgram {
+        modules: compile_modules(program.modules, program.modules, libraryIndex),
         objectOrientedModules: compile_object_oriented_modules(program.modules, program.modules),
         nativeProviders: nativeProviders,
         nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
@@ -144,10 +150,10 @@ private fun validation_library_modules(libraries: List[CompiledModule]): List[St
             + validation_library_modules(libraries[1:])
 
 /// Compiles parsed modules and merges module fragments that share the same name and path.
-private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraries: List[CompiledModule]): List[CompiledModule] =
+private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex): List[CompiledModule] =
     match modules[0] with
     case None -> []
-    case Some { module } -> merge_compiled_module(compile_module_with_libraries(module, allModules, libraries), compile_modules(modules[1:], allModules, libraries))
+    case Some { module } -> merge_compiled_module(compile_module_with_libraries(module, allModules, libraryIndex), compile_modules(modules[1:], allModules, libraryIndex))
 
 /// Adds one compiled module to the result list, merging it with an existing module for the same source path.
 private fun merge_compiled_module(module: CompiledModule, modules: List[CompiledModule]): List[CompiledModule] =
@@ -204,22 +210,22 @@ private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclar
     }
 
 /// Compiles a parsed module and appends functions and static imports made visible by library imports.
-private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraries: List[CompiledModule]): CompiledModule =
+private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex): CompiledModule =
     let compiled = compile_module(module, allModules)
-    let libraryImports = compile_library_imports(compiled.imports, libraries)
+    let libraryImports = compile_library_imports(compiled.imports, libraryIndex)
     compiled.with(
         functions: compiled.functions + libraryImports.functions,
         staticImports: libraryImports.staticImports
     )
 
-private fun compile_library_imports(imports: List[CompiledImportDeclaration], libraries: List[CompiledModule]): CompiledLibraryImports =
+private fun compile_library_imports(imports: List[CompiledImportDeclaration], libraryIndex: CompiledLibraryIndex): CompiledLibraryImports =
     match imports[0] with
     case None -> CompiledLibraryImports { functions: [], staticImports: [] }
     case Some { declaration } ->
-        let rest = compile_library_imports(imports[1:], libraries)
+        let rest = compile_library_imports(imports[1:], libraryIndex)
         if declaration.qualified
         then rest
-        else match find_imported_library(declaration, libraries) with
+        else match find_imported_library(declaration, libraryIndex) with
             case Some { library } ->
                 let selection = imported_library_selection_from_module(
                     declaration,
@@ -276,8 +282,8 @@ private fun library_requires_explicit_static_imports(declaration: CompiledImport
     else true
 
 /// Finds an imported library in available declarations, imports, or modules.
-private fun find_imported_library(declaration: CompiledImportDeclaration, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
-    find_imported_library_by_lookup(compiled_import_library_lookup(declaration.modulePath), libraries)
+private fun find_imported_library(declaration: CompiledImportDeclaration, libraryIndex: CompiledLibraryIndex): /capy/lang/Option[CompiledModule] =
+    find_imported_library_by_lookup(compiled_import_library_lookup(declaration.modulePath), libraryIndex)
 
 /// Builds precomputed import path forms for library matching.
 private fun compiled_import_library_lookup(modulePath: String): CompiledImportLibraryLookup =
@@ -288,25 +294,46 @@ private fun compiled_import_library_lookup(modulePath: String): CompiledImportLi
     }
 
 /// Finds an imported library using precomputed import path forms.
-private fun find_imported_library_by_lookup(lookup: CompiledImportLibraryLookup, libraries: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
-    match libraries[0] with
+private fun find_imported_library_by_lookup(lookup: CompiledImportLibraryLookup, libraryIndex: CompiledLibraryIndex): /capy/lang/Option[CompiledModule] =
+    let best = compiler_best_library_index_entry(
+        compiler_best_library_index_entry(libraryIndex.entries.get(lookup.modulePath), libraryIndex.entries.get(lookup.normalizedPath)),
+        libraryIndex.entries.get(lookup.normalizedImportPath)
+    )
+    match best with
+    case Some { entry } -> /capy/lang/Option.Some { value: entry.module }
     case None -> /capy/lang/Option.None {}
-    case Some { library } ->
-        if imported_library_matches(lookup, library)
-        then /capy/lang/Option.Some { library }
-        else find_imported_library_by_lookup(lookup, libraries[1:])
 
-/// Collects imported library matches visible to the current module.
-private fun imported_library_matches(lookup: CompiledImportLibraryLookup, library: CompiledModule): bool =
-    if lookup.modulePath == library.name
-    then true
-    else
-        let modulePath = compiled_module_path(library)
-        if lookup.normalizedPath == modulePath
-        then true
-        else if lookup.normalizedImportPath == modulePath
-        then true
-        else lookup.modulePath == modulePath.replace("/", ".")
+/// Selects the earliest library index entry from two optional matches.
+private fun compiler_best_library_index_entry(first: /capy/lang/Option[CompiledLibraryIndexEntry], second: /capy/lang/Option[CompiledLibraryIndexEntry]): /capy/lang/Option[CompiledLibraryIndexEntry] =
+    match first with
+    case None -> second
+    case Some { firstEntry } ->
+        match second with
+        case None -> first
+        case Some { secondEntry } ->
+            if firstEntry.order <= secondEntry.order
+            then first
+            else second
+
+/// Builds an index of library modules by supported import spelling.
+private fun compiler_library_index(libraries: List[CompiledModule]): CompiledLibraryIndex =
+    CompiledLibraryIndex { entries: compiler_library_index_entries(libraries, 0) }
+
+/// Builds library index entries from the tail first so duplicate keys keep first-match behavior.
+private fun compiler_library_index_entries(libraries: List[CompiledModule], order: int): Dict[CompiledLibraryIndexEntry] =
+    match libraries[0] with
+    case None -> {:}
+    case Some { library } ->
+        compiler_library_index_entries(libraries[1:], order + 1) + compiler_library_index_entries_for_module(library, order)
+
+/// Builds all import aliases for one library module.
+private fun compiler_library_index_entries_for_module(library: CompiledModule, order: int): Dict[CompiledLibraryIndexEntry] =
+    let entry = CompiledLibraryIndexEntry { module: library, order: order }
+    let modulePath = compiled_module_path(library)
+    {:}
+        + (library.name, entry)
+        + (modulePath, entry)
+        + (modulePath.replace("/", "."), entry)
 
 /// Converts a compiled module path into a Java-style package path.
 private fun compiled_module_path(module: CompiledModule): String =

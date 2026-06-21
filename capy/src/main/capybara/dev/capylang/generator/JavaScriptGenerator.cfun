@@ -1,3 +1,4 @@
+from /capy/collection/Dict import { * }
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
@@ -32,6 +33,12 @@ private data JavaScriptSchemaValues { typeExists: bool, values: List[String] }
 private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
 /// JavaScript source sections collected in one pass over compiled functions.
 private data JavaScriptFunctionSections { constants: String, functions: String, hasOverloadedFunctions: bool }
+/// Native-provider declarations for a single JavaScript generated module, indexed by provider function name.
+private data JavaScriptNativeProviderDeclarations { declarations: Dict[CompiledNativeProviderDeclaration] }
+/// JavaScript native-provider declarations and JavaScript-capable bindings indexed for generator lookups.
+private data JavaScriptNativeProviderIndex { declarationsByModule: Dict[JavaScriptNativeProviderDeclarations], bindings: Dict[CompiledNativeProviderBinding] }
+/// JavaScript native-provider lookup scope for one generated module.
+private data JavaScriptNativeProviderScope { declarations: Dict[CompiledNativeProviderDeclaration], bindings: Dict[CompiledNativeProviderBinding] }
 /// Constructor statements collected in one scan over object helper functions.
 private data JavaScriptObjectConstructorStatements { fieldStatements: String, initStatements: String }
 /// Object class helper metadata collected in one scan over object helper functions.
@@ -59,23 +66,24 @@ private fun java_script_bool_identity(value: bool): bool = value
 
 /// Generates JavaScript source modules and test runtime modules from a compiled program.
 fun java_script_generator(program: CompiledProgram): GeneratedProgram =
+    let nativeProviderIndex = java_script_native_provider_index(program.nativeProviderCatalog)
     GeneratedProgram {
-        modules: java_script_modules(program.modules, program.modules, program.nativeProviderCatalog) + java_script_test_runtime_modules(program.modules)
+        modules: java_script_modules(program.modules, program.modules, nativeProviderIndex) + java_script_test_runtime_modules(program.modules)
     }
 
 /// Creates JavaScript generated source modules for compiled modules.
-private fun java_script_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): List[GeneratedModule] =
+private fun java_script_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderIndex: JavaScriptNativeProviderIndex): List[GeneratedModule] =
     match modules[0] with
     case None -> []
     case Some { module } -> [GeneratedModule {
         relativePath: java_script_module_relative_path(module, ".js"),
-        code: java_script_module_code(module, allModules, nativeProviderCatalog)
-    }] + java_script_modules(modules[1:], allModules, nativeProviderCatalog)
+        code: java_script_module_code(module, allModules, nativeProviderIndex)
+    }] + java_script_modules(modules[1:], allModules, nativeProviderIndex)
 
 /// Emits the complete CommonJS source for one compiled module.
-private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    let moduleNativeProviderCatalog = java_script_native_provider_catalog_for_module(module, nativeProviderCatalog)
-    let sections = java_script_function_sections(module.functions, module, allModules, moduleNativeProviderCatalog)
+private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderIndex: JavaScriptNativeProviderIndex): String =
+    let nativeProviderScope = java_script_native_provider_scope_for_module(module, nativeProviderIndex)
+    let sections = java_script_function_sections(module.functions, module, allModules, nativeProviderScope)
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_runtime_import(module)
@@ -1096,11 +1104,11 @@ private fun java_script_object_constructor_name(className: String): String =
     java_script_identifier(className)
 
 /// Formats JavaScript constants and functions in one pass over compiled functions.
-private fun java_script_function_sections(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): JavaScriptFunctionSections =
+private fun java_script_function_sections(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaScriptNativeProviderScope): JavaScriptFunctionSections =
     match functions[0] with
     case None -> JavaScriptFunctionSections { constants: "", functions: "", hasOverloadedFunctions: false }
     case Some { function } ->
-        let rest = java_script_function_sections(functions[1:], module, allModules, nativeProviderCatalog)
+        let rest = java_script_function_sections(functions[1:], module, allModules, nativeProviderScope)
         if java_script_compiled_constant(function)
             & !java_script_compiled_schema(function)
         then JavaScriptFunctionSections {
@@ -1124,7 +1132,7 @@ private fun java_script_function_sections(functions: List[CompiledFunction], mod
             then rest
             else JavaScriptFunctionSections {
                 constants: rest.constants,
-                functions: java_script_function(function, module, allModules, nativeProviderCatalog)
+                functions: java_script_function(function, module, allModules, nativeProviderScope)
                     + java_script_newline()
                     + rest.functions,
                 hasOverloadedFunctions: rest.hasOverloadedFunctions | java_script_overloaded_function_name(function.name, functions)
@@ -1339,7 +1347,7 @@ private fun java_script_constant_name(function: CompiledFunction): String =
     java_script_identifier(function.name)
 
 /// Formats JavaScript source text for function.
-private fun java_script_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun java_script_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaScriptNativeProviderScope): String =
     if java_script_tail_recursive_function(function, module)
     then java_script_tail_recursive_function_code(function, module, allModules)
     else "function "
@@ -1349,16 +1357,16 @@ private fun java_script_function(function: CompiledFunction, module: CompiledMod
             + ") {"
             + java_script_newline()
             + "    return "
-            + java_script_function_body_expression(function, module, allModules, nativeProviderCatalog)
+            + java_script_function_body_expression(function, module, allModules, nativeProviderScope)
             + ";"
             + java_script_newline()
             + "}"
             + java_script_newline()
 
 /// Emits JavaScript expression text for function body expression.
-private fun java_script_function_body_expression(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    match java_script_find_native_provider_declaration(function, nativeProviderCatalog.declarations) with
-    case Some { declaration } -> java_script_native_provider_function_body(declaration, function.returnType, nativeProviderCatalog)
+private fun java_script_function_body_expression(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaScriptNativeProviderScope): String =
+    match nativeProviderScope.declarations.get(function.name) with
+    case Some { declaration } -> java_script_native_provider_function_body(declaration, function.returnType, nativeProviderScope)
     case None ->
         if java_script_async_native_function(function, module)
         then java_script_async_native_function_body(function)
@@ -1381,34 +1389,64 @@ private fun first_function_parameter_name(function: CompiledFunction): String =
     case Some { parameter } -> parameter.name
     case None -> "value"
 
-private fun java_script_native_provider_catalog_for_module(module: CompiledModule, catalog: NativeProviderCatalog): NativeProviderCatalog =
-    catalog.with(declarations: java_script_native_provider_declarations_for_module(module, catalog.declarations))
+private fun java_script_native_provider_index(catalog: NativeProviderCatalog): JavaScriptNativeProviderIndex =
+    JavaScriptNativeProviderIndex {
+        declarationsByModule: java_script_native_provider_declarations_by_module(catalog.declarations),
+        bindings: java_script_native_provider_binding_dict(catalog.bindings)
+    }
 
-private fun java_script_native_provider_declarations_for_module(module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): List[CompiledNativeProviderDeclaration] =
+private fun java_script_native_provider_scope_for_module(module: CompiledModule, index: JavaScriptNativeProviderIndex): JavaScriptNativeProviderScope =
+    match index.declarationsByModule.get(java_script_native_provider_module_key(module.name, module.path)) with
+    case Some { declarations } -> JavaScriptNativeProviderScope {
+        declarations: declarations.declarations,
+        bindings: index.bindings
+    }
+    case None -> JavaScriptNativeProviderScope {
+        declarations: java_script_empty_native_provider_declaration_dict(),
+        bindings: index.bindings
+    }
+
+private fun java_script_empty_native_provider_declaration_dict(): Dict[CompiledNativeProviderDeclaration] =
+    {:}
+
+private fun java_script_native_provider_declarations_by_module(declarations: List[CompiledNativeProviderDeclaration]): Dict[JavaScriptNativeProviderDeclarations] =
     match declarations[0] with
-    case None -> []
+    case None -> {:}
     case Some { declaration } ->
-        if java_script_native_provider_declaration_in_module(declaration, module)
-        then [declaration] + java_script_native_provider_declarations_for_module(module, declarations[1:])
-        else java_script_native_provider_declarations_for_module(module, declarations[1:])
+        java_script_native_provider_add_declaration(
+            java_script_native_provider_declarations_by_module(declarations[1:]),
+            declaration
+        )
 
-private fun java_script_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
-    if declaration.sourceModuleName == module.name
-    then declaration.sourceModulePath == module.path
-    else false
+private fun java_script_native_provider_add_declaration(declarationsByModule: Dict[JavaScriptNativeProviderDeclarations], declaration: CompiledNativeProviderDeclaration): Dict[JavaScriptNativeProviderDeclarations] =
+    let moduleKey = java_script_native_provider_module_key(declaration.sourceModuleName, declaration.sourceModulePath)
+    let declarations = match declarationsByModule.get(moduleKey) with
+        case Some { moduleDeclarations } -> moduleDeclarations.declarations
+        case None -> java_script_empty_native_provider_declaration_dict()
+    declarationsByModule + (moduleKey, JavaScriptNativeProviderDeclarations {
+        declarations: declarations + (declaration.providerName, declaration)
+    })
 
-/// Finds a native provider declaration in scope, imports, or compiled modules.
-private fun java_script_find_native_provider_declaration(function: CompiledFunction, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
-    match declarations[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { declaration } ->
-        if declaration.providerName == function.name
-        then /capy/lang/Option.Some { declaration }
-        else java_script_find_native_provider_declaration(function, declarations[1:])
+private fun java_script_native_provider_binding_dict(bindings: List[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
+    match bindings[0] with
+    case None -> {:}
+    case Some { binding } ->
+        let rest = java_script_native_provider_binding_dict(bindings[1:])
+        if java_script_native_provider_binding_has_javascript(binding)
+        then rest + (java_script_native_provider_binding_key(binding.interfaceId, binding.qualifier), binding)
+        else rest
+
+private fun java_script_native_provider_module_key(name: String, path: String): String =
+    if path.is_empty()
+    then name
+    else path + "/" + name
+
+private fun java_script_native_provider_binding_key(interfaceId: String, qualifier: String): String =
+    interfaceId.size().value + "|" + interfaceId + "|" + qualifier
 
 /// Emits JavaScript expression text for native provider function body.
-private fun java_script_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =
-    match java_script_find_native_provider_binding(declaration, catalog.bindings) with
+private fun java_script_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, nativeProviderScope: JavaScriptNativeProviderScope): String =
+    match nativeProviderScope.bindings.get(java_script_native_provider_binding_key(declaration.interfaceId, declaration.qualifier)) with
     case Some { binding } -> java_script_native_provider_binding_body(declaration, returnType, binding)
     case None -> java_script_native_provider_not_wired_body(declaration, returnType)
 
@@ -1417,19 +1455,6 @@ private fun java_script_native_provider_binding_body(declaration: CompiledNative
     match binding.javascriptBinding with
     case Some { backend } -> java_script_native_provider_bound_body(declaration, returnType, backend)
     case None -> java_script_native_provider_not_wired_body(declaration, returnType)
-
-/// Finds a native provider binding in scope, imports, or compiled modules.
-private fun java_script_find_native_provider_binding(declaration: CompiledNativeProviderDeclaration, bindings: List[CompiledNativeProviderBinding]): /capy/lang/Option[CompiledNativeProviderBinding] =
-    match bindings[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { binding } ->
-        if binding.interfaceId == declaration.interfaceId
-        then if binding.qualifier == declaration.qualifier
-            then if java_script_native_provider_binding_has_javascript(binding)
-                then /capy/lang/Option.Some { binding }
-                else java_script_find_native_provider_binding(declaration, bindings[1:])
-            else java_script_find_native_provider_binding(declaration, bindings[1:])
-        else java_script_find_native_provider_binding(declaration, bindings[1:])
 
 /// Checks whether the current value satisfies the native provider binding has JavaScript rule for JavaScript processing.
 private fun java_script_native_provider_binding_has_javascript(binding: CompiledNativeProviderBinding): bool =

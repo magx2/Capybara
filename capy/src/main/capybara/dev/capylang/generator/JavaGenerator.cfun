@@ -51,6 +51,12 @@ data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
 data JavaCompiledObjects { interfaces: List[CompiledObjectOrientedInterface], classes: List[CompiledObjectOrientedClass] }
 /// Java object-oriented metadata indexed by compiled module path.
 data JavaObjectOrientedUnitIndex { units: Dict[CompiledObjectOrientedUnit] }
+/// Native-provider declarations for a single Java generated module, indexed by provider function name.
+data JavaNativeProviderDeclarations { declarations: Dict[CompiledNativeProviderDeclaration] }
+/// Java native-provider declarations and bindings indexed for generator lookups.
+data JavaNativeProviderIndex { declarationsByModule: Dict[JavaNativeProviderDeclarations], bindings: Dict[CompiledNativeProviderBinding] }
+/// Java native-provider lookup scope for one generated module.
+data JavaNativeProviderScope { declarations: Dict[CompiledNativeProviderDeclaration], bindings: Dict[CompiledNativeProviderBinding] }
 /// Java generated modules split to preserve top-level interface files before module classes.
 data JavaGeneratedModules { objectInterfaceModules: List[GeneratedModule], javaModules: List[GeneratedModule] }
 /// Generator lookup entry for an annotation declaration and the compiled module that declares it.
@@ -118,7 +124,8 @@ private fun oo_method_function_prefix_size(): int =
 /// Generates Java source modules, object interface files, and test runtime modules from a compiled program.
 fun java_generator(program: CompiledProgram): GeneratedProgram =
     let objectOrientedUnitIndex = java_object_oriented_unit_index(program.objectOrientedModules)
-    let generated = java_generated_modules(program.modules, program.modules, objectOrientedUnitIndex, program.nativeProviderCatalog)
+    let nativeProviderIndex = java_native_provider_index(program.nativeProviderCatalog)
+    let generated = java_generated_modules(program.modules, program.modules, objectOrientedUnitIndex, nativeProviderIndex)
     GeneratedProgram {
         modules: generated.objectInterfaceModules
             + generated.javaModules
@@ -126,18 +133,18 @@ fun java_generator(program: CompiledProgram): GeneratedProgram =
     }
 
 /// Creates Java object interface and module source entries while decoding object schemas once per module.
-private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], objectOrientedUnitIndex: JavaObjectOrientedUnitIndex, nativeProviderCatalog: NativeProviderCatalog): JavaGeneratedModules =
+private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], objectOrientedUnitIndex: JavaObjectOrientedUnitIndex, nativeProviderIndex: JavaNativeProviderIndex): JavaGeneratedModules =
     match modules[0] with
     case None -> JavaGeneratedModules { objectInterfaceModules: [], javaModules: [] }
     case Some { module } ->
         let objects = java_compiled_objects_for_module(module, objectOrientedUnitIndex)
-        let rest = java_generated_modules(modules[1:], allModules, objectOrientedUnitIndex, nativeProviderCatalog)
+        let rest = java_generated_modules(modules[1:], allModules, objectOrientedUnitIndex, nativeProviderIndex)
         JavaGeneratedModules {
             objectInterfaceModules: java_object_interface_modules_for_module(objects.interfaces, module, allModules)
                 + rest.objectInterfaceModules,
             javaModules: [GeneratedModule {
                 relativePath: java_module_relative_path(module, ".java"),
-                code: java_module_code_with_objects(module, allModules, nativeProviderCatalog, objects)
+                code: java_module_code_with_objects(module, allModules, nativeProviderIndex, objects)
             }] + rest.javaModules
         }
 
@@ -167,7 +174,7 @@ private fun java_compiled_module_key(name: String, path: String): String =
     else path + "/" + name
 
 /// Emits the complete Java class source for one compiled module.
-private fun java_module_code_with_objects(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog, objects: JavaCompiledObjects): String =
+private fun java_module_code_with_objects(module: CompiledModule, allModules: List[CompiledModule], nativeProviderIndex: JavaNativeProviderIndex, objects: JavaCompiledObjects): String =
     if module.path == "capy/lang" & module.name == "Effect"
     then java_effect_module_code(module)
     else if module.path == "capy/lang" & module.name == "Async"
@@ -179,7 +186,7 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     else
     let constants = constant_functions(module.functions)
     let constantBindings = constant_bindings(constants, module, allModules)
-    let moduleNativeProviderCatalog = java_native_provider_catalog_for_module(module, nativeProviderCatalog)
+    let nativeProviderScope = java_native_provider_scope_for_module(module, nativeProviderIndex)
     java_package(module)
     + java_imports(module, allModules)
     + "public final class " + module.name + " {" + newline()
@@ -188,7 +195,7 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     + java_object_interfaces(objects.interfaces, module, allModules)
     + java_object_classes(objects.classes, constantBindings, module, allModules)
     + java_constants(constants, module, allModules)
-    + java_functions(module.functions, constantBindings, module, allModules, moduleNativeProviderCatalog)
+    + java_functions(module.functions, constantBindings, module, allModules, nativeProviderScope)
     + java_helpers(module)
     + "}" + newline()
 
@@ -1342,21 +1349,21 @@ private fun constant_java_visibility(function: CompiledFunction): String =
     java_visibility_prefix(function.visibility.replace("const:", ""))
 
 /// Formats Java source text for functions.
-private fun java_functions(functions: List[CompiledFunction], constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun java_functions(functions: List[CompiledFunction], constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaNativeProviderScope): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
         if java_skip_function(function)
-        then java_functions(functions[1:], constantBindings, module, allModules, nativeProviderCatalog)
-        else java_function(function, constantBindings, module, allModules, nativeProviderCatalog) + newline() + java_functions(functions[1:], constantBindings, module, allModules, nativeProviderCatalog)
+        then java_functions(functions[1:], constantBindings, module, allModules, nativeProviderScope)
+        else java_function(function, constantBindings, module, allModules, nativeProviderScope) + newline() + java_functions(functions[1:], constantBindings, module, allModules, nativeProviderScope)
 
 /// Formats Java source text for function.
-private fun java_function(function: CompiledFunction, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun java_function(function: CompiledFunction, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaNativeProviderScope): String =
     let returnTypeReference = effective_function_return_type_with_module_constants(function, module, allModules, constantBindings)
     let returnType = java_type(returnTypeReference)
     let env = java_function_bindings(function) + constantBindings
     "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
-    + java_function_body(function, returnTypeReference, env, module, allModules, nativeProviderCatalog)
+    + java_function_body(function, returnTypeReference, env, module, allModules, nativeProviderScope)
     + "    }" + newline()
 
 /// Computes the Java name for function.
@@ -1490,9 +1497,9 @@ private fun java_visibility_prefix(visibility: String): String =
     else "public "
 
 /// Emits Java expression text for function body.
-private fun java_function_body(function: CompiledFunction, returnType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    match find_native_provider_declaration(function, nativeProviderCatalog.declarations) with
-    case Some { declaration } -> java_native_provider_function_body(declaration, returnType, nativeProviderCatalog)
+private fun java_function_body(function: CompiledFunction, returnType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaNativeProviderScope): String =
+    match nativeProviderScope.declarations.get(function.name) with
+    case Some { declaration } -> java_native_provider_function_body(declaration, returnType, nativeProviderScope)
     case None ->
     if tail_recursive_function(function, env, module, allModules)
     then tail_recursive_function_body(function, returnType, env, module, allModules)
@@ -1510,51 +1517,67 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
 
-private fun java_native_provider_catalog_for_module(module: CompiledModule, catalog: NativeProviderCatalog): NativeProviderCatalog =
-    catalog.with(declarations: java_native_provider_declarations_for_module(module, catalog.declarations))
+private fun java_native_provider_index(catalog: NativeProviderCatalog): JavaNativeProviderIndex =
+    JavaNativeProviderIndex {
+        declarationsByModule: java_native_provider_declarations_by_module(catalog.declarations),
+        bindings: java_native_provider_binding_dict(catalog.bindings)
+    }
 
-private fun java_native_provider_declarations_for_module(module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): List[CompiledNativeProviderDeclaration] =
+private fun java_native_provider_scope_for_module(module: CompiledModule, index: JavaNativeProviderIndex): JavaNativeProviderScope =
+    match index.declarationsByModule.get(java_native_provider_module_key(module.name, module.path)) with
+    case Some { declarations } -> JavaNativeProviderScope {
+        declarations: declarations.declarations,
+        bindings: index.bindings
+    }
+    case None -> JavaNativeProviderScope {
+        declarations: java_empty_native_provider_declaration_dict(),
+        bindings: index.bindings
+    }
+
+private fun java_empty_native_provider_declaration_dict(): Dict[CompiledNativeProviderDeclaration] =
+    {:}
+
+private fun java_native_provider_declarations_by_module(declarations: List[CompiledNativeProviderDeclaration]): Dict[JavaNativeProviderDeclarations] =
     match declarations[0] with
-    case None -> []
+    case None -> {:}
     case Some { declaration } ->
-        if java_native_provider_declaration_in_module(declaration, module)
-        then [declaration] + java_native_provider_declarations_for_module(module, declarations[1:])
-        else java_native_provider_declarations_for_module(module, declarations[1:])
+        java_native_provider_add_declaration(
+            java_native_provider_declarations_by_module(declarations[1:]),
+            declaration
+        )
 
-private fun java_native_provider_declaration_in_module(declaration: CompiledNativeProviderDeclaration, module: CompiledModule): bool =
-    if declaration.sourceModuleName == module.name
-    then declaration.sourceModulePath == module.path
-    else false
+private fun java_native_provider_add_declaration(declarationsByModule: Dict[JavaNativeProviderDeclarations], declaration: CompiledNativeProviderDeclaration): Dict[JavaNativeProviderDeclarations] =
+    let moduleKey = java_native_provider_module_key(declaration.sourceModuleName, declaration.sourceModulePath)
+    let declarations = match declarationsByModule.get(moduleKey) with
+        case Some { moduleDeclarations } -> moduleDeclarations.declarations
+        case None -> java_empty_native_provider_declaration_dict()
+    declarationsByModule + (moduleKey, JavaNativeProviderDeclarations {
+        declarations: declarations + (declaration.providerName, declaration)
+    })
 
-/// Finds a native provider declaration in available declarations, imports, or modules.
-private fun find_native_provider_declaration(function: CompiledFunction, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
-    match declarations[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { declaration } ->
-        if declaration.providerName == function.name
-        then /capy/lang/Option.Some { declaration }
-        else find_native_provider_declaration(function, declarations[1:])
+private fun java_native_provider_binding_dict(bindings: List[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
+    match bindings[0] with
+    case None -> {:}
+    case Some { binding } ->
+        java_native_provider_binding_dict(bindings[1:]) + (java_native_provider_binding_key(binding.interfaceId, binding.qualifier), binding)
+
+private fun java_native_provider_module_key(name: String, path: String): String =
+    if path.is_empty()
+    then name
+    else path + "/" + name
+
+private fun java_native_provider_binding_key(interfaceId: String, qualifier: String): String =
+    interfaceId.size().value + "|" + interfaceId + "|" + qualifier
 
 /// Emits Java expression text for native provider function body.
-private fun java_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =
-    match find_native_provider_binding(declaration, catalog.bindings) with
+private fun java_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, nativeProviderScope: JavaNativeProviderScope): String =
+    match nativeProviderScope.bindings.get(java_native_provider_binding_key(declaration.interfaceId, declaration.qualifier)) with
     case Some { binding } -> {
         match binding.javaBinding with
         case Some { backend } -> java_native_provider_bound_body(declaration, returnType, backend)
         case None -> java_native_provider_not_wired_body(declaration)
     }
     case None -> java_native_provider_not_wired_body(declaration)
-
-/// Finds a native provider binding in available declarations, imports, or modules.
-private fun find_native_provider_binding(declaration: CompiledNativeProviderDeclaration, bindings: List[CompiledNativeProviderBinding]): /capy/lang/Option[CompiledNativeProviderBinding] =
-    match bindings[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { binding } ->
-        if binding.interfaceId == declaration.interfaceId
-        then if binding.qualifier == declaration.qualifier
-            then /capy/lang/Option.Some { binding }
-            else find_native_provider_binding(declaration, bindings[1:])
-        else find_native_provider_binding(declaration, bindings[1:])
 
 /// Emits Java expression text for native provider bound body.
 private fun java_native_provider_bound_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, backend: NativeProviderBackendBinding): String =
