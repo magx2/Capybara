@@ -2054,19 +2054,22 @@ private fun find_parsed_module_by_class(className: String, modules: List[ParsedM
 
 /// Checks whether a parsed module matches a generated class name without building the full class name.
 private fun parsed_module_matches_class(module: ParsedModule, className: String): bool =
-    let path = normalize_module_path(module.path)
-    if path.is_empty()
-    then module.name == className
+    let nameSize = module.name.size().value
+    if className.size().value < nameSize
+    then false
+    else if className[className.size().value - nameSize, className.size().value] != module.name
+    then false
     else
-        let pathSize = path.size().value
-        let nameSize = module.name.size().value
-        if className.size().value != pathSize + 1 + nameSize
-        then false
-        else if !compiler_module_path_matches_class_prefix(path, className, 0)
-        then false
-        else if className[pathSize, pathSize + 1] != "."
-        then false
-        else className[className.size().value - nameSize, className.size().value] == module.name
+        let path = normalize_module_path(module.path)
+        if path.is_empty()
+        then module.name == className
+        else
+            let pathSize = path.size().value
+            if className.size().value != pathSize + 1 + nameSize
+            then false
+            else if !compiler_module_path_matches_class_prefix(path, className, 0)
+            then false
+            else className[pathSize, pathSize + 1] == "."
 
 /// Checks whether a slash-separated module path matches a dot-separated generated class prefix.
 private fun compiler_module_path_matches_class_prefix(path: String, className: String, idx: int): bool =

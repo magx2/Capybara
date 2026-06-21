@@ -1,3 +1,4 @@
+from /capy/collection/Dict import { * }
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
@@ -48,6 +49,8 @@ data JavaFunctionNameRequest { name: String, hasUppercase: bool }
 data JavaStdlibValue { javaName: String, typeReference: CompiledTypeReference }
 /// Java object metadata extracted from schema helper functions for one module.
 data JavaCompiledObjects { interfaces: List[CompiledObjectOrientedInterface], classes: List[CompiledObjectOrientedClass] }
+/// Java object-oriented metadata indexed by compiled module path.
+data JavaObjectOrientedUnitIndex { units: Dict[CompiledObjectOrientedUnit] }
 /// Java generated modules split to preserve top-level interface files before module classes.
 data JavaGeneratedModules { objectInterfaceModules: List[GeneratedModule], javaModules: List[GeneratedModule] }
 /// Generator lookup entry for an annotation declaration and the compiled module that declares it.
@@ -114,7 +117,8 @@ private fun oo_method_function_prefix_size(): int =
 
 /// Generates Java source modules, object interface files, and test runtime modules from a compiled program.
 fun java_generator(program: CompiledProgram): GeneratedProgram =
-    let generated = java_generated_modules(program.modules, program.modules, program.objectOrientedModules, program.nativeProviderCatalog)
+    let objectOrientedUnitIndex = java_object_oriented_unit_index(program.objectOrientedModules)
+    let generated = java_generated_modules(program.modules, program.modules, objectOrientedUnitIndex, program.nativeProviderCatalog)
     GeneratedProgram {
         modules: generated.objectInterfaceModules
             + generated.javaModules
@@ -122,12 +126,12 @@ fun java_generator(program: CompiledProgram): GeneratedProgram =
     }
 
 /// Creates Java object interface and module source entries while decoding object schemas once per module.
-private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], objectOrientedModules: List[CompiledObjectOrientedUnit], nativeProviderCatalog: NativeProviderCatalog): JavaGeneratedModules =
+private fun java_generated_modules(modules: List[CompiledModule], allModules: List[CompiledModule], objectOrientedUnitIndex: JavaObjectOrientedUnitIndex, nativeProviderCatalog: NativeProviderCatalog): JavaGeneratedModules =
     match modules[0] with
     case None -> JavaGeneratedModules { objectInterfaceModules: [], javaModules: [] }
     case Some { module } ->
-        let objects = java_compiled_objects_for_module(module, objectOrientedModules)
-        let rest = java_generated_modules(modules[1:], allModules, objectOrientedModules, nativeProviderCatalog)
+        let objects = java_compiled_objects_for_module(module, objectOrientedUnitIndex)
+        let rest = java_generated_modules(modules[1:], allModules, objectOrientedUnitIndex, nativeProviderCatalog)
         JavaGeneratedModules {
             objectInterfaceModules: java_object_interface_modules_for_module(objects.interfaces, module, allModules)
                 + rest.objectInterfaceModules,
@@ -138,21 +142,29 @@ private fun java_generated_modules(modules: List[CompiledModule], allModules: Li
         }
 
 /// Returns object metadata carried by linked programs, falling back to schema decoding for legacy module-only linked input.
-private fun java_compiled_objects_for_module(module: CompiledModule, objectOrientedModules: List[CompiledObjectOrientedUnit]): JavaCompiledObjects =
-    if objectOrientedModules.is_empty()
+private fun java_compiled_objects_for_module(module: CompiledModule, objectOrientedUnitIndex: JavaObjectOrientedUnitIndex): JavaCompiledObjects =
+    if objectOrientedUnitIndex.units.is_empty()
     then compiled_objects(module.functions)
-    else match java_object_oriented_unit_for_module(module, objectOrientedModules) with
+    else match objectOrientedUnitIndex.units.get(java_compiled_module_key(module.name, module.path)) with
         case Some { unit } -> JavaCompiledObjects { interfaces: unit.interfaces, classes: unit.classes }
         case None -> JavaCompiledObjects { interfaces: [], classes: [] }
 
-/// Finds the object-oriented metadata unit for a compiled module.
-private fun java_object_oriented_unit_for_module(module: CompiledModule, objectOrientedModules: List[CompiledObjectOrientedUnit]): /capy/lang/Option[CompiledObjectOrientedUnit] =
+/// Builds object-oriented metadata lookup by compiled module path.
+private fun java_object_oriented_unit_index(objectOrientedModules: List[CompiledObjectOrientedUnit]): JavaObjectOrientedUnitIndex =
+    JavaObjectOrientedUnitIndex { units: java_object_oriented_unit_dict(objectOrientedModules) }
+
+/// Builds object-oriented metadata dictionary while preserving first-match lookup semantics.
+private fun java_object_oriented_unit_dict(objectOrientedModules: List[CompiledObjectOrientedUnit]): Dict[CompiledObjectOrientedUnit] =
     match objectOrientedModules[0] with
-    case None -> /capy/lang/Option.None {}
+    case None -> {:}
     case Some { unit } ->
-        if unit.name == module.name & unit.path == module.path
-        then /capy/lang/Option.Some { unit }
-        else java_object_oriented_unit_for_module(module, objectOrientedModules[1:])
+        java_object_oriented_unit_dict(objectOrientedModules[1:]) + (java_compiled_module_key(unit.name, unit.path), unit)
+
+/// Builds the lookup key for compiled module metadata.
+private fun java_compiled_module_key(name: String, path: String): String =
+    if path.is_empty()
+    then name
+    else path + "/" + name
 
 /// Emits the complete Java class source for one compiled module.
 private fun java_module_code_with_objects(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog, objects: JavaCompiledObjects): String =
@@ -9324,18 +9336,20 @@ private fun find_module_by_class(className: String, modules: List[CompiledModule
 
 /// Checks whether a compiled module matches a generated class name without building the full class name.
 private fun module_matches_class(module: CompiledModule, className: String): bool =
-    if module.path.is_empty()
+    let nameSize = module.name.size().value
+    if className.size().value < nameSize
+    then false
+    else if className[className.size().value - nameSize, className.size().value] != module.name
+    then false
+    else if module.path.is_empty()
     then module.name == className
     else
         let pathSize = module.path.size().value
-        let nameSize = module.name.size().value
         if className.size().value != pathSize + 1 + nameSize
         then false
         else if !java_generator_module_path_matches_class_prefix(module.path, className, 0)
         then false
-        else if className[pathSize, pathSize + 1] != "."
-        then false
-        else className[className.size().value - nameSize, className.size().value] == module.name
+        else className[pathSize, pathSize + 1] == "."
 
 /// Checks whether a slash-separated module path matches a dot-separated generated class prefix.
 private fun java_generator_module_path_matches_class_prefix(path: String, className: String, idx: int): bool =

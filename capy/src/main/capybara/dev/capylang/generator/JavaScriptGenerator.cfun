@@ -5860,18 +5860,20 @@ private fun java_script_find_module_by_path(modulePath: String, modules: List[Co
 
 /// Checks whether a compiled module matches a slash-separated module path without building the full path.
 private fun java_script_module_matches_path(modulePath: String, module: CompiledModule): bool =
-    if module.path.is_empty()
+    let nameSize = module.name.size().value
+    if modulePath.size().value < nameSize
+    then false
+    else if !java_script_string_has_suffix(modulePath, module.name)
+    then false
+    else if module.path.is_empty()
     then module.name == modulePath
     else
         let pathSize = module.path.size().value
-        let nameSize = module.name.size().value
         if modulePath.size().value != pathSize + 1 + nameSize
         then false
         else if !java_script_string_has_prefix(modulePath, module.path)
         then false
-        else if modulePath[pathSize, pathSize + 1] != "/"
-        then false
-        else java_script_string_has_suffix(modulePath, module.name)
+        else modulePath[pathSize, pathSize + 1] == "/"
 
 /// Checks whether an import matches the import includes name rule.
 private fun java_script_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
