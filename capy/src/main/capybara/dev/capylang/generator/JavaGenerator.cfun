@@ -63,6 +63,10 @@ data JavaGeneratedModules { objectInterfaceModules: List[GeneratedModule], javaM
 data AnnotationBinding { declaration: CompiledAnnotationDeclaration, module: CompiledModule }
 /// Decoded annotation schema argument with field name, value kind, and encoded source value.
 data SchemaAnnotationArgument { name: String, kind: String, value: String }
+/// Schema annotation values grouped under one object reflection metadata key.
+data JavaObjectAnnotationValues { values: List[String] }
+/// Object reflection annotation schema values collected in one pass for a class or interface.
+data JavaObjectAnnotationSources { typeAnnotations: List[String], fieldAnnotations: Dict[JavaObjectAnnotationValues], methodAnnotations: Dict[JavaObjectAnnotationValues] }
 /// Schema lookup result that distinguishes a type with no values from a missing type.
 data JavaSchemaValues { typeExists: bool, values: List[String] }
 /// Decoded object field schema metadata used while rebuilding object classes and reflection metadata.
@@ -3872,18 +3876,15 @@ private fun object_type_method_call_code_for_name(name: String, module: Compiled
 
 /// Emits generated code for reflection object info.
 private fun reflection_object_info_code(className: String, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    let annotationSources = java_object_annotation_sources(className, owner.functions)
     "__capy_data(\"ObjectInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(className) + "\"")
         + ", " + java_map_entry("pkg", package_info_code(owner))
         + ", " + java_map_entry("open", reflection_object_open_code(className, owner.functions))
-        + ", " + java_map_entry("fields", reflection_object_field_infos_code(className, schema_values("__capy_oo_field|" + className + "|", owner.functions), owner, allModules))
-        + ", " + java_map_entry("methods", reflection_object_method_infos_code(className, owner.functions, owner, allModules))
+        + ", " + java_map_entry("fields", reflection_object_field_infos_code(className, schema_values("__capy_oo_field|" + className + "|", owner.functions), annotationSources, owner, allModules))
+        + ", " + java_map_entry("methods", reflection_object_method_infos_code(className, owner.functions, annotationSources, owner, allModules))
         + ", " + java_map_entry("parents", reflection_parent_infos_code(schema_values("__capy_oo_parent|" + className + "|", owner.functions), owner, allModules))
-        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
-            schema_values("__capy_oo_annotation|type|" + className + "|", owner.functions),
-            owner,
-            allModules
-        ))
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(annotationSources.typeAnnotations, owner, allModules))
         + "))"
 
 /// Emits generated code for reflection object open.
@@ -3892,16 +3893,13 @@ private fun reflection_object_open_code(className: String, functions: List[Compi
 
 /// Emits generated code for reflection object interface info.
 private fun reflection_object_interface_info_code(objectInterface: CompiledObjectOrientedInterface, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    let annotationSources = java_object_annotation_sources(objectInterface.name, owner.functions)
     "__capy_data(\"" + reflection_object_interface_info_type(objectInterface) + "\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(objectInterface.name) + "\"")
         + ", " + java_map_entry("pkg", package_info_code(owner))
-        + ", " + java_map_entry("methods", reflection_object_interface_method_infos_code(objectInterface.name, owner.functions, owner, allModules))
+        + ", " + java_map_entry("methods", reflection_object_interface_method_infos_code(objectInterface.name, owner.functions, annotationSources, owner, allModules))
         + ", " + java_map_entry("parents", reflection_parent_infos_code(schema_values("__capy_oo_interface_parent|" + objectInterface.name + "|", owner.functions), owner, allModules))
-        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
-            schema_values("__capy_oo_annotation|type|" + objectInterface.name + "|", owner.functions),
-            owner,
-            allModules
-        ))
+        + ", " + java_map_entry("annotations", reflection_annotation_infos_code(annotationSources.typeAnnotations, owner, allModules))
         + "))"
 
 /// Computes the compiled type for reflection object interface info.
@@ -3909,46 +3907,46 @@ private fun reflection_object_interface_info_type(objectInterface: CompiledObjec
     if objectInterface.kind == "trait" then "TraitInfo" else "InterfaceInfo"
 
 /// Emits generated code for reflection object field infos.
-private fun reflection_object_field_infos_code(className: String, fields: List[String], owner: CompiledModule, allModules: List[CompiledModule]): String =
-    java_list_code(reflection_object_field_info_codes(className, fields, 0, owner, allModules))
+private fun reflection_object_field_infos_code(className: String, fields: List[String], annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_field_info_codes(className, fields, 0, annotationSources, owner, allModules))
 
 /// Collects reflection metadata entries for reflection object field info codes.
-private fun reflection_object_field_info_codes(className: String, fields: List[String], idx: int, owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+private fun reflection_object_field_info_codes(className: String, fields: List[String], idx: int, annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        [reflection_object_field_info_code(className, field, idx, owner, allModules)]
-            + reflection_object_field_info_codes(className, fields[1:], idx + 1, owner, allModules)
+        [reflection_object_field_info_code(className, field, idx, annotationSources, owner, allModules)]
+            + reflection_object_field_info_codes(className, fields[1:], idx + 1, annotationSources, owner, allModules)
 
 /// Emits generated code for reflection object field info.
-private fun reflection_object_field_info_code(className: String, field: String, idx: int, owner: CompiledModule, allModules: List[CompiledModule]): String =
+private fun reflection_object_field_info_code(className: String, field: String, idx: int, annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): String =
     let schema = object_field_schema_metadata(field)
     "__capy_data(\"FieldInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(schema.name) + "\"")
         + ", " + java_map_entry("type", reflection_any_info_code(schema_type_reference(schema.typeName), owner, allModules))
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
-            schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", owner.functions),
+            java_object_annotation_values("" + idx, annotationSources.fieldAnnotations),
             owner,
             allModules
         ))
         + "))"
 
 /// Emits generated code for reflection object method infos.
-private fun reflection_object_method_infos_code(className: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): String =
-    java_list_code(reflection_object_method_info_codes(className, functions, owner, allModules))
+private fun reflection_object_method_infos_code(className: String, functions: List[CompiledFunction], annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_method_info_codes(className, functions, annotationSources, owner, allModules))
 
 /// Collects reflection metadata entries for reflection object method info codes.
-private fun reflection_object_method_info_codes(className: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+private fun reflection_object_method_info_codes(className: String, functions: List[CompiledFunction], annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match functions[0] with
     case None -> []
     case Some { function } ->
         if compiled_object_method_function_for_class(function, className)
-        then [reflection_object_method_info_code(function, owner, allModules)]
-            + reflection_object_method_info_codes(className, functions[1:], owner, allModules)
-        else reflection_object_method_info_codes(className, functions[1:], owner, allModules)
+        then [reflection_object_method_info_code(function, annotationSources, owner, allModules)]
+            + reflection_object_method_info_codes(className, functions[1:], annotationSources, owner, allModules)
+        else reflection_object_method_info_codes(className, functions[1:], annotationSources, owner, allModules)
 
 /// Emits generated code for reflection object method info.
-private fun reflection_object_method_info_code(function: CompiledFunction, owner: CompiledModule, allModules: List[CompiledModule]): String =
+private fun reflection_object_method_info_code(function: CompiledFunction, annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): String =
     let className = compiled_object_method_class_name(function.name)
     let methodName = compiled_object_method_name(function.name)
     "__capy_data(\"MethodInfo\", java.util.Map.ofEntries("
@@ -3957,28 +3955,28 @@ private fun reflection_object_method_info_code(function: CompiledFunction, owner
         + ", " + java_map_entry("params", reflection_method_param_infos_code(function.parameters, owner, allModules))
         + ", " + java_map_entry("return_type", reflection_any_info_code(function.returnType, owner, allModules))
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
-            schema_values("__capy_oo_annotation|method|" + className + "|" + methodName + "|", owner.functions),
+            java_object_annotation_values(methodName, annotationSources.methodAnnotations),
             owner,
             allModules
         ))
         + "))"
 
 /// Emits generated code for reflection object interface method infos.
-private fun reflection_object_interface_method_infos_code(interfaceName: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): String =
-    java_list_code(reflection_object_interface_method_info_codes(interfaceName, functions, owner, allModules))
+private fun reflection_object_interface_method_infos_code(interfaceName: String, functions: List[CompiledFunction], annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): String =
+    java_list_code(reflection_object_interface_method_info_codes(interfaceName, functions, annotationSources, owner, allModules))
 
 /// Collects reflection metadata entries for reflection object interface method info codes.
-private fun reflection_object_interface_method_info_codes(interfaceName: String, functions: List[CompiledFunction], owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
+private fun reflection_object_interface_method_info_codes(interfaceName: String, functions: List[CompiledFunction], annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match functions[0] with
     case None -> []
     case Some { function } ->
         if compiled_object_interface_method_function_for_interface(function, interfaceName)
-        then [reflection_object_interface_method_info_code(function, owner, allModules)]
-            + reflection_object_interface_method_info_codes(interfaceName, functions[1:], owner, allModules)
-        else reflection_object_interface_method_info_codes(interfaceName, functions[1:], owner, allModules)
+        then [reflection_object_interface_method_info_code(function, annotationSources, owner, allModules)]
+            + reflection_object_interface_method_info_codes(interfaceName, functions[1:], annotationSources, owner, allModules)
+        else reflection_object_interface_method_info_codes(interfaceName, functions[1:], annotationSources, owner, allModules)
 
 /// Emits generated code for reflection object interface method info.
-private fun reflection_object_interface_method_info_code(function: CompiledFunction, owner: CompiledModule, allModules: List[CompiledModule]): String =
+private fun reflection_object_interface_method_info_code(function: CompiledFunction, annotationSources: JavaObjectAnnotationSources, owner: CompiledModule, allModules: List[CompiledModule]): String =
     let interfaceName = compiled_object_interface_method_owner_name(function.name)
     let methodName = compiled_object_interface_method_name(function.name)
     "__capy_data(\"MethodInfo\", java.util.Map.ofEntries("
@@ -3987,11 +3985,43 @@ private fun reflection_object_interface_method_info_code(function: CompiledFunct
         + ", " + java_map_entry("params", reflection_method_param_infos_code(function.parameters, owner, allModules))
         + ", " + java_map_entry("return_type", reflection_any_info_code(function.returnType, owner, allModules))
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
-            schema_values("__capy_oo_annotation|method|" + interfaceName + "|" + methodName + "|", owner.functions),
+            java_object_annotation_values(methodName, annotationSources.methodAnnotations),
             owner,
             allModules
         ))
         + "))"
+
+/// Collects object reflection annotation schema values for one object owner.
+private fun java_object_annotation_sources(ownerName: String, functions: List[CompiledFunction]): JavaObjectAnnotationSources =
+    match functions[0] with
+    case None -> JavaObjectAnnotationSources { typeAnnotations: [], fieldAnnotations: {:}, methodAnnotations: {:} }
+    case Some { function } ->
+        let rest = java_object_annotation_sources(ownerName, functions[1:])
+        if compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_annotation|type|" + ownerName + "|")
+        then rest.with(typeAnnotations: [schema_value(function)] + rest.typeAnnotations)
+        else if compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_annotation|field|" + ownerName + "|")
+        then rest.with(fieldAnnotations: java_object_annotation_values_add(rest.fieldAnnotations, java_object_annotation_member_key(function.name, "__capy_oo_annotation|field|" + ownerName + "|"), schema_value(function)))
+        else if compiled_schema(function) & java_generator_string_has_prefix(function.name, "__capy_oo_annotation|method|" + ownerName + "|")
+        then rest.with(methodAnnotations: java_object_annotation_values_add(rest.methodAnnotations, java_object_annotation_member_key(function.name, "__capy_oo_annotation|method|" + ownerName + "|"), schema_value(function)))
+        else rest
+
+/// Adds one object annotation schema value while preserving source order.
+private fun java_object_annotation_values_add(index: Dict[JavaObjectAnnotationValues], key: String, value: String): Dict[JavaObjectAnnotationValues] =
+    match index.get(key) with
+    case Some { existing } -> index + (key, JavaObjectAnnotationValues { values: [value] + existing.values })
+    case None -> index + (key, JavaObjectAnnotationValues { values: [value] })
+
+/// Returns object annotation schema values for a member key.
+private fun java_object_annotation_values(key: String, index: Dict[JavaObjectAnnotationValues]): List[String] =
+    match index.get(key) with
+    case Some { values } -> values.values
+    case None -> []
+
+/// Extracts the first path segment after an object annotation prefix.
+private fun java_object_annotation_member_key(name: String, prefix: String): String =
+    let rest = name[prefix.size().value, name.size().value]
+    let separator = first_index_of(rest, "|", 0)
+    if separator < 0 then rest else rest[0, separator]
 
 /// Emits generated code for reflection method param infos.
 private fun reflection_method_param_infos_code(parameters: List[CompiledFunctionParameter], owner: CompiledModule, allModules: List[CompiledModule]): String =

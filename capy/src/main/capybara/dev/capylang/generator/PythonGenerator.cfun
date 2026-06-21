@@ -38,6 +38,10 @@ data PythonObjectMethodBinding { module: CompiledModule, objectClass: CompiledOb
 data PythonQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
 /// Decoded Python annotation schema argument with field name, value kind, and encoded source value.
 data PythonSchemaAnnotationArgument { name: String, kind: String, value: String }
+/// Schema annotation values grouped under one object reflection metadata key.
+data PythonObjectAnnotationValues { values: List[String] }
+/// Object reflection annotation schema values collected in one pass for a class or interface.
+data PythonObjectAnnotationSources { typeAnnotations: List[String], fieldAnnotations: Dict[PythonObjectAnnotationValues], methodAnnotations: Dict[PythonObjectAnnotationValues] }
 /// Python generator mapping from a standard-library value to its Python identifier and type name.
 data PythonStdlibValue { pythonName: String, typeName: String }
 /// Decoded overload request name used for backend dispatch lookups.
@@ -270,36 +274,30 @@ private fun python_object_type_method(objectClass: CompiledObjectOrientedClass, 
 
 /// Formats object info as a Python literal.
 private fun python_object_info_literal(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let annotationSources = python_object_annotation_sources(objectClass.name, module.functions)
     "__capy_data(\"ObjectInfo\", dict("
         + "name=" + python_string_literal(objectClass.name)
         + ", pkg=" + python_package_info_literal(module.name, module.path)
         + ", open=" + python_bool_code(objectClass.open)
-        + ", fields=" + python_object_field_infos_literal(objectClass.name, objectClass.fields, 0, module, allModules)
-        + ", methods=" + python_object_method_infos_literal(objectClass.name, objectClass.methods, module, allModules)
+        + ", fields=" + python_object_field_infos_literal(objectClass.name, objectClass.fields, 0, annotationSources, module, allModules)
+        + ", methods=" + python_object_method_infos_literal(objectClass.name, objectClass.methods, annotationSources, module, allModules)
         + ", parents=" + python_object_parent_infos_literal(objectClass.parents, module, allModules)
-        + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|type|" + objectClass.name + "|", module.functions),
-            module,
-            allModules
-        )
+        + ", annotations=" + python_reflection_annotation_infos_literal(annotationSources.typeAnnotations, module, allModules)
         + "))"
 
 /// Formats object interface info as a Python literal.
 private fun python_object_interface_info_literal(interfaceName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let annotationSources = python_object_annotation_sources(interfaceName, module.functions)
     "__capy_data(\"" + python_object_interface_info_type(python_object_interface_kind(interfaceName, module.functions)) + "\", dict("
         + "name=" + python_string_literal(interfaceName)
         + ", pkg=" + python_package_info_literal(module.name, module.path)
-        + ", methods=" + python_object_interface_method_infos_literal(interfaceName, module.functions, module, allModules)
+        + ", methods=" + python_object_interface_method_infos_literal(interfaceName, module.functions, annotationSources, module, allModules)
         + ", parents=" + python_object_parent_infos_literal(
             python_object_schema_type_references(python_schema_values("__capy_oo_interface_parent|" + interfaceName + "|", module.functions)),
             module,
             allModules
         )
-        + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|type|" + interfaceName + "|", module.functions),
-            module,
-            allModules
-        )
+        + ", annotations=" + python_reflection_annotation_infos_literal(annotationSources.typeAnnotations, module, allModules)
         + "))"
 
 /// Formats Python source text for object interface kind.
@@ -313,88 +311,88 @@ private fun python_object_interface_info_type(kind: String): String =
     if kind == "trait" then "TraitInfo" else "InterfaceInfo"
 
 /// Formats object field infos as a Python literal.
-private fun python_object_field_infos_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_field_infos_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> "[]"
     case Some { field } ->
-        "[" + python_object_field_info_literal(className, field, idx, module, allModules)
-            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, module, allModules)
+        "[" + python_object_field_info_literal(className, field, idx, annotationSources, module, allModules)
+            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, annotationSources, module, allModules)
             + "]"
 
 /// Formats object field infos tail as a Python literal.
-private fun python_object_field_infos_tail_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_field_infos_tail_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> ""
     case Some { field } ->
-        ", " + python_object_field_info_literal(className, field, idx, module, allModules)
-            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, module, allModules)
+        ", " + python_object_field_info_literal(className, field, idx, annotationSources, module, allModules)
+            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, annotationSources, module, allModules)
 
 /// Formats object field info as a Python literal.
-private fun python_object_field_info_literal(className: String, field: CompiledObjectOrientedField, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_field_info_literal(className: String, field: CompiledObjectOrientedField, idx: int, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"FieldInfo\", dict("
         + "name=" + python_string_literal(field.name)
         + ", type=" + python_any_info_literal(field.typeReference, module, allModules)
         + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", module.functions),
+            python_object_annotation_values("" + idx, annotationSources.fieldAnnotations),
             module,
             allModules
         )
         + "))"
 
 /// Formats object method infos as a Python literal.
-private fun python_object_method_infos_literal(className: String, methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_method_infos_literal(className: String, methods: List[CompiledObjectOrientedMethod], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> "[]"
     case Some { method } ->
-        "[" + python_object_method_info_literal(className, method, module, allModules)
-            + python_object_method_infos_tail_literal(className, methods[1:], module, allModules)
+        "[" + python_object_method_info_literal(className, method, annotationSources, module, allModules)
+            + python_object_method_infos_tail_literal(className, methods[1:], annotationSources, module, allModules)
             + "]"
 
 /// Formats object method infos tail as a Python literal.
-private fun python_object_method_infos_tail_literal(className: String, methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_method_infos_tail_literal(className: String, methods: List[CompiledObjectOrientedMethod], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> ""
     case Some { method } ->
-        ", " + python_object_method_info_literal(className, method, module, allModules)
-            + python_object_method_infos_tail_literal(className, methods[1:], module, allModules)
+        ", " + python_object_method_info_literal(className, method, annotationSources, module, allModules)
+            + python_object_method_infos_tail_literal(className, methods[1:], annotationSources, module, allModules)
 
 /// Formats object method info as a Python literal.
-private fun python_object_method_info_literal(className: String, method: CompiledObjectOrientedMethod, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_method_info_literal(className: String, method: CompiledObjectOrientedMethod, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"MethodInfo\", dict("
         + "name=" + python_string_literal(method.name)
         + ", pkg=" + python_package_info_literal(module.name, module.path)
         + ", params=" + python_object_method_param_infos_literal(method.parameters, module, allModules)
         + ", return_type=" + python_any_info_literal(method.returnType, module, allModules)
         + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|method|" + className + "|" + method.name + "|", module.functions),
+            python_object_annotation_values(method.name, annotationSources.methodAnnotations),
             module,
             allModules
         )
         + "))"
 
 /// Formats object interface method infos as a Python literal.
-private fun python_object_interface_method_infos_literal(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_interface_method_infos_literal(interfaceName: String, functions: List[CompiledFunction], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
     case None -> "[]"
     case Some { function } ->
         if python_compiled_object_interface_method_function_for_interface(function, interfaceName)
-        then "[" + python_object_interface_method_info_literal(function, module, allModules)
-            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+        then "[" + python_object_interface_method_info_literal(function, annotationSources, module, allModules)
+            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], annotationSources, module, allModules)
             + "]"
-        else python_object_interface_method_infos_literal(interfaceName, functions[1:], module, allModules)
+        else python_object_interface_method_infos_literal(interfaceName, functions[1:], annotationSources, module, allModules)
 
 /// Formats object interface method infos tail as a Python literal.
-private fun python_object_interface_method_infos_tail_literal(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_interface_method_infos_tail_literal(interfaceName: String, functions: List[CompiledFunction], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
         if python_compiled_object_interface_method_function_for_interface(function, interfaceName)
-        then ", " + python_object_interface_method_info_literal(function, module, allModules)
-            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
-        else python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+        then ", " + python_object_interface_method_info_literal(function, annotationSources, module, allModules)
+            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], annotationSources, module, allModules)
+        else python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], annotationSources, module, allModules)
 
 /// Formats object interface method info as a Python literal.
-private fun python_object_interface_method_info_literal(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_interface_method_info_literal(function: CompiledFunction, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     let interfaceName = python_compiled_object_interface_method_owner_name(function.name)
     let methodName = python_compiled_object_interface_method_name(function.name)
     "__capy_data(\"MethodInfo\", dict("
@@ -403,11 +401,43 @@ private fun python_object_interface_method_info_literal(function: CompiledFuncti
         + ", params=" + python_object_method_param_infos_literal(function.parameters, module, allModules)
         + ", return_type=" + python_any_info_literal(function.returnType, module, allModules)
         + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|method|" + interfaceName + "|" + methodName + "|", module.functions),
+            python_object_annotation_values(methodName, annotationSources.methodAnnotations),
             module,
             allModules
         )
         + "))"
+
+/// Collects object reflection annotation schema values for one object owner.
+private fun python_object_annotation_sources(ownerName: String, functions: List[CompiledFunction]): PythonObjectAnnotationSources =
+    match functions[0] with
+    case None -> PythonObjectAnnotationSources { typeAnnotations: [], fieldAnnotations: {:}, methodAnnotations: {:} }
+    case Some { function } ->
+        let rest = python_object_annotation_sources(ownerName, functions[1:])
+        if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_annotation|type|" + ownerName + "|")
+        then rest.with(typeAnnotations: [python_schema_value(function)] + rest.typeAnnotations)
+        else if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_annotation|field|" + ownerName + "|")
+        then rest.with(fieldAnnotations: python_object_annotation_values_add(rest.fieldAnnotations, python_object_annotation_member_key(function.name, "__capy_oo_annotation|field|" + ownerName + "|"), python_schema_value(function)))
+        else if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_annotation|method|" + ownerName + "|")
+        then rest.with(methodAnnotations: python_object_annotation_values_add(rest.methodAnnotations, python_object_annotation_member_key(function.name, "__capy_oo_annotation|method|" + ownerName + "|"), python_schema_value(function)))
+        else rest
+
+/// Adds one object annotation schema value while preserving source order.
+private fun python_object_annotation_values_add(index: Dict[PythonObjectAnnotationValues], key: String, value: String): Dict[PythonObjectAnnotationValues] =
+    match index.get(key) with
+    case Some { existing } -> index + (key, PythonObjectAnnotationValues { values: [value] + existing.values })
+    case None -> index + (key, PythonObjectAnnotationValues { values: [value] })
+
+/// Returns object annotation schema values for a member key.
+private fun python_object_annotation_values(key: String, index: Dict[PythonObjectAnnotationValues]): List[String] =
+    match index.get(key) with
+    case Some { values } -> values.values
+    case None -> []
+
+/// Extracts the first path segment after an object annotation prefix.
+private fun python_object_annotation_member_key(name: String, prefix: String): String =
+    let rest = name[prefix.size().value, name.size().value]
+    let separator = python_first_index_of(rest, "|", 0)
+    if separator < 0 then rest else rest[0, separator]
 
 /// Formats object method param infos as a Python literal.
 private fun python_object_method_param_infos_literal(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
