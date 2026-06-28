@@ -19,6 +19,33 @@ public final class ResultUtil {
         return result;
     }
 
+    public static boolean isSuccess(Object value) {
+        return resultType(value, "Success");
+    }
+
+    public static boolean isError(Object value) {
+        return resultType(value, "Error");
+    }
+
+    public static Object successValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map.get("value");
+        }
+        return null;
+    }
+
+    private static boolean resultType(Object value, String typeName) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return false;
+        }
+        var type = map.get("__type");
+        if (type == null) {
+            return false;
+        }
+        var actual = String.valueOf(type);
+        return actual.equals(typeName) || actual.endsWith("." + typeName);
+    }
+
     public static Object error(String kind, String message) {
         return errorFull(
                 kind,

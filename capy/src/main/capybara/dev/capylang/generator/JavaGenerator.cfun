@@ -178,19 +178,43 @@ private fun java_effect_module_code(module: CompiledModule): String =
 
 private fun java_async_module_code(module: CompiledModule): String =
     java_package(module)
-    + "import java.util.concurrent.*;" + newline() + newline()
+    + "import java.util.concurrent.*;" + newline()
+    + "import java.util.function.*;" + newline() + newline()
     + "public final class Async<T> {" + newline()
     + "    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {" + newline()
     + "        Thread thread = new Thread(r, \"capy-async\");" + newline()
     + "        thread.setDaemon(true);" + newline()
     + "        return thread;" + newline()
     + "    });" + newline() + newline()
+    + "    private static final class ResultFailure extends RuntimeException {" + newline()
+    + "        private final java.lang.Object error;" + newline() + newline()
+    + "        private ResultFailure(java.lang.Object error) {" + newline()
+    + "            super(\"Async.flat_map returned Error\");" + newline()
+    + "            this.error = error;" + newline()
+    + "        }" + newline()
+    + "    }" + newline() + newline()
     + "    private final CompletableFuture<T> future;" + newline() + newline()
     + "    private Async(CompletableFuture<T> future) {" + newline()
     + "        this.future = future;" + newline()
     + "    }" + newline() + newline()
     + "    public static <T> capy.lang.Effect<Async<T>> start(capy.lang.Effect<T> effect) {" + newline()
     + "        return capy.lang.Effect.delay(() -> new Async<>(CompletableFuture.supplyAsync(effect::unsafeRun, EXECUTOR)));" + newline()
+    + "    }" + newline() + newline()
+    + "    public <Y> Async<Y> map(Function<? super T, ? extends Y> map) {" + newline()
+    + "        return new Async<>(future.thenApplyAsync(map, EXECUTOR));" + newline()
+    + "    }" + newline() + newline()
+    + "    @SuppressWarnings(\"unchecked\")" + newline()
+    + "    public <Y> Async<Y> flatMap(Function<? super T, ?> flatmap) {" + newline()
+    + "        return new Async<>(future.thenApplyAsync(value -> {" + newline()
+    + "            java.lang.Object result = flatmap.apply(value);" + newline()
+    + "            if (dev.capylang.ResultUtil.isError(result)) {" + newline()
+    + "                throw new ResultFailure(result);" + newline()
+    + "            }" + newline()
+    + "            if (dev.capylang.ResultUtil.isSuccess(result)) {" + newline()
+    + "                return (Y) dev.capylang.ResultUtil.successValue(result);" + newline()
+    + "            }" + newline()
+    + "            throw new ResultFailure(dev.capylang.ResultUtil.error(\"capy.lang.argument.invalid\", \"Async.flat_map expected Result value\"));" + newline()
+    + "        }, EXECUTOR));" + newline()
     + "    }" + newline() + newline()
     + "    public capy.lang.Effect<java.lang.Object> join() {" + newline()
     + "        return capy.lang.Effect.delay(() -> {" + newline()
@@ -200,13 +224,23 @@ private fun java_async_module_code(module: CompiledModule): String =
     + "                Thread.currentThread().interrupt();" + newline()
     + "                return dev.capylang.ResultUtil.error(\"capy.lang.async.failed\", dev.capylang.ResultUtil.safeMessage(e), e);" + newline()
     + "            } catch (ExecutionException e) {" + newline()
-    + "                Throwable cause = e.getCause() == null ? e : e.getCause();" + newline()
+    + "                Throwable cause = unwrap(e);" + newline()
+    + "                if (cause instanceof ResultFailure resultFailure) {" + newline()
+    + "                    return resultFailure.error;" + newline()
+    + "                }" + newline()
     + "                return dev.capylang.ResultUtil.error(\"capy.lang.async.failed\", dev.capylang.ResultUtil.safeMessage(cause), cause);" + newline()
     + "            }" + newline()
     + "        });" + newline()
     + "    }" + newline() + newline()
     + "    public capy.lang.Effect<java.lang.Boolean> isDone() {" + newline()
     + "        return capy.lang.Effect.delay(() -> future.isDone());" + newline()
+    + "    }" + newline() + newline()
+    + "    private static Throwable unwrap(Throwable throwable) {" + newline()
+    + "        Throwable current = throwable;" + newline()
+    + "        while ((current instanceof ExecutionException || current instanceof CompletionException) && current.getCause() != null) {" + newline()
+    + "            current = current.getCause();" + newline()
+    + "        }" + newline()
+    + "        return current;" + newline()
     + "    }" + newline()
     + "}" + newline()
 
@@ -1687,6 +1721,8 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     let resultType = contextual_binary_result_type(naturalResultType, expectedType)
     if result_reduce_operator_expression(binary, leftType)
     then result_reduce_method_code(result_reduce_operator_call(binary), env, expectedType, module, allModules)
+    else if async_pipe_expression(binary, leftType)
+    then async_pipe_code(binary, leftType, expectedType, env, module, allModules)
     else if result_pipe_expression(binary, leftType)
     then result_pipe_code(binary, leftType, expectedType, env, module, allModules)
     else if option_pipe_expression(binary, leftType)
@@ -2172,6 +2208,45 @@ private fun option_pipe_result_type(binary: CompiledBinaryExpression, leftType: 
             then bodyType
             else option_type(bodyType)
     case _ -> option_type(valueType)
+
+/// Checks whether an expression has the async pipe expression shape.
+private fun async_pipe_expression(binary: CompiledBinaryExpression, leftType: CompiledTypeReference): bool =
+    (binary.operator == "|" | binary.operator == "|*")
+        & async_type_name(leftType.name)
+        & lambda_expression(binary.right)
+
+/// Emits generated code for async pipe.
+private fun async_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let valueType = first_type_argument(leftType)
+    let resultType = async_pipe_result_type(binary, leftType, env, module, allModules)
+    let payloadType = if async_type_name(expectedType.name) then first_type_argument(expectedType) else first_type_argument(resultType)
+    let receiverCode = async_receiver_code(binary.left, leftType, env, module, allModules)
+    let methodName = if binary.operator == "|*" then "flatMap" else "map"
+    let mapperExpectedType = if binary.operator == "|*" then result_type(payloadType) else payloadType
+    receiverCode + "." + methodName + "(" + async_pipe_callable_code(binary.right, valueType, mapperExpectedType, env, module, allModules) + ")"
+
+/// Emits generated code for async pipe callable.
+private fun async_pipe_callable_code(mapper: CompiledExpression, valueType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match mapper with
+    case CompiledLambdaExpression lambda -> lambda_code_for_value(lambda, valueType, expectedType, env, module, allModules)
+    case CompiledFunctionReferenceExpression reference -> function_reference_lambda_code(reference, valueType, expectedType, module, allModules)
+    case _ -> "ignored -> unsupported(\"async pipe\")"
+
+/// Computes the compiled type for async pipe result.
+private fun async_pipe_result_type(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let valueType = first_type_argument(leftType)
+    match binary.right with
+    case CompiledLambdaExpression lambda ->
+        let bodyType = expression_type(lambda.body, lambda_value_env(lambda.parameters, valueType, env), module, allModules)
+        if binary.operator == "|*"
+        then if result_type_name(bodyType.name) then async_type(first_type_argument(bodyType)) else async_type(object_type())
+        else async_type(bodyType)
+    case CompiledFunctionReferenceExpression reference ->
+        let bodyType = function_reference_type(reference, module, allModules)
+        if binary.operator == "|*"
+        then if result_type_name(bodyType.name) then async_type(first_type_argument(bodyType)) else async_type(object_type())
+        else async_type(bodyType)
+    case _ -> async_type(object_type())
 
 /// Emits generated code for result pipe.
 private fun result_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4024,6 +4099,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then async_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".join()"
     else if async_is_done_method_call(call, env, module, allModules)
     then async_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".isDone()"
+    else if async_map_method_call(call, env, module, allModules)
+    then async_pipe_code(async_map_method_binary(call), expression_type(call.receiver, env, module, allModules), expectedType, env, module, allModules)
     else if function_value_method_call(call, env, module, allModules)
     then function_value_method_code(call, env, module, allModules)
     else if result_reduce_method_call(call, env, module, allModules)
@@ -4088,6 +4165,23 @@ private fun async_is_done_method_call(call: CompiledMethodCallExpression, env: L
     then call.arguments.is_empty()
         & async_type_name(expression_type(call.receiver, env, module, allModules).name)
     else false
+
+private fun async_map_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if async_map_method_name(call.name)
+    then result_map_method_argument(call.arguments)
+        & async_type_name(expression_type(call.receiver, env, module, allModules).name)
+    else false
+
+private fun async_map_method_name(name: String): bool =
+    name == "map" | name == "flat_map" | name == "`|`" | name == "`|*`"
+
+private fun async_map_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
+    CompiledBinaryExpression {
+        operator: if call.name == "flat_map" | call.name == "`|*`" then "|*" else "|",
+        left: call.receiver,
+        right: argument(call.arguments, 0),
+        location: call.location
+    }
 
 /// Emits generated code for function value method.
 private fun function_value_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -6689,6 +6783,8 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
         let leftType = expression_type(binary.left, env, module, allModules)
         if result_reduce_operator_expression(binary, leftType)
         then result_reduce_method_type(result_reduce_operator_call(binary), env, module, allModules)
+        else if async_pipe_expression(binary, leftType)
+        then async_pipe_result_type(binary, leftType, env, module, allModules)
         else if result_pipe_expression(binary, leftType)
         then result_pipe_result_type(binary, leftType, env, module, allModules)
         else if option_pipe_expression(binary, leftType)
@@ -8016,6 +8112,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then effect_type(result_type(first_type_argument(expression_type(call.receiver, env, module, allModules))))
     else if async_is_done_method_call(call, env, module, allModules)
     then effect_type(bool_type())
+    else if async_map_method_call(call, env, module, allModules)
+    then async_pipe_result_type(async_map_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
     else if function_value_method_call(call, env, module, allModules)
     then function_type_return_type(expression_type(call.receiver, env, module, allModules))
     else if result_reduce_method_call(call, env, module, allModules)
@@ -9404,6 +9502,8 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
         let leftType = expression_type(e.left, env, module, allModules)
         if result_reduce_operator_expression(e, leftType)
         then result_reduce_method_emittable(result_reduce_operator_call(e), env, module, allModules)
+        else if async_pipe_expression(e, leftType)
+        then async_pipe_emittable(e, env, module, allModules)
         else if result_pipe_expression(e, leftType)
         then result_pipe_emittable(e, env, module, allModules)
         else if option_pipe_expression(e, leftType)
@@ -9537,6 +9637,29 @@ private fun lambda_parameters_supported(parameters: List[String]): bool =
     match parameters[0] with
     case None -> true
     case Some { parameter } -> parameter != "_" & lambda_parameters_supported(parameters[1:])
+
+/// Checks whether async pipe can be emitted by the target backend.
+private fun async_pipe_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let leftType = expression_type(binary.left, env, module, allModules)
+    let valueType = first_type_argument(leftType)
+    expression_emittable(binary.left, env, module, allModules)
+        & match binary.right with
+            case CompiledLambdaExpression lambda ->
+                let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+                collection_lambda_emittable(lambda, valueType, env, module, allModules)
+                    & (binary.operator != "|*" | result_type_name(expression_type(lambda.body, lambdaEnv, module, allModules).name))
+            case CompiledFunctionReferenceExpression reference -> async_function_reference_emittable(reference, valueType, binary.operator == "|*", module, allModules)
+            case _ -> false
+
+/// Checks whether async function reference can be emitted by the target backend.
+private fun async_function_reference_emittable(reference: CompiledFunctionReferenceExpression, valueType: CompiledTypeReference, flatMap: bool, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_function_in_scope(reference.name, module, allModules) with
+    case Some { function } ->
+        let returnType = effective_function_return_type(function, module, allModules)
+        concrete_return_type(returnType)
+            & single_parameter_assignable(function.parameters, valueType)
+            & (!flatMap | result_type_name(returnType.name))
+    case None -> false
 
 /// Checks whether result pipe can be emitted by the target backend.
 private fun result_pipe_emittable(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -9775,6 +9898,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then expression_emittable(call.receiver, env, module, allModules)
     else if async_is_done_method_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
+    else if async_map_method_call(call, env, module, allModules)
+    then async_pipe_emittable(async_map_method_binary(call), env, module, allModules)
     else if function_value_method_call(call, env, module, allModules)
     then function_value_method_emittable(call, env, module, allModules)
     else if result_reduce_method_call(call, env, module, allModules)

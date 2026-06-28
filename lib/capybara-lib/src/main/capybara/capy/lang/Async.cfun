@@ -11,3 +11,15 @@ fun Async[T].join(): /capy/lang/Effect[Result[T]] = <native>
 
 /// Returns true when the asynchronous computation has completed.
 fun Async[T].is_done(): /capy/lang/Effect[bool] = <native>
+
+/// Transforms the successful asynchronous value without blocking the caller.
+fun Async[T].map(map: T => Y): Async[Y] = <native>
+
+/// Applies a Result-returning transformation and preserves mapper Error values.
+fun Async[T].flat_map(flatmap: T => Result[Y]): Async[Y] = <native>
+
+/// Operator alias for `map`.
+fun Async[T].`|`(map: T => Y): Async[Y] = <native>
+
+/// Operator alias for `flat_map`.
+fun Async[T].`|*`(flatmap: T => Result[Y]): Async[Y] = <native>

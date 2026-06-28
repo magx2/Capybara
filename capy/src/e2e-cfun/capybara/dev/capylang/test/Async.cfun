@@ -16,4 +16,39 @@ fun async_failure_kind(): Effect[String] =
     case Success _ -> "success"
     case Error error -> error.kind
 
+fun async_mapped_value(): Effect[int] =
+    let task <- pure(20).start()
+    let result <- task.map(value => value + 22).join()
+    match result with
+    case Success { value } -> value
+    case Error _ -> -1
+
+fun async_pipe_value(): Effect[int] =
+    let task <- pure(40).start()
+    let result <- (task | value => value + 2).join()
+    match result with
+    case Success { value } -> value
+    case Error _ -> -1
+
+fun async_flat_mapped_value(): Effect[int] =
+    let task <- pure(20).start()
+    let result <- task.flat_map(value => Success { value + 22 }).join()
+    match result with
+    case Success { value } -> value
+    case Error _ -> -1
+
+fun async_flat_pipe_value(): Effect[int] =
+    let task <- pure(41).start()
+    let result <- (task |* value => Success { value + 1 }).join()
+    match result with
+    case Success { value } -> value
+    case Error _ -> -1
+
+fun async_flat_map_error_kind(): Effect[String] =
+    let task <- pure(20).start()
+    let result <- task.flat_map(value => fail_kind("capy.test.async.mapper", "bad value")).join()
+    match result with
+    case Success _ -> "success"
+    case Error error -> error.kind
+
 private fun portable_failure(): int = ???
