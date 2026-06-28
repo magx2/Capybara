@@ -2,6 +2,7 @@ from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Effect import { Effect }
 from /capy/lang/Option import { Option, None, Some }
 from /capy/meta_prog/Recursive import { Recursive }
 
@@ -230,6 +231,15 @@ fun Seq[T].map(map: T => Y): Seq[Y] =
     match this with
     case End -> End {}
     case Cons { value, rest } -> Cons { map(value), () => rest().map(map) }
+
+/// Maps this sequence with effectful work that may run in parallel.
+///
+/// The host runtime chooses the concurrency policy. Result order matches the
+/// source sequence order. Work is scheduled as the resulting sequence is
+/// consumed, so callers can combine this with lazy sequence operations.
+/// Mapper failures are raised when the affected element is observed; use
+/// `Async.join` directly when recoverable `Result` values are needed.
+fun Seq[T].par_map(map: T => Effect[Y]): Effect[Seq[Y]] = <native>
 
 /// Applies `map` and flattens the resulting sequences.
 ///

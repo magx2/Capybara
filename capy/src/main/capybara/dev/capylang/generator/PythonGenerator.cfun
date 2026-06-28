@@ -121,6 +121,9 @@ private fun python_object_runtime_aliases(classIdentifier: String): String =
     then ""
     else python_object_runtime_alias(classPrefix, "__capy_bind_value")
         + python_object_runtime_alias(classPrefix, "__capy_effect_bind_value")
+        + python_object_runtime_alias(classPrefix, "__capy_async_start")
+        + python_object_runtime_alias(classPrefix, "__capy_async_join")
+        + python_object_runtime_alias(classPrefix, "__capy_async_is_done")
         + python_object_runtime_alias(classPrefix, "__capy_data")
         + python_object_runtime_alias(classPrefix, "__capy_set")
         + python_object_runtime_alias(classPrefix, "__capy_add")
@@ -131,11 +134,13 @@ private fun python_object_runtime_aliases(classIdentifier: String): String =
         + python_object_runtime_alias(classPrefix, "__capy_is_empty")
         + python_object_runtime_alias(classPrefix, "__capy_get_field")
         + python_object_runtime_alias(classPrefix, "__capy_index")
+        + python_object_runtime_alias(classPrefix, "__capy_first")
         + python_object_runtime_alias(classPrefix, "__capy_as_list")
         + python_object_runtime_alias(classPrefix, "__capy_seq_map")
         + python_object_runtime_alias(classPrefix, "__capy_seq_filter")
         + python_object_runtime_alias(classPrefix, "__capy_seq_reject")
         + python_object_runtime_alias(classPrefix, "__capy_seq_flat_map")
+        + python_object_runtime_alias(classPrefix, "__capy_seq_par_map")
         + python_object_runtime_alias(classPrefix, "__capy_any")
         + python_object_runtime_alias(classPrefix, "__capy_all")
         + python_object_runtime_alias(classPrefix, "__capy_type_matches")
@@ -1096,6 +1101,14 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     then python_callable_call_code(call, env, module, allModules)
     else if python_effect_method_call(call, receiverType)
     then python_effect_method_call_code(call, env, module, allModules)
+    else if python_effect_start_method_call(call, receiverType)
+    then "__capy_async_start(" + receiver + ")"
+    else if python_async_join_method_call(call, receiverType)
+    then "__capy_async_join(" + receiver + ")"
+    else if python_async_is_done_method_call(call, receiverType)
+    then "__capy_async_is_done(" + receiver + ")"
+    else if python_seq_par_map_method_call(call, receiverType)
+    then "__capy_seq_par_map(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
     else if python_result_method_call(call, receiverType)
     then python_result_method_call_code(call, env, module, allModules)
     else if python_option_method_call(call, receiverType)
@@ -1127,7 +1140,7 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
     else if python_seq_as_list_call(call)
     then "__capy_as_list(" + receiver + ")"
     else if python_seq_first_call(call, receiverType)
-    then "__capy_index(__capy_as_list(" + receiver + "), 0)"
+    then "__capy_first(" + receiver + ")"
     else if python_collection_predicate_call(call, receiverType)
     then python_collection_predicate_call_code(call, env, module, allModules)
     else if python_primitive_conversion_method_call(call, receiverType)
@@ -1347,6 +1360,30 @@ private fun python_effect_method_call(call: CompiledMethodCallExpression, receiv
     (call.name == "map" | call.name == "flat_map")
         & receiverType == python_effect_type()
         & python_single_callable_argument(call.arguments)
+
+private fun python_effect_start_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    if call.name == "start"
+    then python_type_unqualified_name(receiverType) == python_effect_type()
+        & call.arguments.is_empty()
+    else false
+
+private fun python_async_join_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    if call.name == "join"
+    then python_type_unqualified_name(receiverType) == python_async_type()
+        & call.arguments.is_empty()
+    else false
+
+private fun python_async_is_done_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    if call.name == "is_done"
+    then python_type_unqualified_name(receiverType) == python_async_type()
+        & call.arguments.is_empty()
+    else false
+
+private fun python_seq_par_map_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    if call.name == "par_map"
+    then python_type_unqualified_name(receiverType) == python_seq_type()
+        & python_single_callable_argument(call.arguments)
+    else false
 
 /// Emits Python code for effect method call.
 private fun python_effect_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3114,6 +3151,8 @@ private fun python_runtime_function_type(name: String): String =
     then "DataValueInfo"
     else if name == "to_seq"
     then python_seq_type()
+    else if name == "pure" | name == "delay"
+    then python_effect_type()
     else if python_console_function(name)
     then python_effect_type()
     else python_unknown_type()
@@ -3297,6 +3336,14 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
     then python_object_type_method_call_type(call, module, allModules)
     else if python_effect_method_call(call, receiverType)
     then python_effect_type()
+    else if python_effect_start_method_call(call, receiverType)
+    then python_effect_type()
+    else if python_async_join_method_call(call, receiverType)
+    then python_effect_type()
+    else if python_async_is_done_method_call(call, receiverType)
+    then python_effect_type()
+    else if python_seq_par_map_method_call(call, receiverType)
+    then python_effect_type()
     else if python_result_method_call(call, receiverType)
     then python_result_method_call_type(call, env, module, allModules)
     else if python_option_method_call(call, receiverType)
@@ -3473,7 +3520,16 @@ private fun python_effect_payload_type_from_function_call(call: CompiledFunction
 
 /// Emits Python expression text for effect payload type from method call.
 private fun python_effect_payload_type_from_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match python_find_object_method(call, env, module, allModules) with
+    let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    if python_effect_start_method_call(call, receiverType)
+    then python_async_type()
+    else if python_async_join_method_call(call, receiverType)
+    then python_result_type()
+    else if python_async_is_done_method_call(call, receiverType)
+    then python_bool_type()
+    else if python_seq_par_map_method_call(call, receiverType)
+    then python_seq_type()
+    else match python_find_object_method(call, env, module, allModules) with
     case Some { binding } -> binding.method.returnType.name
     case None -> python_unknown_type()
 
@@ -3713,6 +3769,8 @@ private fun python_tuple_type(): String = "Tuple"
 private fun python_seq_type(): String = "Seq"
 /// Computes the Python type for effect.
 private fun python_effect_type(): String = "Effect"
+/// Computes the Python type for async.
+private fun python_async_type(): String = "Async"
 /// Computes the Python type for option.
 private fun python_option_type(): String = "Option"
 /// Computes the Python type for result.
@@ -5115,6 +5173,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
 private fun python_test_runtime_header_code(): String =
     "# Generated by Capybara." + python_newline()
     + "import builtins" + python_newline()
+    + "import concurrent.futures" + python_newline()
     + "import importlib" + python_newline()
     + "import inspect" + python_newline()
     + "import math" + python_newline()
@@ -5125,7 +5184,7 @@ private fun python_test_runtime_header_code(): String =
     + "import time" + python_newline()
     + "import traceback" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_is_done', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_first', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_seq_par_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime effect.
@@ -5143,6 +5202,9 @@ private fun python_test_runtime_effect_code(): String =
     + "    def flat_map(self, mapper):" + python_newline()
     + "        return Effect(lambda: _unsafe_run(mapper(self.unsafe_run())))" + python_newline()
     + python_newline()
+    + "    def start(self):" + python_newline()
+    + "        return globals()['__capy_async_start'](self)" + python_newline()
+    + python_newline()
     + "    @staticmethod" + python_newline()
     + "    def delay(thunk):" + python_newline()
     + "        return Effect(thunk)" + python_newline()
@@ -5151,11 +5213,42 @@ private fun python_test_runtime_effect_code(): String =
     + "    def pure(value):" + python_newline()
     + "        return Effect(lambda: value)" + python_newline()
     + python_newline()
+    + "__capy_async_executor = concurrent.futures.ThreadPoolExecutor()" + python_newline()
+    + python_newline()
+    + "class Async:" + python_newline()
+    + "    def __init__(self, future):" + python_newline()
+    + "        self._future = future" + python_newline()
+    + python_newline()
+    + "    def join(self):" + python_newline()
+    + "        return globals()['__capy_async_join'](self)" + python_newline()
+    + python_newline()
+    + "    def is_done(self):" + python_newline()
+    + "        return globals()['__capy_async_is_done'](self)" + python_newline()
+    + python_newline()
     + "def pure(value):" + python_newline()
     + "    return Effect.pure(value)" + python_newline()
     + python_newline()
     + "def delay(thunk):" + python_newline()
     + "    return Effect.delay(thunk)" + python_newline()
+    + python_newline()
+    + "def __capy_async_error(exc):" + python_newline()
+    + "    raw_stack = __capy_raw_stack(exc)" + python_newline()
+    + "    stack_trace = __capy_stack_frames(exc.__traceback__)" + python_newline()
+    + "    return __capy_error_full('capy.lang.async.failed', str(exc) if str(exc) else exc.__class__.__name__, __capy_none(), __capy_source_location_from_stack(stack_trace), stack_trace, __capy_some(raw_stack) if raw_stack else __capy_none(), __capy_none(), [])" + python_newline()
+    + python_newline()
+    + "def __capy_async_start(effect):" + python_newline()
+    + "    return Effect.delay(lambda: Async(__capy_async_executor.submit(lambda: _unsafe_run(effect))))" + python_newline()
+    + python_newline()
+    + "def __capy_async_join(async_value):" + python_newline()
+    + "    def run_join():" + python_newline()
+    + "        try:" + python_newline()
+    + "            return __capy_success(async_value._future.result())" + python_newline()
+    + "        except BaseException as exc:" + python_newline()
+    + "            return __capy_async_error(exc)" + python_newline()
+    + "    return Effect.delay(run_join)" + python_newline()
+    + python_newline()
+    + "def __capy_async_is_done(async_value):" + python_newline()
+    + "    return Effect.delay(lambda: async_value._future.done())" + python_newline()
     + python_newline()
     + "def __capy_current_millis():" + python_newline()
     + "    return Effect.delay(lambda: __capy_long(int(time.time() * 1000)))" + python_newline()
@@ -6617,6 +6710,26 @@ private fun python_test_runtime_iterable_helpers_code(): String =
     + "        return value" + python_newline()
     + "    return list(__capy_as_iterable(value))" + python_newline()
     + python_newline()
+    + "def __capy_first(value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if value is None:" + python_newline()
+    + "        return __capy_none()" + python_newline()
+    + "    if isinstance(value, dict):" + python_newline()
+    + "        if value.get('__type') == 'End':" + python_newline()
+    + "            return __capy_none()" + python_newline()
+    + "        if value.get('__type') == 'Cons':" + python_newline()
+    + "            return __capy_some(__capy_match_binding(value, 'value', 0))" + python_newline()
+    + "        if '__type' not in value:" + python_newline()
+    + "            iterator = iter(value.items())" + python_newline()
+    + "        else:" + python_newline()
+    + "            iterator = iter([value])" + python_newline()
+    + "    else:" + python_newline()
+    + "        iterator = iter(value if isinstance(value, (list, tuple, set, str)) else [value])" + python_newline()
+    + "    try:" + python_newline()
+    + "        return __capy_some(next(iterator))" + python_newline()
+    + "    except StopIteration:" + python_newline()
+    + "        return __capy_none()" + python_newline()
+    + python_newline()
     + "def to_seq(value):" + python_newline()
     + "    return __capy_as_list(value)" + python_newline()
     + python_newline()
@@ -6673,6 +6786,33 @@ private fun python_test_runtime_sequence_helpers_code(): String =
     + "        else:" + python_newline()
     + "            result.extend(mapped if isinstance(mapped, (list, tuple)) else [mapped])" + python_newline()
     + "    return result" + python_newline()
+    + python_newline()
+    + "def __capy_seq_par_map(value, mapper):" + python_newline()
+    + "    def run_par_map():" + python_newline()
+    + "        current = _unsafe_run(value)" + python_newline()
+    + "        if _capy_data_is(current, 'Cons') or _capy_data_is(current, 'End'):" + python_newline()
+    + "            return __capy_seq_par_map_lazy(current, mapper)" + python_newline()
+    + "        tasks = [__capy_async_start(__capy_apply_lambda(mapper, item)).unsafe_run() for item in __capy_as_iterable(current)]" + python_newline()
+    + "        result = []" + python_newline()
+    + "        for task in tasks:" + python_newline()
+    + "            joined = __capy_async_join(task).unsafe_run()" + python_newline()
+    + "            if _capy_data_is(joined, 'Error'):" + python_newline()
+    + "                raise RuntimeError(joined.get('message', 'async failed'))" + python_newline()
+    + "            result.append(_capy_data_value(joined))" + python_newline()
+    + "        return result" + python_newline()
+    + "    return Effect.delay(run_par_map)" + python_newline()
+    + python_newline()
+    + "def __capy_seq_par_map_lazy(seq, mapper):" + python_newline()
+    + "    seq = _unsafe_run(seq)" + python_newline()
+    + "    if _capy_data_is(seq, 'End'):" + python_newline()
+    + "        return __capy_data('End', dict())" + python_newline()
+    + "    item = _capy_data_value(seq)" + python_newline()
+    + "    task = __capy_async_start(__capy_apply_lambda(mapper, item)).unsafe_run()" + python_newline()
+    + "    joined = __capy_async_join(task).unsafe_run()" + python_newline()
+    + "    if _capy_data_is(joined, 'Error'):" + python_newline()
+    + "        raise RuntimeError(joined.get('message', 'async failed'))" + python_newline()
+    + "    rest = seq.get('rest')" + python_newline()
+    + "    return __capy_data('Cons', dict(value=_capy_data_value(joined), rest=lambda: __capy_seq_par_map_lazy(rest() if callable(rest) else rest, mapper)))" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime option helpers.
@@ -7197,6 +7337,15 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
         & python_expressions_gatherable(call.arguments, env, module, allModules)
     else if python_effect_method_call(call, receiverType)
     then python_effect_method_gatherable(call, env, module, allModules)
+    else if python_effect_start_method_call(call, receiverType)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+    else if python_async_join_method_call(call, receiverType)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+    else if python_async_is_done_method_call(call, receiverType)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+    else if python_seq_par_map_method_call(call, receiverType)
+    then python_expression_gatherable(call.receiver, env, module, allModules)
+        & python_single_callable_argument_gatherable(call.arguments, env, module, allModules)
     else if python_result_method_call(call, receiverType)
     then python_result_method_gatherable(call, env, module, allModules)
     else if python_option_method_call(call, receiverType)

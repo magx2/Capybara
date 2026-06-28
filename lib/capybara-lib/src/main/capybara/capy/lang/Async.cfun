@@ -1,0 +1,17 @@
+from /capy/lang/Effect import { Effect }
+from /capy/lang/Result import { Result }
+
+/// Handle for an Effect that has been started by the host runtime.
+///
+/// Async values are inert handles. Starting work is still an Effect, and
+/// observing completion is also an Effect.
+data Async[T] { <native> }
+
+/// Starts this Effect on the host runtime's asynchronous execution facility.
+fun Effect[T].start(): Effect[Async[T]] = <native>
+
+/// Waits for the asynchronous computation and captures host failures as Result.Error.
+fun Async[T].join(): Effect[Result[T]] = <native>
+
+/// Returns true when the asynchronous computation has completed.
+fun Async[T].is_done(): Effect[bool] = <native>

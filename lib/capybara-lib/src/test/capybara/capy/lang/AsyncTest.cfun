@@ -1,0 +1,38 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Async import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { Option, None, Some }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/Async.cfun", [
+        should_join_started_effect().map(assertion => test("should join started effect", () => assertion)),
+        should_report_done_after_join().map(assertion => test("should report done after join", () => assertion)),
+        should_capture_async_failure().map(assertion => test("should capture async failure", () => assertion)),
+    ])
+
+fun should_join_started_effect(): Effect[Assert] =
+    let task <- pure(42).start()
+    let result <- task.join()
+    match result with
+    case Success { value } -> assert_that(value).is_equal_to(42)
+    case Error _ -> assert_that(false).is_true()
+
+fun should_report_done_after_join(): Effect[Assert] =
+    let task <- pure(1).start()
+    let ignored <- task.join()
+    let done <- task.is_done()
+    assert_that(done).is_true()
+
+fun should_capture_async_failure(): Effect[Assert] =
+    let task <- delay(() => portable_failure()).start()
+    let result <- task.join()
+    match result with
+    case Success _ -> assert_that(false).is_true()
+    case Error error -> assert_that(error.kind).is_equal_to("capy.lang.async.failed")
+
+private fun portable_failure(): int =
+    let missing: Option[int] = None {}
+    match missing with
+    case Some { value } -> value

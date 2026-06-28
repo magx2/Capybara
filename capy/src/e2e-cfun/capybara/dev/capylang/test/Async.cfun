@@ -1,0 +1,41 @@
+from /capy/collection/List import { List }
+from /capy/collection/Seq import { * }
+from /capy/lang/Async import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { Option, None, Some }
+from /capy/lang/Result import { * }
+
+fun async_value(): Effect[int] =
+    let task <- pure(40 + 2).start()
+    let result <- task.join()
+    match result with
+    case Success { value } -> value
+    case Error _ -> -1
+
+fun async_failure_kind(): Effect[String] =
+    let task <- delay(() => portable_failure()).start()
+    let result <- task.join()
+    match result with
+    case Success _ -> "success"
+    case Error error -> error.kind
+
+fun par_map_values(): Effect[List[int]] =
+    let mapped <- to_seq([1, 2, 3]).par_map(value => pure(value * 10))
+    mapped.as_list()
+
+fun par_map_requested_head(): Effect[int] =
+    let mapped <- requested_head_seq().par_map(value =>
+        if value == 0
+        then pure(value + 1)
+        else delay(() => portable_failure()))
+    match mapped.first() with
+    case Some { value } -> value
+    case None -> -1
+
+private fun requested_head_seq(): Seq[int] =
+    Cons { 0, () => Cons { portable_failure(), () => End {} } }
+
+private fun portable_failure(): int =
+    let missing: Option[int] = None {}
+    match missing with
+    case Some { value } -> value

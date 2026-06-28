@@ -1,0 +1,41 @@
+from /capy/test/Assert import { * }
+from /capy/collection/Seq import { * }
+from /capy/lang/Async import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { Option, None, Some }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/collection/Seq.par_map", [
+        should_par_map_values().map(assertion => test("should par map values", () => assertion)),
+        should_par_map_preserve_order().map(assertion => test("should par map preserve order", () => assertion)),
+        should_par_map_empty_sequence().map(assertion => test("should par map empty sequence", () => assertion)),
+        should_par_map_only_start_requested_head().map(assertion => test("should par map only start requested head", () => assertion)),
+    ])
+
+fun should_par_map_values(): Effect[Assert] =
+    let mapped <- to_seq([1, 2, 3]).par_map(value => pure(value * 2))
+    assert_that(mapped.as_list()).is_equal_to([2, 4, 6])
+
+fun should_par_map_preserve_order(): Effect[Assert] =
+    let mapped <- to_seq([3, 1, 2]).par_map(value => pure(value * 10))
+    assert_that(mapped.as_list()).is_equal_to([30, 10, 20])
+
+fun should_par_map_empty_sequence(): Effect[Assert] =
+    let seq: Seq[int] = End {}
+    let mapped <- seq.par_map(value => pure(value * 10))
+    assert_that(mapped.as_list()).is_equal_to([])
+
+fun should_par_map_only_start_requested_head(): Effect[Assert] =
+    let mapped <- natural_seq().par_map(value =>
+        if value == 0
+        then pure(value + 1)
+        else delay(() => unrequested_failure()))
+    match mapped.first() with
+    case Some { value } -> assert_that(value).is_equal_to(1)
+    case None -> assert_that(false).is_true()
+
+private fun unrequested_failure(): int =
+    let missing: Option[int] = None {}
+    match missing with
+    case Some { value } -> value

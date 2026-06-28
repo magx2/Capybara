@@ -3,6 +3,7 @@ package dev.capylang;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,7 +13,10 @@ public final class ResultUtil {
     }
 
     public static Object success(Object value) {
-        return Map.of("__type", "Success", "value", value);
+        var result = new LinkedHashMap<String, Object>();
+        result.put("__type", "Success");
+        result.put("value", value);
+        return result;
     }
 
     public static Object error(String kind, String message) {

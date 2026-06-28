@@ -106,6 +106,8 @@ private fun java_modules(modules: List[CompiledModule], allModules: List[Compile
 private fun java_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     if module.path == "capy/lang" & module.name == "Effect"
     then java_effect_module_code(module)
+    else if module.path == "capy/lang" & module.name == "Async"
+    then java_async_module_code(module)
     else if module.path == "capy/collection" & module.name == "Seq"
     then java_seq_module_code(module)
     else if module.path == "capy/lang" & module.name == "System"
@@ -145,6 +147,9 @@ private fun java_effect_module_code(module: CompiledModule): String =
     + "    public <Y> Effect<Y> flatMap(Function<? super T, Effect<Y>> flatmap) {" + newline()
     + "        return delay(() -> flatmap.apply(unsafeRun()).unsafeRun());" + newline()
     + "    }" + newline() + newline()
+    + "    public Effect<capy.lang.Async<T>> start() {" + newline()
+    + "        return capy.lang.Async.start(this);" + newline()
+    + "    }" + newline() + newline()
     + "    public static <T> Effect<T> pure__5_0(T value) {" + newline()
     + "        return pure(value);" + newline()
     + "    }" + newline() + newline()
@@ -168,6 +173,40 @@ private fun java_effect_module_code(module: CompiledModule): String =
     + "    }" + newline() + newline()
     + "    public static <T, Y> Effect<Y> Effect_T________27_0(Effect<T> effect, Function<? super T, Effect<Y>> flatmap) {" + newline()
     + "        return effect.flatMap(flatmap);" + newline()
+    + "    }" + newline()
+    + "}" + newline()
+
+private fun java_async_module_code(module: CompiledModule): String =
+    java_package(module)
+    + "import java.util.concurrent.*;" + newline() + newline()
+    + "public final class Async<T> {" + newline()
+    + "    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {" + newline()
+    + "        Thread thread = new Thread(r, \"capy-async\");" + newline()
+    + "        thread.setDaemon(true);" + newline()
+    + "        return thread;" + newline()
+    + "    });" + newline() + newline()
+    + "    private final CompletableFuture<T> future;" + newline() + newline()
+    + "    private Async(CompletableFuture<T> future) {" + newline()
+    + "        this.future = future;" + newline()
+    + "    }" + newline() + newline()
+    + "    public static <T> capy.lang.Effect<Async<T>> start(capy.lang.Effect<T> effect) {" + newline()
+    + "        return capy.lang.Effect.delay(() -> new Async<>(CompletableFuture.supplyAsync(effect::unsafeRun, EXECUTOR)));" + newline()
+    + "    }" + newline() + newline()
+    + "    public capy.lang.Effect<java.lang.Object> join() {" + newline()
+    + "        return capy.lang.Effect.delay(() -> {" + newline()
+    + "            try {" + newline()
+    + "                return dev.capylang.ResultUtil.success(future.get());" + newline()
+    + "            } catch (InterruptedException e) {" + newline()
+    + "                Thread.currentThread().interrupt();" + newline()
+    + "                return dev.capylang.ResultUtil.error(\"capy.lang.async.failed\", dev.capylang.ResultUtil.safeMessage(e), e);" + newline()
+    + "            } catch (ExecutionException e) {" + newline()
+    + "                Throwable cause = e.getCause() == null ? e : e.getCause();" + newline()
+    + "                return dev.capylang.ResultUtil.error(\"capy.lang.async.failed\", dev.capylang.ResultUtil.safeMessage(cause), cause);" + newline()
+    + "            }" + newline()
+    + "        });" + newline()
+    + "    }" + newline() + newline()
+    + "    public capy.lang.Effect<java.lang.Boolean> isDone() {" + newline()
+    + "        return capy.lang.Effect.delay(() -> future.isDone());" + newline()
     + "    }" + newline()
     + "}" + newline()
 
@@ -223,6 +262,24 @@ private fun java_seq_module_code(module: CompiledModule): String =
     + "        }" + newline()
     + "        return new Seq<>(mapped);" + newline()
     + "    }" + newline() + newline()
+    + "    @SuppressWarnings(\"unchecked\")" + newline()
+    + "    public <Y> capy.lang.Effect<Seq<Y>> parMap(Function<? super T, capy.lang.Effect<Y>> map) {" + newline()
+    + "        return capy.lang.Effect.delay(() -> {" + newline()
+    + "            java.util.ArrayList<capy.lang.Async<Y>> tasks = new java.util.ArrayList<>();" + newline()
+    + "            for (T value : values) {" + newline()
+    + "                tasks.add(capy.lang.Async.start(map.apply(value)).unsafeRun());" + newline()
+    + "            }" + newline()
+    + "            java.util.ArrayList<Y> mapped = new java.util.ArrayList<>();" + newline()
+    + "            for (capy.lang.Async<Y> task : tasks) {" + newline()
+    + "                java.lang.Object result = task.join().unsafeRun();" + newline()
+    + "                if (__capy_async_result_error(result)) {" + newline()
+    + "                    throw new RuntimeException(java.lang.String.valueOf(((java.util.Map<?, ?>) result).get(\"message\")));" + newline()
+    + "                }" + newline()
+    + "                mapped.add((Y) ((java.util.Map<?, ?>) result).get(\"value\"));" + newline()
+    + "            }" + newline()
+    + "            return new Seq<>(mapped);" + newline()
+    + "        });" + newline()
+    + "    }" + newline() + newline()
     + "    public Seq<T> filter(Predicate<? super T> pred) {" + newline()
     + "        return new Seq<>(values.stream().filter(pred).toList());" + newline()
     + "    }" + newline() + newline()
@@ -231,6 +288,10 @@ private fun java_seq_module_code(module: CompiledModule): String =
     + "    }" + newline() + newline()
     + "    public boolean all(Predicate<? super T> pred) {" + newline()
     + "        return values.stream().allMatch(pred);" + newline()
+    + "    }" + newline()
+    + newline()
+    + "    private static boolean __capy_async_result_error(java.lang.Object value) {" + newline()
+    + "        return value instanceof java.util.Map<?, ?> map && java.util.Objects.equals(map.get(\"__type\"), \"Error\");" + newline()
     + "    }" + newline()
     + "}" + newline()
 
@@ -2740,6 +2801,9 @@ private fun seq_receiver_code(expression: CompiledExpression, receiverType: Comp
     then "((" + java_seq_type(receiverType) + ") (capy.collection.Seq<?>) " + receiverCode + ")"
     else "capy.collection.Seq.toSeq(" + receiverCode + ")"
 
+private fun async_receiver_code(expression: CompiledExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((capy.lang.Async<?>) " + expression_code(expression, env, receiverType, module, allModules) + ")"
+
 /// Emits generated code for int literal.
 private fun int_literal_code(literal: CompiledIntLiteral, expectedType: CompiledTypeReference): String =
     if expectedType.name == "byte" & byte_literal_source(literal.source)
@@ -3976,6 +4040,26 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
     else if seq_first_call(call, env, module, allModules)
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".first()"
+    else if effect_start_method_call(call, env, module, allModules)
+    then "capy.lang.Async.start((capy.lang.Effect) " + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules) + ")"
+    else if async_join_method_call(call, env, module, allModules)
+    then async_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".join()"
+    else if async_is_done_method_call(call, env, module, allModules)
+    then async_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".isDone()"
+    else if seq_par_map_method_call(call, env, module, allModules)
+    then
+        let receiverType = expression_type(call.receiver, env, module, allModules)
+        let valueType = collection_value_type(receiverType)
+        match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda ->
+            let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+            let bodyType = expression_type(lambda.body, lambdaEnv, module, allModules)
+            seq_receiver_code(call.receiver, receiverType, env, module, allModules)
+                + ".parMap(" + lambda_code_for_value(lambda, valueType, bodyType, env, module, allModules) + ")"
+        case CompiledFunctionReferenceExpression reference ->
+            seq_receiver_code(call.receiver, receiverType, env, module, allModules)
+                + ".parMap(" + function_reference_lambda_code(reference, valueType, function_reference_type(reference, module, allModules), module, allModules) + ")"
+        case _ -> "unsupported(\"seq par_map\")"
     else if function_value_method_call(call, env, module, allModules)
     then function_value_method_code(call, env, module, allModules)
     else if result_reduce_method_call(call, env, module, allModules)
@@ -4021,6 +4105,32 @@ private fun function_value_method_call(call: CompiledMethodCallExpression, env: 
 private fun effect_map_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "map"
     then expression_type(call.receiver, env, module, allModules).name == "Effect"
+    else false
+
+private fun effect_start_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "start"
+    then call.arguments.is_empty()
+        & expression_type(call.receiver, env, module, allModules).name == "Effect"
+    else false
+
+private fun async_join_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "join"
+    then call.arguments.is_empty()
+        & async_type_name(expression_type(call.receiver, env, module, allModules).name)
+    else false
+
+private fun async_is_done_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "is_done"
+    then call.arguments.is_empty()
+        & async_type_name(expression_type(call.receiver, env, module, allModules).name)
+    else false
+
+private fun seq_par_map_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "par_map"
+    then
+        if one_method_argument(call.arguments)
+        then seq_type_name(expression_type(call.receiver, env, module, allModules).name)
+        else false
     else false
 
 /// Emits generated code for function value method.
@@ -6316,6 +6426,10 @@ private fun error_type_name(name: String): bool =
 private fun seq_type_name(name: String): bool =
     stdlib_type_name(name, "Seq")
 
+/// Checks whether a type reference matches the async type name rule.
+private fun async_type_name(name: String): bool =
+    stdlib_type_name(name, "Async")
+
 /// Checks whether a type reference matches the standard-library type name rule.
 private fun stdlib_type_name(name: String, member: String): bool =
     name == member | name == "/capy/lang/" + member | name == "capy/lang/" + member
@@ -6325,6 +6439,7 @@ private fun stdlib_type_reference_assignable(target: CompiledTypeReference, sour
     stdlib_type_reference_assignable_as(target, source, "Option")
         | stdlib_type_reference_assignable_as(target, source, "Result")
         | stdlib_type_reference_assignable_as(target, source, "Seq")
+        | stdlib_type_reference_assignable_as(target, source, "Async")
 
 /// Checks whether standard-library type reference assignable as is assignable under the generator type rules.
 private fun stdlib_type_reference_assignable_as(target: CompiledTypeReference, source: CompiledTypeReference, member: String): bool =
@@ -7939,6 +8054,14 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then list_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
     else if seq_first_call(call, env, module, allModules)
     then option_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
+    else if effect_start_method_call(call, env, module, allModules)
+    then effect_type(async_type(first_type_argument(expression_type(call.receiver, env, module, allModules))))
+    else if async_join_method_call(call, env, module, allModules)
+    then effect_type(result_type(first_type_argument(expression_type(call.receiver, env, module, allModules))))
+    else if async_is_done_method_call(call, env, module, allModules)
+    then effect_type(bool_type())
+    else if seq_par_map_method_call(call, env, module, allModules)
+    then seq_par_map_method_type(call, env, module, allModules)
     else if function_value_method_call(call, env, module, allModules)
     then function_type_return_type(expression_type(call.receiver, env, module, allModules))
     else if result_reduce_method_call(call, env, module, allModules)
@@ -7976,6 +8099,18 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     else match find_extension_method(call, env, module, allModules) with
         case Some { function } -> bound_extension_method_return_type(function, expression_type(call.receiver, env, module, allModules))
         case None -> assert_type()
+
+private fun seq_par_map_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    match argument(call.arguments, 0) with
+    case CompiledLambdaExpression lambda ->
+        let lambdaEnv = lambda_value_env(lambda.parameters, valueType, env)
+        let bodyType = expression_type(lambda.body, lambdaEnv, module, allModules)
+        if bodyType.name == "Effect"
+        then effect_type(seq_type(first_type_argument(bodyType)))
+        else effect_type(seq_type(object_type()))
+    case _ -> effect_type(seq_type(object_type()))
 
 /// Computes the compiled type for result map method.
 private fun result_map_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -9692,6 +9827,21 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
     else if seq_first_call(call, env, module, allModules)
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
+    else if effect_start_method_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
+    else if async_join_method_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
+    else if async_is_done_method_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
+    else if seq_par_map_method_call(call, env, module, allModules)
+    then match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda ->
+            expression_emittable(call.receiver, env, module, allModules)
+                & collection_lambda_emittable(lambda, collection_value_type(receiverType), env, module, allModules)
+        case CompiledFunctionReferenceExpression reference ->
+            expression_emittable(call.receiver, env, module, allModules)
+                & collection_function_reference_emittable(reference, collection_value_type(receiverType), module, allModules)
+        case _ -> false
     else if function_value_method_call(call, env, module, allModules)
     then function_value_method_emittable(call, env, module, allModules)
     else if result_reduce_method_call(call, env, module, allModules)
@@ -10468,6 +10618,7 @@ private fun generated_data_object_type(type: CompiledTypeReference): bool =
         & type.name != "Dict"
         & type.name != "Tuple"
         & type.name != "Effect"
+        & type.name != "Async"
         & type.name != "Assert"
         & type.name != "TestFile"
         & type.name != "TestCase"
@@ -10549,6 +10700,7 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if boxed_container_java_type_name(type.name) then boxed_container_java_type(type.name, boxed_java_type(first_type_argument(type)))
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + generic_argument_java_type(first_type_argument(type)) + ">"
+    else if type.name == "Async" then "capy.lang.Async<" + generic_argument_java_type(first_type_argument(type)) + ">"
     else if !simple_type.is_empty() then simple_type
     else "java.lang.Object"
 
@@ -10570,6 +10722,7 @@ private fun top_level_boxed_java_type(type: CompiledTypeReference, module: Compi
     else if boxed_container_java_type_name(type.name) then boxed_container_java_type(type.name, top_level_boxed_java_type(first_type_argument(type), module, allModules))
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + top_level_generic_argument_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "Async" then "capy.lang.Async<" + top_level_generic_argument_java_type(first_type_argument(type), module, allModules) + ">"
     else if !simple_type.is_empty() then simple_type
     else match top_level_data_type_java_name(type, module, allModules) with
         case Some { name } -> name
@@ -11072,6 +11225,8 @@ private fun dict_type(arg: CompiledTypeReference): CompiledTypeReference = Compi
 private fun tuple_type(args: List[CompiledTypeReference]): CompiledTypeReference = CompiledTypeReference { name: "Tuple", arguments: args }
 /// Computes the compiled type for seq.
 private fun seq_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Seq", arguments: [arg] }
+/// Computes the compiled type for async.
+private fun async_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Async", arguments: [arg] }
 /// Computes the compiled type for effect.
 private fun effect_type(arg: CompiledTypeReference): CompiledTypeReference = CompiledTypeReference { name: "Effect", arguments: [arg] }
 /// Computes the compiled type for supplier.
