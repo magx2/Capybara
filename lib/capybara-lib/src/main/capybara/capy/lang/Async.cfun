@@ -1,4 +1,3 @@
-from /capy/lang/Effect import { Effect }
 from /capy/lang/Result import { Result }
 
 /// Handle for an Effect that has been started by the host runtime.
@@ -7,11 +6,8 @@ from /capy/lang/Result import { Result }
 /// observing completion is also an Effect.
 data Async[T] { <native> }
 
-/// Starts this Effect on the host runtime's asynchronous execution facility.
-fun Effect[T].start(): Effect[Async[T]] = <native>
-
 /// Waits for the asynchronous computation and captures host failures as Result.Error.
-fun Async[T].join(): Effect[Result[T]] = <native>
+fun Async[T].join(): /capy/lang/Effect[Result[T]] = <native>
 
 /// Returns true when the asynchronous computation has completed.
-fun Async[T].is_done(): Effect[bool] = <native>
+fun Async[T].is_done(): /capy/lang/Effect[bool] = <native>
