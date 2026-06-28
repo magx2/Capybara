@@ -215,7 +215,6 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_reduce",
         "__capy_with",
         "__capy_data_fields",
-        "__capy_first",
         "__capy_as_list",
         "to_seq",
         "__capy_async_start",
@@ -224,7 +223,6 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_seq_map",
         "__capy_seq_filter",
         "__capy_seq_flat_map",
-        "__capy_seq_par_map",
         "__capy_option_map",
         "__capy_option_filter",
         "__capy_option_flat_map",
@@ -2184,12 +2182,6 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then "__capy_async_join(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_async_is_done_method_call(call, env, module, allModules)
     then "__capy_async_is_done(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
-    else if java_script_seq_par_map_method_call(call, env, module, allModules)
-    then "__capy_seq_par_map("
-        + java_script_expression_code(call.receiver, env, module, allModules)
-        + ", "
-        + java_script_first_method_argument_code(call.arguments, env, module, allModules)
-        + ")"
     else if java_script_collection_method_call(call, env, module, allModules)
     then java_script_collection_method_call_code(call, env, module, allModules)
     else if java_script_collection_reduce_method_call(call, env, module, allModules)
@@ -2395,7 +2387,11 @@ private fun java_script_collection_first_call(call: CompiledMethodCallExpression
 
 /// Emits JavaScript code for collection first call.
 private fun java_script_collection_first_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    "__capy_first(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    "__capy_index(__capy_as_list("
+        + java_script_expression_code(call.receiver, env, module, allModules)
+        + "), 0, "
+        + java_script_string_literal("List")
+        + ")"
 
 /// Checks whether method metadata matches the size method call rule.
 private fun java_script_size_method_call(call: CompiledMethodCallExpression): bool =
@@ -2450,12 +2446,6 @@ private fun java_script_async_is_done_method_call(call: CompiledMethodCallExpres
     if call.name == "is_done"
     then call.arguments.is_empty()
         & java_script_expression_type(call.receiver, env, module, allModules) == "Async"
-    else false
-
-private fun java_script_seq_par_map_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if call.name == "par_map"
-    then java_script_single_callable_argument(call.arguments)
-        & java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)) == "Seq"
     else false
 
 /// Checks whether a call has the collection predicate call shape.
@@ -4079,8 +4069,6 @@ private fun java_script_effect_payload_type_from_method_call(call: CompiledMetho
     then "Result"
     else if java_script_async_is_done_method_call(call, env, module, allModules)
     then "bool"
-    else if java_script_seq_par_map_method_call(call, env, module, allModules)
-    then "Seq"
     else java_script_unknown_type()
 
 /// Emits JavaScript expression text for effect payload type from function call.
@@ -4296,8 +4284,6 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     else if java_script_async_join_method_call(call, env, module, allModules)
     then "Effect"
     else if java_script_async_is_done_method_call(call, env, module, allModules)
-    then "Effect"
-    else if java_script_seq_par_map_method_call(call, env, module, allModules)
     then "Effect"
     else if java_script_effect_method_call(call, env, module, allModules)
     then "Effect"
@@ -6072,7 +6058,6 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_unsafe_run(value) { while (value && (typeof value.unsafe_run === 'function' || typeof value.unsafeRun === 'function')) value = typeof value.unsafe_run === 'function' ? value.unsafe_run() : value.unsafeRun(); return value; }" + java_script_newline()
     + "function* __capy_seq_iter(seq) { seq = __capy_unsafe_run(seq); while (seq && seq.__type === 'Cons') { yield __capy_match_binding(seq, 'value', 0); const rest = __capy_match_binding(seq, 'rest', 1); seq = __capy_unsafe_run(typeof rest === 'function' ? rest() : rest); } }" + java_script_newline()
     + "function __capy_as_iterable(value) { value = __capy_unsafe_run(value); if (value == null) return []; if (value && value.__type === 'End') return []; if (value && value.__type === 'Cons') return __capy_seq_iter(value); if (typeof value === 'string') return Array.from(value); if (value instanceof Map) return value.entries(); if (value && typeof value[Symbol.iterator] === 'function') return value; return [value]; }" + java_script_newline()
-    + "function __capy_first(value) { value = __capy_unsafe_run(value); if (value == null) return __capy_option(undefined, false); if (value && value.__type === 'End') return __capy_option(undefined, false); if (value && value.__type === 'Cons') return __capy_option(__capy_match_binding(value, 'value', 0), true); if (Array.isArray(value) || typeof value === 'string') { const items = Array.isArray(value) ? value : Array.from(value); return __capy_option(items[0], items.length > 0); } if (value instanceof Map) { const item = value.entries().next(); return __capy_option(item.value, !item.done); } if (value && typeof value[Symbol.iterator] === 'function') { const item = value[Symbol.iterator]().next(); return __capy_option(item.value, !item.done); } return __capy_option(value, true); }" + java_script_newline()
     + "function __capy_as_list(value) { value = __capy_unsafe_run(value); if (Array.isArray(value)) return value; return Array.from(__capy_as_iterable(value)); }" + java_script_newline()
     + "function to_seq(value) { return __capy_as_list(value); }" + java_script_newline()
     + "function __capy_lambda_arity(fn) { return typeof fn === 'function' ? fn.length : 1; }" + java_script_newline()
@@ -6080,8 +6065,6 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_seq_map(value, mapper) { value = __capy_unsafe_run(value); if (value instanceof Map) { const result = new Map(); for (const [key, item] of value) result.set(key, __capy_apply_lambda(mapper, [key, item])); return result; } const result = []; for (const item of __capy_as_iterable(value)) result.push(__capy_apply_lambda(mapper, item)); return result; }" + java_script_newline()
     + "function __capy_seq_filter(value, predicate) { value = __capy_unsafe_run(value); if (value instanceof Map) { const result = new Map(); for (const [key, item] of value) if (__capy_truthy(__capy_apply_lambda(predicate, [key, item]))) result.set(key, item); return result; } const result = []; for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) result.push(item); return result; }" + java_script_newline()
     + "function __capy_seq_flat_map(value, mapper) { const result = []; for (const item of __capy_as_iterable(value)) { const mapped = __capy_unsafe_run(__capy_apply_lambda(mapper, item)); if (mapped == null) continue; if (mapped instanceof Map) result.push(...mapped.entries()); else if (typeof mapped === 'string') result.push(...Array.from(mapped)); else if (mapped && typeof mapped[Symbol.iterator] === 'function') result.push(...mapped); else result.push(mapped); } return result; }" + java_script_newline()
-    + "function __capy_seq_par_map(value, mapper) { return Effect.delay(() => { value = __capy_unsafe_run(value); if (value && (value.__type === 'Cons' || value.__type === 'End')) return __capy_seq_par_map_lazy(value, mapper); const tasks = []; for (const item of __capy_as_iterable(value)) tasks.push(__capy_unsafe_run(__capy_async_start(__capy_apply_lambda(mapper, item)))); const result = []; for (const task of tasks) { const joined = __capy_unsafe_run(__capy_async_join(task)); if (__capy_data_is(joined, 'Error')) throw new Error(joined.message || 'async failed'); result.push(__capy_match_binding(joined, 'value', 0)); } return result; }); }" + java_script_newline()
-    + "function __capy_seq_par_map_lazy(seq, mapper) { seq = __capy_unsafe_run(seq); if (!seq || seq.__type === 'End') return __capy_data('End', Object.fromEntries([])); const item = __capy_match_binding(seq, 'value', 0); const task = __capy_unsafe_run(__capy_async_start(__capy_apply_lambda(mapper, item))); const joined = __capy_unsafe_run(__capy_async_join(task)); if (__capy_data_is(joined, 'Error')) throw new Error(joined.message || 'async failed'); const rest = __capy_match_binding(seq, 'rest', 1); return __capy_data('Cons', Object.fromEntries([['value', __capy_match_binding(joined, 'value', 0)], ['rest', () => __capy_seq_par_map_lazy(typeof rest === 'function' ? rest() : rest, mapper)]])); }" + java_script_newline()
     + "function __capy_any(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return true; return false; } for (const item of __capy_as_iterable(value)) if (__capy_truthy(__capy_apply_lambda(predicate, item))) return true; return false; }" + java_script_newline()
     + "function __capy_all(value, predicate) { value = __capy_unsafe_run(value); if (typeof value === 'string' && __capy_lambda_arity(predicate) > 1) { const chars = Array.from(value); for (let index = 0; index < chars.length; index++) if (!__capy_truthy(__capy_unsafe_run(predicate(chars[index], index)))) return false; return true; } for (const item of __capy_as_iterable(value)) if (!__capy_truthy(__capy_apply_lambda(predicate, item))) return false; return true; }" + java_script_newline()
     + "function __capy_gather_module(modulePath) { const module = require(modulePath); return typeof module.tests === 'function' ? __capy_as_list(module.tests()) : []; }" + java_script_newline()
@@ -6641,9 +6624,6 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
     else if java_script_async_is_done_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
-    else if java_script_seq_par_map_method_call(call, env, module, allModules)
-    then java_script_expression_gatherable(call.receiver, env, module, allModules)
-        & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
     else if java_script_runtime_data_method_call(call)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)

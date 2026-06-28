@@ -7,6 +7,4 @@ fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/Async.cfun", [
         async_value().map(assertion => test("async value", () => assert_that(assertion).is_equal_to(42))),
         async_failure_kind().map(assertion => test("async failure kind", () => assert_that(assertion).is_equal_to("capy.lang.async.failed"))),
-        par_map_values().map(assertion => test("par map values", () => assert_that(assertion).is_equal_to([10, 20, 30]))),
-        par_map_requested_head().map(assertion => test("par map requested head", () => assert_that(assertion).is_equal_to(1))),
     ])
