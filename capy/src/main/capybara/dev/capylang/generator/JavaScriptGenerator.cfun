@@ -1211,6 +1211,10 @@ private fun java_script_object_runtime_class_name(className: String): String =
 private fun java_script_object_constructor_name(className: String): String =
     java_script_identifier(className)
 
+/// Computes the encoded JavaScript type name for an object class.
+private fun java_script_object_type_name(module: CompiledModule, className: String): String =
+    "__capy_oo|" + java_script_module_path(module).replace("/", ".") + "." + className
+
 /// Formats JavaScript constants and functions in one pass over compiled functions.
 private fun java_script_function_sections(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: JavaScriptNativeProviderScope, objectAnnotationIndex: JavaScriptObjectAnnotationIndex): JavaScriptFunctionSections =
     match functions[0] with
@@ -2619,9 +2623,35 @@ private fun java_script_oo_constructor_call_name(name: String, module: CompiledM
 
 /// Computes the JavaScript type for object-oriented constructor call payload.
 private fun java_script_oo_constructor_call_payload_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_oo_constructor_call(name, module, allModules)
-    then if java_script_qualified_call_name(name) then java_script_qualified_call_member(name) else name
-    else java_script_unknown_type()
+    if java_script_qualified_call_name(name)
+    then match java_script_find_qualified_object_constructor_payload_type(name, module, allModules) with
+        case Some { typeName } -> typeName
+        case None -> java_script_unknown_type()
+    else if java_script_object_class_exists(name, module.functions)
+    then java_script_object_type_name(module, name)
+    else match java_script_find_object_constructor_payload_type_in_imports(name, module.imports, module, allModules) with
+        case Some { typeName } -> typeName
+        case None -> java_script_unknown_type()
+
+/// Finds an object constructor payload type in imports in scope, imports, or compiled modules.
+private fun java_script_find_object_constructor_payload_type_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified
+        then java_script_option_string_identity(java_script_find_object_constructor_payload_type_in_imports(name, imports[1:], module, allModules))
+        else if !java_script_import_includes_name(name, declaration)
+        then java_script_option_string_identity(java_script_find_object_constructor_payload_type_in_imports(name, imports[1:], module, allModules))
+        else java_script_find_object_constructor_payload_type_in_import(name, declaration, imports[1:], module, allModules)
+
+/// Finds an object constructor payload type in import in scope, imports, or compiled modules.
+private fun java_script_find_object_constructor_payload_type_in_import(name: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if java_script_object_class_exported(name, importedModule.functions)
+        then /capy/lang/Option.Some { java_script_object_type_name(importedModule, name) }
+        else java_script_option_string_identity(java_script_find_object_constructor_payload_type_in_imports(name, rest, module, allModules))
+    case None -> java_script_option_string_identity(java_script_find_object_constructor_payload_type_in_imports(name, rest, module, allModules))
 
 /// Finds an object constructor in imports in scope, imports, or compiled modules.
 private fun java_script_find_object_constructor_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
@@ -2696,6 +2726,42 @@ private fun java_script_find_qualified_object_constructor_in_modules(qualifier: 
     case Some { targetModule } ->
         if java_script_object_class_exported(member, targetModule.functions)
         then /capy/lang/Option.Some { java_script_module_object_constructor_binding(targetModule, member, module) }
+        else /capy/lang/Option.None {}
+    case None -> /capy/lang/Option.None {}
+
+/// Finds a qualified object constructor payload type in scope, imports, or compiled modules.
+private fun java_script_find_qualified_object_constructor_payload_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let idx = java_script_last_dot_index(name)
+    let qualifier = java_script_qualified_call_qualifier_at(name, idx)
+    let member = java_script_qualified_call_member_at(name, idx)
+    match java_script_find_qualified_object_constructor_payload_type_in_imports(qualifier, member, module.imports, module, allModules) with
+    case Some { typeName } -> /capy/lang/Option.Some { typeName }
+    case None -> java_script_find_qualified_object_constructor_payload_type_in_modules(qualifier, member, module, allModules)
+
+/// Finds a qualified object constructor payload type in imports in scope, imports, or compiled modules.
+private fun java_script_find_qualified_object_constructor_payload_type_in_imports(qualifier: String, member: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_qualified_import_matches(qualifier, declaration, module)
+        then java_script_find_qualified_object_constructor_payload_type_in_import(member, declaration, imports[1:], module, allModules)
+        else java_script_option_string_identity(java_script_find_qualified_object_constructor_payload_type_in_imports(qualifier, member, imports[1:], module, allModules))
+
+/// Finds a qualified object constructor payload type in import in scope, imports, or compiled modules.
+private fun java_script_find_qualified_object_constructor_payload_type_in_import(member: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } ->
+        if java_script_object_class_exported(member, importedModule.functions)
+        then /capy/lang/Option.Some { java_script_object_type_name(importedModule, member) }
+        else java_script_option_string_identity(java_script_find_qualified_object_constructor_payload_type_in_imports(java_script_module_leaf_name(java_script_import_module_path(declaration.modulePath, module)), member, rest, module, allModules))
+    case None -> java_script_option_string_identity(java_script_find_qualified_object_constructor_payload_type_in_imports(java_script_module_leaf_name(java_script_import_module_path(declaration.modulePath, module)), member, rest, module, allModules))
+
+/// Finds a qualified object constructor payload type in modules in scope, imports, or compiled modules.
+private fun java_script_find_qualified_object_constructor_payload_type_in_modules(qualifier: String, member: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_module_by_path(java_script_qualified_module_path(qualifier, module), allModules) with
+    case Some { targetModule } ->
+        if java_script_object_class_exported(member, targetModule.functions)
+        then /capy/lang/Option.Some { java_script_object_type_name(targetModule, member) }
         else /capy/lang/Option.None {}
     case None -> /capy/lang/Option.None {}
 
