@@ -2819,16 +2819,9 @@ private fun java_script_oo_method_call(call: CompiledMethodCallExpression, env: 
     java_script_oo_method_call_with_receiver_type(call, receiverType, module, allModules)
 
 private fun java_script_oo_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if !java_script_object_receiver_type(receiverType)
-    then false
-    else
-        let typeName = java_script_type_unqualified_name(receiverType)
-        java_script_object_method_exists_in_module(typeName, call.name, module)
-            | java_script_object_method_exists_in_other_modules(typeName, call.name, module, allModules)
-
-/// Checks whether a compiled type name can resolve to object-oriented metadata.
-private fun java_script_object_receiver_type(typeName: String): bool =
-    java_script_string_has_prefix(typeName, "__capy_oo|")
+    let typeName = java_script_type_unqualified_name(receiverType)
+    java_script_object_method_exists_in_module(typeName, call.name, module)
+        | java_script_object_method_exists_in_other_modules(typeName, call.name, module, allModules)
 
 /// Emits JavaScript code for callable call.
 private fun java_script_callable_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
