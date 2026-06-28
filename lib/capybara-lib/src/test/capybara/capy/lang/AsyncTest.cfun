@@ -1,7 +1,6 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Async import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Option import { Option, None, Some }
 from /capy/lang/Result import { * }
 from /capy/test/CapyTest import { * }
 
@@ -32,7 +31,4 @@ fun should_capture_async_failure(): Effect[Assert] =
     case Success _ -> assert_that(false).is_true()
     case Error error -> assert_that(error.kind).is_equal_to("capy.lang.async.failed")
 
-private fun portable_failure(): int =
-    let missing: Option[int] = None {}
-    match missing with
-    case Some { value } -> value
+private fun portable_failure(): int = ???

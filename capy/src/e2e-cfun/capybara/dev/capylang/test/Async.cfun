@@ -1,6 +1,5 @@
 from /capy/lang/Async import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Option import { Option, None, Some }
 from /capy/lang/Result import { * }
 
 fun async_value(): Effect[int] =
@@ -17,7 +16,4 @@ fun async_failure_kind(): Effect[String] =
     case Success _ -> "success"
     case Error error -> error.kind
 
-private fun portable_failure(): int =
-    let missing: Option[int] = None {}
-    match missing with
-    case Some { value } -> value
+private fun portable_failure(): int = ???
