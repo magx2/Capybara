@@ -19,7 +19,9 @@ fun Async[T].map(map: T => Y): Async[Y] = <native>
 fun Async[T].flat_map(flatmap: T => Result[Y]): Async[Y] = <native>
 
 /// Operator alias for `map`.
-fun Async[T].`|`(map: T => Y): Async[Y] = <native>
+fun Async[T].`|`(map: T => Y): Async[Y] =
+    this.map(map)
 
 /// Operator alias for `flat_map`.
-fun Async[T].`|*`(flatmap: T => Result[Y]): Async[Y] = <native>
+fun Async[T].`|*`(flatmap: T => Result[Y]): Async[Y] =
+    this.flat_map(flatmap)

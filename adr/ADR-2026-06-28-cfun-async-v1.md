@@ -62,14 +62,15 @@ forcing a join:
 ```capybara
 fun Async[T].map(map: T => Y): Async[Y] = <native>
 fun Async[T].flat_map(flatmap: T => Result[Y]): Async[Y] = <native>
-fun Async[T].`|`(map: T => Y): Async[Y] = <native>
-fun Async[T].`|*`(flatmap: T => Result[Y]): Async[Y] = <native>
+fun Async[T].`|`(map: T => Y): Async[Y] = this.map(map)
+fun Async[T].`|*`(flatmap: T => Result[Y]): Async[Y] = this.flat_map(flatmap)
 ```
 
-`map` and `|` run the mapper after the source async succeeds and produce a new
-async handle for the mapped value. `flat_map` and `|*` run a mapper that returns
-`Result[Y]`; `Success` unwraps into the returned async value and `Error`
-becomes the result observed by `join`.
+`map` runs the mapper after the source async succeeds and produces a new async
+handle for the mapped value. `|` is only an alias that invokes `map`.
+`flat_map` runs a mapper that returns `Result[Y]`; `Success` unwraps into the
+returned async value and `Error` becomes the result observed by `join`. `|*` is
+only an alias that invokes `flat_map`.
 
 Failures are represented as values when the async result is joined:
 
