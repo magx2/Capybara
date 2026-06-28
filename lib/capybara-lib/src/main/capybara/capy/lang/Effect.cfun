@@ -39,7 +39,7 @@ fun Effect[T].unsafe_run(): T =
     _run(this)
 
 /// Starts this Effect on the host runtime's asynchronous execution facility.
-fun Effect[T].start(): Effect[/capy/lang/Async[T]] = <native>
+fun Effect[T].start(): /capy/lang/Async[T] = <native>
 
 /// Transforms the produced value without executing the effect immediately.
 fun Effect[T].map(map: T => Y): Effect[Y] =

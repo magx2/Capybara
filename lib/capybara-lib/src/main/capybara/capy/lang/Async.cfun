@@ -2,15 +2,19 @@ from /capy/lang/Result import { Result }
 
 /// Handle for an Effect that has been started by the host runtime.
 ///
-/// Async values are inert handles. Starting work is still an Effect, and
-/// observing completion is also an Effect.
+/// Async values are inert handles. Observing completion is an Effect.
 data Async[T] { <native> }
+
+/// Waits for all asynchronous computations and preserves every Result in input order.
+fun all(tasks: List[Async[T]]): /capy/lang/Effect[List[Result[T]]] = <native>
+
+/// Waits for the first asynchronous computation that completes.
+///
+/// Returns `capy.lang.async.empty` when `tasks` is empty.
+fun any(tasks: List[Async[T]]): /capy/lang/Effect[Result[T]] = <native>
 
 /// Waits for the asynchronous computation and captures host failures as Result.Error.
 fun Async[T].join(): /capy/lang/Effect[Result[T]] = <native>
-
-/// Returns true when the asynchronous computation has completed.
-fun Async[T].is_done(): /capy/lang/Effect[bool] = <native>
 
 /// Transforms the successful asynchronous value without blocking the caller.
 fun Async[T].map(map: T => Y): Async[Y] = <native>
