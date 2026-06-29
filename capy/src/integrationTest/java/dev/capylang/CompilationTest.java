@@ -173,6 +173,33 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateGrandparentUnionFieldsInJavaDataDeclarations() {
+        var source = """
+                union A { a: String } = B
+
+                union B { b: String } = C
+
+                data C { c: String }
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("""
+                    public sealed interface A {
+                        public String a();
+                    }
+                """);
+        assertThat(code).contains("    public sealed interface B extends A {");
+        assertThat(code).contains("        public String b();");
+        assertThat(code).contains("    public record C(String a, String b, String c) implements B {}");
+    }
+
+    @Test
     void shouldPreservePrimitiveBackedFieldTypesInJavaDataDeclarations() {
         var programSource = """
                 union Program = Success | Failed

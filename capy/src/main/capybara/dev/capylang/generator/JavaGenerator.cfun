@@ -698,12 +698,30 @@ private fun java_data_record_component(field: String, module: CompiledModule, al
     java_data_type_java_type(schema_type_reference(schema_field_type_name(field)), module, allModules)
         + " " + java_identifier(schema_field_name(field))
 
-/// Collects record fields, preserving explicit union parent fields before own fields.
+/// Collects record fields, preserving inherited and explicit union parent fields before own fields.
 private fun java_data_record_fields(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    let inheritedFields = java_data_record_parent_fields(data_type_parent_types(typeName, module, allModules), module, allModules)
     let parentFields = java_data_explicit_parent_fields(typeName, module.functions)
-    if parentFields.is_empty()
+    if inheritedFields.is_empty() & parentFields.is_empty()
     then data_type_fields(typeName, module, allModules)
-    else merge_schema_fields(parentFields, java_data_own_fields(typeName, module.functions))
+    else merge_schema_fields(
+        inheritedFields,
+        merge_schema_fields(parentFields, java_data_own_fields(typeName, module.functions))
+    )
+
+/// Collects generated Java record fields inherited from union parent types.
+private fun java_data_record_parent_fields(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentName = schema_type_reference(parent).name
+        let parentFields = match data_type_owner_module(parentName, module, allModules) with
+            case Some { owner } -> java_data_record_fields(parentName, owner, allModules)
+            case None -> java_data_record_fields(parentName, module, allModules)
+        merge_schema_fields(
+            parentFields,
+            java_data_record_parent_fields(parents[1:], module, allModules)
+        )
 
 /// Collects parser-emitted union parent fields for a variant.
 private fun java_data_explicit_parent_fields(typeName: String, functions: List[CompiledFunction]): List[String] =
