@@ -11,6 +11,9 @@ Example:
 from_string("/var/log/../tmp/app.log")
 ```
 Produces an absolute path with segments `["var", "tmp", "app.log"]`.
+Windows drive-rooted paths such as `D:\work\app`, and UNC paths such as
+`\\server\share\app`, are represented as absolute paths with native root
+prefixes.
 
 
 
@@ -227,4 +230,17 @@ paths start at the platform temporary directory.
 * `HOME`
 * `RELATIVE`
 * `TEMP`
+
+[[type-windows_drive_letter]]
+=== type windows_drive_letter: xref:../../capy/lang/String.adoc#type-String[String]
+
+Single ASCII drive letter for Windows drive-rooted paths.
+
+==== Functions
+
+===== fun windows_drive_letter.native_prefix(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Returns the native root prefix for this Windows drive, e.g. `D:\`.
+
+
 
