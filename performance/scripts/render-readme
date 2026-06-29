@@ -17,11 +17,11 @@ repository = sys.argv[4].strip("/")
 
 backends = [("java", "Java"), ("python", "Python"), ("js", "JS")]
 steps = [
-    ("compile", "compile"),
-    ("generate-java", "generate java"),
-    ("generate-python", "generate python"),
-    ("generate-js", "generate js"),
-    ("compile-test", "compile-test"),
+    ("compile", "compiler"),
+    ("generate-java", "gen java"),
+    ("generate-python", "gen python"),
+    ("generate-js", "gen js"),
+    ("compile-test", "test"),
 ]
 
 def parse_seconds(value):
@@ -89,6 +89,9 @@ def delta_text(current, previous):
     pct_sign = "+" if pct >= 0 else ""
     return f"{indicator} Δ{sign}{human_duration(abs(delta))} / {pct_sign}{pct:.0f}%"
 
+def result_cell(current, previous):
+    return f"{human_duration(current)} ({raw_seconds(current)} s)<br>{delta_text(current, previous)}"
+
 rows = []
 if csv_path.exists():
     with csv_path.open(newline="") as handle:
@@ -132,17 +135,17 @@ else:
             lines.append("")
             lines.append(f"[Changes since previous benchmark check]({compare_url(previous_sha, short_sha)})")
         lines.append("")
-        for backend, backend_title in backends:
-            lines.append(f"### {backend_title}")
-            lines.append("")
-            for step, step_title in steps:
+        lines.append("| Step | Java | Python | JS |")
+        lines.append("| --- | ---: | ---: | ---: |")
+        for step, step_title in steps:
+            cells = []
+            for backend, _ in backends:
                 metric = f"{backend}-{step}"
                 current = parse_seconds(row.get(metric))
                 previous = delta_by_index[index].get(metric)
-                lines.append(
-                    f"- `{step_title}`: {human_duration(current)} ({raw_seconds(current)} s) {delta_text(current, previous)}"
-                )
-            lines.append("")
+                cells.append(result_cell(current, previous))
+            lines.append(f"| `{step_title}` | {' | '.join(cells)} |")
+        lines.append("")
 
 readme_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 PY
