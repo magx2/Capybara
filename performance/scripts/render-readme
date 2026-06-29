@@ -17,7 +17,7 @@ repository = sys.argv[4].strip("/")
 
 backends = [("java", "Java"), ("python", "Python"), ("js", "JS")]
 steps = [
-    ("compile", "compiler"),
+    ("compile", "compile"),
     ("generate-java", "gen java"),
     ("generate-python", "gen python"),
     ("generate-js", "gen js"),
