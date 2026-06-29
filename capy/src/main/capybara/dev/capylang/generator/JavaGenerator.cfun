@@ -207,6 +207,7 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     + "public final class " + module.name + " {" + newline()
     + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
     + java_function_type_interfaces()
+    + java_data_types(schema_values("__capy_schema_type|", module.functions), module, allModules)
     + java_object_interfaces(objects.interfaces, module, allModules)
     + java_object_classes(objects.classes, constantBindings, module, allModules)
     + java_constants(constants, module, allModules)
@@ -461,6 +462,284 @@ private fun java_function_type_interfaces(): String =
     + "    private interface __CapyFunction4<A, B, C, D, R> {" + newline()
     + "        R apply(A a, B b, C c, D d);" + newline()
     + "    }" + newline() + newline()
+
+/// Formats Java source text for functional data and union declarations.
+private fun java_data_types(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match typeNames[0] with
+    case None -> ""
+    case Some { typeName } ->
+        if java_data_type_emittable(typeName, module)
+        then java_data_type(typeName, module, allModules) + newline()
+            + java_data_types(typeNames[1:], module, allModules)
+        else java_data_types(typeNames[1:], module, allModules)
+
+/// Checks whether a data type should be emitted as a nested Java declaration.
+private fun java_data_type_emittable(typeName: String, module: CompiledModule): bool =
+    java_data_type_generated(typeName, module)
+        & java_data_type_kind(typeName, module.functions) != "enum"
+
+/// Checks whether a data type can be generated without colliding with the enclosing module class.
+private fun java_data_type_generated(typeName: String, module: CompiledModule): bool =
+    typeName != module.name
+
+/// Formats Java source text for one functional data or union declaration.
+private fun java_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_data_type_kind(typeName, module.functions) == "union"
+    then java_union_data_type(typeName, module, allModules)
+    else java_record_data_type(typeName, module, allModules)
+
+/// Resolves the schema kind for a functional data type.
+private fun java_data_type_kind(typeName: String, functions: List[CompiledFunction]): String =
+    match schema_value_named("__capy_schema_kind|" + typeName, functions) with
+    case Some { value } -> value
+    case None ->
+        if enum_type_exists_in_functions(typeName, functions)
+        then "enum"
+        else "data"
+
+/// Resolves the schema kind for a data type visible from a module.
+private fun java_data_type_kind_in_scope(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match data_type_owner_module(typeName, module, allModules) with
+    case Some { owner } -> java_data_type_kind(typeName, owner.functions)
+    case None -> "data"
+
+/// Checks whether a data type visible from a module can be referenced as generated Java.
+private fun java_data_type_generated_in_scope(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match data_type_owner_module(typeName, module, allModules) with
+    case Some { owner } -> java_data_type_generated(typeName, owner)
+    case None -> false
+
+/// Formats Java source text for a functional union declaration.
+private fun java_union_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let variants = java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", module.functions), module)
+    "    " + java_visibility_prefix(data_type_visibility(typeName, module.functions)) + java_union_modifier(variants)
+        + "interface " + java_data_type_declaration_name(typeName, module, allModules) + " {" + newline()
+        + java_union_data_type_methods(data_type_direct_fields(typeName, module, allModules), module, allModules)
+        + "    }" + newline()
+
+/// Computes the Java union modifier.
+private fun java_union_modifier(variants: List[String]): String =
+    if variants.is_empty()
+    then ""
+    else "sealed "
+
+/// Formats Java source text for union field accessors.
+private fun java_union_data_type_methods(fields: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        "        public " + java_data_type_java_type(schema_type_reference(schema_field_type_name(field)), module, allModules)
+            + " " + java_identifier(schema_field_name(field)) + "();" + newline()
+            + java_union_data_type_methods(fields[1:], module, allModules)
+
+/// Formats Java source text for a functional data record declaration.
+private fun java_record_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let declarationName = java_data_type_declaration_name(typeName, module, allModules)
+    let components = java_data_record_components(java_data_record_fields(typeName, module, allModules), module, allModules)
+    let parentClause = java_data_record_parent_clause(typeName, module, allModules)
+    let declarationPrefix = "    " + java_visibility_prefix(data_type_visibility(typeName, module.functions)) + "record "
+        + declarationName + "(" + components + ")"
+    declarationPrefix + parentClause + " " + "{" + "}" + newline()
+
+/// Formats Java record components for data fields.
+private fun java_data_record_components(fields: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        java_data_record_component(field, module, allModules)
+            + java_data_record_component_tail(fields[1:], module, allModules)
+
+/// Formats the recursive tail segment for Java record components.
+private fun java_data_record_component_tail(fields: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some _ -> ", " + java_data_record_components(fields, module, allModules)
+
+/// Formats one Java record component.
+private fun java_data_record_component(field: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_data_type_java_type(schema_type_reference(schema_field_type_name(field)), module, allModules)
+        + " " + java_identifier(schema_field_name(field))
+
+/// Collects record fields, preserving explicit union parent fields before own fields.
+private fun java_data_record_fields(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    let parentFields = java_data_explicit_parent_fields(typeName, module.functions)
+    if parentFields.is_empty()
+    then data_type_fields(typeName, module, allModules)
+    else merge_schema_fields(parentFields, java_data_own_fields(typeName, module.functions))
+
+/// Collects parser-emitted union parent fields for a variant.
+private fun java_data_explicit_parent_fields(typeName: String, functions: List[CompiledFunction]): List[String] =
+    schema_values("__capy_schema_field|" + typeName + "|parent|", functions)
+
+/// Collects directly declared fields for a data type, excluding parser-emitted union parent fields.
+private fun java_data_own_fields(typeName: String, functions: List[CompiledFunction]): List[String] =
+    schema_values_excluding_prefix(
+        "__capy_schema_field|" + typeName + "|",
+        "__capy_schema_field|" + typeName + "|parent|",
+        functions
+    )
+
+/// Formats the Java implements clause for union parents.
+private fun java_data_record_parent_clause(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let parents = java_data_record_union_parents(data_type_parent_types(typeName, module, allModules), module, allModules)
+    if parents.is_empty()
+    then ""
+    else " implements " + java_data_record_parent_types(parents, module, allModules)
+
+/// Collects union parents that have generated Java declarations.
+private fun java_data_record_union_parents(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match parents[0] with
+    case None -> []
+    case Some { parent } ->
+        let parentType = schema_type_reference(parent)
+        if java_data_type_kind_in_scope(parentType.name, module, allModules) == "union"
+            & java_data_type_generated_in_scope(parentType.name, module, allModules)
+        then [parent] + java_data_record_union_parents(parents[1:], module, allModules)
+        else java_data_record_union_parents(parents[1:], module, allModules)
+
+/// Formats Java parent type references for record implements clauses.
+private fun java_data_record_parent_types(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parents[0] with
+    case None -> ""
+    case Some { parent } ->
+        java_data_type_reference_java_type(schema_type_reference(parent), module, allModules)
+            + java_data_record_parent_type_tail(parents[1:], module, allModules)
+
+/// Formats the recursive tail segment for Java record parent types.
+private fun java_data_record_parent_type_tail(parents: List[String], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parents[0] with
+    case None -> ""
+    case Some _ -> ", " + java_data_record_parent_types(parents, module, allModules)
+
+/// Formats a Java data type declaration name with type parameters.
+private fun java_data_type_declaration_name(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_identifier(typeName) + java_data_type_parameters(data_type_parameters(typeName, module, allModules))
+
+/// Formats Java type parameters.
+private fun java_data_type_parameters(parameters: List[String]): String =
+    if parameters.is_empty()
+    then ""
+    else "<" + java_data_type_parameter_list(parameters) + ">"
+
+/// Formats a Java type parameter list.
+private fun java_data_type_parameter_list(parameters: List[String]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } -> java_identifier(parameter) + java_data_type_parameter_tail(parameters[1:])
+
+/// Formats the recursive tail segment for Java type parameters.
+private fun java_data_type_parameter_tail(parameters: List[String]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some _ -> ", " + java_data_type_parameter_list(parameters)
+
+/// Collects data type variants from schema parent metadata.
+private fun java_data_type_variant_names(typeName: String, candidates: List[String], module: CompiledModule): List[String] =
+    match candidates[0] with
+    case None -> []
+    case Some { candidate } ->
+        if java_data_type_has_parent(candidate, typeName, module.functions)
+            & java_data_type_generated(candidate, module)
+        then [candidate] + java_data_type_variant_names(typeName, candidates[1:], module)
+        else java_data_type_variant_names(typeName, candidates[1:], module)
+
+/// Checks whether a candidate data type has the expected parent.
+private fun java_data_type_has_parent(candidate: String, parentName: String, functions: List[CompiledFunction]): bool =
+    java_data_type_parent_values_contain(schema_values("__capy_schema_parent|" + candidate + "|", functions), parentName)
+
+/// Checks whether parent schema values include the expected parent type name.
+private fun java_data_type_parent_values_contain(parents: List[String], parentName: String): bool =
+    match parents[0] with
+    case None -> false
+    case Some { parent } ->
+        schema_type_reference(parent).name == parentName
+            | java_data_type_parent_values_contain(parents[1:], parentName)
+
+/// Resolves visibility for a functional data type.
+private fun data_type_visibility(typeName: String, functions: List[CompiledFunction]): String =
+    match schema_value_named("__capy_schema_visibility|" + typeName, functions) with
+    case Some { value } -> value
+    case None -> "public"
+
+/// Formats a Java type in generated data declarations.
+private fun java_data_type_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let primitiveType = primitive_java_type_name(type.name)
+    if type.name == "array"
+    then java_data_type_java_type(first_type_argument(type), module, allModules) + "[]"
+    else if !primitiveType.is_empty()
+    then primitiveType
+    else java_data_type_boxed_java_type(type, module, allModules)
+
+/// Formats a boxed Java type in generated data declarations.
+private fun java_data_type_boxed_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let primitiveType = boxed_primitive_java_type_name(type.name)
+    let simpleType = simple_java_type_name(type.name)
+    if type_parameter(type)
+    then java_identifier(type.name)
+    else if function_type(type)
+    then top_level_java_functional_type(type, module, allModules)
+    else if type.name == "array"
+    then java_data_type_java_type(first_type_argument(type), module, allModules) + "[]"
+    else if java_object_type(type)
+    then java_object_type_java_name(type)
+    else if !primitiveType.is_empty()
+    then primitiveType
+    else if boxed_container_java_type_name(type.name)
+    then boxed_container_java_type(type.name, java_data_type_boxed_java_type(first_type_argument(type), module, allModules))
+    else if type.name == "Tuple"
+    then "java.util.List<?>"
+    else if type.name == "Effect"
+    then "capy.lang.Effect<" + java_data_type_boxed_java_type(first_type_argument(type), module, allModules) + ">"
+    else if type.name == "String"
+    then "String"
+    else if !simpleType.is_empty()
+    then simpleType
+    else match find_data_type(type.name, module, allModules) with
+        case Some _ -> java_data_type_reference_java_type(type, module, allModules)
+        case None -> "java.lang.Object"
+
+/// Formats a Java data type reference.
+private fun java_data_type_reference_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_data_type_reference_name(type, module, allModules)
+        + java_data_type_reference_arguments(type.arguments, module, allModules)
+
+/// Formats a Java data type reference name.
+private fun java_data_type_reference_name(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = type_unqualified_name(type.name)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } ->
+        if owner.name == module.name & owner.path == module.path
+        then java_identifier(name)
+        else top_level_owned_data_type_java_name(name, module, owner)
+    case None -> java_identifier(name)
+
+/// Formats Java data type reference arguments.
+private fun java_data_type_reference_arguments(arguments: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if arguments.is_empty()
+    then ""
+    else "<" + java_data_type_reference_argument_list(arguments, module, allModules) + ">"
+
+/// Formats a Java data type reference argument list.
+private fun java_data_type_reference_argument_list(arguments: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } ->
+        java_data_type_boxed_java_type(argument, module, allModules)
+            + java_data_type_reference_argument_tail(arguments[1:], module, allModules)
+
+/// Formats the recursive tail segment for Java data type reference arguments.
+private fun java_data_type_reference_argument_tail(arguments: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some _ -> ", " + java_data_type_reference_argument_list(arguments, module, allModules)
+
+/// Creates top-level Java interface source modules for compiled object interfaces.
+private fun java_object_interface_modules(modules: List[CompiledModule], allModules: List[CompiledModule]): List[GeneratedModule] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        java_object_interface_modules_for_module(compiled_object_interfaces(module.functions), module, allModules)
+            + java_object_interface_modules(modules[1:], allModules)
 
 /// Creates top-level Java interface modules declared inside one compiled module.
 private fun java_object_interface_modules_for_module(interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule, allModules: List[CompiledModule]): List[GeneratedModule] =
@@ -9598,6 +9877,17 @@ private fun schema_value_with_prefix_exists(prefix: String, functions: List[Comp
             then true
             else schema_value_with_prefix_exists(prefix, functions[1:])
         else schema_value_with_prefix_exists(prefix, functions[1:])
+
+/// Computes value metadata for schema values while excluding a more specific prefix.
+private fun schema_values_excluding_prefix(prefix: String, excludedPrefix: String, functions: List[CompiledFunction]): List[String] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_schema(function)
+            & java_generator_string_has_prefix(function.name, prefix)
+            & !java_generator_string_has_prefix(function.name, excludedPrefix)
+        then [schema_value(function)] + schema_values_excluding_prefix(prefix, excludedPrefix, functions[1:])
+        else schema_values_excluding_prefix(prefix, excludedPrefix, functions[1:])
 
 /// Computes value metadata for schema value.
 private fun schema_value(function: CompiledFunction): String =

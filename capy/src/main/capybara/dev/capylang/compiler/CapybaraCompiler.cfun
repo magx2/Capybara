@@ -1091,6 +1091,7 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
     let fieldFunctions = compile_data_field_functions(declaration.name, declaration.fields, 0)
     [
         compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
+        compile_schema_constant("__capy_schema_kind|" + declaration.name, "data", declaration.location),
         compile_schema_constant("__capy_schema_visibility|" + declaration.name, declaration.visibility, declaration.location),
     ]
         + compile_data_schema_parameters(declaration.name, declaration.parameters, 0, declaration.location)
@@ -1103,6 +1104,7 @@ private fun compile_data_declaration(declaration: DataDeclaration): List[Compile
 private fun compile_enum_declaration(declaration: EnumDeclaration): List[CompiledFunction] =
     [
         compile_documented_schema_constant("__capy_schema_type|" + declaration.name, declaration.name, declaration.documentation, declaration.location),
+        compile_schema_constant("__capy_schema_kind|" + declaration.name, "enum", declaration.location),
         compile_schema_constant("__capy_schema_visibility|" + declaration.name, "public", declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|0", "name|String", declaration.location),
         compile_schema_constant("__capy_schema_field|" + declaration.name + "|1", "order|int", declaration.location),

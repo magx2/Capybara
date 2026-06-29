@@ -923,6 +923,7 @@ def type_declaration_definitions_from(declarations, visibility, parent_fields, c
             location=location,
         ),
         schema_constant_definition("__capy_schema_type|" + name, name, location),
+        schema_constant_definition("__capy_schema_kind|" + name, "union", location),
     ]
     type_parameters = data_type_parameters(union_declaration)
     for index, parameter in enumerate(type_parameters):

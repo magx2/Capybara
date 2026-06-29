@@ -714,7 +714,7 @@ function type_declaration_definitions_from(declarations, visibility, parent_fiel
     }
     var union_declaration = declarations[0];
     var name = data_type_name(union_declaration);
-    var definitions = [data("TypeDeclaration", { name: name, visibility: visibility, parameters: data_type_parameters(union_declaration), fields: field_declaration_field_dtos(parent_fields), variants: type_declaration_variants(declarations), annotations: annotations, derives: derives, location: location }), schema_constant_definition(("__capy_schema_type|" + name), name, location)];
+    var definitions = [data("TypeDeclaration", { name: name, visibility: visibility, parameters: data_type_parameters(union_declaration), fields: field_declaration_field_dtos(parent_fields), variants: type_declaration_variants(declarations), annotations: annotations, derives: derives, location: location }), schema_constant_definition(("__capy_schema_type|" + name), name, location), schema_constant_definition(("__capy_schema_kind|" + name), "union", location)];
     var type_parameters = data_type_parameters(union_declaration);
     var __index_6 = 0;
     for (const parameter of type_parameters) {

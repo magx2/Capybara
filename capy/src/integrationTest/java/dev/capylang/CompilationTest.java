@@ -148,6 +148,31 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateUnionParentFieldsInJavaDataDeclarations() {
+        var source = """
+                union A { a: String } = B | C
+
+                data B { x: int }
+                data C { y: String }
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("""
+                    public sealed interface A {
+                        public String a();
+                    }
+                """);
+        assertThat(code).contains("    public record B(String a, int x) implements A {}");
+        assertThat(code).contains("    public record C(String a, String y) implements A {}");
+    }
+
+    @Test
     void shouldRejectObjectOrientedThrowingNonError() {
         var objectSource = """
                 class BadThrow {
