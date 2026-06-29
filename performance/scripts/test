@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common"
+
+runner="${1:-java}"
+jar="$(capy_jar)"
+
+for backend in java python js; do
+    cli_backend="$(backend_cli_name "${backend}")"
+    java -jar "${jar}" compile-generate "${cli_backend}" \
+        --input "${PROJECT_SRC_DIR}" \
+        --output "${PROJECT_BUILD_DIR}/test-main/${runner}/${backend}" \
+        --linked-output "${PROJECT_BUILD_DIR}/test-linked/${runner}/${backend}" \
+        --test-input "${PROJECT_SRC_DIR}" \
+        --test-output "${PROJECT_BUILD_DIR}/test-generated/${runner}/${backend}" \
+        --log WARN
+done
+
+PYTHONPATH="${PROJECT_BUILD_DIR}/test-generated/${runner}/python:${PROJECT_SRC_DIR}/native/py${PYTHONPATH:+:${PYTHONPATH}}" \
+    python3 "${ROOT_DIR}/lib/capybara-lib/src/test/py/run-capybara-tests.py" \
+        --generated-dir "${PROJECT_BUILD_DIR}/test-generated/${runner}/python" \
+        --output-dir "${PROJECT_BUILD_DIR}/test-results/${runner}/python" \
+        --report-type JUNIT \
+        --log NONE

@@ -1,0 +1,38 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Program import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/Program.cfun", [
+        test("failed_exit_code accepts boundary values", () => assert_all([
+            assert_that(failed_exit_code { 1 }).succeeds(value => assert_that(value.value).is_equal_to(1)),
+            assert_that(failed_exit_code { 255 }).succeeds(value => assert_that(value.value).is_equal_to(255)),
+        ])),
+        test("failed_exit_code rejects values outside process failure range", () => assert_all([
+            assert_that(failed_exit_code { 0 }).fails("failed_exit_code must be greater or equals to 1, was `0`."),
+            assert_that(failed_exit_code { 256 }).fails("failed_exit_code must be less than or equal to 255, was `256`."),
+        ])),
+        test("failed_exit_code next and previous stay inside bounds", () => assert_all([
+            assert_that(next_value(DEFAULT_FAILED_EXIT_CODE)).is_equal_to(2),
+            assert_that(next_value(LAST_FAILED_EXIT_CODE)).is_equal_to(255),
+            assert_that(previous_value(constructed_value(2))).is_equal_to(1),
+            assert_that(previous_value(DEFAULT_FAILED_EXIT_CODE)).is_equal_to(1),
+        ])),
+        test("failed_exit_code constants expose conventional values", () => assert_all([
+            assert_that(DEFAULT_FAILED_EXIT_CODE.value).is_equal_to(1),
+            assert_that(LAST_FAILED_EXIT_CODE.value).is_equal_to(255),
+            assert_that(SIGINT.value).is_equal_to(130),
+            assert_that(SIGTERM.value).is_equal_to(143),
+        ])),
+    ])
+
+private fun next_value(code: failed_exit_code): int =
+    code.next().value
+
+private fun previous_value(code: failed_exit_code): int =
+    code.previous().value
+
+private fun constructed_value(value: int): failed_exit_code =
+    (failed_exit_code { value }).reduce(code => code, _ => DEFAULT_FAILED_EXIT_CODE)

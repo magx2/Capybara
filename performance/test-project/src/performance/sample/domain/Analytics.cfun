@@ -1,0 +1,37 @@
+from /capy/collection/List import { * }
+from /capy/collection/Seq import { * }
+from /capy/collection/Set import { * }
+from /performance/sample/domain/Order import { Order, subtotal }
+
+data OrderMetrics {
+    line_count: int,
+    item_count: int,
+    gross_cents: long,
+    distinct_skus: int,
+    expensive_skus: List[String]
+}
+
+fun order_metrics(order: Order): OrderMetrics =
+    OrderMetrics {
+        line_count: order.lines.size().value,
+        item_count: item_count(order),
+        gross_cents: subtotal(order).cents,
+        distinct_skus: sku_set(order).size().value,
+        expensive_skus: expensive_skus(order, 1000L)
+    }
+
+fun metrics_label(order: Order): String =
+    let metrics = order_metrics(order)
+    "{metrics.line_count}:{metrics.item_count}:{metrics.gross_cents}:{metrics.distinct_skus}:{join_labels(metrics.expensive_skus)}"
+
+fun item_count(order: Order): int =
+    order.lines.reduce(0, (acc, line) => acc + line.quantity)
+
+fun sku_set(order: Order): Set[String] =
+    order.lines.reduce({}, (acc, line) => acc + line.sku)
+
+fun expensive_skus(order: Order, threshold: long): List[String] =
+    ((order.lines |- line => line.unit_price.cents >= threshold) | line => line.sku).as_list()
+
+fun join_labels(labels: List[String]): String =
+    labels.reduce("", (acc, label) => if acc == "" then label else acc + "|" + label)

@@ -1,0 +1,13 @@
+/// Marks a declaration as deprecated while preserving it for compatibility.
+///
+/// Example:
+/// ```cfun
+/// @Deprecated { message: "Use full_name instead", since: "1.4.0" }
+/// fun display_name(user: User): String = user.full_name
+/// ```
+/// The declaration stays available, while tools can show the deprecation
+/// message and version to users.
+annotation Deprecated on fun, method, const, data, union, enum, type, deriver, class, interface, trait, field, init {
+    message: String
+    since: String = ""
+}

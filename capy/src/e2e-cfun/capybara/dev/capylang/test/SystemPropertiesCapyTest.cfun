@@ -1,0 +1,66 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/System import { clear_system_property, nano_time, set_system_property, system_property }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/SystemPropertiesCapyTest.cfun", [
+        set_system_property_stores_value_and_returns_previous().map(assertion => test("set_system_property stores value and returns previous", () => assertion)),
+        set_system_property_empty_name_returns_none().map(assertion => test("set_system_property empty name returns None", () => assertion)),
+        clear_system_property_removes_value_and_returns_previous().map(assertion => test("clear_system_property removes value and returns previous", () => assertion)),
+        clear_system_property_empty_name_returns_none().map(assertion => test("clear_system_property empty name returns None", () => assertion)),
+    ])
+
+fun set_system_property_stores_value_and_returns_previous(): Effect[Assert] =
+    let key <- unique_system_property_key()
+    let missing <- system_property(key)
+    let previous <- set_system_property(key, "first")
+    let first <- system_property(key)
+    let overwritten <- set_system_property(key, "second")
+    let second <- system_property(key)
+    assert_all([
+        assert_that(missing).is_empty(),
+        assert_that(previous).is_empty(),
+        assert_that(first).contains("first"),
+        assert_that(overwritten).contains("first"),
+        assert_that(second).contains("second"),
+    ])
+
+fun set_system_property_empty_name_returns_none(): Effect[Assert] =
+    let previous <- set_system_property("", "ignored")
+    let value <- system_property("")
+    assert_all([
+        assert_that(previous).is_empty(),
+        assert_that(value).is_empty(),
+    ])
+
+fun clear_system_property_removes_value_and_returns_previous(): Effect[Assert] =
+    let key <- unique_system_property_key()
+    let empty_key = key + ".empty"
+    let missing <- clear_system_property(key)
+    let previous <- set_system_property(key, "value")
+    let cleared <- clear_system_property(key)
+    let value <- system_property(key)
+    let cleared_again <- clear_system_property(key)
+    let empty_previous <- set_system_property(empty_key, "")
+    let empty_cleared <- clear_system_property(empty_key)
+    assert_all([
+        assert_that(missing).is_empty(),
+        assert_that(previous).is_empty(),
+        assert_that(cleared).contains("value"),
+        assert_that(value).is_empty(),
+        assert_that(cleared_again).is_empty(),
+        assert_that(empty_previous).is_empty(),
+        assert_that(empty_cleared).contains(""),
+    ])
+
+fun clear_system_property_empty_name_returns_none(): Effect[Assert] =
+    let previous <- clear_system_property("")
+    let value <- system_property("")
+    assert_all([
+        assert_that(previous).is_empty(),
+        assert_that(value).is_empty(),
+    ])
+
+private fun unique_system_property_key(): Effect[String] =
+    nano_time().map(value => "capybara.e2e.system.property." + value)

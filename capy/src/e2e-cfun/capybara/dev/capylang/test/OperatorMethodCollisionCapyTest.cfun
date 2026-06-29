@@ -1,0 +1,16 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from OperatorMethodCollision import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/OperatorMethodCollision.cfun", [
+        test("named and operator plus methods stay distinct", () => named_and_operator_plus_methods_stay_distinct()),
+    ])
+
+private fun named_and_operator_plus_methods_stay_distinct(): Assert =
+    let counter = Counter { value: 10 }
+    assert_all([
+        assert_that(named_plus(counter, 5)).is_equal_to(15),
+        assert_that(operator_plus(counter, 5)).is_equal_to(115),
+    ])

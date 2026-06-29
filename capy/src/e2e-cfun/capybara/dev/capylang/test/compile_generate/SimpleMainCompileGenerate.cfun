@@ -1,0 +1,4 @@
+// Mirrors src/e2e-cfun/resources/compile-generate/simple/Main.cfun.
+
+fun sum(a: int, b: int): int =
+    a + b

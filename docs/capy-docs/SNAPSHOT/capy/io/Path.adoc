@@ -1,0 +1,230 @@
+= Module Path
+
+== Functions
+
+=== fun from_string(path_string: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Path[Path]
+
+Parses a string path and normalizes empty, `.`, and `..` segments.
+
+Example:
+```cfun
+from_string("/var/log/../tmp/app.log")
+```
+Produces an absolute path with segments `["var", "tmp", "app.log"]`.
+
+
+
+
+== Types
+
+[[type-Path]]
+=== data Path
+
+Portable path value split into a root and path segments.
+
+Build paths with `from_string` or the `/` operator instead of manually
+constructing segments.
+
+Example:
+```cfun
+let path = from_string("~/projects") / "capybara" / "README.md"
+path.is_absolute()
+```
+The root remains `HOME`, and each joined segment is normalized separately.
+
+==== Fields
+
+* `prefix`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+* `root`: xref:#type-PathRoot[PathRoot]
+* `segments`: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+
+==== Functions
+
+===== fun Path.`/`(segment: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Path[Path]
+
+Returns a new path with `segment` appended.
+
+Example:
+```cfun
+from_string("reports") / "junit" / "TEST-main.xml"
+```
+The original path is unchanged.
+
+
+===== fun Path.`/`(other: xref:#type-Path[Path]): xref:#type-Path[Path]
+
+Returns a new path with `other` path segments appended.
+
+The root of `this` is preserved, so use this to join a base directory with a
+relative child path.
+
+
+===== fun Path.append_bytes(bytes: xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;&#93;&#93;
+
+Appends bytes to this path, creating the file when needed, and returns the consumed bytes.
+
+
+===== fun Path.append_lines(lines: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;&#93;
+
+Appends UTF-8 lines to this path, creating the file when needed, and returns the consumed lines.
+
+
+===== fun Path.append_text(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Appends UTF-8 text to this path, creating the file when needed, and returns the consumed text.
+
+
+===== fun Path.copy(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Copies this file to the target path. Fails if the target already exists.
+
+
+===== fun Path.copy_replace(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Copies this file to the target path, replacing an existing target.
+
+
+===== fun Path.create_directories(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Creates a directory and any missing parent directories at this path, returning the created path.
+
+
+===== fun Path.create_directory(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Creates a single directory at this path and returns the created path.
+
+
+===== fun Path.create_file(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Creates a new empty file at this path and returns the created path.
+
+
+===== fun Path.delete(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;bool&#93;&#93;
+
+Deletes the file or empty directory at this path and returns true when something was deleted.
+
+
+===== fun Path.exists(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;bool&#93;
+
+Returns true when this path exists.
+
+
+===== fun Path.is_absolute(): bool
+
+Returns true for absolute, home-rooted, and temp-rooted paths.
+
+
+===== fun Path.is_directory(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;bool&#93;
+
+Returns true when this path exists and is a directory.
+
+
+===== fun Path.is_file(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;bool&#93;
+
+Returns true when this path exists and is a regular file.
+
+
+===== fun Path.is_root(): bool
+
+Returns true when the path has a root but no child segments.
+
+
+===== fun Path.list_entries(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-Path[Path]&#93;&#93;&#93;
+
+Lists direct child entries of this directory.
+
+
+===== fun Path.move(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Moves this file or directory to the target path. Fails if the target already exists.
+
+
+===== fun Path.move_replace(target: xref:#type-Path[Path]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Path[Path]&#93;&#93;
+
+Moves this file or directory to the target path, replacing an existing target.
+
+
+===== fun Path.name(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Returns the final segment name, or the root name for root paths.
+
+Examples: `from_string("/tmp/app.log").name()` returns `app.log`,
+while `from_string("/").name()` returns `/`.
+
+
+===== fun Path.normalize(): xref:#type-Path[Path]
+
+Returns a path with redundant segments removed.
+
+Relative leading `..` segments are preserved; rooted paths do not move above
+their root.
+
+Example:
+```cfun
+from_string("src/./main/../test").normalize()
+```
+Produces the relative path `src/test`.
+
+
+===== fun Path.parent(): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Path[Path]&#93;
+
+Returns the parent path, or `None` when this path has no parent segment.
+
+Example:
+```cfun
+from_string("docs/api/json.md").parent()
+```
+Returns `Some` containing `docs/api`.
+
+
+===== fun Path.read_bytes(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;&#93;&#93;
+
+Reads the entire file at this path as bytes.
+
+
+===== fun Path.read_lines(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;&#93;
+
+Reads all lines from the file at this path as UTF-8 text.
+
+
+===== fun Path.read_text(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Reads the entire file at this path as UTF-8 text.
+
+
+===== fun Path.size(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/io/ByteSize.adoc#type-byte_count[byte_count]&#93;&#93;
+
+Returns the size of this file in bytes.
+
+
+===== fun Path.write_bytes(bytes: xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;byte&#93;&#93;&#93;
+
+Writes bytes to this path, replacing existing content, and returns the consumed bytes.
+
+
+===== fun Path.write_lines(lines: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;&#93;
+
+Writes UTF-8 lines to this path, replacing existing content, and returns the consumed lines.
+
+
+===== fun Path.write_text(text: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Writes UTF-8 text to this path, replacing existing content, and returns the consumed text.
+
+
+[[type-PathRoot]]
+=== enum PathRoot
+
+Kind of root used by a `Path`.
+
+`RELATIVE` paths are resolved from the current working directory,
+`ABSOLUTE` paths start at `/`, `HOME` paths start at `~`, and `TEMP`
+paths start at the platform temporary directory.
+
+==== Values
+
+* `ABSOLUTE`
+* `HOME`
+* `RELATIVE`
+* `TEMP`
+

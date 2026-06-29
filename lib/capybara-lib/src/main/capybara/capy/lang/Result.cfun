@@ -1,0 +1,213 @@
+from /capy/collection/List import { List }
+from /capy/lang/Option import { * }
+
+/// Fallible value that is either a Success with a value or a structured Error.
+///
+/// Expected, recoverable failures should be represented in return types as
+/// `Result[T]` or `Effect[Result[T]]` instead of Java-style checked
+/// exceptions.
+union Result[T] = Success[T] | Error
+
+/// Successful Result value.
+data Success[T] { value: T }
+
+/// Optional source location attached to an Error.
+data SourceLocation {
+    file: String,
+    line: int,
+    column: Option[int],
+    end_line: Option[int],
+    end_column: Option[int],
+}
+
+/// Portable backend stack frame attached to an Error.
+data StackFrame {
+    backend: String,
+    module: Option[String],
+    type_name: Option[String],
+    function: Option[String],
+    file: Option[String],
+    line: Option[int],
+    column: Option[int],
+    end_line: Option[int],
+    end_column: Option[int],
+    source_line: Option[String],
+    native: bool,
+    raw: String,
+}
+
+/// Structured recoverable failure value.
+data Error {
+    kind: String,
+    message: String,
+    details: Option[data],
+    location: Option[SourceLocation],
+    stack_trace: List[StackFrame],
+    raw_stack: Option[String],
+    cause: Option[Error],
+    suppressed: List[Error]
+}
+
+/// Creates a generic Error with kind `capy.error`.
+fun error(message: String): Error =
+    error_kind("capy.error", message)
+
+/// Creates an Error with a stable kind and no structured details.
+fun error_kind(kind: String, message: String): Error =
+    error_full(kind, message, None {}, None {}, [], None {}, None {}, [])
+
+/// Creates an Error with a stable kind and structured details.
+fun error_with(kind: String, message: String, details: data): Error =
+    error_full(kind, message, Some { value: details }, None {}, [], None {}, None {}, [])
+
+/// Creates an Error with an explicit source location.
+fun error_at(kind: String, message: String, location: SourceLocation): Error =
+    error_full(kind, message, None {}, Some { value: location }, [], None {}, None {}, [])
+
+/// Creates an Error with all structured fields supplied by the caller.
+fun error_full(
+    kind: String,
+    message: String,
+    details: Option[data],
+    location: Option[SourceLocation],
+    stack_trace: List[StackFrame],
+    raw_stack: Option[String],
+    cause: Option[Error],
+    suppressed: List[Error]
+): Error =
+    Error {
+        kind: kind,
+        message: message,
+        details: details,
+        location: location,
+        stack_trace: stack_trace,
+        raw_stack: raw_stack,
+        cause: cause,
+        suppressed: suppressed,
+    }
+
+/// Returns a failed Result with a generic Error.
+fun fail(message: String): Result[T] = error(message)
+
+/// Returns a failed Result with a stable error kind.
+fun fail_kind(kind: String, message: String): Result[T] = error_kind(kind, message)
+
+/// Returns a failed Result with structured error details.
+fun fail_with(kind: String, message: String, details: data): Result[T] = error_with(kind, message, details)
+
+/// Returns a failed Result from an existing Error.
+fun fail_error(error: Error): Result[T] = error
+
+/// Returns a copy of this Error with another kind.
+fun Error.with_kind(kind: String): Error =
+    error_full(kind, this.message, this.details, this.location, this.stack_trace, this.raw_stack, this.cause, this.suppressed)
+
+/// Returns a copy of this Error with another message.
+fun Error.with_message(message: String): Error =
+    error_full(this.kind, message, this.details, this.location, this.stack_trace, this.raw_stack, this.cause, this.suppressed)
+
+/// Returns a copy of this Error with another details payload.
+fun Error.with_details(details: data): Error =
+    error_full(this.kind, this.message, Some { value: details }, this.location, this.stack_trace, this.raw_stack, this.cause, this.suppressed)
+
+/// Returns a copy of this Error with another source location.
+fun Error.with_location(location: SourceLocation): Error =
+    error_full(this.kind, this.message, this.details, Some { value: location }, this.stack_trace, this.raw_stack, this.cause, this.suppressed)
+
+/// Returns a copy of this Error with another stack trace.
+fun Error.with_stack_trace(stack_trace: List[StackFrame]): Error =
+    error_full(this.kind, this.message, this.details, this.location, stack_trace, this.raw_stack, this.cause, this.suppressed)
+
+/// Returns a copy of this Error with another raw backend stack.
+fun Error.with_raw_stack(raw_stack: String): Error =
+    error_full(this.kind, this.message, this.details, this.location, this.stack_trace, Some { value: raw_stack }, this.cause, this.suppressed)
+
+/// Returns a copy of this Error with another cause.
+fun Error.with_cause(cause: Error): Error =
+    error_full(this.kind, this.message, this.details, this.location, this.stack_trace, this.raw_stack, Some { value: cause }, this.suppressed)
+
+/// Returns a copy of this Error with another suppressed error list.
+fun Error.with_suppressed(suppressed: List[Error]): Error =
+    error_full(this.kind, this.message, this.details, this.location, this.stack_trace, this.raw_stack, this.cause, suppressed)
+
+/// Returns a copy of this Error with one additional suppressed error.
+fun Error.add_suppressed(error: Error): Error =
+    this.with_suppressed(this.suppressed + error)
+
+/// Returns a compact human-readable error message.
+fun Error.short_message(): String = this.kind + ": " + this.message
+
+/// Returns a human-readable error message including the cause when present.
+fun Error.full_message(): String =
+    match this.cause with
+    case None -> this.short_message()
+    case Some { cause } -> this.short_message() + "; caused by " + cause.full_message()
+
+/// Returns true when this Error has the supplied stable kind.
+fun Error.has_kind(kind: String): bool = this.kind == kind
+
+/// Transforms a successful value using `map`; equivalent to `this.map(map)`.
+fun Result[T].`|`(map: T => Y): Result[Y] = this.map(map)
+
+/// Transforms a successful value using `map`, or propagates an Error unchanged.
+fun Result[T].map(map: T => Y): Result[Y] =
+    match this with
+    case Error e -> e
+    case Success s -> Success { map(s.value) }
+
+/// Applies `flatmap` to a successful value; equivalent to `this.flat_map(flatmap)`.
+fun Result[T].`|*`(flatmap: T => Result[Y]): Result[Y] = this.flat_map(flatmap)
+
+/// Applies `flatmap` to a successful value, or propagates an Error unchanged.
+fun Result[T].flat_map(flatmap: T => Result[Y]): Result[Y] =
+    match this with
+    case Error e -> e
+    case Success s -> flatmap(s.value)
+
+/// Returns the successful value, or `v` when this Result is an Error.
+fun Result[T].or_else(v: T): T =
+    match this with
+    case Error _ -> v
+    case Success { v } -> v
+
+/// Returns this Result when successful, or `r` when this Result is an Error.
+fun Result[T].or(r: Result[T]): Result[T] =
+    match this with
+    case Error _ -> r
+    case Success s -> s
+
+/// Reduces a Result by applying the first function to Success or the second function to Error.
+fun Result[T].`|>`(reduce: Tuple[T => R, Error => R]): R =
+    match this with
+    case Success { v } -> reduce[0](v)
+    case Error e -> reduce[1](e)
+
+/// Reduces a Result by applying `on_success` to Success or `on_error` to Error.
+fun Result[T].reduce(on_success: T => R, on_error: Error => R): R = this |> (on_success, on_error)
+
+/// Reduces a Result by applying `on_success` to Success or `on_error` to Error.
+fun Result[T].reduce_left(on_success: T => R, on_error: Error => R): R = this.reduce(on_success, on_error)
+
+/// Returns the error message, or an empty string when this Result is successful.
+fun Result[T].error_message(): String =
+    match this with
+    case Success _ -> ""
+    case Error e -> e.message
+
+/// Maps an Error while preserving successful values.
+fun Result[T].map_error(map: Error => Error): Result[T] =
+    match this with
+    case Success s -> s
+    case Error e -> map(e)
+
+/// Recovers an Error into a plain value.
+fun Result[T].recover(recover: Error => T): T =
+    match this with
+    case Success { value } -> value
+    case Error e -> recover(e)
+
+/// Recovers an Error into another Result.
+fun Result[T].recover_result(recover: Error => Result[T]): Result[T] =
+    match this with
+    case Success s -> s
+    case Error e -> recover(e)

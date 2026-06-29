@@ -1,0 +1,432 @@
+package dev.capylang;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import dev.capylang.compiler.OutputType;
+import dev.capylang.generator.Generator;
+import dev.capylang.generator.JavaGenerator;
+import dev.capylang.generator.JavaScriptGenerator;
+import dev.capylang.generator.PythonGenerator;
+import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.NativeProviderManifest;
+import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.compiler.parser.SourceKind;
+import capy.lang.Either;
+
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
+class CompilationTest {
+    @ParameterizedTest(name = "{index}: should {0}")
+    @MethodSource
+    void test(String code) {
+        var rawModules = List.of(rawModule("Main", "/capybara", code));
+        System.out.println(" === PARSING === ");
+        System.out.println(rawModules);
+
+        var link = CapybaraCompiler.compile(rawModules, new LinkedHashSet<>(), emptyNativeProviders(), emptyNativeProviders()).unsafeRun();
+        if (link instanceof Either.Right<?, ?> error) {
+            var errors = (List<?>) error.value();
+            throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
+        }
+        System.out.println("\n === LINKING === ");
+        System.out.println(link);
+
+        System.out.println("\n === GENERATION === ");
+        Arrays.stream(OutputType.values())
+                .parallel()
+                .map(type -> {
+                    var linkedProgram = (CompiledProgram) ((Either.Left<?, ?>) link).value();
+                    var compiled = Generator.generate(linkedProgram, generatorOutputType(type));
+                    return "\t === " + type + " === \n" + compiled;
+                })
+                .forEach(System.out::println);
+
+    }
+
+    @Test
+    void shouldGenerateObjectOrientedCatchBranchesByErrorKind() {
+        var resultSource = """
+                data Error { kind: String, message: String }
+                fun error_kind(kind: String, message: String): Error = Error { kind: kind, message: message }
+                """;
+        var objectSource = """
+                from /capy/lang/Result import { * }
+
+                class CatchByKind {
+                    def recover(): String {
+                        try {
+                            throw error_kind("capy.test.alpha", "alpha")
+                        } catch "capy.test.alpha" error {
+                            return "alpha"
+                        } catch "capy.test.beta" error {
+                            return "beta"
+                        } catch error {
+                            return "fallback"
+                        }
+                    }
+                }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
+                rawModule("CatchByKind", "/sample/app", objectSource, SourceKind.OBJECT_ORIENTED)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var code = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/CatchByKind.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("__capy_error_kind_equals");
+        var alphaBranch = code.indexOf("\"capy.test.alpha\"");
+        var betaBranch = code.indexOf("\"capy.test.beta\"");
+        var fallbackBranch = code.indexOf("\"fallback\"");
+        assertThat(alphaBranch).isGreaterThanOrEqualTo(0);
+        assertThat(betaBranch).isGreaterThan(alphaBranch);
+        assertThat(fallbackBranch).isGreaterThan(betaBranch);
+        assertThat(code).contains("__capy_thrown_error");
+
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .reduce("", String::concat);
+        assertThat(javaScriptCode)
+                .contains("__capy_throw")
+                .contains("__capy_try")
+                .contains("__capy_enrich_thrown_error")
+                .contains("function __capy_error(message) { return __capy_error_kind('capy.error', message); }")
+                .contains("backend: 'javascript'");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .reduce("", String::concat);
+        assertThat(pythonCode)
+                .contains("__capy_throw")
+                .contains("__capy_try")
+                .contains("__capy_enrich_thrown_error")
+                .contains("def __capy_error(message):\n    return __capy_error_kind('capy.error', message)")
+                .contains("backend='python'");
+    }
+
+    @Test
+    void shouldGenerateResultReducerErrorCallbacksWithStructuredError() {
+        var resultSource = """
+                data Error { kind: String, message: String }
+                data Success[T] { value: T }
+                union Result[T] = Success[T] | Error
+                fun fail_kind(kind: String, message: String): Result[String] = Error { kind: kind, message: message }
+                """;
+        var consumerSource = """
+                from /capy/lang/Result import { * }
+
+                fun reducer_error_kind(): String =
+                    fail_kind("capy.test.result.boom", "boom").reduce(_ => "success", error => error.kind)
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
+                rawModule("UseResult", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/UseResult.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("__capy_result_error_value");
+        assertThat(code).contains("__capy_data_field(error, \"kind\")");
+        assertThat(code).doesNotContain("java.lang.String error = java.lang.String.valueOf(__capy_result_error_value");
+    }
+
+    @Test
+    void shouldGenerateUnionParentFieldsInJavaDataDeclarations() {
+        var source = """
+                union A { a: String } = B | C
+
+                data B { x: int }
+                data C { y: String }
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("""
+                    public sealed interface A {
+                        public String a();
+                    }
+                """);
+        assertThat(code).contains("    public record B(String a, int x) implements A {}");
+        assertThat(code).contains("    public record C(String a, String y) implements A {}");
+    }
+
+    @Test
+    void shouldAvoidSealingUnionWithExternalJavaVariants() {
+        var ownerSource = """
+                union A { a: String } = B
+
+                data B { b: String }
+                """;
+        var extensionSource = """
+                from /sample/owner/Owner import { A }
+
+                data C { ... A, c: String }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Owner", "/sample/owner", ownerSource, SourceKind.FUNCTIONAL),
+                rawModule("Extension", "/sample/ext", extensionSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var ownerCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/owner/Owner.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var extensionCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/ext/Extension.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(ownerCode).contains("    public interface A {");
+        assertThat(ownerCode).doesNotContain("public sealed interface A");
+        assertThat(ownerCode).contains("    public record B(String a, String b) implements A {}");
+        assertThat(extensionCode).contains("    public record C(String a, String c) implements sample.owner.Owner.A {}");
+    }
+
+    @Test
+    void shouldGenerateGrandparentUnionFieldsInJavaDataDeclarations() {
+        var source = """
+                union A { a: String } = B
+
+                union B { b: String } = C
+
+                data C { c: String }
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("""
+                    public sealed interface A {
+                        public String a();
+                    }
+                """);
+        assertThat(code).contains("    public sealed interface B extends A {");
+        assertThat(code).contains("        public String b();");
+        assertThat(code).contains("    public record C(String a, String b, String c) implements B {}");
+    }
+
+    @Test
+    void shouldPreservePrimitiveBackedFieldTypesInJavaDataDeclarations() {
+        var programSource = """
+                union Program = Success | Failed
+
+                data Success {}
+                data Failed { exit_code: failed_exit_code }
+
+                type failed_exit_code -> int
+                """;
+        var consumerSource = """
+                from /capy/lang/Program import { * }
+
+                fun fail(): Program = Failed { exit_code: 1 }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Program", "/capy/lang", programSource, SourceKind.FUNCTIONAL),
+                rawModule("Main", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var programCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/lang/Program.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var consumerCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(programCode).contains("    public record Failed(int exit_code) {}");
+        assertThat(programCode).doesNotContain("record failed_exit_code");
+        assertThat(consumerCode).contains("new capy.lang.Program.Failed(1)");
+    }
+
+    @Test
+    void shouldRejectObjectOrientedThrowingNonError() {
+        var objectSource = """
+                class BadThrow {
+                    def fail(): String {
+                        throw "boom"
+                    }
+                }
+                """;
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("BadThrow", "/sample/app", objectSource, SourceKind.OBJECT_ORIENTED)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString()).contains("OO throw expression must have type `/capy/lang/Result.Error`.");
+    }
+
+    @Test
+    void shouldRejectObjectOrientedNonFinalIfThatFallsThrough() {
+        var objectSource = """
+                class BadIf {
+                    def label(): String {
+                        return "side"
+                    }
+
+                    def run(flag: bool): String {
+                        if flag {
+                            this.label()
+                        }
+                        return "ok"
+                    }
+                }
+                """;
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("BadIf", "/sample/app", objectSource, SourceKind.OBJECT_ORIENTED)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString()).contains("Unsupported object-oriented construct");
+    }
+
+    private static String generatorOutputType(OutputType outputType) {
+        return switch (outputType) {
+            case JAVA -> "java";
+            case PYTHON -> "python";
+            case JAVASCRIPT -> "javascript";
+        };
+    }
+
+    private static RawModule rawModule(String name, String path, String input) {
+        return rawModule(name, path, input, SourceKind.FUNCTIONAL);
+    }
+
+    private static RawModule rawModule(String name, String path, String input, SourceKind sourceKind) {
+        return new RawModule(name, path, input, sourceKind);
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> rawModules) {
+        var result = CapybaraCompiler.compile(rawModules, new LinkedHashSet<>(), emptyNativeProviders(), emptyNativeProviders()).unsafeRun();
+        if (result instanceof Either.Right<?, ?> error) {
+            fail(error.value().toString());
+        }
+        return (CompiledProgram) ((Either.Left<?, ?>) result).value();
+    }
+
+    private static NativeProviderManifest emptyNativeProviders() {
+        return new NativeProviderManifest(List.of());
+    }
+
+    static Stream<Arguments> test() {
+        return Stream.of(
+                Arguments.of("""
+                                // algebraic type
+                                union Shape = Circle | Rectangle
+                                data Circle { radius: double }
+                                data Rectangle { width: double, height: double }
+                                
+                                fun area(shape: Shape): double =
+                                    match shape with
+                                    case Circle { radius } -> 3.14 * radius ^ 2
+                                    case Rectangle { width, height } -> width * height
+                                
+                                fun da_vinci(shape: Shape): Shape =
+                                    match shape with
+                                    case Circle { radius } -> Rectangle { width : radius * 2, height : radius * 2 }
+                                    case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
+                                
+                                // type with common value
+                                union Person { name: String, age: int } = Student | Teacher
+                                data Student { grade: int }
+                                data Teacher { subject: String }
+                                """,
+                        """
+                                fun classify(x: int): String =
+                                    if x > 0 then "positive"
+                                    else "non-positive"
+                                fun always_true(): bool = true
+                                
+                                // algebraic type
+                                union Shape = Circle | Rectangle
+                                data Circle { radius: double }
+                                data Rectangle { width: double, height: double }
+                                
+                                fun area(shape: Shape): double =
+                                    match shape with
+                                    case Circle { radius } -> 3.14 * radius * radius
+                                    case Rectangle { width, height } -> width * height
+                                
+                                fun da_vinci(shape: Shape): Shape =
+                                    match shape with
+                                    case Circle { radius } -> Rectangle { width = radius * 2, height = radius * 2 }
+                                    case Rectangle { width, height } -> Circle { radius = (width + height) / 4 }
+                                """,
+                        """
+                                // algebraic type
+                                union Shape = Circle | Rectangle
+                                data Circle { radius: double }
+                                data Rectangle { width: double, height: double }
+                                
+                                fun area(shape: Shape): double =
+                                    match shape with
+                                    case Circle { radius } -> 3.14 * radius ^ 2
+                                    case Rectangle { width, height } -> width * height
+                                
+                                fun da_vinci(shape: Shape): Shape =
+                                    match shape with
+                                    case Circle { radius } -> Rectangle { width : radius * 2, height : radius * 2 }
+                                    case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
+                                """,
+                        """
+                                // type with common value
+                                union Person { name: String, age: int } = Student | Teacher
+                                data Student { grade: int }
+                                data Teacher { subject: String }
+                                """,
+                        """
+                                union Option[T] = Some[T] | None
+                                data Some[T] { value: T }
+                                data None {}
+                                fun tuple(): Tuple[int, String, double] = (1, "foo", 5.0)
+                                fun tuple2(): Tuple[int, Option[String], double] = (1, Some { value: "foo" }, 5.0)
+                                fun tuple_index(): Option[String] = (1, "foo", 5.0)[1]
+                                fun tuple_index_negative(): Option[String] = (1, "foo", 5.0)[-2]
+                                fun tuple_slice(): Tuple[String, double] = (1, "foo", 5.0)[1:]
+                                fun tuple_slice_negative(): Tuple[int, String] = (1, "foo", 5.0)[:-1]
+                                fun tuple_if(x: int): Tuple[int, String, float, String] =
+                                    (5, if x > 4 then "big" else "small", 5.1f, "foo")
+                                """)
+        );
+    }
+}

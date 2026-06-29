@@ -1,0 +1,11 @@
+/// Source file kinds accepted by the parser and their canonical extensions.
+enum SourceKind {
+    FUNCTIONAL,
+    OBJECT_ORIENTED,
+}
+
+/// Returns the canonical file extension for a source kind.
+fun SourceKind.extension(): String =
+    match this with
+    case FUNCTIONAL -> ".cfun"
+    case OBJECT_ORIENTED -> ".coo"

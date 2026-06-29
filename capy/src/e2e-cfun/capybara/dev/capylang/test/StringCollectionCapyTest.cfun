@@ -1,0 +1,214 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Ordering import { * }
+from /capy/lang/Result import { * }
+from StringCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/StringCollection.cfun", [
+        test("contains detects substrings", () => contains_detects_substrings()),
+        test("contains_method detects substrings", () => contains_method_detects_substrings()),
+        test("any detects matching characters", () => any_detects_matching_characters()),
+        test("any_with_index detects matching characters at index", () => any_with_index_detects_matching_characters_at_index()),
+        test("all detects strings without spaces", () => all_detects_strings_without_spaces()),
+        test("all_with_index detects strings without spaces", () => all_with_index_detects_strings_without_spaces()),
+        test("contains accepts empty substring", () => contains_accepts_empty_substring()),
+        test("starts_with_method detects prefixes", () => starts_with_method_detects_prefixes()),
+        test("end_with_method detects suffixes", () => end_with_method_detects_suffixes()),
+        test("trim_method trims surrounding whitespace", () => trim_method_trims_surrounding_whitespace()),
+        test("replace_method replaces all occurrences", () => replace_method_replaces_all_occurrences()),
+        test("compare_method returns ordering", () => compare_method_returns_ordering()),
+        test("char_compare_method returns ordering", () => char_compare_method_returns_ordering()),
+        test("is_empty_method detects empty strings", () => is_empty_method_detects_empty_strings()),
+        test("not_is_empty_method negates emptiness", () => not_is_empty_method_negates_emptiness()),
+        test("not_nested_is_empty reads nested buffer", () => not_nested_is_empty_reads_nested_buffer()),
+        test("not_trimmed_is_empty trims before checking emptiness", () => not_trimmed_is_empty_trims_before_checking_emptiness()),
+        test("length returns string size", () => length_returns_string_size()),
+        test("char helpers handle valid and invalid chars", () => char_helpers_handle_valid_and_invalid_chars()),
+        test("to_int_method parses ints", () => to_int_method_parses_ints()),
+        test("to_long_method parses longs", () => to_long_method_parses_longs()),
+        test("to_double_method parses doubles", () => to_double_method_parses_doubles()),
+        test("to_float_method parses floats", () => to_float_method_parses_floats()),
+        test("to_bool_method parses booleans", () => to_bool_method_parses_booleans()),
+    ])
+
+private fun contains_detects_substrings(): Assert =
+    assert_all([
+        assert_that(contains("capybara", "pyb")).is_true(),
+        assert_that(contains("capybara", "dog")).is_false(),
+    ])
+
+private fun contains_method_detects_substrings(): Assert =
+    assert_all([
+        assert_that(contains_method("capybara", "pyb")).is_true(),
+        assert_that(contains_method("capybara", "dog")).is_false(),
+    ])
+
+private fun any_detects_matching_characters(): Assert =
+    assert_all([
+        assert_that(any("capybara")).is_true(),
+        assert_that(any("capibara")).is_false(),
+    ])
+
+private fun any_with_index_detects_matching_characters_at_index(): Assert =
+    assert_all([
+        assert_that(any_with_index("capybara")).is_true(),
+        assert_that(any_with_index("ycapi")).is_false(),
+    ])
+
+private fun all_detects_strings_without_spaces(): Assert =
+    assert_all([
+        assert_that(all("capybara")).is_true(),
+        assert_that(all("capy bara")).is_false(),
+    ])
+
+private fun all_with_index_detects_strings_without_spaces(): Assert =
+    assert_all([
+        assert_that(all_with_index("capybara")).is_true(),
+        assert_that(all_with_index("capy bara")).is_false(),
+    ])
+
+private fun contains_accepts_empty_substring(): Assert =
+    assert_all([
+        assert_that(contains("capybara", "")).is_true(),
+        assert_that(contains("", "")).is_true(),
+    ])
+
+private fun starts_with_method_detects_prefixes(): Assert =
+    assert_all([
+        assert_that(starts_with_method("capybara", "cap")).is_true(),
+        assert_that(starts_with_method("capybara", "bara")).is_false(),
+    ])
+
+private fun end_with_method_detects_suffixes(): Assert =
+    assert_all([
+        assert_that(end_with_method("capybara", "bara")).is_true(),
+        assert_that(end_with_method("capybara", "cap")).is_false(),
+    ])
+
+private fun trim_method_trims_surrounding_whitespace(): Assert =
+    assert_all([
+        assert_that(trim_method("  capybara  ")).is_equal_to("capybara"),
+        assert_that(trim_method("capybara")).is_equal_to("capybara"),
+    ])
+
+private fun replace_method_replaces_all_occurrences(): Assert =
+    assert_all([
+        assert_that(replace_method("capybara", "bara", "lang")).is_equal_to("capylang"),
+        assert_that(replace_method("aaaa", "a", "b")).is_equal_to("bbbb"),
+        assert_that(replace_method("capybara", "dog", "cat")).is_equal_to("capybara"),
+    ])
+
+private fun compare_method_returns_ordering(): Assert =
+    assert_all([
+        assert_that(compare_method("capy", "capy")).is_equal_to(EQUAL),
+        assert_that(compare_method("apple", "banana")).is_equal_to(LESS),
+        assert_that(compare_method("zebra", "yak")).is_equal_to(GREATER),
+        assert_that(compare_method("capy", "capybara")).is_equal_to(LESS),
+        assert_that(compare_method("", "a")).is_equal_to(LESS),
+    ])
+
+private fun char_compare_method_returns_ordering(): Assert =
+    assert_all([
+        assert_that(make_char("a")).succeeds(left =>
+            assert_that(make_char("a")).succeeds(right =>
+                assert_that(char_compare_method(left, right)).is_equal_to(EQUAL))),
+        assert_that(make_char("a")).succeeds(left =>
+            assert_that(make_char("b")).succeeds(right =>
+                assert_that(char_compare_method(left, right)).is_equal_to(LESS))),
+        assert_that(make_char("b")).succeeds(left =>
+            assert_that(make_char("a")).succeeds(right =>
+                assert_that(char_compare_method(left, right)).is_equal_to(GREATER))),
+    ])
+
+private fun is_empty_method_detects_empty_strings(): Assert =
+    assert_all([
+        assert_that(is_empty_method("")).is_true(),
+        assert_that(is_empty_method("capybara")).is_false(),
+    ])
+
+private fun not_is_empty_method_negates_emptiness(): Assert =
+    assert_all([
+        assert_that(not_is_empty_method("")).is_false(),
+        assert_that(not_is_empty_method("capybara")).is_true(),
+    ])
+
+private fun not_nested_is_empty_reads_nested_buffer(): Assert =
+    assert_all([
+        assert_that(not_nested_is_empty(BufferHolder { buffer: "" })).is_false(),
+        assert_that(not_nested_is_empty(BufferHolder { buffer: "capybara" })).is_true(),
+    ])
+
+private fun not_trimmed_is_empty_trims_before_checking_emptiness(): Assert =
+    assert_all([
+        assert_that(not_trimmed_is_empty("   ")).is_false(),
+        assert_that(not_trimmed_is_empty(" capybara ")).is_true(),
+    ])
+
+private fun length_returns_string_size(): Assert =
+    assert_all([
+        assert_that(string_collection_any_int(length("capybara"))).is_equal_to(8),
+        assert_that(string_collection_any_int(length(""))).is_zero(),
+    ])
+
+private fun char_helpers_handle_valid_and_invalid_chars(): Assert =
+    // char_at_or_question(..., index) stays in the host tests because index constructors are not
+    // emitted for every Capybara test backend yet.
+    assert_all([
+        assert_that(make_char("c")).succeeds(value => assert_that(value.to_string()).is_equal_to("c")),
+        assert_that(make_char("")).fails("char must contain exactly one character"),
+        assert_that(make_char("ab")).fails("char must contain exactly one character"),
+        assert_that(make_char("x")).succeeds(value => assert_that(char_to_string(value)).is_equal_to("x")),
+        assert_that(make_char("x")).succeeds(value => assert_that(string_collection_any_int(char_length(value))).is_equal_to(1)),
+    ])
+
+private fun to_int_method_parses_ints(): Assert =
+    assert_all([
+        assert_that(to_int_method("123")).succeeds(123),
+        assert_that(to_int_method("abc")).fails("Cannot parse string to int: abc"),
+    ])
+
+private fun to_long_method_parses_longs(): Assert =
+    assert_all([
+        assert_that(to_long_method("12345678901")).succeeds(12345678901L),
+        assert_that(to_long_method("9223372036854775807")).succeeds(9223372036854775807L),
+        assert_that(to_long_method("abc")).fails("Cannot parse string to long: abc"),
+        string_collection_assert_failed_message_contains(to_long_method("9223372036854775808"), "Cannot parse string to long"),
+    ])
+
+private fun to_double_method_parses_doubles(): Assert =
+    assert_all([
+        assert_that(to_double_method("12.5")).succeeds(12.5),
+        assert_that(to_double_method("abc")).fails("Cannot parse string to double: abc"),
+    ])
+
+private fun to_float_method_parses_floats(): Assert =
+    assert_all([
+        assert_that(to_float_method("1.25")).succeeds(1.25f),
+        assert_that(to_float_method("abc")).fails("Cannot parse string to float: abc"),
+    ])
+
+private fun to_bool_method_parses_booleans(): Assert =
+    assert_all([
+        assert_that(to_bool_method("true")).succeeds(true),
+        assert_that(to_bool_method("false")).succeeds(false),
+        assert_that(to_bool_method("abc")).fails("Cannot parse string to bool: abc"),
+    ])
+
+private fun string_collection_assert_failed_message_contains(result: Result[T], expected: String): Assert =
+    assert_all([
+        assert_that(result).fails(),
+        assert_that(string_collection_result_error_message(result)).contains(expected),
+    ])
+
+private fun string_collection_result_error_message(result: Result[T]): String =
+    match result with
+    case Error e -> e.message
+    case Success _ -> ""
+
+// StringCollection size helpers are unannotated, so imported return values are matched from any.
+private fun string_collection_any_int(value: any): int =
+    match value with
+    case int actual -> actual
+    case _ -> -1

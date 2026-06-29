@@ -1,0 +1,5 @@
+from /capy/collection/List import { List }
+from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
+
+/// Generator output grouped as the list of source modules to write.
+data GeneratedProgram { modules: List[GeneratedModule] }

@@ -1,0 +1,21 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Pck4 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports2/Pck4.cfun", [
+        test("fully qualified cross-package callable boosts levels", () => fully_qualified_cross_package_callable_boosts_levels()),
+    ])
+
+private fun fully_qualified_cross_package_callable_boosts_levels(): Assert =
+    let ordinary: String = boosted_awesome(3)
+    let pumping: String = boosted_awesome(4)
+    let strong: String = boosted_awesome(11)
+    let extreme: String = boosted_awesome(96)
+    assert_all([
+        assert_that(ordinary).is_equal_to("Day as usual"),
+        assert_that(pumping).is_equal_to("Keep pumping!"),
+        assert_that(strong).is_equal_to("Not Bad B)"),
+        assert_that(extreme).is_equal_to("IT'S OVER NINE THOUSAND!!!"),
+    ])

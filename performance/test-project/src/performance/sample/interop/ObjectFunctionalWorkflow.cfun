@@ -1,0 +1,25 @@
+from /capy/lang/Effect import { * }
+from /performance/sample/domain/Order import { Order, summary }
+from /performance/sample/domain/ResultTypes import { WorkflowResult }
+from /performance/sample/nativeinterop/NativeClock import { FixedClock }
+from /performance/sample/nativeinterop/NativeHasher import { StableHasher }
+from /performance/sample/nativeinterop/NativeProviders import { fixed_clock, stable_hasher }
+from /performance/sample/oo/DiscountEngine import { DiscountEngine }
+from /performance/sample/oo/Inventory import { Inventory }
+from /performance/sample/oo/Workflow import { Workflow }
+
+fun order_summary(order: Order): String = summary(order)
+
+fun run_workflow(order: Order): Effect[WorkflowResult] =
+    let inventory <- Inventory(8, 2, 25)
+    let discounts <- DiscountEngine()
+    let native_clock <- fixed_clock()
+    let native_hasher <- stable_hasher()
+    let clock <- FixedClock(native_clock)
+    let hasher <- StableHasher(native_hasher)
+    let workflow <- Workflow(inventory, discounts, clock, hasher)
+    workflow.place_order(order)
+
+fun describe_with_facade(order: Order): Effect[String] =
+    let facade <- InteropFacade()
+    facade.describe(order)

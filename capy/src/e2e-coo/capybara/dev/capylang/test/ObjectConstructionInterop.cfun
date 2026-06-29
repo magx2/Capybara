@@ -1,0 +1,27 @@
+from /capy/lang/Effect import { * }
+import ConstructedObjects
+from ConstructedObjects import { TrackedPerson, EmptyTracked, TrackedPrintable }
+
+fun make_person(name: String): Effect[TrackedPerson] =
+    TrackedPerson(name)
+
+fun make_printable(name: String): Effect[TrackedPrintable] =
+    TrackedPerson(name)
+
+fun make_empty(): Effect[EmptyTracked] =
+    EmptyTracked()
+
+fun make_qualified_person(name: String): Effect[ConstructedObjects.TrackedPerson] =
+    ConstructedObjects.TrackedPerson(name)
+
+fun make_qualified_printable(name: String): Effect[ConstructedObjects.TrackedPrintable] =
+    ConstructedObjects.TrackedPerson(name)
+
+fun sequence_two(left: String, right: String): Effect[String] =
+    let first <- TrackedPerson(left)
+    let second <- TrackedPerson(right)
+    left + ":" + right
+
+fun construct_lazily(name: String): bool =
+    let effect = TrackedPerson(name)
+    true

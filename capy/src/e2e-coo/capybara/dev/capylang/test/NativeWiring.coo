@@ -1,0 +1,10 @@
+interface NativeClock {
+    def now_millis(): long
+}
+
+class NativeClockConsumer(clock: NativeClock) {
+    field clock: NativeClock = clock
+
+    def read(): long =
+        this.clock.now_millis()
+}
