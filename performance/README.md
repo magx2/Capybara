@@ -10,7 +10,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 2s (2.3 s)<br>🟢 Δ-0s / -13% | 2s (2.088 s)<br>🟢 Δ-0s / -17% | 2s (1.916 s)<br>🟢 Δ-1s / -32% |
+| `compile` | 2s (2.3 s)<br>🟢 Δ-0s / -13% | 2s (2.088 s)<br>🟢 Δ-0s / -17% | 2s (1.916 s)<br>🟢 Δ-1s / -32% |
 | `gen java` | 2s (1.631 s)<br>🟢 Δ-1m 24s / -98% | 2s (1.575 s)<br>🟢 Δ-1m 23s / -98% | 2s (1.534 s)<br>🟢 Δ-1m 23s / -98% |
 | `gen python` | 1s (1.107 s)<br>🟢 Δ-1m 24s / -99% | 1s (1.061 s)<br>🟢 Δ-1m 22s / -99% | 1s (1.106 s)<br>🟢 Δ-1m 22s / -99% |
 | `gen js` | 1s (0.954 s)<br>🟢 Δ-1m 22s / -99% | 1s (0.98 s)<br>🟢 Δ-1m 21s / -99% | 1s (0.977 s)<br>🟢 Δ-1m 23s / -99% |
@@ -22,7 +22,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 3s (2.632 s)<br>🟢 Δ-0s / -0% | 3s (2.524 s)<br>🟢 Δ-0s / -10% | 3s (2.811 s)<br>🟢 Δ-0s / -5% |
+| `compile` | 3s (2.632 s)<br>🟢 Δ-0s / -0% | 3s (2.524 s)<br>🟢 Δ-0s / -10% | 3s (2.811 s)<br>🟢 Δ-0s / -5% |
 | `gen java` | 1m 26s (85.751 s)<br>🟡 Δ+5s / +6% | 1m 25s (84.972 s)<br>🟢 Δ-1s / -1% | 1m 25s (84.977 s)<br>🔵 Δ+1s / +1% |
 | `gen python` | 1m 25s (84.86 s)<br>🟡 Δ+5s / +6% | 1m 23s (83.485 s)<br>🔵 Δ+1s / +1% | 1m 23s (82.86 s)<br>🔵 Δ+1s / +1% |
 | `gen js` | 1m 23s (83.159 s)<br>🟡 Δ+3s / +4% | 1m 22s (82.276 s)<br>🔵 Δ+1s / +1% | 1m 24s (84.17 s)<br>🟡 Δ+3s / +4% |
@@ -34,7 +34,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 3s (2.638 s)<br>🟡 Δ+0s / +5% | 3s (2.789 s)<br>🔴 Δ+0s / +18% | 3s (2.955 s)<br>🔴 Δ+0s / +19% |
+| `compile` | 3s (2.638 s)<br>🟡 Δ+0s / +5% | 3s (2.789 s)<br>🔴 Δ+0s / +18% | 3s (2.955 s)<br>🔴 Δ+0s / +19% |
 | `gen java` | 1m 21s (80.621 s)<br>🟡 Δ+5s / +7% | 1m 26s (85.936 s)<br>🔴 Δ+10s / +13% | 1m 24s (83.967 s)<br>🔴 Δ+8s / +11% |
 | `gen python` | 1m 20s (79.758 s)<br>🟡 Δ+5s / +7% | 1m 22s (82.359 s)<br>🟡 Δ+7s / +10% | 1m 22s (82.067 s)<br>🟡 Δ+7s / +9% |
 | `gen js` | 1m 20s (79.849 s)<br>🟡 Δ+6s / +8% | 1m 21s (81.267 s)<br>🟡 Δ+7s / +9% | 1m 21s (81.2 s)<br>🟡 Δ+7s / +9% |
@@ -46,7 +46,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 3s (2.502 s)<br>🟢 Δ-0s / -4% | 2s (2.358 s)<br>🟡 Δ+0s / +9% | 2s (2.475 s)<br>🔵 Δ+0s / +2% |
+| `compile` | 3s (2.502 s)<br>🟢 Δ-0s / -4% | 2s (2.358 s)<br>🟡 Δ+0s / +9% | 2s (2.475 s)<br>🔵 Δ+0s / +2% |
 | `gen java` | 1m 16s (75.64 s)<br>🟡 Δ+2s / +3% | 1m 16s (76.009 s)<br>🟡 Δ+3s / +4% | 1m 16s (75.969 s)<br>🟡 Δ+2s / +3% |
 | `gen python` | 1m 14s (74.39 s)<br>🟡 Δ+3s / +4% | 1m 15s (75.123 s)<br>🟡 Δ+3s / +4% | 1m 15s (75.016 s)<br>🟡 Δ+3s / +5% |
 | `gen js` | 1m 14s (74.116 s)<br>🟡 Δ+2s / +3% | 1m 14s (74.306 s)<br>🟡 Δ+3s / +4% | 1m 14s (74.339 s)<br>🟡 Δ+3s / +4% |
@@ -58,7 +58,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 3s (2.6 s)<br>🔴 Δ+0s / +16% | 2s (2.168 s)<br>🟢 Δ-0s / -16% | 2s (2.429 s)<br>🟢 Δ-0s / -7% |
+| `compile` | 3s (2.6 s)<br>🔴 Δ+0s / +16% | 2s (2.168 s)<br>🟢 Δ-0s / -16% | 2s (2.429 s)<br>🟢 Δ-0s / -7% |
 | `gen java` | 1m 14s (73.735 s)<br>🟢 Δ-1m 47s / -59% | 1m 13s (73.204 s)<br>🟢 Δ-1m 49s / -60% | 1m 14s (73.651 s)<br>🟢 Δ-1m 46s / -59% |
 | `gen python` | 1m 12s (71.665 s)<br>🟢 Δ-1m 49s / -60% | 1m 12s (71.927 s)<br>🟢 Δ-1m 48s / -60% | 1m 12s (71.648 s)<br>🟢 Δ-1m 47s / -60% |
 | `gen js` | 1m 12s (71.723 s)<br>🟢 Δ-1m 49s / -60% | 1m 12s (71.662 s)<br>🟢 Δ-1m 46s / -60% | 1m 11s (71.306 s)<br>🟢 Δ-1m 46s / -60% |
@@ -70,7 +70,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 2s (2.25 s)<br>🟢 Δ-1s / -23% | 3s (2.58 s)<br>🟢 Δ-0s / -13% | 3s (2.623 s)<br>🟢 Δ-0s / -10% |
+| `compile` | 2s (2.25 s)<br>🟢 Δ-1s / -23% | 3s (2.58 s)<br>🟢 Δ-0s / -13% | 3s (2.623 s)<br>🟢 Δ-0s / -10% |
 | `gen java` | 3m 1s (181.223 s)<br>🔴 Δ+1m 36s / +114% | 3m 3s (182.672 s)<br>🔴 Δ+1m 37s / +112% | 3m 0s (179.667 s)<br>🔴 Δ+1m 36s / +114% |
 | `gen python` | 3m 1s (180.957 s)<br>🔴 Δ+1m 37s / +115% | 3m 0s (180.386 s)<br>🔴 Δ+1m 37s / +117% | 2m 59s (178.752 s)<br>🔴 Δ+1m 35s / +114% |
 | `gen js` | 3m 1s (180.961 s)<br>🔴 Δ+1m 37s / +117% | 2m 58s (177.961 s)<br>🔴 Δ+1m 36s / +116% | 2m 58s (177.787 s)<br>🔴 Δ+1m 35s / +114% |
@@ -80,7 +80,7 @@ Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regress
 
 | Step | Java | Python | JS |
 | --- | ---: | ---: | ---: |
-| `compiler` | 3s (2.905 s)<br>no previous run | 3s (2.961 s)<br>no previous run | 3s (2.92 s)<br>no previous run |
+| `compile` | 3s (2.905 s)<br>no previous run | 3s (2.961 s)<br>no previous run | 3s (2.92 s)<br>no previous run |
 | `gen java` | 1m 25s (84.774 s)<br>no previous run | 1m 26s (86.139 s)<br>no previous run | 1m 24s (83.893 s)<br>no previous run |
 | `gen python` | 1m 24s (84.087 s)<br>no previous run | 1m 23s (82.978 s)<br>no previous run | 1m 23s (83.487 s)<br>no previous run |
 | `gen js` | 1m 24s (83.533 s)<br>no previous run | 1m 22s (82.319 s)<br>no previous run | 1m 23s (83.173 s)<br>no previous run |
