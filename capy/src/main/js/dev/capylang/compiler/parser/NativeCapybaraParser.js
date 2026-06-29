@@ -714,7 +714,7 @@ function type_declaration_definitions_from(declarations, visibility, parent_fiel
     }
     var union_declaration = declarations[0];
     var name = data_type_name(union_declaration);
-    var definitions = [data("TypeDeclaration", { name: name, visibility: visibility, parameters: data_type_parameters(union_declaration), fields: field_declaration_field_dtos(parent_fields), variants: type_declaration_variants(declarations), annotations: annotations, derives: derives, location: location }), schema_constant_definition(("__capy_schema_type|" + name), name, location)];
+    var definitions = [data("TypeDeclaration", { name: name, visibility: visibility, parameters: data_type_parameters(union_declaration), fields: field_declaration_field_dtos(parent_fields), variants: type_declaration_variants(declarations), annotations: annotations, derives: derives, location: location }), schema_constant_definition(("__capy_schema_type|" + name), name, location), schema_constant_definition(("__capy_schema_kind|" + name), "union", location)];
     var type_parameters = data_type_parameters(union_declaration);
     var __index_6 = 0;
     for (const parameter of type_parameters) {
@@ -761,7 +761,7 @@ function primitive_backed_type_declaration_definitions(ctx) {
     var name = text(ctx_call(ctx, "primitiveBackedTypeName"));
     var backing_type = type_ref(text(ctx_call(ctx, "primitiveBackingType")), []);
     var location = source_location(ctx);
-    var definitions = [schema_constant_definition(("__capy_schema_type|" + name), name, location), schema_constant_definition(("__capy_schema_primitive|" + name), backing_type["name"], location), schema_constant_definition((("__capy_schema_field|" + name) + "|0"), ("value|" + backing_type["name"]), location)];
+    var definitions = [schema_constant_definition(("__capy_schema_type|" + name), name, location), schema_constant_definition(("__capy_schema_kind|" + name), "primitive", location), schema_constant_definition(("__capy_schema_primitive|" + name), backing_type["name"], location), schema_constant_definition((("__capy_schema_field|" + name) + "|0"), ("value|" + backing_type["name"]), location)];
     if (pyTruthy(ctx_has(ctx, "constructorClause"))) {
         definitions.push(constructor_function_definition(name, [data("FunctionParameter", { name: "value", typeReference: backing_type, location: source_location(ctx_call(ctx, "primitiveBackingType")) })], ctx_call(ctx, "constructorClause")));
     }

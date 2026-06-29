@@ -94,7 +94,7 @@ class CompilationTest {
         assertThat(alphaBranch).isGreaterThanOrEqualTo(0);
         assertThat(betaBranch).isGreaterThan(alphaBranch);
         assertThat(fallbackBranch).isGreaterThan(betaBranch);
-        assertThat(code).contains("ResultUtil.thrownError");
+        assertThat(code).contains("__capy_thrown_error");
 
         var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
                 .map(module -> module.code())
@@ -145,6 +145,130 @@ class CompilationTest {
         assertThat(code).contains("__capy_result_error_value");
         assertThat(code).contains("__capy_data_field(error, \"kind\")");
         assertThat(code).doesNotContain("java.lang.String error = java.lang.String.valueOf(__capy_result_error_value");
+    }
+
+    @Test
+    void shouldGenerateUnionParentFieldsInJavaDataDeclarations() {
+        var source = """
+                union A { a: String } = B | C
+
+                data B { x: int }
+                data C { y: String }
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("""
+                    public sealed interface A {
+                        public String a();
+                    }
+                """);
+        assertThat(code).contains("    public record B(String a, int x) implements A {}");
+        assertThat(code).contains("    public record C(String a, String y) implements A {}");
+    }
+
+    @Test
+    void shouldAvoidSealingUnionWithExternalJavaVariants() {
+        var ownerSource = """
+                union A { a: String } = B
+
+                data B { b: String }
+                """;
+        var extensionSource = """
+                from /sample/owner/Owner import { A }
+
+                data C { ... A, c: String }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Owner", "/sample/owner", ownerSource, SourceKind.FUNCTIONAL),
+                rawModule("Extension", "/sample/ext", extensionSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var ownerCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/owner/Owner.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var extensionCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/ext/Extension.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(ownerCode).contains("    public interface A {");
+        assertThat(ownerCode).doesNotContain("public sealed interface A");
+        assertThat(ownerCode).contains("    public record B(String a, String b) implements A {}");
+        assertThat(extensionCode).contains("    public record C(String a, String c) implements sample.owner.Owner.A {}");
+    }
+
+    @Test
+    void shouldGenerateGrandparentUnionFieldsInJavaDataDeclarations() {
+        var source = """
+                union A { a: String } = B
+
+                union B { b: String } = C
+
+                data C { c: String }
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("""
+                    public sealed interface A {
+                        public String a();
+                    }
+                """);
+        assertThat(code).contains("    public sealed interface B extends A {");
+        assertThat(code).contains("        public String b();");
+        assertThat(code).contains("    public record C(String a, String b, String c) implements B {}");
+    }
+
+    @Test
+    void shouldPreservePrimitiveBackedFieldTypesInJavaDataDeclarations() {
+        var programSource = """
+                union Program = Success | Failed
+
+                data Success {}
+                data Failed { exit_code: failed_exit_code }
+
+                type failed_exit_code -> int
+                """;
+        var consumerSource = """
+                from /capy/lang/Program import { * }
+
+                fun fail(): Program = Failed { exit_code: 1 }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Program", "/capy/lang", programSource, SourceKind.FUNCTIONAL),
+                rawModule("Main", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var programCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/lang/Program.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var consumerCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(programCode).contains("    public record Failed(int exit_code) {}");
+        assertThat(programCode).doesNotContain("record failed_exit_code");
+        assertThat(consumerCode).contains("new capy.lang.Program.Failed(1)");
     }
 
     @Test
