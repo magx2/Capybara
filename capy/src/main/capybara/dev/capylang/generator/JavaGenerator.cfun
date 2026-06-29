@@ -871,7 +871,7 @@ private fun java_object_interface_modules(modules: List[CompiledModule], allModu
     match modules[0] with
     case None -> []
     case Some { module } ->
-        java_object_interface_modules_for_module(compiled_object_interfaces(module.functions), module, allModules)
+        java_object_interface_modules_for_module(compiled_objects(module.functions).interfaces, module, allModules)
             + java_object_interface_modules(modules[1:], allModules)
 
 /// Creates top-level Java interface modules declared inside one compiled module.
