@@ -148,10 +148,15 @@ jobs:
           github-token: ${{ github.token }}
           native-image-job-reports: "false"
 
-      - name: Set up MSVC
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          arch: x64
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -161,22 +166,30 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Build project without tests
-        run: ./gradlew clean assemble --no-daemon
+      - name: Build and check project
+        run: ./gradlew clean check assemble --no-daemon
 
-      - name: Build Linux native CLI
-        run: ./gradlew :capy:nativeCompile --no-daemon
+      - name: Build JavaScript and Python compiler packages
+        run: ./gradlew :capy:packageJavaScriptCompiler :capy:packagePythonCompiler --no-daemon
 
-      - name: Collect Linux artifacts
+      - name: Smoke test JavaScript and Python compiler packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          capy/build/distributions/javascript-compiler/bin/capyc-js --version
+          capy/build/distributions/python-compiler/bin/capyc-py --version
+
+      - name: Build and collect Linux artifacts
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ needs.release-metadata.outputs.release_version }}"
           mkdir -p dist
-          find capy lib build-tool -path '*/build/libs/*.jar' -type f -exec cp {} dist/ \;
-          find capy -path '*/build/distributions/*' -type f -exec cp {} dist/ \;
-          cp "capy/build/native/nativeCompile/capyc-${VERSION}" "dist/capyc-${VERSION}-linux-x64"
-          tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C "capy/build/native/nativeCompile" "capyc-${VERSION}"
+          cp "capy/build/libs/capy-${VERSION}.jar" "dist/capyc-${VERSION}.jar"
+          cp "capy/build/distributions/capyc-${VERSION}-javascript.zip" dist/
+          cp "capy/build/distributions/capyc-${VERSION}-python.zip" dist/
+          native-image --no-fallback -o "dist/capyc-${VERSION}-linux-x64" -jar "capy/build/libs/capy-${VERSION}.jar"
+          tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C dist "capyc-${VERSION}-linux-x64"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -217,15 +230,15 @@ jobs:
         with:
           cache-disabled: false
 
-      - name: Build Windows native CLI
-        run: .\gradlew.bat :capy:nativeCompile --no-daemon
+      - name: Build and check project
+        run: .\gradlew.bat clean check assemble --no-daemon
 
-      - name: Collect Windows artifacts
+      - name: Build and collect Windows artifacts
         shell: pwsh
         run: |
           $version = "${{ needs.release-metadata.outputs.release_version }}"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Copy-Item "capy/build/native/nativeCompile/capyc-$version.exe" "dist/capyc-$version-windows-x64.exe"
+          native-image.cmd --no-fallback -o "dist/capyc-$version-windows-x64" -jar "capy/build/libs/capy-$version.jar"
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4

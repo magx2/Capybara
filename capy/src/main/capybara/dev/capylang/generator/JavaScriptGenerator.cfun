@@ -8831,7 +8831,7 @@ private fun java_script_identifier_part_char(char: String): bool =
 
 /// Checks whether a name is reserved in JavaScript source.
 private fun java_script_reserved_word(name: String): bool =
-    "|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|function|if|import|in|instanceof|new|return|super|switch|this|throw|try|typeof|var|void|while|with|yield|let|static|enum|await|implements|package|protected|interface|private|public|null|true|false|" ? ("|" + name + "|")
+    "|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|function|if|import|in|instanceof|new|return|super|switch|this|throw|try|typeof|var|void|while|with|yield|let|static|enum|await|implements|package|protected|interface|private|public|null|true|false|arguments|" ? ("|" + name + "|")
 
 /// Formats string as a JavaScript literal.
 private fun java_script_string_literal(value: String): String =

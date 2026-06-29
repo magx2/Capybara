@@ -210,6 +210,10 @@ public final class NativeCompilerValidator {
                 validateNativeProvider(module, function, annotation, errors, nativeProviderKeys);
                 continue;
             }
+            if (isStandardRecursive(annotation, module)) {
+                validateStandardRecursive(module, annotation, errors);
+                continue;
+            }
             var declaration = availableAnnotations.get(unqualified(annotation.name()));
             if (declaration == null) {
                 if ("NativeProvider".equals(unqualified(annotation.name())) && !standardNativeProviderImported(module)) {
@@ -676,6 +680,26 @@ public final class NativeCompilerValidator {
                 || importsName(module.imports(), "NativeProvider", "NativeProvider");
     }
 
+    private boolean isStandardRecursive(FunctionAnnotationApplication annotation, ParsedModule module) {
+        return "Recursive".equals(unqualified(annotation.name())) && standardRecursiveImported(module);
+    }
+
+    private boolean standardRecursiveImported(ParsedModule module) {
+        return importsName(module.imports(), "/capy/meta_prog/Recursive", "Recursive")
+                || importsName(module.imports(), "capy/meta_prog/Recursive", "Recursive")
+                || importsName(module.imports(), "Recursive", "Recursive");
+    }
+
+    private void validateStandardRecursive(
+            ParsedModule module,
+            FunctionAnnotationApplication annotation,
+            List<CompilerError> errors
+    ) {
+        for (var argument : annotation.arguments()) {
+            errors.add(error(module, argument.location(), "Unknown annotation argument " + argument.name() + "."));
+        }
+    }
+
     private boolean importsName(List<ImportDeclaration> imports, String modulePath, String name) {
         var expected = normalizeImportModulePath(modulePath);
         for (var declaration : imports) {
@@ -960,19 +984,20 @@ public final class NativeCompilerValidator {
         private Set<String> parsedSymbols(ParsedModule module) {
             var symbols = new LinkedHashSet<String>();
             for (var definition : module.definitions()) {
-                var name = switch (definition) {
-                    case AnnotationDeclaration annotation -> annotation.name();
-                    case ConstantDefinition constant -> constant.constant().name();
-                    case DataDeclaration data -> data.name();
-                    case DeriverDeclaration deriver -> deriver.name();
-                    case EnumDeclaration enumDeclaration -> enumDeclaration.name();
-                    case FunctionDefinition function -> function.function().name();
-                    case PrimitiveBackedTypeDeclaration primitive -> primitive.name();
-                    case TypeDeclaration type -> type.name();
-                    default -> "";
-                };
-                if (!name.isBlank()) {
-                    symbols.add(name);
+                switch (definition) {
+                    case AnnotationDeclaration annotation -> symbols.add(annotation.name());
+                    case ConstantDefinition constant -> symbols.add(constant.constant().name());
+                    case DataDeclaration data -> symbols.add(data.name());
+                    case DeriverDeclaration deriver -> symbols.add(deriver.name());
+                    case EnumDeclaration enumDeclaration -> {
+                        symbols.add(enumDeclaration.name());
+                        enumDeclaration.values().forEach(value -> symbols.add(value.name()));
+                    }
+                    case FunctionDefinition function -> symbols.add(function.function().name());
+                    case PrimitiveBackedTypeDeclaration primitive -> symbols.add(primitive.name());
+                    case TypeDeclaration type -> symbols.add(type.name());
+                    default -> {
+                    }
                 }
             }
             module.objectOriented().interfaces().forEach(type -> symbols.add(type.name()));

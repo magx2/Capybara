@@ -385,11 +385,17 @@ def capybaraPreparedMainSourceDir = layout.buildDirectory.dir('generated/sources
 def capybaraMainLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraMainPythonSourceDir = layout.projectDirectory.dir('src/main/py')
 def capybaraMainJavaScriptSourceDir = layout.projectDirectory.dir('src/main/js')
+def capybaraJavaScriptCompilerDistDir = layout.projectDirectory.dir('src/dist/javascript')
+def capybaraPythonCompilerDistDir = layout.projectDirectory.dir('src/dist/python')
+def capybaraLibGeneratedJavaScriptDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/js/test')
+def capybaraLibGeneratedPythonDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/python/test')
 def capybaraGeneratedCompilerPythonDir = layout.buildDirectory.dir('generated/sources/capybara/python/compiler')
 def capybaraLinkedCompilerPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/compiler')
 def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript/compiler')
 def capybaraRuntimeCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-runtime/compiler')
 def capybaraLinkedCompilerJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/compiler')
+def capybaraJavaScriptCompilerPackageDir = layout.buildDirectory.dir('distributions/javascript-compiler')
+def capybaraPythonCompilerPackageDir = layout.buildDirectory.dir('distributions/python-compiler')
 def pythonAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/python-grammars')
 def pythonAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/python/main')
 def pythonAntlrRuntimeDir = layout.buildDirectory.dir('python/antlr4-runtime')
@@ -936,6 +942,104 @@ def prepareJavaScriptCompilerRuntime = tasks.register('prepareJavaScriptCompiler
         include 'dev/**'
     }
     into capybaraRuntimeCompilerJavaScriptDir
+}
+
+tasks.register('prepareJavaScriptCompilerPackage', Sync) {
+    description = 'Prepares a runnable JavaScript Capybara compiler distribution.'
+    group = capybaraTaskGroup
+    dependsOn prepareJavaScriptCompilerRuntime
+    dependsOn ':lib:capybara-lib:compileTestCapybaraJavaScriptDirect'
+    dependsOn tasks.named('generateJavaScriptAntlr')
+    dependsOn tasks.named('installJavaScriptAntlrRuntime')
+
+    from(capybaraLibGeneratedJavaScriptDir) {
+        include 'capy/**'
+        exclude 'capy/test/CapyTestRuntime.js'
+        exclude '**/*Test.js'
+        into 'lib/compiler'
+    }
+    from(capybaraRuntimeCompilerJavaScriptDir) {
+        into 'lib/compiler'
+    }
+    from(javascriptAntlrGeneratedDir) {
+        into 'lib/antlr'
+    }
+    from(javascriptAntlrRuntimeDir.map { new File(it.asFile, 'node_modules') }) {
+        into 'lib/node_modules'
+    }
+    from(capybaraJavaScriptCompilerDistDir)
+    into capybaraJavaScriptCompilerPackageDir
+
+    doLast {
+        def packageDir = capybaraJavaScriptCompilerPackageDir.get().asFile
+        new File(packageDir, 'bin/capyc-js').setExecutable(true, false)
+    }
+}
+
+tasks.register('packageJavaScriptCompiler') {
+    description = 'Packages the runnable JavaScript Capybara compiler distribution.'
+    group = capybaraTaskGroup
+    dependsOn tasks.named('prepareJavaScriptCompilerPackage')
+    inputs.dir(capybaraJavaScriptCompilerPackageDir)
+    outputs.file(layout.buildDirectory.file("distributions/capyc-${project.version}-javascript.zip"))
+
+    doLast {
+        def archiveFile = layout.buildDirectory.file("distributions/capyc-${project.version}-javascript.zip").get().asFile
+        archiveFile.parentFile.mkdirs()
+        archiveFile.delete()
+        ant.zip(destfile: archiveFile, basedir: capybaraJavaScriptCompilerPackageDir.get().asFile)
+    }
+}
+
+tasks.register('preparePythonCompilerPackage', Sync) {
+    description = 'Prepares a runnable Python Capybara compiler distribution.'
+    group = capybaraTaskGroup
+    dependsOn generatePythonCompiler
+    dependsOn ':lib:capybara-lib:compileTestCapybaraPythonDirect'
+    dependsOn tasks.named('generatePythonAntlr')
+    dependsOn tasks.named('installPythonAntlrRuntime')
+
+    from(capybaraLibGeneratedPythonDir) {
+        include 'capy/**'
+        exclude 'capy/test/CapyTestRuntime.py'
+        exclude '**/*Test.py'
+        into 'lib/compiler'
+    }
+    from(capybaraGeneratedCompilerPythonDir) {
+        into 'lib/compiler'
+    }
+    from(capybaraMainPythonSourceDir) {
+        include 'dev/**'
+        into 'lib/native'
+    }
+    from(pythonAntlrGeneratedDir) {
+        into 'lib/antlr'
+    }
+    from(pythonAntlrRuntimeDir) {
+        into 'lib/runtime'
+    }
+    from(capybaraPythonCompilerDistDir)
+    into capybaraPythonCompilerPackageDir
+
+    doLast {
+        def packageDir = capybaraPythonCompilerPackageDir.get().asFile
+        new File(packageDir, 'bin/capyc-py').setExecutable(true, false)
+    }
+}
+
+tasks.register('packagePythonCompiler') {
+    description = 'Packages the runnable Python Capybara compiler distribution.'
+    group = capybaraTaskGroup
+    dependsOn tasks.named('preparePythonCompilerPackage')
+    inputs.dir(capybaraPythonCompilerPackageDir)
+    outputs.file(layout.buildDirectory.file("distributions/capyc-${project.version}-python.zip"))
+
+    doLast {
+        def archiveFile = layout.buildDirectory.file("distributions/capyc-${project.version}-python.zip").get().asFile
+        archiveFile.parentFile.mkdirs()
+        archiveFile.delete()
+        ant.zip(destfile: archiveFile, basedir: capybaraPythonCompilerPackageDir.get().asFile)
+    }
 }
 
 tasks.register('pythonNativeParserSmoke', Exec) {

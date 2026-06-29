@@ -1083,6 +1083,8 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
     let leftType = python_expression_type(binary.left, env, module, allModules)
     if python_result_reduce_operator_expression_with_left_type(binary, leftType)
     then python_result_reduce_operator_code(binary, env, module, allModules)
+    else if python_collection_reduce_operator_expression_with_left_type(binary, leftType)
+    then python_collection_reduce_operator_code(binary, leftType, env, module, allModules)
     else if python_async_pipe_expression_with_left_type(binary, leftType)
     then python_async_pipe_code(binary, env, module, allModules)
     else if python_result_pipe_expression_with_left_type(binary, leftType)
@@ -1095,15 +1097,10 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
     then python_collection_pipe_code(binary, env, module, allModules)
     else if python_regex_binary_expression_with_left_type(binary, leftType)
     then python_regex_binary_code(binary, env, module, allModules)
-    else if python_binary_extension_operator_expression_with_left_type(binary, leftType, module, allModules)
-    then python_binary_extension_operator_code_with_left_type(binary, leftType, env, module, allModules)
+    else if python_string_concat_expression(binary, leftType, env, module, allModules)
+    then python_string_concat_code(binary, env, module, allModules)
     else if python_set_binary_expression_with_left_type(binary, leftType)
     then python_set_binary_code(binary, env, module, allModules)
-    else if python_string_concat_expression(binary, leftType, env, module, allModules)
-    then "(" + python_expression_code(binary.left, env, module, allModules)
-        + " + "
-        + python_expression_code(binary.right, env, module, allModules)
-        + ")"
     else if binary.operator == ".nand."
     then "(~(" + python_expression_code(binary.left, env, module, allModules)
         + " & "
@@ -1121,18 +1118,39 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
         + ")"
     else match python_binary_runtime_helper(binary.operator) with
     case Some { helper } -> python_binary_runtime_call(helper, binary, env, module, allModules)
-    case None -> "(" + python_expression_code(binary.left, env, module, allModules)
-        + " " + binary.operator + " "
-        + python_expression_code(binary.right, env, module, allModules)
-        + ")"
+    case None ->
+        match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+        case Some { function } -> python_binary_extension_operator_code(function, binary, env, module, allModules)
+        case None -> "(" + python_expression_code(binary.left, env, module, allModules)
+            + " " + binary.operator + " "
+            + python_expression_code(binary.right, env, module, allModules)
+            + ")"
 
 /// Checks whether an expression has the string concat expression shape.
 private fun python_string_concat_expression(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if binary.operator == "+"
     then if leftType == python_string_type()
-        then python_expression_type(binary.right, env, module, allModules) == python_string_type()
+        then match binary.right with
+            case CompiledStringLiteral _ -> true
+            case _ -> python_expression_type(binary.right, env, module, allModules) == python_string_type()
         else false
     else false
+
+/// Emits Python code for a string concat expression.
+private fun python_string_concat_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "\"\".join([" + python_string_concat_items_code(expression, env, module, allModules) + "])"
+
+/// Emits flat Python code for string concat expression items.
+private fun python_string_concat_items_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledBinaryExpression binary ->
+        let leftType = python_expression_type(binary.left, env, module, allModules)
+        if python_string_concat_expression(binary, leftType, env, module, allModules)
+        then python_string_concat_items_code(binary.left, env, module, allModules)
+            + ", "
+            + python_string_concat_items_code(binary.right, env, module, allModules)
+        else python_expression_code(expression, env, module, allModules)
+    case _ -> python_expression_code(expression, env, module, allModules)
 
 /// Checks whether an operator belongs to the binary extension operator expression with left type category.
 private fun python_binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1143,13 +1161,16 @@ private fun python_binary_extension_operator_expression_with_left_type(binary: C
 /// Computes the Python type for binary extension operator code with left.
 private fun python_binary_extension_operator_code_with_left_type(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
-    case Some { function } ->
-        python_function_name(function)
-            + "("
-            + python_expression_code(binary.left, env, module, allModules)
-            + python_extension_method_argument_tail([binary.right], env, module, allModules)
-            + ")"
+    case Some { function } -> python_binary_extension_operator_code(function, binary, env, module, allModules)
     case None -> "__capy_unsupported('extension operator')"
+
+/// Emits Python code for binary extension operator.
+private fun python_binary_extension_operator_code(function: CompiledFunction, binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_function_name(function)
+        + "("
+        + python_expression_code(binary.left, env, module, allModules)
+        + python_extension_method_argument_tail([binary.right], env, module, allModules)
+        + ")"
 
 /// Emits Python runtime support source for binary runtime call.
 private fun python_binary_runtime_call(name: String, binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1834,6 +1855,28 @@ private fun python_collection_reduce_method_callable_code(receiver: CompiledExpr
         + ", "
         + python_expression_code(reducer, env, module, allModules)
         + ")"
+
+/// Emits Python code for collection reduce operator.
+private fun python_collection_reduce_operator_code(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match binary.right with
+    case CompiledTupleLiteral literal ->
+        python_collection_reduce_method_code(
+            python_collection_reduce_operator_method_call(binary, literal.values),
+            leftType,
+            env,
+            module,
+            allModules
+        )
+    case _ -> "__capy_unsupported('collection reduce operator')"
+
+/// Converts a collection reduce operator expression into a reduce method call.
+private fun python_collection_reduce_operator_method_call(binary: CompiledBinaryExpression, arguments: List[CompiledExpression]): CompiledMethodCallExpression =
+    CompiledMethodCallExpression {
+        receiver: binary.left,
+        name: "reduce",
+        arguments: arguments,
+        location: binary.location
+    }
 
 /// Computes the Python name for reduce parameters from names.
 private fun python_reduce_parameters_from_names(accumulatorName: String, keyName: String, valueName: String): String =
@@ -3979,6 +4022,8 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     let leftType = python_expression_type(binary.left, env, module, allModules)
     if python_result_reduce_operator_expression_with_left_type(binary, leftType)
     then python_result_reduce_operator_type(binary, env, module, allModules)
+    else if python_collection_reduce_operator_expression_with_left_type(binary, leftType)
+    then python_collection_reduce_operator_type(binary, env, module, allModules)
     else if python_async_pipe_expression_with_left_type(binary, leftType)
     then python_async_type()
     else if python_result_pipe_expression_with_left_type(binary, leftType)
@@ -3993,22 +4038,30 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     then python_regex_binary_expression_type(binary.operator)
     else if python_set_binary_expression_with_left_type(binary, leftType)
     then python_set_binary_expression_type(binary)
-    else match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    else if binary.operator == "+" & leftType == python_string_type()
+    then python_string_type()
+    else if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
+    then python_bool_type()
+    else if python_numeric_binary_operator(binary.operator) | binary.operator == "+"
+    then python_numeric_or_string_binary_expression_type(binary, leftType, env, module, allModules)
+    else python_binary_extension_operator_type(binary, leftType, module, allModules)
+
+/// Infers the expression type for numeric or right-string binary.
+private fun python_numeric_or_string_binary_expression_type(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let rightType = python_expression_type(binary.right, env, module, allModules)
+    if binary.operator == "+" & rightType == python_string_type()
+    then python_string_type()
+    else if python_numeric_binary_operator(binary.operator)
+    then if python_numeric_type(leftType)
+        then if python_numeric_type(rightType) then python_promoted_numeric_type(leftType, rightType) else python_unknown_type()
+        else python_unknown_type()
+    else python_unknown_type()
+
+/// Infers the expression type for extension operator fallback.
+private fun python_binary_extension_operator_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> function.returnType.name
-    case None ->
-        if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
-        then python_bool_type()
-        else if binary.operator == "+" & leftType == "String"
-        then python_string_type()
-        else
-            let rightType = python_expression_type(binary.right, env, module, allModules)
-            if binary.operator == "+" & rightType == "String"
-            then python_string_type()
-            else if python_numeric_binary_operator(binary.operator)
-            then if python_numeric_type(leftType)
-                then if python_numeric_type(rightType) then python_promoted_numeric_type(leftType, rightType) else python_unknown_type()
-                else python_unknown_type()
-            else python_unknown_type()
+    case None -> python_unknown_type()
 
 /// Checks whether an operator belongs to the binary operator category.
 private fun python_bool_binary_operator(operator: String): bool =
@@ -4204,18 +4257,48 @@ private fun python_collection_pipe_operator(operator: String): bool =
 
 /// Checks whether a type reference matches the collection pipe receiver type rule.
 private fun python_collection_pipe_receiver_type(type: String): bool =
-    type == python_unknown_type()
-        | type == python_list_type()
-        | type == python_set_type()
-        | type == python_string_type()
-        | type == python_seq_type()
-        | type == python_dict_type()
+    let baseType = python_type_unqualified_name(type)
+    baseType == python_unknown_type()
+        | baseType == python_list_type()
+        | baseType == python_set_type()
+        | baseType == python_string_type()
+        | baseType == python_seq_type()
+        | baseType == python_dict_type()
 
 /// Computes the Python type for collection pipe result.
 private fun python_collection_pipe_result_type(operator: String, leftType: String): String =
     if leftType == python_dict_type() & operator != "|*"
     then python_dict_type()
     else python_seq_type()
+
+/// Checks whether an operator belongs to the collection reduce operator expression with left type category.
+private fun python_collection_reduce_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    binary.operator == "|>"
+        & python_collection_pipe_receiver_type(leftType)
+
+/// Checks whether collection reduce operator arguments are supported by the current backend.
+private fun python_collection_reduce_operator_arguments_shape(expression: CompiledExpression, leftType: String): bool =
+    match expression with
+    case CompiledTupleLiteral literal ->
+        if python_two_method_arguments(literal.values)
+        then match literal.values[1] with
+            case Some { reducer } -> python_collection_reduce_operator_reducer_shape(reducer, leftType)
+            case None -> false
+        else false
+    case _ -> false
+
+/// Checks whether collection reduce operator reducer is supported by the current backend.
+private fun python_collection_reduce_operator_reducer_shape(reducer: CompiledExpression, leftType: String): bool =
+    match reducer with
+    case CompiledLambdaExpression lambda -> python_collection_reduce_lambda_parameters_supported(lambda.parameters, leftType)
+    case CompiledFunctionReferenceExpression _ -> true
+    case _ -> false
+
+/// Computes the Python type for collection reduce operator.
+private fun python_collection_reduce_operator_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match binary.right with
+    case CompiledTupleLiteral literal -> python_first_method_argument_type(literal.values, env, module, allModules)
+    case _ -> python_unknown_type()
 
 /// Checks whether a type reference matches the result pipe expression with left type rule.
 private fun python_result_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
@@ -7753,6 +7836,8 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
     let leftType = python_expression_type(binary.left, env, module, allModules)
     if python_result_reduce_operator_expression_with_left_type(binary, leftType)
     then python_result_reduce_operator_gatherable(binary, env, module, allModules)
+    else if python_collection_reduce_operator_expression_with_left_type(binary, leftType)
+    then python_collection_reduce_operator_gatherable(binary, leftType, env, module, allModules)
     else if python_async_pipe_expression_with_left_type(binary, leftType)
     then python_async_pipe_gatherable(binary, env, module, allModules)
     else if python_result_pipe_expression_with_left_type(binary, leftType)
@@ -7809,6 +7894,13 @@ private fun python_result_reduce_operator_gatherable(binary: CompiledBinaryExpre
         if python_expression_gatherable(binary.left, env, module, allModules)
         then python_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
         else false
+    case _ -> false
+
+/// Checks whether collection reduce operator can be included in generated test gathering.
+private fun python_collection_reduce_operator_gatherable(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match binary.right with
+    case CompiledTupleLiteral literal ->
+        python_collection_reduce_method_gatherable(python_collection_reduce_operator_method_call(binary, literal.values), leftType, env, module, allModules)
     case _ -> false
 
 /// Checks whether option pipe can be included in generated test gathering.

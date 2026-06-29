@@ -17,6 +17,50 @@ import static org.assertj.core.api.Assertions.fail;
 
 class CapybaraCompilerLibrariesIntegrationTest {
     @Test
+    void shouldCompileExplicitEnumValueImportsFromParsedModules() {
+        var enumSource = """
+                enum SourceKind {
+                    FUNCTIONAL,
+                    OBJECT_ORIENTED,
+                }
+                """;
+        var consumerSource = """
+                from /dev/capylang/compiler/parser/SourceKind import { FUNCTIONAL, OBJECT_ORIENTED }
+
+                fun functional(): SourceKind = FUNCTIONAL
+                fun object_oriented(): SourceKind = OBJECT_ORIENTED
+                """;
+
+        var program = compileProgram(List.of(
+                rawModule("SourceKind", "/dev/capylang/compiler/parser", enumSource),
+                rawModule("RawModuleFactory", "/dev/capylang/compiler/parser", consumerSource)
+        ), new LinkedHashSet<>());
+
+        assertThat(program.modules())
+                .extracting(CompiledModule::name)
+                .contains("SourceKind", "RawModuleFactory");
+    }
+
+    @Test
+    void shouldCompileStandardRecursiveFunctionAnnotationImport() {
+        var source = """
+                from /capy/meta_prog/Recursive import { Recursive }
+
+                @Recursive
+                fun sum(values: List[int], acc: int): int =
+                    match values[0] with
+                    case None -> acc
+                    case Some { value } -> sum(values[1:], acc + value)
+                """;
+
+        var program = compileProgram(List.of(rawModule("RecursiveUser", "/foo/app", source)), new LinkedHashSet<>());
+
+        assertThat(program.modules())
+                .extracting(CompiledModule::name)
+                .contains("RecursiveUser");
+    }
+
+    @Test
     void shouldGenerateJavaReferencingLibraryWithoutEmittingIt() {
         var librarySource = """
                 data Message { value: String }
