@@ -565,13 +565,86 @@ private fun java_system_module_code(module: CompiledModule): String =
     + "    public static capy.lang.Effect<java.lang.Long> nanoTime() {" + newline()
     + "        return capy.lang.Effect.delay(() -> java.lang.System.nanoTime());" + newline()
     + "    }" + newline() + newline()
-    + "    public static capy.lang.Effect<java.lang.Long> current_millis__3_0() {" + newline()
-    + "        return currentMillis();" + newline()
+    + "    public static capy.lang.Effect<java.util.Optional<java.lang.String>> systemProperty(java.lang.String name) {" + newline()
+    + "        return capy.lang.Effect.delay(() -> {" + newline()
+    + "            if (name == null || name.isEmpty()) {" + newline()
+    + "                return java.util.Optional.empty();" + newline()
+    + "            }" + newline()
+    + "            try {" + newline()
+    + "                return java.util.Optional.ofNullable(java.lang.System.getProperty(name));" + newline()
+    + "            } catch (java.lang.IllegalArgumentException | java.lang.SecurityException e) {" + newline()
+    + "                return java.util.Optional.empty();" + newline()
+    + "            }" + newline()
+    + "        });" + newline()
     + "    }" + newline() + newline()
-    + "    public static capy.lang.Effect<java.lang.Long> nano_time__8_0() {" + newline()
-    + "        return nanoTime();" + newline()
-    + "    }" + newline()
+    + "    public static capy.lang.Effect<java.util.Optional<java.lang.String>> setSystemProperty(java.lang.String name, java.lang.String value) {" + newline()
+    + "        return capy.lang.Effect.delay(() -> {" + newline()
+    + "            if (name == null || name.isEmpty() || value == null) {" + newline()
+    + "                return java.util.Optional.empty();" + newline()
+    + "            }" + newline()
+    + "            try {" + newline()
+    + "                return java.util.Optional.ofNullable(java.lang.System.setProperty(name, value));" + newline()
+    + "            } catch (java.lang.IllegalArgumentException | java.lang.NullPointerException | java.lang.SecurityException e) {" + newline()
+    + "                return java.util.Optional.empty();" + newline()
+    + "            }" + newline()
+    + "        });" + newline()
+    + "    }" + newline() + newline()
+    + "    public static capy.lang.Effect<java.util.Optional<java.lang.String>> clearSystemProperty(java.lang.String name) {" + newline()
+    + "        return capy.lang.Effect.delay(() -> {" + newline()
+    + "            if (name == null || name.isEmpty()) {" + newline()
+    + "                return java.util.Optional.empty();" + newline()
+    + "            }" + newline()
+    + "            try {" + newline()
+    + "                return java.util.Optional.ofNullable(java.lang.System.clearProperty(name));" + newline()
+    + "            } catch (java.lang.IllegalArgumentException | java.lang.NullPointerException | java.lang.SecurityException e) {" + newline()
+    + "                return java.util.Optional.empty();" + newline()
+    + "            }" + newline()
+    + "        });" + newline()
+    + "    }" + newline() + newline()
+    + java_system_aliases(module.functions)
     + "}" + newline()
+
+/// Emits generated aliases for public System functions.
+private fun java_system_aliases(functions: List[CompiledFunction]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } -> java_system_alias(function) + java_system_aliases(functions[1:])
+
+/// Emits a generated alias for a public System function.
+private fun java_system_alias(function: CompiledFunction): String =
+    if function.name == "current_millis"
+    then "    public static capy.lang.Effect<java.lang.Long> " + java_function_name(function) + "() {" + newline()
+        + "        return currentMillis();" + newline()
+        + "    }" + newline() + newline()
+    else if function.name == "nano_time"
+    then "    public static capy.lang.Effect<java.lang.Long> " + java_function_name(function) + "() {" + newline()
+        + "        return nanoTime();" + newline()
+        + "    }" + newline() + newline()
+    else if function.name == "system_property"
+    then "    public static capy.lang.Effect<java.util.Optional<java.lang.String>> " + java_function_name(function) + "(java.lang.String " + java_identifier(java_first_function_parameter_name(function)) + ") {" + newline()
+        + "        return systemProperty(" + java_identifier(java_first_function_parameter_name(function)) + ");" + newline()
+        + "    }" + newline() + newline()
+    else if function.name == "set_system_property"
+    then "    public static capy.lang.Effect<java.util.Optional<java.lang.String>> " + java_function_name(function) + "(java.lang.String " + java_identifier(java_first_function_parameter_name(function)) + ", java.lang.String " + java_identifier(java_second_function_parameter_name(function)) + ") {" + newline()
+        + "        return setSystemProperty(" + java_identifier(java_first_function_parameter_name(function)) + ", " + java_identifier(java_second_function_parameter_name(function)) + ");" + newline()
+        + "    }" + newline() + newline()
+    else if function.name == "clear_system_property"
+    then "    public static capy.lang.Effect<java.util.Optional<java.lang.String>> " + java_function_name(function) + "(java.lang.String " + java_identifier(java_first_function_parameter_name(function)) + ") {" + newline()
+        + "        return clearSystemProperty(" + java_identifier(java_first_function_parameter_name(function)) + ");" + newline()
+        + "    }" + newline() + newline()
+    else ""
+
+/// Returns the first function parameter name.
+private fun java_first_function_parameter_name(function: CompiledFunction): String =
+    match function.parameters[0] with
+    case None -> "value"
+    case Some { parameter } -> parameter.name
+
+/// Returns the second function parameter name.
+private fun java_second_function_parameter_name(function: CompiledFunction): String =
+    match function.parameters[1] with
+    case None -> "value"
+    case Some { parameter } -> parameter.name
 
 /// Emits private Java functional interfaces needed for higher-arity Capybara function values.
 private fun java_function_type_interfaces(): String =
@@ -3696,6 +3769,8 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then
         let valueType = if expectedType.name == "Effect" then first_type_argument(expectedType) else expression_type(argument(call.arguments, 0), env, module, allModules)
         "capy.lang.Effect.pure(" + expression_code(argument(call.arguments, 0), env, valueType, module, allModules) + ")"
+    else if stdlib_system_property_call(call, module)
+    then stdlib_system_property_call_code(call, env, module, allModules)
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_code(call.name)
     else if async_function_call(call, module)
@@ -8028,6 +8103,8 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then effect_type(expression_type(argument(call.arguments, 0), env, module, allModules))
     else if async_function_call(call, module)
     then async_function_call_type(call, env, module, allModules)
+    else if stdlib_system_property_call(call, module)
+    then stdlib_system_property_call_type()
     else if stdlib_effect_function_call(call, module)
     then stdlib_effect_function_call_type(call.name)
     else if result_error_function_call(call, module)
@@ -8741,6 +8818,54 @@ private fun delay_call_type(arguments: List[CompiledExpression], env: List[JavaB
         match expression with
         case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, lambda_env(lambda.parameters, env), module, allModules))
         case _ -> effect_type(object_type())
+
+/// Checks whether a function matches the standard-library system property call metadata.
+private fun stdlib_system_property_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    if call.name == "system_property"
+    then one_method_argument(call.arguments)
+        & !function_defined(call.name, module.functions)
+        & system_member_imported("system_property", module.imports)
+    else if call.name == "set_system_property"
+    then two_method_arguments(call.arguments)
+        & !function_defined(call.name, module.functions)
+        & system_member_imported("set_system_property", module.imports)
+    else if call.name == "clear_system_property"
+    then one_method_argument(call.arguments)
+        & !function_defined(call.name, module.functions)
+        & system_member_imported("clear_system_property", module.imports)
+    else false
+
+/// Emits generated code for standard-library system property call.
+private fun stdlib_system_property_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "system_property"
+    then "capy.lang.System.systemProperty("
+            + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+            + ")"
+    else if call.name == "set_system_property"
+    then "capy.lang.System.setSystemProperty("
+            + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+            + ", "
+            + expression_code(argument(call.arguments, 1), env, string_type(), module, allModules)
+            + ")"
+    else "capy.lang.System.clearSystemProperty("
+            + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+            + ")"
+
+/// Computes the compiled type for standard-library system property call.
+private fun stdlib_system_property_call_type(): CompiledTypeReference =
+    effect_type(option_type(string_type()))
+
+/// Checks whether a standard-library system property call can be emitted by the Java backend.
+private fun stdlib_system_property_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "system_property"
+    then one_method_argument(call.arguments)
+        & typed_argument_emittable(argument(call.arguments, 0), string_type(), env, module, allModules)
+    else if call.name == "set_system_property"
+    then two_method_arguments(call.arguments)
+        & typed_argument_emittable(argument(call.arguments, 0), string_type(), env, module, allModules)
+        & typed_argument_emittable(argument(call.arguments, 1), string_type(), env, module, allModules)
+    else one_method_argument(call.arguments)
+        & typed_argument_emittable(argument(call.arguments, 0), string_type(), env, module, allModules)
 
 /// Checks whether a function matches the standard-library effect function call metadata.
 private fun stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
@@ -11400,6 +11525,8 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
             else false
     else if async_function_call(call, module)
     then async_function_call_emittable(call, env, module, allModules)
+    else if stdlib_system_property_call(call, module)
+    then stdlib_system_property_call_emittable(call, env, module, allModules)
     else if stdlib_effect_function_call(call, module)
     then true
     else if result_error_function_call(call, module)
@@ -11524,7 +11651,7 @@ private fun function_defined(name: String, functions: List[CompiledFunction]): b
     match functions[0] with
     case None -> false
     case Some { function } ->
-        if function.name == name & !compiled_constant(function)
+        if !java_skip_function(function) & function.name == name & !compiled_constant(function)
         then true
         else function_defined(name, functions[1:])
 

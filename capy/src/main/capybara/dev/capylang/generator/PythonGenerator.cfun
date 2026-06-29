@@ -726,9 +726,26 @@ private fun python_function_body(function: CompiledFunction, env: List[PythonBin
     match nativeProviderScope.declarations.get(function.name) with
     case Some { declaration } -> python_native_provider_function_body(declaration, function.returnType, nativeProviderScope)
     case None ->
-        if python_async_native_function(function, module)
+        if python_system_property_native_function(function, module)
+        then "    return " + python_system_property_native_function_body(function) + python_newline()
+        else if python_async_native_function(function, module)
         then "    return " + python_async_native_function_body(function) + python_newline()
         else python_return_statement(function.body, env, module, allModules, "    ", function.returnType)
+
+/// Checks whether a function is a System native runtime wrapper.
+private fun python_system_property_native_function(function: CompiledFunction, module: CompiledModule): bool =
+    module.path == "capy/lang"
+        & module.name == "System"
+        & (function.name == "system_property" | function.name == "set_system_property" | function.name == "clear_system_property")
+        & python_native_placeholder_function(function)
+
+/// Emits the System property native runtime wrapper body.
+private fun python_system_property_native_function_body(function: CompiledFunction): String =
+    if function.name == "system_property"
+    then "__capy_system_property(" + python_identifier(python_first_function_parameter_name(function)) + ")"
+    else if function.name == "set_system_property"
+    then "__capy_set_system_property(" + python_identifier(python_first_function_parameter_name(function)) + ", " + python_identifier(python_second_function_parameter_name(function)) + ")"
+    else "__capy_clear_system_property(" + python_identifier(python_first_function_parameter_name(function)) + ")"
 
 /// Checks whether a function is an Async native runtime wrapper.
 private fun python_async_native_function(function: CompiledFunction, module: CompiledModule): bool =
@@ -744,6 +761,12 @@ private fun python_async_native_function_body(function: CompiledFunction): Strin
 /// Returns the first function parameter name.
 private fun python_first_function_parameter_name(function: CompiledFunction): String =
     match function.parameters[0] with
+    case Some { parameter } -> parameter.name
+    case None -> "value"
+
+/// Returns the second function parameter name.
+private fun python_second_function_parameter_name(function: CompiledFunction): String =
+    match function.parameters[1] with
     case Some { parameter } -> parameter.name
     case None -> "value"
 
@@ -1196,7 +1219,9 @@ private fun python_unary_expression_code(unary: CompiledUnaryExpression, env: Li
 
 /// Emits Python code for function call.
 private fun python_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_stdlib_effect_function_call(call, module)
+    if python_stdlib_system_property_call(call, module)
+    then python_stdlib_system_property_call_code(call, env, module, allModules)
+    else if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_function_call_code(call.name)
     else if python_stdlib_parse_function_call(call, module)
     then python_stdlib_parse_function_call_code(call, env, module, allModules)
@@ -3365,7 +3390,9 @@ private fun python_user_defined_index_type(receiverType: String, module: Compile
 
 /// Infers the expression type for function call.
 private fun python_function_call_expression_type(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_stdlib_effect_function_call(call, module)
+    if python_stdlib_system_property_call(call, module)
+    then python_effect_type()
+    else if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_function_call_type(call.name)
     else if python_object_type_function_call(call, module, allModules)
     then python_object_type_function_call_type(call, module, allModules)
@@ -3439,6 +3466,38 @@ private fun python_stdlib_effect_function_call_by_name(name: String, module: Com
     else if name == "now"
     then !python_local_function_exists(name, module.functions) & python_clock_member_imported("now", module.imports)
     else false
+
+/// Checks whether a function matches the standard-library system property call metadata.
+private fun python_stdlib_system_property_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    if call.name == "system_property"
+    then python_one_method_argument(call.arguments)
+        & !python_local_function_exists(call.name, module.functions)
+        & python_system_member_imported("system_property", module.imports)
+    else if call.name == "set_system_property"
+    then python_two_method_arguments(call.arguments)
+        & !python_local_function_exists(call.name, module.functions)
+        & python_system_member_imported("set_system_property", module.imports)
+    else if call.name == "clear_system_property"
+    then python_one_method_argument(call.arguments)
+        & !python_local_function_exists(call.name, module.functions)
+        & python_system_member_imported("clear_system_property", module.imports)
+    else false
+
+/// Emits Python code for standard-library system property call.
+private fun python_stdlib_system_property_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if call.name == "system_property"
+    then "__capy_system_property("
+            + python_first_method_argument_code(call.arguments, env, module, allModules)
+            + ")"
+    else if call.name == "set_system_property"
+    then "__capy_set_system_property("
+            + python_first_method_argument_code(call.arguments, env, module, allModules)
+            + ", "
+            + python_second_method_argument_code(call.arguments, env, module, allModules)
+            + ")"
+    else "__capy_clear_system_property("
+            + python_first_method_argument_code(call.arguments, env, module, allModules)
+            + ")"
 
 /// Emits Python code for standard-library effect function call.
 private fun python_stdlib_effect_function_call_code(name: String): String =
@@ -3749,7 +3808,9 @@ private fun python_effect_payload_type(expression: CompiledExpression, env: List
 
 /// Emits Python expression text for effect payload type from function call.
 private fun python_effect_payload_type_from_function_call(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_stdlib_effect_function_call(call, module)
+    if python_stdlib_system_property_call(call, module)
+    then python_option_type()
+    else if python_stdlib_effect_function_call(call, module)
     then python_stdlib_effect_payload_type(call.name)
     else match python_find_object_class_in_scope(call.name, module, allModules) with
     case Some { binding } -> python_object_type_name(binding.module, binding.objectClass.name)
@@ -5672,7 +5733,7 @@ private fun python_test_runtime_header_code(): String =
     + "import time" + python_newline()
     + "import traceback" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_system_property', '__capy_set_system_property', '__capy_clear_system_property', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_as_list', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime effect.
@@ -5790,6 +5851,38 @@ private fun python_test_runtime_effect_code(): String =
     + python_newline()
     + "def __capy_nano_time():" + python_newline()
     + "    return Effect.delay(lambda: __capy_long(time.monotonic_ns()))" + python_newline()
+    + python_newline()
+    + "__capy_system_properties = dict()" + python_newline()
+    + python_newline()
+    + "def __capy_system_property(name):" + python_newline()
+    + "    def __capy_read_system_property():" + python_newline()
+    + "        if name is None or name == '':" + python_newline()
+    + "            return __capy_data('None', dict())" + python_newline()
+    + "        if name in __capy_system_properties:" + python_newline()
+    + "            return __capy_data('Some', dict(value=__capy_system_properties[name]))" + python_newline()
+    + "        return __capy_data('None', dict())" + python_newline()
+    + "    return Effect.delay(__capy_read_system_property)" + python_newline()
+    + python_newline()
+    + "def __capy_set_system_property(name, value):" + python_newline()
+    + "    def __capy_write_system_property():" + python_newline()
+    + "        if name is None or name == '' or value is None:" + python_newline()
+    + "            return __capy_data('None', dict())" + python_newline()
+    + "        previous = __capy_system_properties.get(name)" + python_newline()
+    + "        __capy_system_properties[name] = value" + python_newline()
+    + "        if previous is None:" + python_newline()
+    + "            return __capy_data('None', dict())" + python_newline()
+    + "        return __capy_data('Some', dict(value=previous))" + python_newline()
+    + "    return Effect.delay(__capy_write_system_property)" + python_newline()
+    + python_newline()
+    + "def __capy_clear_system_property(name):" + python_newline()
+    + "    def __capy_clear_property():" + python_newline()
+    + "        if name is None or name == '':" + python_newline()
+    + "            return __capy_data('None', dict())" + python_newline()
+    + "        if name not in __capy_system_properties:" + python_newline()
+    + "            return __capy_data('None', dict())" + python_newline()
+    + "        previous = __capy_system_properties.pop(name)" + python_newline()
+    + "        return __capy_data('Some', dict(value=previous))" + python_newline()
+    + "    return Effect.delay(__capy_clear_property)" + python_newline()
     + python_newline()
     + "def __capy_clock_now():" + python_newline()
     + "    def __capy_run_clock_now():" + python_newline()
@@ -7765,7 +7858,9 @@ private fun python_unary_operator_gatherable(operator: String): bool =
 /// Checks whether function call can be included in generated test gathering.
 private fun python_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_expressions_gatherable(call.arguments, env, module, allModules)
-    then if python_stdlib_effect_function_call(call, module)
+    then if python_stdlib_system_property_call(call, module)
+        then true
+        else if python_stdlib_effect_function_call(call, module)
         then true
         else if python_runtime_function(call.name)
         then true
@@ -7986,6 +8081,13 @@ private fun python_local_function_count_at_most(name: String, functions: List[Co
         if !python_skip_function(function) & function.name == name
         then 1 + python_local_function_count_at_most(name, functions[1:], limit - 1)
         else python_local_function_count_at_most(name, functions[1:], limit)
+
+/// Checks whether a local function with the given name was declared without running generation filters.
+private fun python_local_function_declared(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        function.name == name | python_local_function_declared(name, functions[1:])
 
 /// Collects imported function exists visible to the current module.
 private fun python_imported_function_exists(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =

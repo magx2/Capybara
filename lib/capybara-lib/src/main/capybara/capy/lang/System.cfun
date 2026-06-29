@@ -1,4 +1,5 @@
 from /capy/lang/Effect import { * }
+from /capy/lang/Option import { Option }
 
 /// Returns an effect that reads the current system time in milliseconds since the Unix epoch.
 ///
@@ -9,3 +10,18 @@ fun current_millis(): Effect[long] = <native>
 ///
 /// Use this for measuring elapsed durations, not for wall-clock timestamps.
 fun nano_time(): Effect[long] = <native>
+
+/// Returns an effect that reads a system property by name.
+///
+/// Missing, empty, or inaccessible properties return `None`.
+fun system_property(name: String): Effect[Option[String]] = <native>
+
+/// Returns an effect that sets a system property and returns its previous value.
+///
+/// Missing previous values, empty names, or inaccessible properties return `None`.
+fun set_system_property(name: String, value: String): Effect[Option[String]] = <native>
+
+/// Returns an effect that clears a system property and returns its previous value.
+///
+/// Missing previous values, empty names, or inaccessible properties return `None`.
+fun clear_system_property(name: String): Effect[Option[String]] = <native>
