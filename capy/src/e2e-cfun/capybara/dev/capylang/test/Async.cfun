@@ -9,6 +9,13 @@ fun async_value(): Effect[int] =
     case Success { value } -> value
     case Error _ -> -1
 
+fun async_compute_value(): Effect[int] =
+    let task = compute(() => 40 + 2)
+    let result <- task.join()
+    match result with
+    case Success { value } -> value
+    case Error _ -> -1
+
 fun async_failure_kind(): Effect[String] =
     let task = delay(() => portable_failure()).start()
     let result <- task.join()

@@ -7,6 +7,7 @@ from /capy/test/CapyTest import { * }
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/Async.cfun", [
         should_join_started_effect().map(assertion => test("should join started effect", () => assertion)),
+        should_compute_async_value().map(assertion => test("should compute async value", () => assertion)),
         should_join_all_started_effects().map(assertion => test("should join all started effects", () => assertion)),
         should_join_all_started_effects_with_failures().map(assertion => test("should join all started effects with failures", () => assertion)),
         should_join_first_completed_effect().map(assertion => test("should join first completed effect", () => assertion)),
@@ -25,6 +26,11 @@ fun should_join_started_effect(): Effect[Assert] =
     match result with
     case Success { value } -> assert_that(value).is_equal_to(42)
     case Error _ -> assert_that(false).is_true()
+
+fun should_compute_async_value(): Effect[Assert] =
+    let task = compute(() => 40 + 2)
+    let result <- task.join()
+    assert_that(result).succeeds(42)
 
 fun should_join_all_started_effects(): Effect[Assert] =
     let first = pure(1).start()

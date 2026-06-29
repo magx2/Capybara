@@ -1,9 +1,14 @@
+from /capy/lang/Effect import { * }
 from /capy/lang/Result import { Result }
 
 /// Handle for an Effect that has been started by the host runtime.
 ///
 /// Async values are inert handles. Observing completion is an Effect.
 data Async[T] { <native> }
+
+/// Starts a deferred computation on the host runtime's asynchronous execution facility.
+fun compute(fn: () => T): Async[T] =
+    delay(fn).start()
 
 /// Waits for all asynchronous computations and preserves every Result in input order.
 fun all(tasks: List[Async[T]]): /capy/lang/Effect[List[Result[T]]] = <native>

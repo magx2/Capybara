@@ -6,6 +6,7 @@ from Async import { * }
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/Async.cfun", [
         async_value().map(assertion => test("async value", () => assert_that(assertion).is_equal_to(42))),
+        async_compute_value().map(assertion => test("async compute value", () => assert_that(assertion).is_equal_to(42))),
         async_failure_kind().map(assertion => test("async failure kind", () => assert_that(assertion).is_equal_to("capy.lang.async.failed"))),
         async_all_values().map(assertion => test("async all values", () => assert_that(assertion).is_equal_to([1, 2]))),
         async_all_failure_kinds().map(assertion => test("async all failure kinds", () => assert_that(assertion).is_equal_to(["success", "capy.lang.async.failed"]))),
