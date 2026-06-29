@@ -65,6 +65,11 @@ read_text(path).flat_map(result =>
 Transforms the produced value without executing the effect immediately.
 
 
+===== fun Effect[T].start(): xref:../../capy/lang/Async.adoc#type-Async[Async]&#91;T&#93;
+
+Starts this Effect on the host runtime's asynchronous execution facility.
+
+
 ===== fun Effect[T].unsafe_run(): T
 
 Executes the effect immediately and returns its value.

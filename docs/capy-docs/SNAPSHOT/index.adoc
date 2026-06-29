@@ -31,6 +31,7 @@
 
 ==== lang
 
+* xref:capy/lang/Async.adoc[Async]
 * xref:capy/lang/BoundedNumber.adoc[BoundedNumber]
 * xref:capy/lang/Effect.adoc[Effect]
 * xref:capy/lang/Either.adoc[Either]
