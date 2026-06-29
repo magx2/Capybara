@@ -103,6 +103,7 @@ private fun java_script_runtime_excluded_symbols(module: CompiledModule): List[S
 private fun java_script_runtime_symbol_names(): List[String] =
     [
         "Effect",
+        "Async",
         "pure",
         "delay",
         "print",
@@ -216,6 +217,12 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_data_fields",
         "__capy_as_list",
         "to_seq",
+        "__capy_async_start",
+        "__capy_async_join",
+        "__capy_async_all",
+        "__capy_async_any",
+        "__capy_async_map",
+        "__capy_async_flat_map",
         "__capy_seq_map",
         "__capy_seq_filter",
         "__capy_seq_flat_map",
@@ -1183,7 +1190,27 @@ private fun java_script_function(function: CompiledFunction, module: CompiledMod
 private fun java_script_function_body_expression(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
     match java_script_find_native_provider_declaration(function, module, nativeProviderCatalog.declarations) with
     case Some { declaration } -> java_script_native_provider_function_body(declaration, function.returnType, nativeProviderCatalog)
-    case None -> java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
+    case None ->
+        if java_script_async_native_function(function, module)
+        then java_script_async_native_function_body(function)
+        else java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
+
+/// Checks whether a function is an Async native runtime wrapper.
+private fun java_script_async_native_function(function: CompiledFunction, module: CompiledModule): bool =
+    module.path == "capy/lang"
+        & module.name == "Async"
+        & (function.name == "all" | function.name == "any")
+        & java_script_native_function_body(function)
+
+/// Emits the Async native runtime wrapper body.
+private fun java_script_async_native_function_body(function: CompiledFunction): String =
+    "__capy_async_" + function.name + "(" + java_script_identifier(first_function_parameter_name(function)) + ")"
+
+/// Returns the first function parameter name.
+private fun first_function_parameter_name(function: CompiledFunction): String =
+    match function.parameters[0] with
+    case Some { parameter } -> parameter.name
+    case None -> "value"
 
 /// Finds a native provider declaration in scope, imports, or compiled modules.
 private fun java_script_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
@@ -1610,6 +1637,8 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
     then java_script_collection_reduce_operator_code(binary, env, module, allModules)
     else if java_script_collection_pipe_chained_method_expression_with_left_type(binary, leftType)
     then java_script_method_call_code(java_script_collection_pipe_chained_method_call(binary), env, module, allModules)
+    else if java_script_async_pipe_expression_with_left_type(binary, leftType)
+    then java_script_async_pipe_code(binary, env, module, allModules)
     else if java_script_result_pipe_expression_with_left_type(binary, leftType)
     then java_script_result_pipe_code(binary, env, module, allModules)
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
@@ -1734,6 +1763,21 @@ private fun java_script_result_pipe_code(binary: CompiledBinaryExpression, env: 
         + java_script_result_callable_code(binary.left, binary.right, env, module, allModules)
         + ")"
 
+/// Emits JavaScript code for async pipe.
+private fun java_script_async_pipe_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_async_pipe_helper(binary.operator)
+        + "("
+        + java_script_expression_code(binary.left, env, module, allModules)
+        + ", "
+        + java_script_expression_code(binary.right, env, module, allModules)
+        + ")"
+
+/// Emits JavaScript runtime helper source for async pipe helper.
+private fun java_script_async_pipe_helper(operator: String): String =
+    if operator == "|*"
+    then "__capy_async_flat_map"
+    else "__capy_async_map"
+
 /// Emits JavaScript code for result reduce operator.
 private fun java_script_result_reduce_operator_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match binary.right with
@@ -1833,6 +1877,12 @@ private fun java_script_result_reduce_error_callable_code(arguments: List[Compil
 private fun java_script_result_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
     java_script_result_pipe_operator(binary.operator)
         & java_script_result_pipe_receiver_type(leftType)
+        & java_script_callable_expression(binary.right)
+
+/// Checks whether a type reference matches the async pipe expression with left type rule.
+private fun java_script_async_pipe_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
+    java_script_result_pipe_operator(binary.operator)
+        & java_script_type_unqualified_name(leftType) == "Async"
         & java_script_callable_expression(binary.right)
 
 /// Checks whether an operator belongs to the result reduce operator expression with left type category.
@@ -2172,6 +2222,12 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
     then "__capy_as_list(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
     else if java_script_collection_first_call(call, env, module, allModules)
     then java_script_collection_first_call_code(call, env, module, allModules)
+    else if java_script_effect_start_method_call(call, env, module, allModules)
+    then "__capy_async_start(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_async_join_method_call(call, env, module, allModules)
+    then "__capy_async_join(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    else if java_script_async_map_method_call(call, env, module, allModules)
+    then java_script_async_pipe_code(java_script_async_map_method_binary(call), env, module, allModules)
     else if java_script_collection_method_call(call, env, module, allModules)
     then java_script_collection_method_call_code(call, env, module, allModules)
     else if java_script_collection_reduce_method_call(call, env, module, allModules)
@@ -2419,6 +2475,37 @@ private fun java_script_effect_method_call(call: CompiledMethodCallExpression, e
         then java_script_expression_type(call.receiver, env, module, allModules) == "Effect"
         else false
     else false
+
+private fun java_script_effect_start_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "start"
+    then call.arguments.is_empty()
+        & java_script_expression_type(call.receiver, env, module, allModules) == "Effect"
+    else false
+
+private fun java_script_async_join_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "join"
+    then call.arguments.is_empty()
+        & java_script_expression_type(call.receiver, env, module, allModules) == "Async"
+    else false
+
+private fun java_script_async_map_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if java_script_async_map_method_name(call.name)
+    then
+        if java_script_single_callable_argument(call.arguments)
+        then java_script_expression_type(call.receiver, env, module, allModules) == "Async"
+        else false
+    else false
+
+private fun java_script_async_map_method_name(name: String): bool =
+    name == "map" | name == "flat_map" | name == "`|`" | name == "`|*`"
+
+private fun java_script_async_map_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
+    CompiledBinaryExpression {
+        operator: if call.name == "flat_map" | call.name == "`|*`" then "|*" else "|",
+        left: call.receiver,
+        right: java_script_first_method_argument(call.arguments),
+        location: call.location
+    }
 
 /// Checks whether a call has the collection predicate call shape.
 private fun java_script_collection_predicate_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3024,6 +3111,12 @@ private fun java_script_first_method_argument_code(arguments: List[CompiledExpre
     match arguments[0] with
     case None -> "undefined"
     case Some { argument } -> java_script_expression_code(argument, env, module, allModules)
+
+/// Resolves the first method argument expression.
+private fun java_script_first_method_argument(arguments: List[CompiledExpression]): CompiledExpression =
+    match arguments[0] with
+    case None -> java_script_missing_argument()
+    case Some { argument } -> argument
 
 /// Emits JavaScript code for second method argument.
 private fun java_script_second_method_argument_code(arguments: List[CompiledExpression], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4031,7 +4124,13 @@ private fun java_script_effect_binding_payload_type(expression: CompiledExpressi
         if java_script_oo_constructor_call(call.name, module, allModules)
         then java_script_oo_constructor_call_payload_type(call.name, module, allModules)
         else java_script_effect_payload_type_from_function_call(call.name, module, allModules)
+    case CompiledMethodCallExpression call -> java_script_effect_payload_type_from_method_call(call, env, module, allModules)
     case _ -> java_script_unknown_type()
+
+private fun java_script_effect_payload_type_from_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_async_join_method_call(call, env, module, allModules)
+    then "Result"
+    else java_script_unknown_type()
 
 /// Emits JavaScript expression text for effect payload type from function call.
 private fun java_script_effect_payload_type_from_function_call(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4097,6 +4196,8 @@ private fun java_script_binary_expression_type(binary: CompiledBinaryExpression,
     then java_script_result_reduce_operator_type(binary, env, module, allModules)
     else if java_script_collection_pipe_chained_method_expression_with_left_type(binary, leftType)
     then java_script_method_call_expression_type(java_script_collection_pipe_chained_method_call(binary), env, module, allModules)
+    else if java_script_async_pipe_expression_with_left_type(binary, leftType)
+    then "Async"
     else if java_script_result_pipe_expression_with_left_type(binary, leftType)
     then "Result"
     else if java_script_option_pipe_expression_with_left_type(binary, leftType)
@@ -4239,8 +4340,14 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
     then java_script_string_method_return_type(call.name)
     else if java_script_regex_method_call(call, env, module, allModules)
     then java_script_regex_method_call_type(call.name)
-        else if java_script_date_time_method_call_expression(call, env, module, allModules)
-        then java_script_date_time_method_call_type(java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)), call.name)
+    else if java_script_date_time_method_call_expression(call, env, module, allModules)
+    then java_script_date_time_method_call_type(java_script_type_unqualified_name(java_script_expression_type(call.receiver, env, module, allModules)), call.name)
+    else if java_script_effect_start_method_call(call, env, module, allModules)
+    then "Async"
+    else if java_script_async_join_method_call(call, env, module, allModules)
+    then "Effect"
+    else if java_script_async_map_method_call(call, env, module, allModules)
+    then "Async"
     else if java_script_effect_method_call(call, env, module, allModules)
     then "Effect"
     else if java_script_collection_is_empty_call(call, env, module, allModules)
@@ -5708,12 +5815,32 @@ private fun java_script_effect_runtime_code(): String =
     + "    map(fn) { return new Effect(() => fn(this.unsafe_run())); }" + java_script_newline()
     + "    flat_map(fn) { return new Effect(() => __capy_unsafe_run(fn(this.unsafe_run()))); }" + java_script_newline()
     + "    flatMap(fn) { return this.flat_map(fn); }" + java_script_newline()
+    + "    start() { return __capy_async_start(this); }" + java_script_newline()
     + "    static pure(value) { return new Effect(() => value); }" + java_script_newline()
     + "    static delay(thunk) { return new Effect(thunk); }" + java_script_newline()
     + "}" + java_script_newline()
     + java_script_newline()
+    + "class CapyAsyncResultFailure extends Error { constructor(result) { super('Async.flat_map returned Error'); this.result = result; } }" + java_script_newline()
+    + java_script_newline()
+    + "class Async {" + java_script_newline()
+    + "    constructor(thunk) { this._thunk = thunk; this._done = false; this._result = undefined; }" + java_script_newline()
+    + "    _evaluate() { if (!this._done) { try { this._result = __capy_success(__capy_unsafe_run(this._thunk())); } catch (error) { this._result = error instanceof CapyAsyncResultFailure ? error.result : __capy_async_error(error); } this._done = true; } return this._result; }" + java_script_newline()
+    + "    join() { return __capy_async_join(this); }" + java_script_newline()
+    + "    map(mapper) { return __capy_async_map(this, mapper); }" + java_script_newline()
+    + "    flat_map(mapper) { return __capy_async_flat_map(this, mapper); }" + java_script_newline()
+    + "    flatMap(mapper) { return this.flat_map(mapper); }" + java_script_newline()
+    + "}" + java_script_newline()
+    + java_script_newline()
     + "function pure(value) { return Effect.pure(value); }" + java_script_newline()
     + "function delay(thunk) { return Effect.delay(thunk); }" + java_script_newline()
+    + "function __capy_async_error(error) { const host = error instanceof Error ? error : new Error(String(error)); const rawStack = host.stack ? String(host.stack) : ''; const stackTrace = typeof __capy_stack_frames === 'function' ? __capy_stack_frames(rawStack) : []; return __capy_error_full('capy.lang.async.failed', host.message || String(error), __capy_none(), typeof __capy_source_location_from_stack === 'function' ? __capy_source_location_from_stack(stackTrace) : __capy_none(), stackTrace, rawStack ? __capy_some(rawStack) : __capy_none(), __capy_none(), []); }" + java_script_newline()
+    + "function __capy_async_start(effect) { const handle = new Async(() => effect); const schedule = typeof setImmediate === 'function' ? setImmediate : (typeof queueMicrotask === 'function' ? queueMicrotask : task => setTimeout(task, 0)); schedule(() => handle._evaluate()); return handle; }" + java_script_newline()
+    + "function __capy_async_join(asyncValue) { return Effect.delay(() => asyncValue._evaluate()); }" + java_script_newline()
+    + "function __capy_async_all(asyncValues) { return Effect.delay(() => Array.from(asyncValues).map(value => value._evaluate())); }" + java_script_newline()
+    + "function __capy_async_any(asyncValues) { return Effect.delay(() => { const values = Array.from(asyncValues); if (values.length === 0) return __capy_error_full('capy.lang.async.empty', 'Async.any requires at least one task', __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), []); const done = values.find(value => value && value._done); return (done || values[0])._evaluate(); }); }" + java_script_newline()
+    + "function __capy_async_value(asyncValue) { const result = asyncValue._evaluate(); if (__capy_data_is(result, 'Error')) throw new CapyAsyncResultFailure(result); if (__capy_data_is(result, 'Success')) return __capy_match_binding(result, 'value', 0); throw new CapyAsyncResultFailure(__capy_error_full('capy.lang.argument.invalid', 'Async expected Result value', __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), [])); }" + java_script_newline()
+    + "function __capy_async_map(asyncValue, mapper) { return new Async(() => __capy_unsafe_run(mapper(__capy_async_value(asyncValue)))); }" + java_script_newline()
+    + "function __capy_async_flat_map(asyncValue, mapper) { return new Async(() => { const mapped = __capy_unsafe_run(mapper(__capy_async_value(asyncValue))); if (__capy_data_is(mapped, 'Error')) throw new CapyAsyncResultFailure(mapped); if (__capy_data_is(mapped, 'Success')) return __capy_match_binding(mapped, 'value', 0); throw new CapyAsyncResultFailure(__capy_error_full('capy.lang.argument.invalid', 'Async.flat_map expected Result value', __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), [])); }); }" + java_script_newline()
     + "function __capy_current_millis() { return Effect.delay(() => __capy_long(BigInt(Date.now()))); }" + java_script_newline()
     + "function __capy_nano_time() { return Effect.delay(() => __capy_long(process.hrtime.bigint())); }" + java_script_newline()
     + "function __capy_clock_now() { return Effect.delay(() => { const current = new Date(); return __capy_date_time(__capy_date(current.getUTCDate(), current.getUTCMonth() + 1, current.getUTCFullYear()), __capy_time(current.getUTCHours(), current.getUTCMinutes(), current.getUTCSeconds(), __capy_data('Some', { value: 0 }))); }); }" + java_script_newline()
@@ -6388,6 +6515,8 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
     then java_script_collection_reduce_operator_gatherable(binary, env, module, allModules)
     else if java_script_collection_pipe_chained_method_expression_with_left_type(binary, leftType)
     then java_script_method_call_gatherable(java_script_collection_pipe_chained_method_call(binary), env, module, allModules)
+    else if java_script_async_pipe_expression_with_left_type(binary, leftType)
+    then java_script_async_pipe_gatherable(binary, env, module, allModules)
     else if java_script_result_pipe_expression_with_left_type(binary, leftType)
     then java_script_result_pipe_gatherable(binary, env, module, allModules)
     else if java_script_collection_or_unknown_pipe_expression_with_left_type(binary, leftType)
@@ -6427,6 +6556,11 @@ private fun java_script_pipe_gatherable(binary: CompiledBinaryExpression, env: L
 private fun java_script_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     java_script_expression_gatherable(binary.left, env, module, allModules)
         & java_script_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+
+/// Checks whether async pipe can be included in generated test gathering.
+private fun java_script_async_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_script_expression_gatherable(binary.left, env, module, allModules)
+        & java_script_callable_expression_gatherable(binary.right, env, module, allModules)
 
 /// Checks whether result reduce operator can be included in generated test gathering.
 private fun java_script_result_reduce_operator_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6562,6 +6696,12 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
     else if java_script_effect_method_call(call, env, module, allModules)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
+    else if java_script_effect_start_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_async_join_method_call(call, env, module, allModules)
+    then java_script_expression_gatherable(call.receiver, env, module, allModules)
+    else if java_script_async_map_method_call(call, env, module, allModules)
+    then java_script_async_pipe_gatherable(java_script_async_map_method_binary(call), env, module, allModules)
     else if java_script_runtime_data_method_call(call)
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)

@@ -3,6 +3,7 @@ package dev.capylang;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,7 +13,37 @@ public final class ResultUtil {
     }
 
     public static Object success(Object value) {
-        return Map.of("__type", "Success", "value", value);
+        var result = new LinkedHashMap<String, Object>();
+        result.put("__type", "Success");
+        result.put("value", value);
+        return result;
+    }
+
+    public static boolean isSuccess(Object value) {
+        return resultType(value, "Success");
+    }
+
+    public static boolean isError(Object value) {
+        return resultType(value, "Error");
+    }
+
+    public static Object successValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map.get("value");
+        }
+        return null;
+    }
+
+    private static boolean resultType(Object value, String typeName) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return false;
+        }
+        var type = map.get("__type");
+        if (type == null) {
+            return false;
+        }
+        var actual = String.valueOf(type);
+        return actual.equals(typeName) || actual.endsWith("." + typeName);
     }
 
     public static Object error(String kind, String message) {
